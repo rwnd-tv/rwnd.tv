@@ -1,5 +1,9 @@
 # rwnd.tv
 
+[![CI](https://github.com/rwnd-tv/rwnd.tv/actions/workflows/ci.yml/badge.svg)](https://github.com/rwnd-tv/rwnd.tv/actions/workflows/ci.yml)
+[![Release](https://github.com/rwnd-tv/rwnd.tv/actions/workflows/release.yml/badge.svg)](https://github.com/rwnd-tv/rwnd.tv/actions/workflows/release.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 rwnd.tv (rewind dot tv) is an open source, self-hosted app for tracking the TV shows and movies you watch — a replacement for [trakt.tv](https://trakt.tv) that you run yourself.
 
 > **Built with Claude Code.** This project's author isn't a web developer and is building rwnd.tv with Claude Code, in the open, from the start. See [docs/vision.md](docs/vision.md) for the full story and intent.

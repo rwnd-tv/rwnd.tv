@@ -14,9 +14,9 @@ Format:
 
 - [ ] **Review Dependabot PRs** (2026-08-09 20:40)\
       8 open, incl. `node` 22→26-alpine again — that exact bump broke
-      the Docker image build silently last time (`corepack: not
-      found`); confirm the `docker build .` CI step actually catches
-      it before merging.
+      the Docker image build silently last time
+      (`corepack: not found`); confirm the `docker build .` CI step
+      actually catches it before merging.
 
 - [ ] **Hold TS 7 bump** (2026-08-09 20:40)\
       `typescript-eslint` doesn't support TS 7 yet; leave any TS 7.0

@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.7
 
 FROM node:26-alpine AS base
-RUN corepack enable
+RUN npm install -g corepack@latest && corepack enable
 WORKDIR /app
 
 # --- deps: install once, cached as long as package.json files don't change ---

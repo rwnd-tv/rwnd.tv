@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-1 -1 26 26">
+  <defs>
+    <linearGradient id="rwndSunset" x1="19" y1="12" x2="3" y2="12" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#d946ef" />
+      <stop offset="1" stop-color="#f59e0b" />
+    </linearGradient>
+  </defs>
+  <g transform="translate(11,12) scale(1.2) translate(-11,-12)">
+    <path
+      d="M10 6 L3 12 L10 18 Z"
+      fill="none"
+      stroke="url(#rwndSunset)"
+      stroke-width="2.2"
+      stroke-linejoin="round"
+      stroke-linecap="round"
+    />
+    <path
+      d="M19 6 L12 12 L19 18 Z"
+      fill="none"
+      stroke="url(#rwndSunset)"
+      stroke-width="2.2"
+      stroke-linejoin="round"
+      stroke-linecap="round"
+    />
+  </g>
+</svg>

@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 
-FROM node:26-alpine AS base
+FROM node:22-alpine AS base
 RUN corepack enable
 WORKDIR /app
 
@@ -23,7 +23,7 @@ RUN pnpm --filter @rwnd/api deploy --prod --legacy /out/api
 RUN pnpm --filter @rwnd/db deploy --prod --legacy /out/db
 
 # --- runtime: just the two deployable subsets, the built SPA, and Node ---
-FROM node:26-alpine AS runtime
+FROM node:22-alpine AS runtime
 RUN addgroup -S rwnd && adduser -S rwnd -G rwnd
 WORKDIR /app
 

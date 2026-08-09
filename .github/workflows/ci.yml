@@ -63,3 +63,10 @@ jobs:
 
       - name: Build
         run: pnpm build
+
+      - name: Build Docker image
+        # Not pushed anywhere — this exists purely to catch a broken
+        # Dockerfile (e.g. a base image bump that drops something the build
+        # relies on) before it reaches the release workflow, which actually
+        # publishes the image.
+        run: docker build .

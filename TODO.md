@@ -9,16 +9,9 @@ Format:
 - `- [ ] **Title** (YYYY-MM-DD HH:MM added)\`, then details on the next line (trailing `\` forces the line break).
 - Blank line between each item.
 - Lists sorted oldest to newest.
+- Completed items move to [TODO_ARCHIVE.md](TODO_ARCHIVE.md) rather than staying checked off here.
 
 ## Repo hygiene
-
-- [x] **Review Dependabot PRs** (2026-08-09 20:40)\
-      8 open, incl. `node` 22→26-alpine again — that exact bump broke
-      the Docker image build silently last time
-      (`corepack: not found`); confirm the `docker build .` CI step
-      actually catches it before merging. Done: fixed the Dockerfile
-      (corepack is no longer bundled with Node ≥25, install it
-      explicitly) and merged 8 PRs; #7 stays open, blocked on TS 7.
 
 - [ ] **Hold TS 7 bump** (2026-08-09 20:40)\
       `typescript-eslint` doesn't support TS 7 yet; leave any TS 7.0

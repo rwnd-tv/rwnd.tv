@@ -39,6 +39,7 @@ export function Layout() {
           className="mx-auto flex max-w-4xl flex-wrap items-center justify-between gap-4 px-4 py-3"
         >
           <span className="flex items-center gap-2 text-lg font-semibold">
+            <img src="/favicon.svg" alt="" className="h-6 w-6" />
             {t('app.name')}
             <EnvironmentBadge label={settings?.environmentLabel} />
           </span>

@@ -12,11 +12,13 @@ Format:
 
 ## Repo hygiene
 
-- [ ] **Review Dependabot PRs** (2026-08-09 20:40)\
+- [x] **Review Dependabot PRs** (2026-08-09 20:40)\
       8 open, incl. `node` 22→26-alpine again — that exact bump broke
       the Docker image build silently last time
       (`corepack: not found`); confirm the `docker build .` CI step
-      actually catches it before merging.
+      actually catches it before merging. Done: fixed the Dockerfile
+      (corepack is no longer bundled with Node ≥25, install it
+      explicitly) and merged 8 PRs; #7 stays open, blocked on TS 7.
 
 - [ ] **Hold TS 7 bump** (2026-08-09 20:40)\
       `typescript-eslint` doesn't support TS 7 yet; leave any TS 7.0

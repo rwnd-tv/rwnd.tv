@@ -67,7 +67,10 @@ export function createApp() {
   // handles the frontend and this directory won't exist.
   const webDistDir = join(process.cwd(), 'public')
   if (existsSync(webDistDir)) {
-    app.use('/assets/*', serveStatic({ root: 'public' }))
+    // Serves any real file under public/ (hashed /assets/* bundles, and
+    // root-level files like favicon.svg); falls through to the SPA
+    // fallback below for anything that isn't an actual file on disk.
+    app.use('*', serveStatic({ root: 'public' }))
     app.get('*', async (c) => {
       const html = await readFile(join(webDistDir, 'index.html'), 'utf-8')
       return c.html(html)

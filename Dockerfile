@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.7
 
-FROM node:22-alpine AS base
-RUN corepack enable
+FROM node:26-alpine AS base
+RUN npm install -g corepack@latest && corepack enable
 WORKDIR /app
 
 # --- deps: install once, cached as long as package.json files don't change ---
@@ -23,7 +23,7 @@ RUN pnpm --filter @rwnd/api deploy --prod --legacy /out/api
 RUN pnpm --filter @rwnd/db deploy --prod --legacy /out/db
 
 # --- runtime: just the two deployable subsets, the built SPA, and Node ---
-FROM node:22-alpine AS runtime
+FROM node:26-alpine AS runtime
 RUN addgroup -S rwnd && adduser -S rwnd -G rwnd
 WORKDIR /app
 

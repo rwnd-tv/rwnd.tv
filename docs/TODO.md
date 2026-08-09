@@ -1,8 +1,8 @@
 # TODO
 
 Smaller, non-milestone work — things to do, watch, or decide. For the
-feature roadmap see [docs/ROADMAP.md](docs/ROADMAP.md); for why past
-decisions were made see [docs/adr/](docs/adr/).
+feature roadmap see [ROADMAP.md](ROADMAP.md); for why past decisions
+were made see [adr/](adr/).
 
 Format:
 

@@ -1,0 +1,58 @@
+@import 'tailwindcss';
+
+/*
+ * Theme tokens. Defaults are the light palette; dark overrides apply either
+ * when the OS prefers dark (and the user hasn't chosen) or when the user has
+ * explicitly picked dark via [data-theme="dark"]. See ProfileForm for the
+ * three-way (system/light/dark) picker this backs.
+ */
+:root {
+  --color-bg: #ffffff;
+  --color-surface: #f6f6f7;
+  --color-border: #e2e2e5;
+  --color-fg: #16161a;
+  --color-fg-muted: #5c5c66;
+  --color-primary: #4f46e5;
+  --color-primary-fg: #ffffff;
+  --color-danger: #dc2626;
+  --color-danger-fg: #ffffff;
+  --color-focus-ring: #4f46e5;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --color-bg: #121214;
+    --color-surface: #1b1b1f;
+    --color-border: #2e2e34;
+    --color-fg: #f2f2f4;
+    --color-fg-muted: #a3a3ad;
+    --color-primary: #818cf8;
+    --color-primary-fg: #16161a;
+    --color-danger: #f87171;
+    --color-danger-fg: #16161a;
+    --color-focus-ring: #818cf8;
+  }
+}
+
+:root[data-theme='dark'] {
+  --color-bg: #121214;
+  --color-surface: #1b1b1f;
+  --color-border: #2e2e34;
+  --color-fg: #f2f2f4;
+  --color-fg-muted: #a3a3ad;
+  --color-primary: #818cf8;
+  --color-primary-fg: #16161a;
+  --color-danger: #f87171;
+  --color-danger-fg: #16161a;
+  --color-focus-ring: #818cf8;
+}
+
+body {
+  background-color: var(--color-bg);
+  color: var(--color-fg);
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}

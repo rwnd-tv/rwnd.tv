@@ -1,0 +1,53 @@
+# Self-hosting rwnd.tv
+
+rwnd.tv ships as a single Docker image plus a PostgreSQL database.
+
+## Requirements
+
+- Docker and Docker Compose
+- A free [TMDB API key](https://www.themoviedb.org/settings/api) (Settings → API → "API Key (v3 auth)")
+- A reverse proxy for TLS if you're exposing this beyond your local network (e.g. nginx-pm, Caddy, Traefik)
+
+## Quick start
+
+```sh
+curl -O https://raw.githubusercontent.com/rwnd-tv/rwnd.tv/main/docker-compose.yml
+curl -O https://raw.githubusercontent.com/rwnd-tv/rwnd.tv/main/.env.example
+mv .env.example .env
+# edit .env: set POSTGRES_PASSWORD, TMDB_API_KEY, and DATABASE_URL to match
+docker compose up -d
+```
+
+Visit `http://<host>:3000`. The first person to load the app is walked through creating the admin account — after that, whether anyone else can register is controlled from Settings → Instance (admin only), or by editing `instance_settings` directly.
+
+## Configuration
+
+All configuration is environment variables, set in `.env` (see `.env.example` for the full list with defaults):
+
+| Variable              | Required                  | Notes                                                                              |
+| --------------------- | ------------------------- | ---------------------------------------------------------------------------------- |
+| `DATABASE_URL`        | Yes                       | Postgres connection string                                                         |
+| `TMDB_API_KEY`        | Yes                       | Free at themoviedb.org                                                             |
+| `COOKIE_SECURE`       | Recommended in production | Set `true` once served over HTTPS — browsers drop `Secure` cookies over plain HTTP |
+| `SESSION_COOKIE_NAME` | No                        | Defaults to `rwnd_session`                                                         |
+
+## Putting it behind a reverse proxy
+
+Point your proxy at `http://<container>:3000` and terminate TLS in front of it. Nothing rwnd.tv-specific is required beyond forwarding `Host` and `X-Forwarded-For` headers, which most reverse proxies (including nginx-pm) do by default.
+
+## Upgrading
+
+```sh
+docker compose pull
+docker compose up -d
+```
+
+Database migrations run automatically on container startup (see `docker-entrypoint.sh`) — there's no separate migration step to run by hand.
+
+## Backups
+
+Everything that matters lives in the `db-data` volume (the Postgres data directory). Back it up like any other Postgres instance, e.g.:
+
+```sh
+docker compose exec db pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB" > backup.sql
+```

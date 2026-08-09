@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: rwnd
+          POSTGRES_PASSWORD: rwnd
+          POSTGRES_DB: rwnd
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U rwnd"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://rwnd:rwnd@localhost:5432/rwnd
+      # Not a real key — only the health/setup/auth paths exercised in CI
+      # need the provider to construct without throwing; nothing here
+      # actually calls out to TMDB.
+      TMDB_API_KEY: ci-placeholder
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Format check
+        run: pnpm format:check
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Run database migrations
+        run: pnpm db:migrate
+
+      - name: Test
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build

@@ -1,0 +1,37 @@
+services:
+  app:
+    # `edge` tracks main until the first tagged release exists, after which
+    # `latest` will track the newest release instead — see release.yml.
+    image: ghcr.io/rwnd-tv/rwnd.tv:edge
+    # Uncomment to build from source instead of pulling the published image:
+    # build: .
+    container_name: rwnd-tv
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      TMDB_API_KEY: ${TMDB_API_KEY}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+    ports:
+      - '3000:3000'
+    restart: unless-stopped
+
+  db:
+    image: postgres:16-alpine
+    container_name: rwnd-tv-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  db-data:

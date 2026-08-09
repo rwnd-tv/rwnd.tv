@@ -1,0 +1,15 @@
+import type { User } from '@rwnd/shared'
+import type { UserRecord } from '../types.js'
+
+export function serializeUser(user: UserRecord): User {
+  return {
+    id: user.id,
+    email: user.email,
+    displayName: user.displayName,
+    locale: user.locale as User['locale'],
+    timezone: user.timezone,
+    theme: user.theme,
+    role: user.role,
+    createdAt: user.createdAt.toISOString(),
+  }
+}

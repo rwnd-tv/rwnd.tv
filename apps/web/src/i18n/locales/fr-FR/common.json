@@ -1,0 +1,91 @@
+{
+  "app": {
+    "name": "rwnd.tv",
+    "tagline": "Suivez ce que vous regardez."
+  },
+  "nav": {
+    "search": "Recherche",
+    "history": "Historique",
+    "settings": "Paramètres",
+    "logout": "Se déconnecter"
+  },
+  "setup": {
+    "title": "Configurer rwnd.tv",
+    "description": "Créez le compte administrateur de cette instance.",
+    "displayName": "Nom affiché",
+    "email": "E-mail",
+    "password": "Mot de passe",
+    "submit": "Créer le compte administrateur"
+  },
+  "login": {
+    "title": "Connexion",
+    "email": "E-mail",
+    "password": "Mot de passe",
+    "submit": "Se connecter",
+    "registerPrompt": "Vous n'avez pas de compte ?",
+    "registerLink": "S'inscrire"
+  },
+  "register": {
+    "title": "Créer un compte",
+    "displayName": "Nom affiché",
+    "email": "E-mail",
+    "password": "Mot de passe",
+    "inviteCode": "Code d'invitation",
+    "submit": "S'inscrire",
+    "loginPrompt": "Vous avez déjà un compte ?",
+    "loginLink": "Se connecter",
+    "closed": "Les inscriptions ne sont pas ouvertes sur cette instance."
+  },
+  "search": {
+    "title": "Recherche",
+    "placeholder": "Rechercher un film ou une série…",
+    "noResults": "Aucun résultat pour l'instant — essayez une recherche.",
+    "logWatch": "Enregistrer",
+    "logged": "Enregistré !"
+  },
+  "history": {
+    "title": "Historique",
+    "empty": "Vous n'avez encore rien enregistré. Recherchez quelque chose que vous avez regardé pour commencer.",
+    "loadMore": "Charger plus",
+    "remove": "Supprimer",
+    "episodeLabel": "S{{season}}E{{episode}}"
+  },
+  "settings": {
+    "title": "Paramètres",
+    "profile": {
+      "title": "Profil",
+      "displayName": "Nom affiché",
+      "locale": "Langue",
+      "theme": "Thème",
+      "themeSystem": "Suivre le système",
+      "themeLight": "Clair",
+      "themeDark": "Sombre",
+      "save": "Enregistrer",
+      "saved": "Enregistré."
+    },
+    "tokens": {
+      "title": "Jetons API",
+      "description": "Utilisez des jetons API pour permettre à d'autres applications (comme les scrobblers Plex) d'enregistrer des visionnages en votre nom.",
+      "name": "Nom du jeton",
+      "create": "Créer un jeton",
+      "createdOnce": "Copiez ce jeton maintenant — il ne sera plus affiché.",
+      "lastUsed": "Dernière utilisation {{date}}",
+      "neverUsed": "Jamais utilisé",
+      "revoke": "Révoquer"
+    },
+    "instance": {
+      "title": "Paramètres de l'instance",
+      "instanceName": "Nom de l'instance",
+      "registrationMode": "Inscriptions",
+      "registrationOpen": "Ouvertes — tout le monde peut s'inscrire",
+      "registrationInvite": "Sur invitation uniquement",
+      "registrationClosed": "Fermées — l'administrateur crée les comptes",
+      "save": "Enregistrer"
+    }
+  },
+  "common": {
+    "loading": "Chargement…",
+    "cancel": "Annuler",
+    "somethingWentWrong": "Une erreur est survenue. Veuillez réessayer."
+  }
+}

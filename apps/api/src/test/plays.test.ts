@@ -1,0 +1,129 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { plays } from '@rwnd/db'
+import type { ListPlaysResponse, Play, User } from '@rwnd/shared'
+import { createLocalUser, extractCookie, json, resetDb, testApp, testDb } from './helpers.js'
+
+const db = testDb()
+const app = testApp()
+
+async function createUserAndCookie() {
+  const res = await app.request('/api/v1/setup', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      email: 'watcher@example.com',
+      password: 'correct-horse-battery-staple',
+      displayName: 'Watcher',
+    }),
+  })
+  return extractCookie(res)!
+}
+
+describe('plays', () => {
+  beforeEach(() => resetDb(db))
+
+  it('requires authentication', async () => {
+    const res = await app.request('/api/v1/plays')
+    expect(res.status).toBe(401)
+  })
+
+  describe('POST /plays', () => {
+    beforeEach(() => {
+      // resolveMovie() fetches from TMDB on first sight of an external ID —
+      // stub it rather than hitting the network in tests.
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (input: string | URL) => {
+          const url = new URL(input)
+          if (url.pathname === '/3/movie/603') {
+            return new Response(
+              JSON.stringify({
+                id: 603,
+                title: 'The Matrix',
+                release_date: '1999-03-30',
+                runtime: 136,
+                overview: 'A hacker learns the truth.',
+                poster_path: '/matrix.jpg',
+              }),
+              { status: 200 },
+            )
+          }
+          throw new Error(`Unexpected fetch in test: ${url}`)
+        }),
+      )
+    })
+
+    afterEach(() => vi.unstubAllGlobals())
+
+    it('logs a movie watch and lists it back in history', async () => {
+      const cookie = await createUserAndCookie()
+
+      const created = await app.request('/api/v1/plays', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', cookie },
+        body: JSON.stringify({ movie: { source: 'tmdb', externalId: '603' } }),
+      })
+      expect(created.status).toBe(201)
+      const play = await json<Play>(created)
+      expect(play.media).toEqual({
+        type: 'movie',
+        title: 'The Matrix',
+        posterPath: expect.stringContaining('/matrix.jpg'),
+      })
+
+      const list = await app.request('/api/v1/plays', { headers: { cookie } })
+      const { plays: history } = await json<ListPlaysResponse>(list)
+      expect(history).toHaveLength(1)
+      expect(history[0]?.id).toBe(play.id)
+    })
+
+    it("does not let a different user delete someone else's play", async () => {
+      const cookieA = await createUserAndCookie()
+      const created = await app.request('/api/v1/plays', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', cookie: cookieA },
+        body: JSON.stringify({ movie: { source: 'tmdb', externalId: '603' } }),
+      })
+      const play = await json<Play>(created)
+
+      // Setup only ever creates one admin, and registration is closed by
+      // default, so a second user is inserted directly for this test.
+      await createLocalUser(db, 'other@example.com', 'correct-horse-battery-staple')
+      const loginB = await app.request('/api/v1/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: 'other@example.com',
+          password: 'correct-horse-battery-staple',
+        }),
+      })
+      const cookieB = extractCookie(loginB)!
+
+      // The query scopes on (id, userId), so a mismatched owner reads as
+      // "not found" rather than leaking that the play exists at all.
+      const deleteAsOtherUser = await app.request(`/api/v1/plays/${play.id}`, {
+        method: 'DELETE',
+        headers: { cookie: cookieB },
+      })
+      expect(deleteAsOtherUser.status).toBe(404)
+
+      const stillThere = await app.request('/api/v1/plays', { headers: { cookie: cookieA } })
+      expect((await json<ListPlaysResponse>(stillThere)).plays).toHaveLength(1)
+
+      const deleteAsOwner = await app.request(`/api/v1/plays/${play.id}`, {
+        method: 'DELETE',
+        headers: { cookie: cookieA },
+      })
+      expect(deleteAsOwner.status).toBe(204)
+    })
+  })
+
+  it('rejects a play row with neither or both media references at the database level', async () => {
+    const cookie = await createUserAndCookie()
+    const me = await json<User>(await app.request('/api/v1/auth/me', { headers: { cookie } }))
+
+    await expect(
+      db.insert(plays).values({ userId: me.id, watchedAt: new Date() }),
+    ).rejects.toThrow()
+  })
+})

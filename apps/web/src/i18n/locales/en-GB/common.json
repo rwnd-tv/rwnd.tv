@@ -1,0 +1,91 @@
+{
+  "app": {
+    "name": "rwnd.tv",
+    "tagline": "Track what you watch."
+  },
+  "nav": {
+    "search": "Search",
+    "history": "History",
+    "settings": "Settings",
+    "logout": "Log out"
+  },
+  "setup": {
+    "title": "Set up rwnd.tv",
+    "description": "Create the admin account for this instance.",
+    "displayName": "Display name",
+    "email": "Email",
+    "password": "Password",
+    "submit": "Create admin account"
+  },
+  "login": {
+    "title": "Log in",
+    "email": "Email",
+    "password": "Password",
+    "submit": "Log in",
+    "registerPrompt": "Don't have an account?",
+    "registerLink": "Register"
+  },
+  "register": {
+    "title": "Create an account",
+    "displayName": "Display name",
+    "email": "Email",
+    "password": "Password",
+    "inviteCode": "Invite code",
+    "submit": "Register",
+    "loginPrompt": "Already have an account?",
+    "loginLink": "Log in",
+    "closed": "Registration is not currently open on this instance."
+  },
+  "search": {
+    "title": "Search",
+    "placeholder": "Search for a movie or show…",
+    "noResults": "No results yet — try searching for something.",
+    "logWatch": "Log watch",
+    "logged": "Logged!"
+  },
+  "history": {
+    "title": "History",
+    "empty": "You haven't logged anything yet. Search for something you've watched to get started.",
+    "loadMore": "Load more",
+    "remove": "Remove",
+    "episodeLabel": "S{{season}}E{{episode}}"
+  },
+  "settings": {
+    "title": "Settings",
+    "profile": {
+      "title": "Profile",
+      "displayName": "Display name",
+      "locale": "Language",
+      "theme": "Theme",
+      "themeSystem": "Match system",
+      "themeLight": "Light",
+      "themeDark": "Dark",
+      "save": "Save changes",
+      "saved": "Saved."
+    },
+    "tokens": {
+      "title": "API tokens",
+      "description": "Use API tokens to let other apps (like Plex scrobblers) log watches on your behalf.",
+      "name": "Token name",
+      "create": "Create token",
+      "createdOnce": "Copy this token now — it won't be shown again.",
+      "lastUsed": "Last used {{date}}",
+      "neverUsed": "Never used",
+      "revoke": "Revoke"
+    },
+    "instance": {
+      "title": "Instance settings",
+      "instanceName": "Instance name",
+      "registrationMode": "Registration",
+      "registrationOpen": "Open — anyone can register",
+      "registrationInvite": "Invite only",
+      "registrationClosed": "Closed — admin creates accounts",
+      "save": "Save changes"
+    }
+  },
+  "common": {
+    "loading": "Loading…",
+    "cancel": "Cancel",
+    "somethingWentWrong": "Something went wrong. Please try again."
+  }
+}

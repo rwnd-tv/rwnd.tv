@@ -10,7 +10,7 @@ rwnd.tv (rewind dot tv) is an open source, self-hosted app for tracking the TV s
 
 ## Status
 
-Early days — the current milestone is a working vertical slice: sign in, search for something, log that you watched it, see your history. Trakt import and Plex/Tautulli webhook ingestion are next. See [docs/vision.md](docs/vision.md) for the full roadmap.
+Early days — milestone 1 (a working vertical slice: sign in, search for something, log that you watched it, see your history) is done and running live at [rwnd.tv](https://rwnd.tv). Trakt import and Plex/Tautulli webhook ingestion are next. See [docs/ROADMAP.md](docs/ROADMAP.md) for the full roadmap.
 
 ## Features (this milestone)
 
@@ -48,13 +48,13 @@ Other useful scripts: `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`.
 
 The project is a pnpm workspace:
 
-| Path              | What                                                             |
-| ----------------- | ---------------------------------------------------------------- |
-| `apps/api`        | Hono JSON API — auth, search, plays, OpenAPI spec at `/api/docs` |
-| `apps/web`        | React (Vite) single-page app                                     |
-| `packages/db`     | Drizzle schema and migrations                                    |
-| `packages/shared` | Zod schemas and types shared by the API and web app              |
-| `docs/`           | Vision doc, architecture decision records, self-hosting guide    |
+| Path              | What                                                                   |
+| ----------------- | ---------------------------------------------------------------------- |
+| `apps/api`        | Hono JSON API — auth, search, plays, OpenAPI spec at `/api/docs`       |
+| `apps/web`        | React (Vite) single-page app                                           |
+| `packages/db`     | Drizzle schema and migrations                                          |
+| `packages/shared` | Zod schemas and types shared by the API and web app                    |
+| `docs/`           | Vision doc, roadmap, architecture decision records, self-hosting guide |
 
 ## Architecture decisions
 

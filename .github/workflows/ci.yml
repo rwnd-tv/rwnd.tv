@@ -34,7 +34,7 @@ jobs:
       TMDB_API_KEY: ci-placeholder
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: pnpm/action-setup@v4
 

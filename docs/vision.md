@@ -2,7 +2,6 @@
 
 rwnd.tv (rewind dot tv) is an open source project to help users track their TV Show and Movie watching activity.
 
-
 ## Aims
 
 rwnd.tv is/can:

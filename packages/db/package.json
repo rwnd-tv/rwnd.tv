@@ -24,8 +24,8 @@
     "tsx": "^4.19.2"
   },
   "devDependencies": {
-    "drizzle-kit": "^0.30.2",
-    "typescript": "^5.7.3",
-    "vitest": "^3.0.4"
+    "drizzle-kit": "^0.31.10",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.10"
   }
 }

@@ -1,0 +1,10 @@
+# Force LF everywhere, regardless of a contributor's core.autocrlf setting
+# — matches .editorconfig, and avoids Windows checkouts showing files as
+# perpetually "modified" with no real content difference.
+* text=auto eol=lf
+
+# Binary — never touch line endings.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.ico binary

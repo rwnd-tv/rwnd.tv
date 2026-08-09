@@ -16,10 +16,3 @@ Format:
 - [ ] **Hold TS 7 bump** (2026-08-09 20:40)\
       `typescript-eslint` doesn't support TS 7 yet; leave any TS 7.0
       Dependabot bump open until it does.
-
-## Open questions / not yet decided
-
-- [ ] **Local dev-loop** (2026-08-09 20:40)\
-      Decide whether to restand a dedicated dev Postgres +
-      `pnpm dev:api`/`dev:web`, or keep testing against `dev.rwnd.tv`
-      as the default.

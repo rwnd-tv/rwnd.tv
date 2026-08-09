@@ -12,3 +12,16 @@ grouping, sorted oldest to newest.
       actually catches it before merging. Done: fixed the Dockerfile
       (corepack is no longer bundled with Node ≥25, install it
       explicitly) and merged 8 PRs; #7 stays open, blocked on TS 7.
+
+## Open questions / not yet decided
+
+- [x] **Local dev-loop** (2026-08-09 20:40)\
+      Decide whether to restand a dedicated dev Postgres +
+      `pnpm dev:api`/`dev:web`, or keep testing against `dev.rwnd.tv`
+      as the default. Done: installed Docker Engine in WSL2 (Ubuntu, no
+      Docker Desktop), enabled mirrored networking + `vmIdleTimeout=-1`
+      in `.wslconfig`, and a dev-only Postgres container
+      (`network_mode: host` — Docker's port-publishing NAT doesn't work
+      reliably under mirrored networking, host mode sidesteps it; the
+      compose file itself is kept local at `~/rwnd-tv-dev/` inside WSL,
+      not in the repo). Confirmed working end to end with a real login.

@@ -8,6 +8,7 @@ import {
 import { instanceSettings } from '@rwnd/db'
 import type { AppEnv } from '../types.js'
 import { requireAdmin, requireAuth } from '../middleware/auth.js'
+import { loadEnv } from '../env.js'
 
 export const settingsRoutes = new OpenAPIHono<AppEnv>()
 
@@ -34,6 +35,7 @@ function serializeSettings(row?: {
     defaultLocale: isSupportedLocale(source.defaultLocale)
       ? source.defaultLocale
       : DEFAULT_SETTINGS.defaultLocale,
+    environmentLabel: loadEnv().ENVIRONMENT_LABEL ?? null,
   }
 }
 

@@ -17,6 +17,11 @@ const rawEnvSchema = z.object({
   // by value below instead, defaulting off the schema's own NODE_ENV
   // rather than the ambient process.env at module-load time.
   COOKIE_SECURE: z.string().optional(),
+  // Purely cosmetic: shown as a badge in the UI and prefixed on the
+  // browser tab title, so multiple deployments (e.g. rwnd.tv vs
+  // dev.rwnd.tv) don't get confused for one another. Unset by default —
+  // a normal single-instance deployment shows nothing.
+  ENVIRONMENT_LABEL: z.string().optional(),
   METADATA_PROVIDER: z.enum(['tmdb']).default('tmdb'),
   TMDB_API_KEY: z.string().optional(),
   TMDB_API_BASE_URL: z.string().url().default('https://api.themoviedb.org/3'),

@@ -80,7 +80,8 @@
       "registrationOpen": "Open — anyone can register",
       "registrationInvite": "Invite only",
       "registrationClosed": "Closed — admin creates accounts",
-      "save": "Save changes"
+      "save": "Save changes",
+      "environmentLabel": "This instance is labelled \"{{label}}\", set via the ENVIRONMENT_LABEL environment variable — not editable here."
     }
   },
   "common": {

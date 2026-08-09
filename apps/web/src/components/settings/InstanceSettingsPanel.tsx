@@ -1,8 +1,9 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import type { RegistrationMode } from '@rwnd/shared'
 import { api } from '../../lib/api-client.js'
+import { usePublicSettings } from '../../lib/use-public-settings.js'
 import { Card } from '../ui/Card.js'
 import { Field } from '../ui/Field.js'
 import { Button } from '../ui/Button.js'
@@ -10,7 +11,7 @@ import { Button } from '../ui/Button.js'
 export function InstanceSettingsPanel() {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
-  const { data } = useQuery({ queryKey: ['settings', 'public'], queryFn: () => api.settings.get() })
+  const { data } = usePublicSettings()
 
   const [instanceName, setInstanceName] = useState('')
   const [registrationMode, setRegistrationMode] = useState<RegistrationMode>('closed')
@@ -67,6 +68,11 @@ export function InstanceSettingsPanel() {
           </Button>
         </div>
       </form>
+      {data?.environmentLabel && (
+        <p className="mt-4 text-sm text-[var(--color-fg-muted)]">
+          {t('settings.instance.environmentLabel', { label: data.environmentLabel })}
+        </p>
+      )}
     </Card>
   )
 }

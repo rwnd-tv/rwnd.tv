@@ -3,7 +3,9 @@ import { useTranslation } from 'react-i18next'
 import { useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../lib/auth-context.js'
 import { api } from '../lib/api-client.js'
+import { usePublicSettings } from '../lib/use-public-settings.js'
 import { Button } from './ui/Button.js'
+import { EnvironmentBadge } from './EnvironmentBadge.js'
 
 const navLinkClass = ({ isActive }: { isActive: boolean }) =>
   `rounded-md px-3 py-2 text-sm font-medium ${
@@ -16,6 +18,7 @@ export function Layout() {
   const { t } = useTranslation()
   const { user } = useAuth()
   const queryClient = useQueryClient()
+  const { data: settings } = usePublicSettings()
 
   async function handleLogout() {
     await api.auth.logout()
@@ -35,7 +38,10 @@ export function Layout() {
           aria-label="Main"
           className="mx-auto flex max-w-4xl flex-wrap items-center justify-between gap-4 px-4 py-3"
         >
-          <span className="text-lg font-semibold">{t('app.name')}</span>
+          <span className="flex items-center gap-2 text-lg font-semibold">
+            {t('app.name')}
+            <EnvironmentBadge label={settings?.environmentLabel} />
+          </span>
           <div className="flex items-center gap-2">
             <NavLink to="/search" className={navLinkClass}>
               {t('nav.search')}

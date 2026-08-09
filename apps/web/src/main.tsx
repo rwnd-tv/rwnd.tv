@@ -7,6 +7,7 @@ import { App } from './App.js'
 import { AuthProvider } from './lib/auth-context.js'
 import { queryClient } from './lib/query-client.js'
 import { PreferencesEffect } from './components/PreferencesEffect.js'
+import { EnvironmentTitleEffect } from './components/EnvironmentTitleEffect.js'
 
 const rootElement = document.getElementById('root')
 if (!rootElement) throw new Error('Root element not found')
@@ -16,6 +17,7 @@ createRoot(rootElement).render(
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <PreferencesEffect />
+        <EnvironmentTitleEffect />
         <App />
       </AuthProvider>
     </QueryClientProvider>

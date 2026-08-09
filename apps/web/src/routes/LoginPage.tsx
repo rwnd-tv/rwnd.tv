@@ -1,9 +1,10 @@
 import { useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, Navigate, useNavigate } from 'react-router'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQueryClient } from '@tanstack/react-query'
 import { api, ApiError } from '../lib/api-client.js'
 import { useSetupStatus } from '../lib/use-setup-status.js'
+import { usePublicSettings } from '../lib/use-public-settings.js'
 import { useAuth } from '../lib/auth-context.js'
 import { Card } from '../components/ui/Card.js'
 import { Field } from '../components/ui/Field.js'
@@ -16,10 +17,7 @@ export function LoginPage() {
   const queryClient = useQueryClient()
   const { user, isLoading: authLoading } = useAuth()
   const { data: setupStatus, isLoading: setupLoading } = useSetupStatus()
-  const { data: settings } = useQuery({
-    queryKey: ['settings', 'public'],
-    queryFn: () => api.settings.get(),
-  })
+  const { data: settings } = usePublicSettings()
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')

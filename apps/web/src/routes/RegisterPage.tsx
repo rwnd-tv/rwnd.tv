@@ -1,8 +1,9 @@
 import { useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, Navigate, useNavigate } from 'react-router'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQueryClient } from '@tanstack/react-query'
 import { api, ApiError } from '../lib/api-client.js'
+import { usePublicSettings } from '../lib/use-public-settings.js'
 import { useAuth } from '../lib/auth-context.js'
 import { Card } from '../components/ui/Card.js'
 import { Field } from '../components/ui/Field.js'
@@ -14,10 +15,7 @@ export function RegisterPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { user, isLoading: authLoading } = useAuth()
-  const { data: settings, isLoading: settingsLoading } = useQuery({
-    queryKey: ['settings', 'public'],
-    queryFn: () => api.settings.get(),
-  })
+  const { data: settings, isLoading: settingsLoading } = usePublicSettings()
 
   const [displayName, setDisplayName] = useState('')
   const [email, setEmail] = useState('')

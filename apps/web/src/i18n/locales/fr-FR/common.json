@@ -80,7 +80,8 @@
       "registrationOpen": "Ouvertes — tout le monde peut s'inscrire",
       "registrationInvite": "Sur invitation uniquement",
       "registrationClosed": "Fermées — l'administrateur crée les comptes",
-      "save": "Enregistrer"
+      "save": "Enregistrer",
+      "environmentLabel": "Cette instance porte l'étiquette « {{label}} », définie via la variable d'environnement ENVIRONMENT_LABEL — non modifiable ici."
     }
   },
   "common": {

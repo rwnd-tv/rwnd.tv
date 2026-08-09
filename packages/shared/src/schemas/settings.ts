@@ -8,8 +8,13 @@ export const instanceSettingsSchema = z.object({
   instanceName: z.string(),
   registrationMode: registrationModeSchema,
   defaultLocale: localeSchema,
+  // Set via the ENVIRONMENT_LABEL env var at deploy time, not admin-editable
+  // here — see apps/api/src/env.ts.
+  environmentLabel: z.string().nullable(),
 })
 export type InstanceSettings = z.infer<typeof instanceSettingsSchema>
 
-export const updateInstanceSettingsRequestSchema = instanceSettingsSchema.partial()
+export const updateInstanceSettingsRequestSchema = instanceSettingsSchema
+  .omit({ environmentLabel: true })
+  .partial()
 export type UpdateInstanceSettingsRequest = z.infer<typeof updateInstanceSettingsRequestSchema>

@@ -32,6 +32,12 @@ jobs:
       # need the provider to construct without throwing; nothing here
       # actually calls out to TMDB.
       TMDB_API_KEY: ci-placeholder
+      # Not real credentials — apps/api/src/test/imports.test.ts stubs
+      # `fetch` rather than calling Trakt for real. loadEnv() caches on
+      # first call, so these have to be set before any test runs.
+      TRAKT_CLIENT_ID: ci-placeholder-client-id
+      TRAKT_CLIENT_SECRET: ci-placeholder-client-secret
+      ENCRYPTION_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
 
     steps:
       - uses: actions/checkout@v7

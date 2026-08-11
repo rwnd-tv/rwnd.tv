@@ -5,8 +5,9 @@ import { OpenAPIHono } from '@hono/zod-openapi'
 import { swaggerUI } from '@hono/swagger-ui'
 import { cors } from 'hono/cors'
 import { serveStatic } from '@hono/node-server/serve-static'
-import { createDatabase } from '@rwnd/db'
+import { createDatabase, type Database } from '@rwnd/db'
 import type { AppEnv } from './types.js'
+import type { MetadataProvider } from './providers/types.js'
 import { loadEnv } from './env.js'
 import { createMetadataProvider } from './providers/index.js'
 import { healthRoutes } from './routes/health.js'
@@ -16,11 +17,18 @@ import { tokenRoutes } from './routes/tokens.js'
 import { searchRoutes } from './routes/search.js'
 import { playRoutes } from './routes/plays.js'
 import { settingsRoutes } from './routes/settings.js'
+import { importRoutes } from './routes/imports.js'
 
-export function createApp() {
+/**
+ * `services` lets index.ts share the same db connection pool and provider
+ * instance it builds for import-job restart recovery, instead of this
+ * function creating a second pool. Tests (testApp()) call createApp() with
+ * no argument and get fresh ones, same as before.
+ */
+export function createApp(services?: { db: Database; metadataProvider: MetadataProvider }) {
   const env = loadEnv()
-  const db = createDatabase(env.DATABASE_URL)
-  const metadataProvider = createMetadataProvider(env)
+  const db = services?.db ?? createDatabase(env.DATABASE_URL)
+  const metadataProvider = services?.metadataProvider ?? createMetadataProvider(env)
 
   const app = new OpenAPIHono<AppEnv>()
 
@@ -49,6 +57,7 @@ export function createApp() {
   v1.route('/', searchRoutes)
   v1.route('/', playRoutes)
   v1.route('/', settingsRoutes)
+  v1.route('/', importRoutes)
 
   v1.doc('/openapi.json', {
     openapi: '3.1.0',

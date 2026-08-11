@@ -24,12 +24,15 @@ Visit `http://<host>:3000`. The first person to load the app is walked through c
 
 All configuration is environment variables, set in `.env` (see `.env.example` for the full list with defaults):
 
-| Variable              | Required                  | Notes                                                                              |
-| --------------------- | ------------------------- | ---------------------------------------------------------------------------------- |
-| `DATABASE_URL`        | Yes                       | Postgres connection string                                                         |
-| `TMDB_API_KEY`        | Yes                       | Free at themoviedb.org                                                             |
-| `COOKIE_SECURE`       | Recommended in production | Set `true` once served over HTTPS — browsers drop `Secure` cookies over plain HTTP |
-| `SESSION_COOKIE_NAME` | No                        | Defaults to `rwnd_session`                                                         |
+| Variable              | Required                         | Notes                                                                              |
+| --------------------- | -------------------------------- | ---------------------------------------------------------------------------------- |
+| `DATABASE_URL`        | Yes                              | Postgres connection string                                                         |
+| `TMDB_API_KEY`        | Yes                              | Free at themoviedb.org                                                             |
+| `COOKIE_SECURE`       | Recommended in production        | Set `true` once served over HTTPS — browsers drop `Secure` cookies over plain HTTP |
+| `SESSION_COOKIE_NAME` | No                               | Defaults to `rwnd_session`                                                         |
+| `TRAKT_CLIENT_ID`     | No                               | Enables Trakt import (Settings > Import) — free app at trakt.tv/oauth/applications |
+| `TRAKT_CLIENT_SECRET` | Only if `TRAKT_CLIENT_ID` is set | Paired with the client id above                                                    |
+| `ENCRYPTION_KEY`      | Only if `TRAKT_CLIENT_ID` is set | 32 bytes, base64 (`openssl rand -base64 32`) — encrypts stored Trakt tokens        |
 
 ## Putting it behind a reverse proxy
 

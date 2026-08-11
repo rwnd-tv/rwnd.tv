@@ -1,10 +1,12 @@
 import { relations, sql } from 'drizzle-orm'
 import {
+  boolean,
   check,
   customType,
   date,
   index,
   integer,
+  jsonb,
   pgEnum,
   pgTable,
   smallint,
@@ -36,6 +38,14 @@ export const registrationModeEnum = pgEnum('registration_mode', ['open', 'invite
 export const metadataEntityTypeEnum = pgEnum('metadata_entity_type', ['movie', 'show', 'episode'])
 export const externalIdSourceEnum = pgEnum('external_id_source', ['tmdb', 'imdb', 'tvdb', 'trakt'])
 export const playSourceEnum = pgEnum('play_source', ['manual', 'plex', 'import'])
+export const importSourceEnum = pgEnum('import_source', ['trakt'])
+export const importJobStatusEnum = pgEnum('import_job_status', [
+  'pending',
+  'running',
+  'completed',
+  'failed',
+  'cancelled',
+])
 
 // ---------------------------------------------------------------------------
 // Identity
@@ -240,10 +250,18 @@ export const plays = pgTable(
     episodeId: uuid('episode_id').references(() => episodes.id, { onDelete: 'cascade' }),
     watchedAt: timestamp('watched_at', { withTimezone: true }).notNull(),
     source: playSourceEnum('source').notNull().default('manual'),
+    // Opaque identifier for the play in its originating system (a Trakt
+    // history item id today, a Plex/Tautulli event id later). Only
+    // populated for non-manual sources — it's what makes re-running an
+    // import, or a webhook retry, idempotent instead of double-logging.
+    sourceRef: text('source_ref'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
     index('plays_user_watched_at_idx').on(table.userId, table.watchedAt.desc()),
+    uniqueIndex('plays_user_source_ref_idx')
+      .on(table.userId, table.source, table.sourceRef)
+      .where(sql`${table.sourceRef} IS NOT NULL`),
     check(
       'plays_exactly_one_media_ref',
       sql`(${table.movieId} IS NOT NULL)::int + (${table.episodeId} IS NOT NULL)::int = 1`,
@@ -252,14 +270,149 @@ export const plays = pgTable(
 )
 
 // ---------------------------------------------------------------------------
+// Trakt import (M2, see docs/adr/0004-trakt-import.md)
+// ---------------------------------------------------------------------------
+
+/**
+ * One row per user's linked Trakt account. Tokens are encrypted (not
+ * hashed, unlike sessions/api_tokens) because the import job has to
+ * present them back to Trakt — see apps/api/src/lib/crypto.ts.
+ */
+export const traktConnections = pgTable('trakt_connections', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id')
+    .notNull()
+    .unique()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  traktUsername: text('trakt_username').notNull(),
+  accessTokenEncrypted: text('access_token_encrypted').notNull(),
+  refreshTokenEncrypted: text('refresh_token_encrypted').notNull(),
+  accessTokenExpiresAt: timestamp('access_token_expires_at', { withTimezone: true }).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+})
+
+/**
+ * A (potentially long-running, resumable) import run. `cursor` records
+ * where in the history/ratings/watchlist sequence the job got to, so a
+ * restart (see apps/api/src/index.ts) picks back up rather than starting
+ * over. `failures` caps at 200 entries — enough for a user to see what
+ * didn't match without the row growing unbounded on a bad import.
+ */
+export const importJobs = pgTable(
+  'import_jobs',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    source: importSourceEnum('source').notNull().default('trakt'),
+    status: importJobStatusEnum('status').notNull().default('pending'),
+    includeHistory: boolean('include_history').notNull().default(true),
+    includeRatings: boolean('include_ratings').notNull().default(true),
+    includeWatchlist: boolean('include_watchlist').notNull().default(true),
+    cursor: jsonb('cursor').$type<{ phase: 'history' | 'ratings' | 'watchlist'; page: number }>(),
+    itemsTotal: integer('items_total'),
+    itemsProcessed: integer('items_processed').notNull().default(0),
+    itemsImported: integer('items_imported').notNull().default(0),
+    itemsSkipped: integer('items_skipped').notNull().default(0),
+    failures: jsonb('failures')
+      .$type<Array<{ phase: string; reason: string; title?: string }>>()
+      .notNull()
+      .default([]),
+    error: text('error'),
+    startedAt: timestamp('started_at', { withTimezone: true }),
+    finishedAt: timestamp('finished_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    // A user can only have one import in flight at a time.
+    uniqueIndex('import_jobs_user_active_idx')
+      .on(table.userId)
+      .where(sql`${table.status} IN ('pending', 'running')`),
+    index('import_jobs_user_created_at_idx').on(table.userId, table.createdAt.desc()),
+  ],
+)
+
+/**
+ * Polymorphic like `external_ids` (schema comment above applies here too):
+ * no FK on (entityType, entityId) since Postgres can't express a
+ * cross-table reference, so integrity is enforced in application code.
+ */
+export const ratings = pgTable(
+  'ratings',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    entityType: metadataEntityTypeEnum('entity_type').notNull(),
+    entityId: uuid('entity_id').notNull(),
+    rating: smallint('rating').notNull(),
+    ratedAt: timestamp('rated_at', { withTimezone: true }).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('ratings_user_entity_idx').on(table.userId, table.entityType, table.entityId),
+    check('ratings_rating_range', sql`${table.rating} BETWEEN 1 AND 10`),
+  ],
+)
+
+/** Polymorphic like `ratings` above. */
+export const watchlistItems = pgTable(
+  'watchlist_items',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    entityType: metadataEntityTypeEnum('entity_type').notNull(),
+    entityId: uuid('entity_id').notNull(),
+    listedAt: timestamp('listed_at', { withTimezone: true }).notNull(),
+    notes: text('notes'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('watchlist_items_user_entity_idx').on(
+      table.userId,
+      table.entityType,
+      table.entityId,
+    ),
+  ],
+)
+
+// ---------------------------------------------------------------------------
 // Relations (for Drizzle's relational query API)
 // ---------------------------------------------------------------------------
 
-export const usersRelations = relations(users, ({ many }) => ({
+export const usersRelations = relations(users, ({ many, one }) => ({
   credentials: many(userCredentials),
   sessions: many(sessions),
   apiTokens: many(apiTokens),
   plays: many(plays),
+  traktConnection: one(traktConnections, {
+    fields: [users.id],
+    references: [traktConnections.userId],
+  }),
+  importJobs: many(importJobs),
+  ratings: many(ratings),
+  watchlistItems: many(watchlistItems),
+}))
+
+export const traktConnectionsRelations = relations(traktConnections, ({ one }) => ({
+  user: one(users, { fields: [traktConnections.userId], references: [users.id] }),
+}))
+
+export const importJobsRelations = relations(importJobs, ({ one }) => ({
+  user: one(users, { fields: [importJobs.userId], references: [users.id] }),
+}))
+
+export const ratingsRelations = relations(ratings, ({ one }) => ({
+  user: one(users, { fields: [ratings.userId], references: [users.id] }),
+}))
+
+export const watchlistItemsRelations = relations(watchlistItems, ({ one }) => ({
+  user: one(users, { fields: [watchlistItems.userId], references: [users.id] }),
 }))
 
 export const userCredentialsRelations = relations(userCredentials, ({ one }) => ({

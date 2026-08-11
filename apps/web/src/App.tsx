@@ -6,6 +6,7 @@ import { LoginPage } from './routes/LoginPage.js'
 import { RegisterPage } from './routes/RegisterPage.js'
 import { SearchPage } from './routes/SearchPage.js'
 import { HistoryPage } from './routes/HistoryPage.js'
+import { ImportPage } from './routes/ImportPage.js'
 import { SettingsPage } from './routes/SettingsPage.js'
 import { NotFoundPage } from './routes/NotFoundPage.js'
 
@@ -22,6 +23,7 @@ const router = createBrowserRouter([
           { path: '/', element: <Navigate to="/history" replace /> },
           { path: '/search', element: <SearchPage /> },
           { path: '/history', element: <HistoryPage /> },
+          { path: '/import', element: <ImportPage /> },
           { path: '/settings', element: <SettingsPage /> },
         ],
       },

@@ -6,6 +6,7 @@
   "nav": {
     "search": "Recherche",
     "history": "Historique",
+    "import": "Importer",
     "settings": "Paramètres",
     "logout": "Se déconnecter"
   },
@@ -49,6 +50,42 @@
     "loadMore": "Charger plus",
     "remove": "Supprimer",
     "episodeLabel": "S{{season}}E{{episode}}"
+  },
+  "import": {
+    "title": "Importer",
+    "notConfigured": "L'import Trakt n'est pas configuré sur cette instance — l'administrateur doit définir TRAKT_CLIENT_ID et TRAKT_CLIENT_SECRET.",
+    "trakt": {
+      "title": "Trakt",
+      "description": "Connectez un compte Trakt pour importer votre historique de visionnage, vos notes et votre liste à voir.",
+      "connect": "Se connecter à Trakt",
+      "connectedAs": "Connecté en tant que {{username}}.",
+      "disconnect": "Déconnecter",
+      "pairingInstructions": "Saisissez ce code sur le lien ci-dessous pour autoriser rwnd.tv :",
+      "retryPairing": "Réessayer",
+      "denied": "L'autorisation a été refusée sur Trakt. Vous pouvez réessayer.",
+      "expired": "Ce code a expiré avant d'être utilisé. Vous pouvez réessayer."
+    },
+    "start": {
+      "title": "Démarrer un import",
+      "description": "Choisissez ce qu'il faut importer depuis Trakt. Relancer un import est sans risque — cela ne crée pas de doublons.",
+      "history": "Historique de visionnage",
+      "ratings": "Notes",
+      "watchlist": "Liste à voir",
+      "submit": "Démarrer l'import",
+      "alreadyRunning": "Un import est déjà en cours."
+    },
+    "progress": {
+      "title": "Progression de l'import",
+      "status": {
+        "pending": "En attente…",
+        "running": "Import en cours…",
+        "completed": "Terminé",
+        "failed": "Échec",
+        "cancelled": "Annulé"
+      },
+      "counts": "{{processed}} sur {{total}} traités ({{imported}} importés)",
+      "failuresSummary": "{{count}} éléments n'ont pas pu être associés"
+    }
   },
   "settings": {
     "title": "Paramètres",

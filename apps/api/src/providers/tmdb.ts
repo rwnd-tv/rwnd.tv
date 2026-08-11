@@ -50,6 +50,9 @@ interface TmdbEpisode {
   runtime?: number | null
   air_date?: string | null
 }
+interface TmdbSeason {
+  episodes: TmdbEpisode[]
+}
 
 /**
  * TMDB terms require attribution (see README/UI footer) and forbid caching
@@ -141,5 +144,20 @@ export class TmdbProvider implements MetadataProvider {
       runtimeMinutes: e.runtime ?? null,
       firstAired: e.air_date ?? null,
     }
+  }
+
+  async getSeason(
+    showExternalId: string,
+    seasonNumber: number,
+    locale: string,
+  ): Promise<ProviderEpisode[]> {
+    const s = await this.request<TmdbSeason>(`/tv/${showExternalId}/season/${seasonNumber}`, locale)
+    return s.episodes.map((e) => ({
+      title: e.name ?? null,
+      seasonNumber: e.season_number,
+      episodeNumber: e.episode_number,
+      runtimeMinutes: e.runtime ?? null,
+      firstAired: e.air_date ?? null,
+    }))
   }
 }

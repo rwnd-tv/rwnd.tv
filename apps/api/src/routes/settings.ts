@@ -36,6 +36,7 @@ function serializeSettings(row?: {
       ? source.defaultLocale
       : DEFAULT_SETTINGS.defaultLocale,
     environmentLabel: loadEnv().ENVIRONMENT_LABEL ?? null,
+    traktConfigured: Boolean(loadEnv().TRAKT_CLIENT_ID && loadEnv().TRAKT_CLIENT_SECRET),
   }
 }
 

@@ -50,6 +50,11 @@ export function Layout() {
             <NavLink to="/history" className={navLinkClass}>
               {t('nav.history')}
             </NavLink>
+            {settings?.traktConfigured && (
+              <NavLink to="/import" className={navLinkClass}>
+                {t('nav.import')}
+              </NavLink>
+            )}
             <NavLink to="/settings" className={navLinkClass}>
               {t('nav.settings')}
             </NavLink>

@@ -17,6 +17,17 @@ export interface MetadataProvider {
     episodeNumber: number,
     locale: string,
   ): Promise<ProviderEpisode>
+  /**
+   * All episodes of one season in a single call. Used by the Trakt importer
+   * (apps/api/src/import/match.ts) instead of `getEpisode` per episode —
+   * resolving a large history one episode at a time would mean thousands of
+   * redundant calls for shows with many watched episodes.
+   */
+  getSeason(
+    showExternalId: string,
+    seasonNumber: number,
+    locale: string,
+  ): Promise<ProviderEpisode[]>
 }
 
 export interface ProviderSearchResult {

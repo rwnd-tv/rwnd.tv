@@ -1,11 +1,17 @@
 import { sql } from 'drizzle-orm'
-import { createDatabase, users, userCredentials, type Database } from '@rwnd/db'
+import { createDatabase, traktConnections, users, userCredentials, type Database } from '@rwnd/db'
 import { createApp } from '../app.js'
 import { hashPassword } from '../lib/password.js'
+import { encryptSecret } from '../lib/crypto.js'
+import { loadEnv } from '../env.js'
 
 /** Tables that accumulate rows across tests, in FK-safe delete order. */
 const TABLES = [
   'plays',
+  'ratings',
+  'watchlist_items',
+  'import_jobs',
+  'trakt_connections',
   'external_ids',
   'episodes',
   'shows',
@@ -60,4 +66,39 @@ export async function createLocalUser(
     .insert(userCredentials)
     .values({ userId: user.id, type: 'local', passwordHash: await hashPassword(password) })
   return user.id
+}
+
+/**
+ * Inserts a Trakt connection directly, bypassing the device-flow pairing
+ * dance — for tests that want to exercise import behaviour without also
+ * re-testing pairing (which has its own dedicated test).
+ */
+export async function createTraktConnection(db: Database, userId: string): Promise<void> {
+  const env = loadEnv()
+  await db.insert(traktConnections).values({
+    userId,
+    traktUsername: 'test-trakt-user',
+    accessTokenEncrypted: encryptSecret('test-access-token', env.ENCRYPTION_KEY!),
+    refreshTokenEncrypted: encryptSecret('test-refresh-token', env.ENCRYPTION_KEY!),
+    accessTokenExpiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+  })
+}
+
+/**
+ * Polls `fn` until it returns a truthy value, or throws once `timeoutMs`
+ * elapses. Needed because pairing and import both kick off fire-and-forget
+ * background work (see routes/imports.ts) rather than blocking the HTTP
+ * response on it — a real client would poll GET endpoints the same way.
+ */
+export async function waitFor<T>(
+  fn: () => Promise<T | undefined | null | false>,
+  { timeoutMs = 5000, intervalMs = 20 }: { timeoutMs?: number; intervalMs?: number } = {},
+): Promise<T> {
+  const deadline = Date.now() + timeoutMs
+  for (;;) {
+    const result = await fn()
+    if (result) return result
+    if (Date.now() > deadline) throw new Error('waitFor timed out')
+    await new Promise((resolve) => setTimeout(resolve, intervalMs))
+  }
 }

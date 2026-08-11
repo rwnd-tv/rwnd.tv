@@ -11,10 +11,14 @@ export const instanceSettingsSchema = z.object({
   // Set via the ENVIRONMENT_LABEL env var at deploy time, not admin-editable
   // here — see apps/api/src/env.ts.
   environmentLabel: z.string().nullable(),
+  // True when this instance has TRAKT_CLIENT_ID/SECRET configured — the web
+  // app hides the /import page entirely when false, since none of its
+  // routes would work without a Trakt app registered.
+  traktConfigured: z.boolean(),
 })
 export type InstanceSettings = z.infer<typeof instanceSettingsSchema>
 
 export const updateInstanceSettingsRequestSchema = instanceSettingsSchema
-  .omit({ environmentLabel: true })
+  .omit({ environmentLabel: true, traktConfigured: true })
   .partial()
 export type UpdateInstanceSettingsRequest = z.infer<typeof updateInstanceSettingsRequestSchema>

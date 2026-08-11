@@ -8,6 +8,10 @@ if (!url) throw new Error('DATABASE_URL required')
 
 const TABLES = [
   'plays',
+  'ratings',
+  'watchlist_items',
+  'import_jobs',
+  'trakt_connections',
   'external_ids',
   'episodes',
   'shows',

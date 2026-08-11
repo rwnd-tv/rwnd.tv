@@ -22,3 +22,45 @@ describe('COOKIE_SECURE parsing', () => {
     expect(parseEnv({ ...base, NODE_ENV: 'development' }).COOKIE_SECURE).toBe(false)
   })
 })
+
+describe('Trakt import config', () => {
+  const validKey = Buffer.alloc(32, 7).toString('base64')
+
+  it('is fine with no Trakt config at all', () => {
+    expect(() => parseEnv(base)).not.toThrow()
+  })
+
+  it('requires TRAKT_CLIENT_SECRET when TRAKT_CLIENT_ID is set', () => {
+    expect(() => parseEnv({ ...base, TRAKT_CLIENT_ID: 'id', ENCRYPTION_KEY: validKey })).toThrow(
+      /TRAKT_CLIENT_SECRET/,
+    )
+  })
+
+  it('requires ENCRYPTION_KEY when TRAKT_CLIENT_ID is set', () => {
+    expect(() =>
+      parseEnv({ ...base, TRAKT_CLIENT_ID: 'id', TRAKT_CLIENT_SECRET: 'secret' }),
+    ).toThrow(/ENCRYPTION_KEY/)
+  })
+
+  it('rejects an ENCRYPTION_KEY that is not 32 bytes', () => {
+    expect(() =>
+      parseEnv({
+        ...base,
+        TRAKT_CLIENT_ID: 'id',
+        TRAKT_CLIENT_SECRET: 'secret',
+        ENCRYPTION_KEY: Buffer.alloc(16).toString('base64'),
+      }),
+    ).toThrow(/32 bytes/)
+  })
+
+  it('accepts a valid full Trakt configuration', () => {
+    expect(() =>
+      parseEnv({
+        ...base,
+        TRAKT_CLIENT_ID: 'id',
+        TRAKT_CLIENT_SECRET: 'secret',
+        ENCRYPTION_KEY: validKey,
+      }),
+    ).not.toThrow()
+  })
+})

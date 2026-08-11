@@ -6,6 +6,7 @@
   "nav": {
     "search": "Search",
     "history": "History",
+    "import": "Import",
     "settings": "Settings",
     "logout": "Log out"
   },
@@ -49,6 +50,42 @@
     "loadMore": "Load more",
     "remove": "Remove",
     "episodeLabel": "S{{season}}E{{episode}}"
+  },
+  "import": {
+    "title": "Import",
+    "notConfigured": "Trakt import isn't set up on this instance — the admin needs to set TRAKT_CLIENT_ID and TRAKT_CLIENT_SECRET.",
+    "trakt": {
+      "title": "Trakt",
+      "description": "Connect a Trakt account to import your watch history, ratings, and watchlist.",
+      "connect": "Connect to Trakt",
+      "connectedAs": "Connected as {{username}}.",
+      "disconnect": "Disconnect",
+      "pairingInstructions": "Enter this code at the link below to authorise rwnd.tv:",
+      "retryPairing": "Try again",
+      "denied": "Pairing was denied on Trakt. You can try again.",
+      "expired": "This code expired before it was used. You can try again."
+    },
+    "start": {
+      "title": "Start an import",
+      "description": "Choose what to bring in from Trakt. Re-running an import is safe — it won't create duplicates.",
+      "history": "Watch history",
+      "ratings": "Ratings",
+      "watchlist": "Watchlist",
+      "submit": "Start import",
+      "alreadyRunning": "An import is already in progress."
+    },
+    "progress": {
+      "title": "Import progress",
+      "status": {
+        "pending": "Queued…",
+        "running": "Importing…",
+        "completed": "Completed",
+        "failed": "Failed",
+        "cancelled": "Cancelled"
+      },
+      "counts": "{{processed}} of {{total}} processed ({{imported}} imported)",
+      "failuresSummary": "{{count}} items couldn't be matched"
+    }
   },
   "settings": {
     "title": "Settings",

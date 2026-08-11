@@ -68,7 +68,12 @@ export async function resolveMovie(
   return { id: movie.id, title: movie.title, posterPath: movie.posterPath }
 }
 
-async function resolveShow(
+/**
+ * Exported for apps/api/src/import/match.ts, which needs to resolve a show
+ * on its own (for a Trakt rating/watchlist entry of type 'show') as well as
+ * before resolving individual episodes.
+ */
+export async function resolveShow(
   db: Database,
   provider: MetadataProvider,
   showExternalId: string,

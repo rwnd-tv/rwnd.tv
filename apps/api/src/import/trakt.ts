@@ -15,7 +15,13 @@ import { decryptSecret, encryptSecret } from '../lib/crypto.js'
 import { TraktClient, type PagedResult } from '../trakt/client.js'
 import { refreshAccessToken } from '../trakt/auth.js'
 import type { TraktHistoryItem, TraktRatingItem, TraktWatchlistItem } from '../trakt/types.js'
-import { matchEpisode, matchMovie, matchTraktMediaItem, type MatchOutcome } from './match.js'
+import {
+  matchEpisode,
+  matchMovie,
+  matchTraktMediaItem,
+  type MatchOutcome,
+  type SeasonCache,
+} from './match.js'
 
 /**
  * Runs (or resumes) one Trakt import job to completion. Exported so tests
@@ -144,7 +150,7 @@ export async function runTraktImport(
   // Per-job cache: a show with many watched/rated/listed episodes should
   // only trigger one provider.getSeason() call per season, not one per
   // episode — see import/match.ts.
-  const seasonCache = new Set<string>()
+  const seasonCache: SeasonCache = new Map()
 
   const state = {
     itemsTotal: job.itemsTotal,

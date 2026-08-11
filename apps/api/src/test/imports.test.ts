@@ -75,6 +75,9 @@ function createFetchStub(
 
     if (url.hostname === 'api.themoviedb.org') {
       if (url.pathname === '/3/movie/603') return jsonResponse(fx.tmdbMatrixMovie)
+      if (url.pathname === `/3/movie/${fx.TMDB_DELETED_MOVIE_ID}`) {
+        return new Response('{"status_message":"Not Found"}', { status: 404 })
+      }
       if (url.pathname === '/3/tv/1396') return jsonResponse(fx.tmdbBreakingBadShow)
       if (url.pathname === '/3/tv/1396/season/1') {
         if (seasonCalls) seasonCalls.count += 1
@@ -211,6 +214,38 @@ describe('Trakt import', () => {
 
     const allPlaysAfterReimport = await db.select().from(plays).where(eq(plays.userId, me.id))
     expect(allPlaysAfterReimport).toHaveLength(3)
+  })
+
+  it('records a TMDB lookup failure as a skipped item instead of aborting the whole job', async () => {
+    vi.stubGlobal(
+      'fetch',
+      createFetchStub({
+        // A movie TMDB 404s on, sandwiched between two movies that resolve
+        // fine — the failure in the middle must not stop the one after it.
+        historyItems: [fx.matrixHistoryItem, fx.tmdbDeletedMovieHistoryItem],
+      }),
+    )
+
+    const cookie = await createUserAndCookie()
+    const me = await json<User>(await app.request('/api/v1/auth/me', { headers: { cookie } }))
+    await createTraktConnection(db, me.id)
+
+    const [job] = await db
+      .insert(importJobs)
+      .values({ userId: me.id, includeRatings: false, includeWatchlist: false })
+      .returning()
+    await runTraktImport(db, provider, env, job!.id)
+
+    const [finished] = await db.select().from(importJobs).where(eq(importJobs.id, job!.id)).limit(1)
+    expect(finished?.status).toBe('completed')
+    expect(finished?.error).toBeNull()
+    expect(finished?.itemsImported).toBe(1)
+    expect(finished?.itemsSkipped).toBe(1)
+    expect(finished?.failures).toHaveLength(1)
+    expect(finished?.failures[0]?.reason).toMatch(/TMDB lookup failed.*404/)
+
+    const allPlays = await db.select().from(plays).where(eq(plays.userId, me.id))
+    expect(allPlays).toHaveLength(1)
   })
 
   it('re-importing ratings updates a changed rating rather than skipping it', async () => {

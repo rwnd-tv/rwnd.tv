@@ -35,8 +35,15 @@ interface ShowMatch {
 
 /** Per-job cache so a show with many watched episodes only triggers one
  * provider.getSeason() call per season, not one per episode. Keyed by
- * `${localShowId}:${seasonNumber}`. */
-export type SeasonCache = Set<string>
+ * `${localShowId}:${seasonNumber}`; value is `null` once fetched
+ * successfully, or the failure reason if the fetch failed — caching the
+ * failure too means one broken season doesn't retry TMDB for every
+ * episode under it. */
+export type SeasonCache = Map<string, string | null>
+
+function describeProviderError(err: unknown): string {
+  return err instanceof Error ? `TMDB lookup failed: ${err.message}` : 'TMDB lookup failed'
+}
 
 async function lookupLocalIdByExternalId(
   db: Database,
@@ -114,7 +121,15 @@ export async function matchMovie(
     return { ok: false, reason: 'No TMDB id for this movie', title: traktMovie.title }
   }
 
-  const movie = await resolveMovie(db, provider, String(traktMovie.ids.tmdb), locale)
+  let movie: Awaited<ReturnType<typeof resolveMovie>>
+  try {
+    movie = await resolveMovie(db, provider, String(traktMovie.ids.tmdb), locale)
+  } catch (err) {
+    // A Trakt item can carry a tmdb id TMDB no longer recognises (merged,
+    // deleted, or just wrong) — that's a per-item failure, not a reason to
+    // abort the whole import.
+    return { ok: false, reason: describeProviderError(err), title: traktMovie.title }
+  }
   await backfillExternalIds(db, 'movie', movie.id, traktMovie.ids)
   return { ok: true, entityType: 'movie', entityId: movie.id, title: movie.title }
 }
@@ -140,7 +155,12 @@ async function matchShow(
     return { ok: false, reason: 'No TMDB id for this show', title: traktShow.title }
   }
 
-  const show = await resolveShow(db, provider, String(traktShow.ids.tmdb), locale)
+  let show: Awaited<ReturnType<typeof resolveShow>>
+  try {
+    show = await resolveShow(db, provider, String(traktShow.ids.tmdb), locale)
+  } catch (err) {
+    return { ok: false, reason: describeProviderError(err), title: traktShow.title }
+  }
   await backfillExternalIds(db, 'show', show.id, traktShow.ids)
   return {
     ok: true,
@@ -189,27 +209,38 @@ export async function matchEpisode(
 
   const seasonKey = `${show.id}:${traktEpisode.season}`
   if (!seasonCache.has(seasonKey)) {
-    const seasonEpisodes = await provider.getSeason(
-      show.tmdbExternalId,
-      traktEpisode.season,
-      locale,
-    )
-    if (seasonEpisodes.length > 0) {
-      await db
-        .insert(episodes)
-        .values(
-          seasonEpisodes.map((e) => ({
-            showId: show.id,
-            seasonNumber: e.seasonNumber,
-            episodeNumber: e.episodeNumber,
-            title: e.title,
-            runtimeMinutes: e.runtimeMinutes,
-            firstAired: e.firstAired,
-          })),
-        )
-        .onConflictDoNothing()
+    try {
+      const seasonEpisodes = await provider.getSeason(
+        show.tmdbExternalId,
+        traktEpisode.season,
+        locale,
+      )
+      if (seasonEpisodes.length > 0) {
+        await db
+          .insert(episodes)
+          .values(
+            seasonEpisodes.map((e) => ({
+              showId: show.id,
+              seasonNumber: e.seasonNumber,
+              episodeNumber: e.episodeNumber,
+              title: e.title,
+              runtimeMinutes: e.runtimeMinutes,
+              firstAired: e.firstAired,
+            })),
+          )
+          .onConflictDoNothing()
+      }
+      seasonCache.set(seasonKey, null)
+    } catch (err) {
+      // Cached so every other episode in this same broken season fails
+      // fast instead of re-hitting TMDB for a season it's already 404'd on.
+      seasonCache.set(seasonKey, describeProviderError(err))
     }
-    seasonCache.add(seasonKey)
+  }
+
+  const seasonFailure = seasonCache.get(seasonKey)
+  if (seasonFailure) {
+    return { ok: false, reason: seasonFailure, title: label }
   }
 
   const resolved = await findLocalEpisode(db, show.id, traktEpisode.season, traktEpisode.number)

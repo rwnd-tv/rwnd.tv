@@ -98,6 +98,22 @@ export const secondEpisodeHistoryItem: TraktHistoryItem = {
   },
 }
 
+/** Carries a `tmdb` id, but TMDB itself 404s on it (a merged/deleted
+ * title) — the importer must record this as a failure and keep going,
+ * not let the whole job die on one bad id. */
+export const TMDB_DELETED_MOVIE_ID = 327805
+export const tmdbDeletedMovieHistoryItem: TraktHistoryItem = {
+  id: 105,
+  watched_at: '2024-01-07T12:00:00.000Z',
+  action: 'watch',
+  type: 'movie',
+  movie: {
+    title: 'A Title TMDB No Longer Has',
+    year: 2015,
+    ids: { trakt: 7, slug: 'gone-from-tmdb', imdb: 'tt9999999', tmdb: TMDB_DELETED_MOVIE_ID },
+  },
+}
+
 /** No TMDB id and nothing already matched locally — the importer can't
  * resolve this and must record it as a failure, not throw or silently
  * drop it. */

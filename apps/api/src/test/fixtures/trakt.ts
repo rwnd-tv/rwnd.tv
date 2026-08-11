@@ -3,6 +3,7 @@ import type {
   TraktHistoryItem,
   TraktRatingItem,
   TraktSettingsResponse,
+  TraktShow,
   TraktTokenResponse,
   TraktWatchlistItem,
 } from '../../trakt/types.js'
@@ -12,6 +13,7 @@ export const MATRIX_TRAKT_ID = 1
 export const MATRIX_TMDB_ID = 603
 export const BREAKING_BAD_SHOW_TRAKT_ID = 2
 export const BREAKING_BAD_SHOW_TMDB_ID = 1396
+export const BREAKING_BAD_SHOW_TVDB_ID = 81189
 export const PILOT_EPISODE_TRAKT_ID = 3
 export const SECOND_EPISODE_TRAKT_ID = 4
 export const OBSCURE_MOVIE_TRAKT_ID = 5
@@ -71,6 +73,7 @@ export const pilotHistoryItem: TraktHistoryItem = {
       slug: 'breaking-bad',
       imdb: 'tt0903747',
       tmdb: BREAKING_BAD_SHOW_TMDB_ID,
+      tvdb: BREAKING_BAD_SHOW_TVDB_ID,
     },
   },
   episode: {
@@ -112,6 +115,55 @@ export const tmdbDeletedMovieHistoryItem: TraktHistoryItem = {
     year: 2015,
     ids: { trakt: 7, slug: 'gone-from-tmdb', imdb: 'tt9999999', tmdb: TMDB_DELETED_MOVIE_ID },
   },
+}
+
+/** A show whose TMDB lookup 404s. Two episodes of it, sharing the same
+ * `show` object, are used to assert that the *show* resolution failure is
+ * cached per job — without that, every episode of an unresolvable show
+ * independently retries the same failing TMDB request (found live: one
+ * such show accounted for 200+ redundant failures on a real import). */
+export const TMDB_DELETED_SHOW_ID = 888888
+const undeadShow: TraktShow = {
+  title: 'A Show TMDB No Longer Has',
+  year: 2016,
+  ids: { trakt: 8, slug: 'gone-show', imdb: null, tmdb: TMDB_DELETED_SHOW_ID },
+}
+export const undeadShowHistoryItem1: TraktHistoryItem = {
+  id: 106,
+  watched_at: '2024-01-08T12:00:00.000Z',
+  action: 'watch',
+  type: 'episode',
+  show: undeadShow,
+  episode: { season: 1, number: 1, title: null, ids: { trakt: 801, imdb: null, tmdb: null } },
+}
+export const undeadShowHistoryItem2: TraktHistoryItem = {
+  id: 107,
+  watched_at: '2024-01-09T12:00:00.000Z',
+  action: 'watch',
+  type: 'episode',
+  show: undeadShow,
+  episode: { season: 1, number: 2, title: null, ids: { trakt: 802, imdb: null, tmdb: null } },
+}
+
+/**
+ * Deliberately malformed — `ids` is missing entirely. Trakt responses
+ * aren't runtime-validated at the HTTP boundary (no zod parse), so a
+ * malformed response is a real possibility, and it throws from a place
+ * import/match.ts's provider-error try/catches don't cover (reading
+ * `.trakt` off `ids` happens before any of those). Used to assert
+ * apps/api/src/import/trakt.ts's per-item catch survives errors it didn't
+ * anticipate, not just TMDB ones.
+ */
+export const malformedHistoryItem: TraktHistoryItem = {
+  id: 108,
+  watched_at: '2024-01-10T12:00:00.000Z',
+  action: 'watch',
+  type: 'movie',
+  movie: {
+    title: 'Malformed Movie',
+    year: null,
+    ids: undefined,
+  } as unknown as TraktHistoryItem['movie'],
 }
 
 /** No TMDB id and nothing already matched locally — the importer can't

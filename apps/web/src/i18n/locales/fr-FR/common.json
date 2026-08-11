@@ -49,7 +49,8 @@
     "empty": "Vous n'avez encore rien enregistré. Recherchez quelque chose que vous avez regardé pour commencer.",
     "loadMore": "Charger plus",
     "remove": "Supprimer",
-    "episodeLabel": "S{{season}}E{{episode}}"
+    "episodeLabelShort": "S{{season}} E{{episode}}",
+    "episodeLabelLong": "Saison {{season}} Épisode {{episode}}"
   },
   "import": {
     "title": "Importer",
@@ -83,8 +84,22 @@
         "failed": "Échec",
         "cancelled": "Annulé"
       },
-      "counts": "{{processed}} sur {{total}} traités ({{imported}} importés)",
-      "failuresSummary": "{{count}} éléments n'ont pas pu être associés"
+      "counts": "{{processed}} éléments traités ({{imported}} éléments importés)",
+      "elapsed": "Écoulé : {{duration}}",
+      "remaining": "environ {{duration}} restant",
+      "failuresSummary": "{{count}} éléments n'ont pas pu être associés",
+      "season": "Saison {{number}}",
+      "episode": "Épisode {{number}}",
+      "phase": {
+        "history": "V",
+        "ratings": "N",
+        "watchlist": "LV"
+      },
+      "phaseLabel": {
+        "history": "Visionnage",
+        "ratings": "Note",
+        "watchlist": "Liste à voir"
+      }
     }
   },
   "settings": {

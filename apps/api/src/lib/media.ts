@@ -9,7 +9,7 @@ export function episodeDisplayTitle(
   seasonNumber: number | undefined,
   episodeNumber: number | undefined,
 ): string {
-  return title ?? `S${seasonNumber}E${episodeNumber}`
+  return title ?? `S${seasonNumber} E${episodeNumber}`
 }
 
 /**

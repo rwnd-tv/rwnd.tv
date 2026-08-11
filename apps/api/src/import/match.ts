@@ -3,7 +3,7 @@ import type { Database } from '@rwnd/db'
 import { episodes, externalIds, movies, shows } from '@rwnd/db'
 import type { MetadataProvider } from '../providers/types.js'
 import { resolveMovie, resolveShow } from '../lib/media.js'
-import type { TraktEpisode, TraktIds, TraktMovie, TraktShow } from '../trakt/types.js'
+import type { TraktEpisode, TraktIds, TraktMovie, TraktSeason, TraktShow } from '../trakt/types.js'
 
 /**
  * Matches Trakt-sourced items against rwnd.tv's local records, via
@@ -11,8 +11,13 @@ import type { TraktEpisode, TraktIds, TraktMovie, TraktShow } from '../trakt/typ
  * against a `trakt` row means a previous import already resolved this item
  * (no network call); otherwise it falls back to the item's `tmdb` id and
  * goes through the same resolveMovie/resolveShow path search already uses
- * (apps/api/src/lib/media.ts), then backfills the `trakt` (and `imdb`, when
- * present) rows so the next import — or a webhook — hits the fast path.
+ * (apps/api/src/lib/media.ts), then backfills every id Trakt handed us for
+ * free (`trakt`, plus `imdb`/`tvdb` when present) so the next import — or a
+ * webhook, or a future provider that matches by imdb/tvdb instead of tmdb —
+ * hits the fast path. Trakt's `slug` isn't stored: it's an alternate
+ * identifier *within* Trakt's own system, not a separate external source,
+ * so it doesn't fit `external_id_source`'s model of "which other system
+ * does this id belong to."
  *
  * Anything that can't be matched (no tmdb id and no prior local match, or a
  * Trakt item type rwnd.tv has no local entity for) is reported back to the
@@ -21,7 +26,17 @@ import type { TraktEpisode, TraktIds, TraktMovie, TraktShow } from '../trakt/typ
 
 export type MatchOutcome =
   | { ok: true; entityType: 'movie' | 'show' | 'episode'; entityId: string; title: string }
-  | { ok: false; reason: string; title?: string }
+  | {
+      ok: false
+      reason: string
+      title?: string
+      /** Present for episode-level (and, for `season`, season-level)
+       * failures — lets the UI group failures into a show > season >
+       * episode tree instead of parsing them back out of `title`. */
+      show?: string
+      season?: number
+      episode?: number
+    }
 
 interface ShowMatch {
   id: string
@@ -33,13 +48,25 @@ interface ShowMatch {
   tmdbExternalId: string | null
 }
 
-/** Per-job cache so a show with many watched episodes only triggers one
- * provider.getSeason() call per season, not one per episode. Keyed by
- * `${localShowId}:${seasonNumber}`; value is `null` once fetched
- * successfully, or the failure reason if the fetch failed — caching the
- * failure too means one broken season doesn't retry TMDB for every
- * episode under it. */
-export type SeasonCache = Map<string, string | null>
+/**
+ * Per-job caches so a show with many watched/rated/listed episodes only
+ * triggers one TMDB request per show and per season, not one per episode.
+ * Both cache failures as well as successes — a show whose TMDB lookup
+ * 404s fails identically for every episode under it, so without
+ * `showFailures` a show with N watched episodes makes N redundant failing
+ * requests instead of one (found live: a single unresolvable show
+ * accounted for 200+ consecutive failures on a real import).
+ */
+export interface ImportCaches {
+  /** `${localShowId}:${seasonNumber}` -> null once fetched successfully,
+   * or the failure reason if the fetch failed. */
+  seasons: Map<string, string | null>
+  /** Trakt show id -> failure reason. Only failures are cached here — a
+   * successful resolution is already fast via the local `external_ids`
+   * lookup at the top of `matchShow`, so caching successes too would be
+   * redundant. */
+  showFailures: Map<number, string>
+}
 
 function describeProviderError(err: unknown): string {
   return err instanceof Error ? `TMDB lookup failed: ${err.message}` : 'TMDB lookup failed'
@@ -93,10 +120,11 @@ async function backfillExternalIds(
   const rows: Array<{
     entityType: typeof entityType
     entityId: string
-    source: 'trakt' | 'imdb'
+    source: 'trakt' | 'imdb' | 'tvdb'
     externalId: string
   }> = [{ entityType, entityId, source: 'trakt', externalId: String(ids.trakt) }]
   if (ids.imdb) rows.push({ entityType, entityId, source: 'imdb', externalId: ids.imdb })
+  if (ids.tvdb) rows.push({ entityType, entityId, source: 'tvdb', externalId: String(ids.tvdb) })
   await db.insert(externalIds).values(rows).onConflictDoNothing()
 }
 
@@ -114,7 +142,14 @@ export async function matchMovie(
   )
   if (localId) {
     const [movie] = await db.select().from(movies).where(eq(movies.id, localId)).limit(1)
-    if (movie) return { ok: true, entityType: 'movie', entityId: movie.id, title: movie.title }
+    if (movie) {
+      // Backfilled even on this already-resolved fast path — a movie
+      // matched via `trakt` before this field existed would otherwise
+      // never pick up its tvdb id on a later re-import, since the whole
+      // point of this branch is skipping work that's already done.
+      await backfillExternalIds(db, 'movie', movie.id, traktMovie.ids)
+      return { ok: true, entityType: 'movie', entityId: movie.id, title: movie.title }
+    }
   }
 
   if (!traktMovie.ids.tmdb) {
@@ -139,7 +174,13 @@ async function matchShow(
   provider: MetadataProvider,
   traktShow: TraktShow,
   locale: string,
+  caches: ImportCaches,
 ): Promise<{ ok: true; show: ShowMatch } | { ok: false; reason: string; title?: string }> {
+  const cachedFailure = caches.showFailures.get(traktShow.ids.trakt)
+  if (cachedFailure) {
+    return { ok: false, reason: cachedFailure, title: traktShow.title }
+  }
+
   const localId = await lookupLocalIdByExternalId(db, 'show', 'trakt', String(traktShow.ids.trakt))
   if (localId) {
     const [show] = await db.select().from(shows).where(eq(shows.id, localId)).limit(1)
@@ -147,6 +188,8 @@ async function matchShow(
       const tmdbExternalId = traktShow.ids.tmdb
         ? String(traktShow.ids.tmdb)
         : await lookupTmdbExternalId(db, 'show', show.id)
+      // Same reasoning as matchMovie's fast path above.
+      await backfillExternalIds(db, 'show', show.id, traktShow.ids)
       return { ok: true, show: { id: show.id, title: show.title, tmdbExternalId } }
     }
   }
@@ -159,7 +202,9 @@ async function matchShow(
   try {
     show = await resolveShow(db, provider, String(traktShow.ids.tmdb), locale)
   } catch (err) {
-    return { ok: false, reason: describeProviderError(err), title: traktShow.title }
+    const reason = describeProviderError(err)
+    caches.showFailures.set(traktShow.ids.trakt, reason)
+    return { ok: false, reason, title: traktShow.title }
   }
   await backfillExternalIds(db, 'show', show.id, traktShow.ids)
   return {
@@ -189,13 +234,28 @@ export async function matchEpisode(
   traktShow: TraktShow,
   traktEpisode: TraktEpisode,
   locale: string,
-  seasonCache: SeasonCache,
+  caches: ImportCaches,
 ): Promise<MatchOutcome> {
-  const showResult = await matchShow(db, provider, traktShow, locale)
-  if (!showResult.ok) return { ok: false, reason: showResult.reason, title: showResult.title }
-  const { show } = showResult
+  // Built from the Trakt show's own title up front, before we know whether
+  // the show resolves — a show-level failure (the common case: one show
+  // with many watched episodes fails identically for all of them) still
+  // needs a label that identifies *which episode*, or every failure in
+  // the list looks like an indistinguishable copy of the same entry.
+  const label = `${traktShow.title} S${traktEpisode.season} E${traktEpisode.number}`
+  // show/season/episode carried on every failure below so the UI can group
+  // them into a tree instead of parsing `label` back apart.
+  const episodeFailure = (reason: string): MatchOutcome => ({
+    ok: false,
+    reason,
+    title: label,
+    show: traktShow.title,
+    season: traktEpisode.season,
+    episode: traktEpisode.number,
+  })
 
-  const label = `${show.title} S${traktEpisode.season}E${traktEpisode.number}`
+  const showResult = await matchShow(db, provider, traktShow, locale, caches)
+  if (!showResult.ok) return episodeFailure(showResult.reason)
+  const { show } = showResult
 
   const existing = await findLocalEpisode(db, show.id, traktEpisode.season, traktEpisode.number)
   if (existing) {
@@ -204,11 +264,11 @@ export async function matchEpisode(
   }
 
   if (!show.tmdbExternalId) {
-    return { ok: false, reason: 'Show has no TMDB id, cannot resolve episode', title: label }
+    return episodeFailure('Show has no TMDB id, cannot resolve episode')
   }
 
   const seasonKey = `${show.id}:${traktEpisode.season}`
-  if (!seasonCache.has(seasonKey)) {
+  if (!caches.seasons.has(seasonKey)) {
     try {
       const seasonEpisodes = await provider.getSeason(
         show.tmdbExternalId,
@@ -230,22 +290,22 @@ export async function matchEpisode(
           )
           .onConflictDoNothing()
       }
-      seasonCache.set(seasonKey, null)
+      caches.seasons.set(seasonKey, null)
     } catch (err) {
       // Cached so every other episode in this same broken season fails
       // fast instead of re-hitting TMDB for a season it's already 404'd on.
-      seasonCache.set(seasonKey, describeProviderError(err))
+      caches.seasons.set(seasonKey, describeProviderError(err))
     }
   }
 
-  const seasonFailure = seasonCache.get(seasonKey)
+  const seasonFailure = caches.seasons.get(seasonKey)
   if (seasonFailure) {
-    return { ok: false, reason: seasonFailure, title: label }
+    return episodeFailure(seasonFailure)
   }
 
   const resolved = await findLocalEpisode(db, show.id, traktEpisode.season, traktEpisode.number)
   if (!resolved) {
-    return { ok: false, reason: 'Episode not found in TMDB season data', title: label }
+    return episodeFailure('Episode not found in TMDB season data')
   }
   await backfillExternalIds(db, 'episode', resolved.id, traktEpisode.ids)
   return { ok: true, entityType: 'episode', entityId: resolved.id, title: label }
@@ -260,9 +320,15 @@ export async function matchEpisode(
 export async function matchTraktMediaItem(
   db: Database,
   provider: MetadataProvider,
-  item: { type: string; movie?: TraktMovie; show?: TraktShow; episode?: TraktEpisode },
+  item: {
+    type: string
+    movie?: TraktMovie
+    show?: TraktShow
+    season?: TraktSeason
+    episode?: TraktEpisode
+  },
   locale: string,
-  seasonCache: SeasonCache,
+  caches: ImportCaches,
 ): Promise<MatchOutcome> {
   switch (item.type) {
     case 'movie':
@@ -270,18 +336,20 @@ export async function matchTraktMediaItem(
       return matchMovie(db, provider, item.movie, locale)
     case 'show': {
       if (!item.show) return { ok: false, reason: 'Missing show payload' }
-      const result = await matchShow(db, provider, item.show, locale)
+      const result = await matchShow(db, provider, item.show, locale, caches)
       if (!result.ok) return result
       return { ok: true, entityType: 'show', entityId: result.show.id, title: result.show.title }
     }
     case 'episode':
       if (!item.show || !item.episode) return { ok: false, reason: 'Missing episode payload' }
-      return matchEpisode(db, provider, item.show, item.episode, locale, seasonCache)
+      return matchEpisode(db, provider, item.show, item.episode, locale, caches)
     case 'season':
       return {
         ok: false,
         reason: 'Season-level ratings/watchlist entries are not yet supported',
         title: item.show?.title,
+        show: item.show?.title,
+        season: item.season?.number,
       }
     default:
       return { ok: false, reason: `Unknown Trakt item type: ${item.type}` }

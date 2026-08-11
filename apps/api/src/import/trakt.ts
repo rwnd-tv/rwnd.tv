@@ -19,8 +19,8 @@ import {
   matchEpisode,
   matchMovie,
   matchTraktMediaItem,
+  type ImportCaches,
   type MatchOutcome,
-  type SeasonCache,
 } from './match.js'
 
 /**
@@ -40,11 +40,14 @@ const PAGE_LIMIT = 1000
 const PHASES = ['history', 'ratings', 'watchlist'] as const
 type Phase = (typeof PHASES)[number]
 type JobStatus = (typeof importJobStatusEnum.enumValues)[number]
-const MAX_FAILURES = 200
 /** Refresh proactively rather than waiting for a request to 401 — Trakt
  * access tokens are valid 7 days, so refreshing inside the last day of
  * that window leaves comfortable margin for a long-running import. */
 const REFRESH_MARGIN_MS = 24 * 60 * 60 * 1000
+
+function describeUnexpectedError(err: unknown): string {
+  return err instanceof Error ? `Unexpected error: ${err.message}` : 'Unexpected error'
+}
 
 interface JobRow {
   id: string
@@ -58,7 +61,14 @@ interface JobRow {
   itemsProcessed: number
   itemsImported: number
   itemsSkipped: number
-  failures: Array<{ phase: string; reason: string; title?: string }>
+  failures: Array<{
+    phase: string
+    reason: string
+    title?: string
+    show?: string
+    season?: number
+    episode?: number
+  }>
 }
 
 async function loadJob(db: Database, jobId: string): Promise<JobRow | undefined> {
@@ -147,10 +157,11 @@ export async function runTraktImport(
     .set(job.cursor ? { status: 'running' } : { status: 'running', startedAt: new Date() })
     .where(eq(importJobs.id, jobId))
 
-  // Per-job cache: a show with many watched/rated/listed episodes should
-  // only trigger one provider.getSeason() call per season, not one per
-  // episode — see import/match.ts.
-  const seasonCache: SeasonCache = new Map()
+  // Per-job caches: a show with many watched/rated/listed episodes should
+  // only trigger one provider.getSeason() call per season, and a show
+  // that fails to resolve at all should only be tried against TMDB once
+  // — not once per episode. See import/match.ts.
+  const caches: ImportCaches = { seasons: new Map(), showFailures: new Map() }
 
   const state = {
     itemsTotal: job.itemsTotal,
@@ -160,10 +171,18 @@ export async function runTraktImport(
     failures: [...job.failures],
   }
 
-  function pushFailure(phase: Phase, outcome: { reason: string; title?: string }) {
-    if (state.failures.length < MAX_FAILURES) {
-      state.failures.push({ phase, reason: outcome.reason, title: outcome.title })
-    }
+  function pushFailure(
+    phase: Phase,
+    outcome: { reason: string; title?: string; show?: string; season?: number; episode?: number },
+  ) {
+    state.failures.push({
+      phase,
+      reason: outcome.reason,
+      title: outcome.title,
+      show: outcome.show,
+      season: outcome.season,
+      episode: outcome.episode,
+    })
   }
 
   async function persistProgress(cursor: { phase: Phase; page: number } | null) {
@@ -185,7 +204,7 @@ export async function runTraktImport(
     if (item.type === 'movie' && item.movie) {
       match = await matchMovie(db, provider, item.movie, locale)
     } else if (item.type === 'episode' && item.show && item.episode) {
-      match = await matchEpisode(db, provider, item.show, item.episode, locale, seasonCache)
+      match = await matchEpisode(db, provider, item.show, item.episode, locale, caches)
     } else {
       match = { ok: false, reason: `Unsupported history item type: ${item.type}` }
     }
@@ -210,7 +229,7 @@ export async function runTraktImport(
   }
 
   async function processRatingItem(item: TraktRatingItem): Promise<'imported' | 'skipped'> {
-    const match = await matchTraktMediaItem(db, provider, item, locale, seasonCache)
+    const match = await matchTraktMediaItem(db, provider, item, locale, caches)
     if (!match.ok) {
       pushFailure('ratings', match)
       return 'skipped'
@@ -232,7 +251,7 @@ export async function runTraktImport(
   }
 
   async function processWatchlistItem(item: TraktWatchlistItem): Promise<'imported' | 'skipped'> {
-    const match = await matchTraktMediaItem(db, provider, item, locale, seasonCache)
+    const match = await matchTraktMediaItem(db, provider, item, locale, caches)
     if (!match.ok) {
       pushFailure('watchlist', match)
       return 'skipped'
@@ -274,12 +293,28 @@ export async function runTraktImport(
       }
 
       for (const item of result.items) {
-        const outcome =
-          phase === 'history'
-            ? await processHistoryItem(item as TraktHistoryItem)
-            : phase === 'ratings'
-              ? await processRatingItem(item as TraktRatingItem)
-              : await processWatchlistItem(item as TraktWatchlistItem)
+        // Match failures (bad/missing TMDB ids, TMDB itself 404ing) are
+        // already turned into failure outcomes inside import/match.ts.
+        // This catches everything else — a malformed Trakt response, a
+        // transient DB error, anything not yet anticipated — so one item
+        // can never crash the rest of the page. Without this, a crash here
+        // skips the persistProgress() call below entirely: any inserts
+        // already made earlier in this same page stay in the database (they
+        // don't get rolled back) but never get reflected in the job's own
+        // counters, so what actually happened and what the job reports can
+        // silently drift apart.
+        let outcome: 'imported' | 'skipped'
+        try {
+          outcome =
+            phase === 'history'
+              ? await processHistoryItem(item as TraktHistoryItem)
+              : phase === 'ratings'
+                ? await processRatingItem(item as TraktRatingItem)
+                : await processWatchlistItem(item as TraktWatchlistItem)
+        } catch (err) {
+          pushFailure(phase, { reason: describeUnexpectedError(err) })
+          outcome = 'skipped'
+        }
         state.itemsProcessed += 1
         if (outcome === 'imported') state.itemsImported += 1
         else state.itemsSkipped += 1

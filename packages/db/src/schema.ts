@@ -296,8 +296,8 @@ export const traktConnections = pgTable('trakt_connections', {
  * A (potentially long-running, resumable) import run. `cursor` records
  * where in the history/ratings/watchlist sequence the job got to, so a
  * restart (see apps/api/src/index.ts) picks back up rather than starting
- * over. `failures` caps at 200 entries — enough for a user to see what
- * didn't match without the row growing unbounded on a bad import.
+ * over. `failures` records every unmatched item, uncapped — users want to
+ * see everything that didn't come across, not a truncated sample.
  */
 export const importJobs = pgTable(
   'import_jobs',
@@ -317,7 +317,16 @@ export const importJobs = pgTable(
     itemsImported: integer('items_imported').notNull().default(0),
     itemsSkipped: integer('items_skipped').notNull().default(0),
     failures: jsonb('failures')
-      .$type<Array<{ phase: string; reason: string; title?: string }>>()
+      .$type<
+        Array<{
+          phase: string
+          reason: string
+          title?: string
+          show?: string
+          season?: number
+          episode?: number
+        }>
+      >()
       .notNull()
       .default([]),
     error: text('error'),

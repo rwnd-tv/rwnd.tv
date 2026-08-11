@@ -57,8 +57,10 @@ function jsonResponse(body: unknown, headers: Record<string, string> = {}): Resp
  * Routes stubbed `fetch` calls to whichever fixture applies, by hostname —
  * the importer talks to three different hosts (Trakt's OAuth host, Trakt's
  * API host, and TMDB), each asserted separately in apps/api/src/env.ts.
- * `seasonCalls`, when passed, counts /tv/{id}/season/{n} requests so tests
- * can assert provider.getSeason() is only called once per season.
+ * `seasonCalls`/`showCalls`, when passed, count /tv/{id}/season/{n} and
+ * /tv/{id} requests respectively, so tests can assert provider.getSeason()
+ * and resolveShow() are only called once per season/show, not once per
+ * episode.
  */
 function createFetchStub(
   opts: {
@@ -66,9 +68,16 @@ function createFetchStub(
     ratingsItems?: TraktRatingItem[]
     watchlistItemsList?: TraktWatchlistItem[]
     seasonCalls?: { count: number }
+    showCalls?: { count: number }
   } = {},
 ) {
-  const { historyItems = [], ratingsItems = [], watchlistItemsList = [], seasonCalls } = opts
+  const {
+    historyItems = [],
+    ratingsItems = [],
+    watchlistItemsList = [],
+    seasonCalls,
+    showCalls,
+  } = opts
 
   return vi.fn(async (input: string | URL) => {
     const url = new URL(input)
@@ -76,6 +85,10 @@ function createFetchStub(
     if (url.hostname === 'api.themoviedb.org') {
       if (url.pathname === '/3/movie/603') return jsonResponse(fx.tmdbMatrixMovie)
       if (url.pathname === `/3/movie/${fx.TMDB_DELETED_MOVIE_ID}`) {
+        return new Response('{"status_message":"Not Found"}', { status: 404 })
+      }
+      if (url.pathname === `/3/tv/${fx.TMDB_DELETED_SHOW_ID}`) {
+        if (showCalls) showCalls.count += 1
         return new Response('{"status_message":"Not Found"}', { status: 404 })
       }
       if (url.pathname === '/3/tv/1396') return jsonResponse(fx.tmdbBreakingBadShow)
@@ -204,6 +217,16 @@ describe('Trakt import', () => {
       .where(and(eq(externalIds.entityType, 'movie'), eq(externalIds.entityId, movieRow!.id)))
     expect(movieExternalIds.map((r) => r.source).sort()).toEqual(['imdb', 'tmdb', 'trakt'])
 
+    // The show fixture carries a tvdb id (movies' don't, realistically —
+    // TheTVDB doesn't cover movies) — backfilled alongside trakt/imdb even
+    // though nothing currently matches by tvdb, for a future provider that
+    // might, and so self-hosters exporting their data get it too.
+    const showExternalIds = await db
+      .select()
+      .from(externalIds)
+      .where(and(eq(externalIds.entityType, 'show'), eq(externalIds.entityId, showRow!.id)))
+    expect(showExternalIds.map((r) => r.source).sort()).toEqual(['imdb', 'tmdb', 'trakt', 'tvdb'])
+
     // Re-running the same import must not create duplicate plays — this is
     // the plays_user_source_ref_idx partial unique index doing its job.
     const [job2] = await db
@@ -214,6 +237,48 @@ describe('Trakt import', () => {
 
     const allPlaysAfterReimport = await db.select().from(plays).where(eq(plays.userId, me.id))
     expect(allPlaysAfterReimport).toHaveLength(3)
+  })
+
+  it('backfills a missing tvdb id on re-import even for an already-resolved show', async () => {
+    const cookie = await createUserAndCookie()
+    const me = await json<User>(await app.request('/api/v1/auth/me', { headers: { cookie } }))
+    await createTraktConnection(db, me.id)
+
+    // Simulates a show resolved before tvdb backfill existed — same
+    // trakt/tmdb ids as the real fixture, but no tvdb.
+    const showWithoutTvdb: TraktHistoryItem = {
+      ...fx.pilotHistoryItem,
+      show: { ...fx.pilotHistoryItem.show!, ids: { ...fx.pilotHistoryItem.show!.ids, tvdb: null } },
+    }
+
+    vi.stubGlobal('fetch', createFetchStub({ historyItems: [showWithoutTvdb] }))
+    const [job1] = await db
+      .insert(importJobs)
+      .values({ userId: me.id, includeRatings: false, includeWatchlist: false })
+      .returning()
+    await runTraktImport(db, provider, env, job1!.id)
+
+    const [showRow] = await db.select().from(shows).where(eq(shows.title, 'Breaking Bad')).limit(1)
+    const firstPassIds = await db
+      .select()
+      .from(externalIds)
+      .where(and(eq(externalIds.entityType, 'show'), eq(externalIds.entityId, showRow!.id)))
+    expect(firstPassIds.map((r) => r.source).sort()).toEqual(['imdb', 'tmdb', 'trakt'])
+
+    // Re-import with the real fixture, which does carry a tvdb id — the
+    // show is already resolved (fast path), but should still pick it up.
+    vi.stubGlobal('fetch', createFetchStub({ historyItems: [fx.pilotHistoryItem] }))
+    const [job2] = await db
+      .insert(importJobs)
+      .values({ userId: me.id, includeRatings: false, includeWatchlist: false })
+      .returning()
+    await runTraktImport(db, provider, env, job2!.id)
+
+    const secondPassIds = await db
+      .select()
+      .from(externalIds)
+      .where(and(eq(externalIds.entityType, 'show'), eq(externalIds.entityId, showRow!.id)))
+    expect(secondPassIds.map((r) => r.source).sort()).toEqual(['imdb', 'tmdb', 'trakt', 'tvdb'])
   })
 
   it('records a TMDB lookup failure as a skipped item instead of aborting the whole job', async () => {
@@ -243,6 +308,88 @@ describe('Trakt import', () => {
     expect(finished?.itemsSkipped).toBe(1)
     expect(finished?.failures).toHaveLength(1)
     expect(finished?.failures[0]?.reason).toMatch(/TMDB lookup failed.*404/)
+
+    const allPlays = await db.select().from(plays).where(eq(plays.userId, me.id))
+    expect(allPlays).toHaveLength(1)
+  })
+
+  it('caches a show-level TMDB failure so it is only retried once, not once per episode', async () => {
+    const showCalls = { count: 0 }
+    vi.stubGlobal(
+      'fetch',
+      createFetchStub({
+        historyItems: [fx.undeadShowHistoryItem1, fx.undeadShowHistoryItem2],
+        showCalls,
+      }),
+    )
+
+    const cookie = await createUserAndCookie()
+    const me = await json<User>(await app.request('/api/v1/auth/me', { headers: { cookie } }))
+    await createTraktConnection(db, me.id)
+
+    const [job] = await db
+      .insert(importJobs)
+      .values({ userId: me.id, includeRatings: false, includeWatchlist: false })
+      .returning()
+    await runTraktImport(db, provider, env, job!.id)
+
+    const [finished] = await db.select().from(importJobs).where(eq(importJobs.id, job!.id)).limit(1)
+    expect(finished?.status).toBe('completed')
+    expect(finished?.itemsSkipped).toBe(2)
+    expect(finished?.failures).toHaveLength(2)
+    for (const failure of finished?.failures ?? []) {
+      expect(failure.reason).toMatch(/TMDB lookup failed.*404/)
+    }
+
+    // Two episodes of the same unresolvable show — only one TMDB show lookup.
+    expect(showCalls.count).toBe(1)
+
+    // Titles must identify *which* episode (S/E number) — without that,
+    // every failure from the same broken show is indistinguishable in the
+    // failures list, even though they're different episodes.
+    const titles = finished?.failures.map((f) => f.title)
+    expect(new Set(titles).size).toBe(2)
+    expect(titles).toContain('A Show TMDB No Longer Has S1 E1')
+    expect(titles).toContain('A Show TMDB No Longer Has S1 E2')
+
+    // Structured show/season/episode fields, not just the flat title — this
+    // is what lets the UI group failures into a tree.
+    const episodeNumbers = finished?.failures.map((f) => f.episode).sort()
+    expect(episodeNumbers).toEqual([1, 2])
+    for (const failure of finished?.failures ?? []) {
+      expect(failure.show).toBe('A Show TMDB No Longer Has')
+      expect(failure.season).toBe(1)
+    }
+  })
+
+  it('survives an unexpected per-item error instead of losing the rest of the page', async () => {
+    vi.stubGlobal(
+      'fetch',
+      createFetchStub({
+        // A well-formed item, then a malformed one that throws from
+        // outside any of import/match.ts's provider-error try/catches —
+        // the malformed item must not cost the successful one its place
+        // in the job's own counters.
+        historyItems: [fx.matrixHistoryItem, fx.malformedHistoryItem],
+      }),
+    )
+
+    const cookie = await createUserAndCookie()
+    const me = await json<User>(await app.request('/api/v1/auth/me', { headers: { cookie } }))
+    await createTraktConnection(db, me.id)
+
+    const [job] = await db
+      .insert(importJobs)
+      .values({ userId: me.id, includeRatings: false, includeWatchlist: false })
+      .returning()
+    await runTraktImport(db, provider, env, job!.id)
+
+    const [finished] = await db.select().from(importJobs).where(eq(importJobs.id, job!.id)).limit(1)
+    expect(finished?.status).toBe('completed')
+    expect(finished?.itemsProcessed).toBe(2)
+    expect(finished?.itemsImported).toBe(1)
+    expect(finished?.itemsSkipped).toBe(1)
+    expect(finished?.failures.some((f) => f.reason.match(/Unexpected error/))).toBe(true)
 
     const allPlays = await db.select().from(plays).where(eq(plays.userId, me.id))
     expect(allPlays).toHaveLength(1)
@@ -299,6 +446,9 @@ describe('Trakt import', () => {
     expect(finished?.itemsImported).toBe(1)
     expect(finished?.itemsSkipped).toBe(1)
     expect(finished?.failures[0]?.reason).toMatch(/season/i)
+    expect(finished?.failures[0]?.show).toBe('Some Other Show')
+    expect(finished?.failures[0]?.season).toBe(1)
+    expect(finished?.failures[0]?.episode).toBeUndefined()
 
     const items = await db.select().from(watchlistItems).where(eq(watchlistItems.userId, me.id))
     expect(items).toHaveLength(1)

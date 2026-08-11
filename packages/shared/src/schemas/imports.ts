@@ -44,11 +44,21 @@ export const createImportJobRequestSchema = z.object({
 })
 export type CreateImportJobRequest = z.infer<typeof createImportJobRequestSchema>
 
-const importJobFailureSchema = z.object({
+/**
+ * `show`/`season`/`episode` are only present for episode-level (and, for
+ * `season`, season-level) failures — they're what let the UI group
+ * failures into a show > season > episode tree instead of a flat list,
+ * without having to parse them back out of `title`.
+ */
+export const importJobFailureSchema = z.object({
   phase: z.string(),
   reason: z.string(),
   title: z.string().optional(),
+  show: z.string().optional(),
+  season: z.number().int().optional(),
+  episode: z.number().int().optional(),
 })
+export type ImportJobFailure = z.infer<typeof importJobFailureSchema>
 
 export const importJobSchema = z.object({
   id: z.string().uuid(),

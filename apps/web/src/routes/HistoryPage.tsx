@@ -25,7 +25,7 @@ function groupByDay(plays: Play[], locale: string) {
 
 function playTitle(play: Play, t: (key: string, opts?: Record<string, unknown>) => string) {
   if (play.media.type === 'movie') return play.media.title
-  const label = t('history.episodeLabel', {
+  const label = t('history.episodeLabelShort', {
     season: play.media.seasonNumber,
     episode: play.media.episodeNumber,
   })

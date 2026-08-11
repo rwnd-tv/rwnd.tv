@@ -49,7 +49,8 @@
     "empty": "You haven't logged anything yet. Search for something you've watched to get started.",
     "loadMore": "Load more",
     "remove": "Remove",
-    "episodeLabel": "S{{season}}E{{episode}}"
+    "episodeLabelShort": "S{{season}} E{{episode}}",
+    "episodeLabelLong": "Season {{season}} Episode {{episode}}"
   },
   "import": {
     "title": "Import",
@@ -83,8 +84,22 @@
         "failed": "Failed",
         "cancelled": "Cancelled"
       },
-      "counts": "{{processed}} of {{total}} processed ({{imported}} imported)",
-      "failuresSummary": "{{count}} items couldn't be matched"
+      "counts": "{{processed}} items processed ({{imported}} items imported)",
+      "elapsed": "Elapsed {{duration}}",
+      "remaining": "about {{duration}} remaining",
+      "failuresSummary": "{{count}} items couldn't be matched",
+      "season": "Season {{number}}",
+      "episode": "Episode {{number}}",
+      "phase": {
+        "history": "W",
+        "ratings": "R",
+        "watchlist": "WL"
+      },
+      "phaseLabel": {
+        "history": "Watch",
+        "ratings": "Rating",
+        "watchlist": "Watchlist"
+      }
     }
   },
   "settings": {

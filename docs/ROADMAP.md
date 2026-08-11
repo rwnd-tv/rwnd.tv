@@ -18,6 +18,7 @@ Prove every layer works end to end, running as a real self-hosted deployment.
 - [x] **Trakt import**: history, ratings, and watchlist, matched against existing local records via `external_ids` (see [ADR 0002](adr/0002-metadata-provider.md) and [ADR 0004](adr/0004-trakt-import.md))
 - [ ] **Plex/Tautulli webhook ingestion**: watches log themselves as you watch, authenticated via per-user API tokens (already built in M1 for exactly this)
 - [ ] **Full data export** in an open format — one of the project's stated aims from day one
+- [ ] **Multi-provider metadata matching**: an internal id independent of any single provider (tmdb/imdb/tvdb), admin-configurable provider priority, and a manual per-title metadata refresh instead of silent background updates (see [TODO.md](TODO.md))
 
 ## M3 — Make it worth using day to day
 

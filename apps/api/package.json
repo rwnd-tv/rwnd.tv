@@ -17,7 +17,7 @@
     "@hono/node-server": "^2.1.0",
     "@hono/swagger-ui": "^0.6.1",
     "@hono/zod-openapi": "^1.5.3",
-    "@node-rs/argon2": "^2.0.2",
+    "@node-rs/argon2": "^2.1.0",
     "@rwnd/db": "workspace:*",
     "@rwnd/shared": "workspace:*",
     "drizzle-orm": "^0.45.2",

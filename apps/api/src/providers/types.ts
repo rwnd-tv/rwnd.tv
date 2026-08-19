@@ -54,6 +54,28 @@ export interface ProviderShow {
   year: number | null
   overview: string | null
   posterPath: string | null
+  /** Provider's raw airing status (e.g. TMDB's 'Returning Series', 'Ended',
+   * 'Canceled'), or null if the provider doesn't expose one. Drives how
+   * often the metadata refresher re-fetches a show — see
+   * apps/api/src/metadata/refresh.ts. */
+  status: string | null
+  /** Provider's genre names verbatim (e.g. 'Drama', 'Animation'). Backs the
+   * shows gallery's genre filter panel — see packages/db/src/schema.ts's
+   * `shows.genres` column. */
+  genres: string[]
+  /** Per-season episode counts, cached locally so the shows library gallery
+   * can compute watched-progress without calling the provider — see
+   * packages/db/src/schema.ts's `seasons` table. Excludes nothing itself;
+   * callers decide whether to include season 0 (specials). */
+  seasons: ProviderSeasonSummary[]
+}
+
+export interface ProviderSeasonSummary {
+  seasonNumber: number
+  name: string | null
+  episodeCount: number
+  airDate: string | null
+  posterPath: string | null
 }
 
 export interface ProviderEpisode {

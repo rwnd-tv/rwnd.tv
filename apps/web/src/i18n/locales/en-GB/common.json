@@ -4,6 +4,8 @@
     "tagline": "Track what you watch."
   },
   "nav": {
+    "shows": "TV Shows",
+    "movies": "Movies",
     "search": "Search",
     "history": "History",
     "import": "Import",
@@ -43,6 +45,49 @@
     "noResults": "No results yet — try searching for something.",
     "logWatch": "Log watch",
     "logged": "Logged!"
+  },
+  "shows": {
+    "title": "TV Shows",
+    "filterLabel": "Filter shows",
+    "filterPlaceholder": "Filter by title…",
+    "sortLabel": "Sort by",
+    "sortLastWatched": "Recently watched",
+    "sortTitleAsc": "Title (A - Z)",
+    "sortTitleDesc": "Title (Z - A)",
+    "sortYearDesc": "Year (Descending)",
+    "sortYearAsc": "Year (Ascending)",
+    "sortProgressDesc": "Progress (Descending)",
+    "sortProgressAsc": "Progress (Ascending)",
+    "progress": "{{watched}} of {{total}} episodes",
+    "progressUnknown_one": "{{count}} episode watched",
+    "progressUnknown_other": "{{count}} episodes watched",
+    "progressAria": "{{title}}: {{watched}} of {{total}} episodes watched",
+    "empty": "Nothing here yet. Shows appear once you've logged an episode.",
+    "noMatches": "No shows match \"{{query}}\".",
+    "noFilterMatches": "No shows match the selected filters.",
+    "filtersButton": "Filters…",
+    "filtersPanel": {
+      "genres": "Genres",
+      "include": "Include",
+      "exclude": "Exclude",
+      "released": "Released",
+      "after": "After",
+      "before": "Before",
+      "reset": "Reset"
+    }
+  },
+  "movies": {
+    "title": "Movies",
+    "filterLabel": "Filter movies",
+    "filterPlaceholder": "Filter by title…",
+    "sortLabel": "Sort by",
+    "sortTitle": "Title",
+    "sortYear": "Year",
+    "sortLastWatched": "Recently watched",
+    "sortTimesWatched": "Times watched",
+    "timesWatched": "Watched {{count}} times",
+    "empty": "Nothing here yet. Movies appear once you've logged a watch.",
+    "noMatches": "No movies match \"{{query}}\"."
   },
   "history": {
     "title": "History",

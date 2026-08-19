@@ -1,0 +1,1 @@
+ALTER TABLE "shows" ADD COLUMN "genres" text[] DEFAULT '{}' NOT NULL;

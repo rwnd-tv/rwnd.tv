@@ -15,6 +15,20 @@
       "when": 1786453692502,
       "tag": "0001_lean_the_watchers",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1787147535210,
+      "tag": "0002_fine_scorpion",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1787166342612,
+      "tag": "0003_new_serpent_society",
+      "breakpoints": true
     }
   ]
 }

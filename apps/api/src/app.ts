@@ -18,6 +18,7 @@ import { searchRoutes } from './routes/search.js'
 import { playRoutes } from './routes/plays.js'
 import { settingsRoutes } from './routes/settings.js'
 import { importRoutes } from './routes/imports.js'
+import { libraryRoutes } from './routes/library.js'
 
 /**
  * `services` lets index.ts share the same db connection pool and provider
@@ -58,6 +59,7 @@ export function createApp(services?: { db: Database; metadataProvider: MetadataP
   v1.route('/', playRoutes)
   v1.route('/', settingsRoutes)
   v1.route('/', importRoutes)
+  v1.route('/', libraryRoutes)
 
   v1.doc('/openapi.json', {
     openapi: '3.1.0',

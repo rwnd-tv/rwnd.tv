@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import type { Play } from '@rwnd/shared'
 import { api } from '../lib/api-client.js'
+import { invalidateWatchData } from '../lib/query-client.js'
 import { useAuth } from '../lib/auth-context.js'
 import { Button } from '../components/ui/Button.js'
 import { Spinner } from '../components/ui/Spinner.js'
@@ -47,7 +48,7 @@ export function HistoryPage() {
 
   const removePlay = useMutation({
     mutationFn: (id: string) => api.plays.delete(id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['plays'] }),
+    onSuccess: () => invalidateWatchData(queryClient),
   })
 
   const allPlays = useMemo(() => data?.pages.flatMap((page) => page.plays) ?? [], [data])

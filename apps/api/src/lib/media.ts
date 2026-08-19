@@ -1,6 +1,6 @@
 import { and, eq } from 'drizzle-orm'
 import type { Database } from '@rwnd/db'
-import { episodes, externalIds, movies, shows } from '@rwnd/db'
+import { episodes, externalIds, movies, seasons, shows } from '@rwnd/db'
 import type { MetadataProvider } from '../providers/types.js'
 
 /** TMDB frequently has no episode title yet for very recent/unaired episodes. */
@@ -104,6 +104,8 @@ export async function resolveShow(
       year: fetched.year,
       overview: fetched.overview,
       posterPath: fetched.posterPath,
+      status: fetched.status,
+      genres: fetched.genres,
     })
     .returning()
   if (!show) throw new Error('Failed to insert show')
@@ -117,6 +119,25 @@ export async function resolveShow(
       externalId: showExternalId,
     })
     .onConflictDoNothing()
+
+  // Store season/episode-count data the provider already returned for free —
+  // saves the metadata refresher (apps/api/src/metadata/refresh.ts) an
+  // otherwise-immediate re-fetch for every newly-resolved show.
+  if (fetched.seasons.length > 0) {
+    await db
+      .insert(seasons)
+      .values(
+        fetched.seasons.map((season) => ({
+          showId: show.id,
+          seasonNumber: season.seasonNumber,
+          name: season.name,
+          episodeCount: season.episodeCount,
+          airDate: season.airDate,
+          posterPath: season.posterPath,
+        })),
+      )
+      .onConflictDoNothing()
+  }
 
   return { id: show.id, title: show.title }
 }

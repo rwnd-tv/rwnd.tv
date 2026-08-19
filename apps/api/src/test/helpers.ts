@@ -14,6 +14,7 @@ const TABLES = [
   'trakt_connections',
   'external_ids',
   'episodes',
+  'seasons',
   'shows',
   'movies',
   'invites',

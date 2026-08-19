@@ -1,9 +1,10 @@
-import { NavLink, Outlet } from 'react-router'
+import { NavLink, Outlet, useMatches } from 'react-router'
 import { useTranslation } from 'react-i18next'
 import { useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../lib/auth-context.js'
 import { api } from '../lib/api-client.js'
 import { usePublicSettings } from '../lib/use-public-settings.js'
+import type { RouteHandle } from '../lib/route-handle.js'
 import { Button } from './ui/Button.js'
 import { EnvironmentBadge } from './EnvironmentBadge.js'
 
@@ -19,6 +20,19 @@ export function Layout() {
   const { user } = useAuth()
   const queryClient = useQueryClient()
   const { data: settings } = usePublicSettings()
+  const matches = useMatches()
+
+  // Every page defaults to the existing 896px reading column. Gallery pages
+  // (ShowsPage, MoviesPage) opt into the full viewport instead, via
+  // `handle: { width: 'full' }` on their route in App.tsx — read here
+  // through useMatches() rather than route path so the width lives with
+  // the route definition, not as a path allow-list duplicated in Layout.
+  // Applied to both <nav> and <main> so the header lines up with whichever
+  // width is in use.
+  const isFullWidth = matches.some(
+    (match) => (match.handle as RouteHandle | undefined)?.width === 'full',
+  )
+  const containerClass = isFullWidth ? 'mx-auto w-full px-4' : 'mx-auto max-w-4xl px-4'
 
   async function handleLogout() {
     await api.auth.logout()
@@ -36,7 +50,7 @@ export function Layout() {
       <header className="border-b border-[var(--color-border)]">
         <nav
           aria-label="Main"
-          className="mx-auto flex max-w-4xl flex-wrap items-center justify-between gap-4 px-4 py-3"
+          className={`flex flex-wrap items-center justify-between gap-4 py-3 ${containerClass}`}
         >
           <span className="flex items-center gap-2 text-lg font-semibold">
             <img src="/favicon.svg" alt="" className="h-6 w-6" />
@@ -44,6 +58,12 @@ export function Layout() {
             <EnvironmentBadge label={settings?.environmentLabel} />
           </span>
           <div className="flex items-center gap-2">
+            <NavLink to="/shows" className={navLinkClass}>
+              {t('nav.shows')}
+            </NavLink>
+            <NavLink to="/movies" className={navLinkClass}>
+              {t('nav.movies')}
+            </NavLink>
             <NavLink to="/search" className={navLinkClass}>
               {t('nav.search')}
             </NavLink>
@@ -66,7 +86,7 @@ export function Layout() {
           </div>
         </nav>
       </header>
-      <main id="main-content" className="mx-auto max-w-4xl px-4 py-6">
+      <main id="main-content" className={`py-6 ${containerClass}`}>
         <Outlet />
       </main>
     </div>

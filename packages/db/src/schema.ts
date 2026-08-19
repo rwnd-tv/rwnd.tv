@@ -174,11 +174,47 @@ export const shows = pgTable('shows', {
   year: integer('year'),
   overview: text('overview'),
   posterPath: text('poster_path'),
+  // TMDB's raw status string ('Returning Series', 'Ended', 'Canceled', ...).
+  // Null for shows resolved before this column existed, until next refresh.
+  // Drives the metadata refresher: airing shows refresh far more often than
+  // ended ones — see apps/api/src/metadata/refresh.ts.
+  status: text('status'),
+  // TMDB's genre names verbatim (e.g. 'Drama', 'Animation') — from a fixed
+  // ~16-value vocabulary, so a plain string array rather than a normalised
+  // genres table: nothing else needs to reference a genre by id, and there's
+  // no per-genre metadata beyond the name. Backs the shows gallery's genre
+  // filter panel (apps/web/src/components/library/GenreFilterPanel.tsx).
+  genres: text('genres').array().notNull().default([]),
   metadataRefreshedAt: timestamp('metadata_refreshed_at', { withTimezone: true })
     .notNull()
     .defaultNow(),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 })
+
+/**
+ * Per-season episode counts, cached from the metadata provider so the shows
+ * library gallery can compute "154 / 212 episodes" without ever calling
+ * TMDB itself (apps/api/src/routes/library.ts). Populated by the metadata
+ * refresher (apps/api/src/metadata/refresh.ts), not by resolveShow() — a
+ * show can exist locally (because you watched an episode of it) long before
+ * its season breakdown has been fetched.
+ */
+export const seasons = pgTable(
+  'seasons',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    showId: uuid('show_id')
+      .notNull()
+      .references(() => shows.id, { onDelete: 'cascade' }),
+    seasonNumber: integer('season_number').notNull(),
+    name: text('name'),
+    episodeCount: integer('episode_count').notNull(),
+    airDate: date('air_date'),
+    posterPath: text('poster_path'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [uniqueIndex('seasons_show_season_idx').on(table.showId, table.seasonNumber)],
+)
 
 export const episodes = pgTable(
   'episodes',
@@ -438,6 +474,11 @@ export const apiTokensRelations = relations(apiTokens, ({ one }) => ({
 
 export const showsRelations = relations(shows, ({ many }) => ({
   episodes: many(episodes),
+  seasons: many(seasons),
+}))
+
+export const seasonsRelations = relations(seasons, ({ one }) => ({
+  show: one(shows, { fields: [seasons.showId], references: [shows.id] }),
 }))
 
 export const episodesRelations = relations(episodes, ({ one, many }) => ({

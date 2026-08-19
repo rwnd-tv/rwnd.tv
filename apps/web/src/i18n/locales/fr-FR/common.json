@@ -4,6 +4,8 @@
     "tagline": "Suivez ce que vous regardez."
   },
   "nav": {
+    "shows": "Séries",
+    "movies": "Films",
     "search": "Recherche",
     "history": "Historique",
     "import": "Importer",
@@ -43,6 +45,49 @@
     "noResults": "Aucun résultat pour l'instant — essayez une recherche.",
     "logWatch": "Enregistrer",
     "logged": "Enregistré !"
+  },
+  "shows": {
+    "title": "Séries",
+    "filterLabel": "Filtrer les séries",
+    "filterPlaceholder": "Filtrer par titre…",
+    "sortLabel": "Trier par",
+    "sortLastWatched": "Vues récemment",
+    "sortTitleAsc": "Titre (A - Z)",
+    "sortTitleDesc": "Titre (Z - A)",
+    "sortYearDesc": "Année (Décroissant)",
+    "sortYearAsc": "Année (Croissant)",
+    "sortProgressDesc": "Progression (Décroissant)",
+    "sortProgressAsc": "Progression (Croissant)",
+    "progress": "{{watched}} épisodes sur {{total}}",
+    "progressUnknown_one": "{{count}} épisode vu",
+    "progressUnknown_other": "{{count}} épisodes vus",
+    "progressAria": "{{title}} : {{watched}} épisodes vus sur {{total}}",
+    "empty": "Rien pour l'instant. Les séries apparaissent dès que vous enregistrez un épisode.",
+    "noMatches": "Aucune série ne correspond à « {{query}} ».",
+    "noFilterMatches": "Aucune série ne correspond aux filtres sélectionnés.",
+    "filtersButton": "Filtres…",
+    "filtersPanel": {
+      "genres": "Genres",
+      "include": "Inclure",
+      "exclude": "Exclure",
+      "released": "Sortie",
+      "after": "Après",
+      "before": "Avant",
+      "reset": "Réinitialiser"
+    }
+  },
+  "movies": {
+    "title": "Films",
+    "filterLabel": "Filtrer les films",
+    "filterPlaceholder": "Filtrer par titre…",
+    "sortLabel": "Trier par",
+    "sortTitle": "Titre",
+    "sortYear": "Année",
+    "sortLastWatched": "Vus récemment",
+    "sortTimesWatched": "Nombre de visionnages",
+    "timesWatched": "Vu {{count}} fois",
+    "empty": "Rien pour l'instant. Les films apparaissent dès que vous enregistrez un visionnage.",
+    "noMatches": "Aucun film ne correspond à « {{query}} »."
   },
   "history": {
     "title": "Historique",

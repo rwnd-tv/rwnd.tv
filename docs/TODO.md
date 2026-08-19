@@ -17,6 +17,29 @@ Format:
       `typescript-eslint` doesn't support TS 7 yet; leave any TS 7.0
       Dependabot bump open until it does.
 
+## TV Shows / Movies gallery follow-ups
+
+- [ ] **Manual "refresh metadata" button** (2026-08-19 15:25)\
+      The gallery's metadata refresher (see [ADR 0005](adr/0005-metadata-refresh.md))
+      auto-refreshes airing shows and sweeps everything every ~5 months for
+      TMDB compliance, but there's no per-show manual trigger yet for the
+      case TMDB itself has something wrong. Needs a button plus a small
+      `POST /library/shows/{id}/refresh`-style endpoint.
+- [ ] **Gallery nav overflow on narrow viewports** (2026-08-19 15:25)\
+      Adding TV Shows/Movies brings the header nav to 7 items; it wraps
+      (`flex-wrap` already on the nav) rather than breaks, but a proper
+      mobile nav (hamburger/collapse) hasn't been designed.
+- [ ] **Virtualize the gallery grid if libraries grow** (2026-08-19 15:25)\
+      Shipped without `content-visibility`/windowing — real libraries are
+      ~500 shows/movies, comfortably fine for the DOM. Revisit if a
+      self-hoster's library gets meaningfully larger and scroll performance
+      suffers.
+- [ ] **Title-sort article stripping** (2026-08-19 15:25)\
+      The gallery's title sort ("Sort by: Title") is a plain locale-aware
+      string compare — "The Wire" sorts under T, not W. Real per-language
+      leading-article rules are a bigger job than this feature needed; left
+      as a known simplification.
+
 ## Metadata & matching
 
 - [ ] **Multi-provider metadata (tmdb/imdb/tvdb)** (2026-08-11 22:20)\

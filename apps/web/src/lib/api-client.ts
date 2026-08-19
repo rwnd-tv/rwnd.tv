@@ -7,6 +7,8 @@ import {
   type ImportJob,
   type InstanceSettings,
   type ListImportJobsResponse,
+  type ListLibraryMoviesResponse,
+  type ListLibraryShowsResponse,
   type ListPlaysResponse,
   type LoginRequest,
   type Play,
@@ -77,6 +79,11 @@ export const api = {
       get<ListPlaysResponse>(`/plays${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`),
     create: (body: CreatePlayRequest) => post<Play>('/plays', body),
     delete: (id: string) => del<void>(`/plays/${id}`),
+  },
+  library: {
+    // Whole-library responses, not paginated — see packages/shared/src/schemas/library.ts.
+    shows: () => get<ListLibraryShowsResponse>('/library/shows'),
+    movies: () => get<ListLibraryMoviesResponse>('/library/movies'),
   },
   settings: {
     get: () => get<InstanceSettings>('/settings'),

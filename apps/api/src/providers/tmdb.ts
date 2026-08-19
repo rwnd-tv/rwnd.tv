@@ -3,10 +3,16 @@ import type {
   ProviderEpisode,
   ProviderMovie,
   ProviderSearchResult,
+  ProviderSeasonSummary,
   ProviderShow,
 } from './types.js'
 
 const POSTER_SIZE = 'w342'
+const MAX_RETRY_AFTER_SECONDS = 60
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
 
 interface TmdbOptions {
   apiKey: string
@@ -42,6 +48,20 @@ interface TmdbShow {
   first_air_date?: string
   overview?: string | null
   poster_path?: string | null
+  status?: string | null
+  genres?: TmdbGenre[]
+  seasons?: TmdbSeasonSummary[]
+}
+interface TmdbGenre {
+  id: number
+  name: string
+}
+interface TmdbSeasonSummary {
+  season_number: number
+  name?: string | null
+  episode_count?: number
+  air_date?: string | null
+  poster_path?: string | null
 }
 interface TmdbEpisode {
   name?: string | null
@@ -74,13 +94,32 @@ export class TmdbProvider implements MetadataProvider {
     return Number.isNaN(year) ? null : year
   }
 
-  private async request<T>(path: string, locale: string, params: Record<string, string> = {}) {
+  private async request<T>(
+    path: string,
+    locale: string,
+    params: Record<string, string> = {},
+    isRetry = false,
+  ): Promise<T> {
     const url = new URL(this.options.apiBaseUrl + path)
     url.searchParams.set('api_key', this.options.apiKey)
     url.searchParams.set('language', locale)
     for (const [key, value] of Object.entries(params)) url.searchParams.set(key, value)
 
     const res = await fetch(url)
+
+    if (res.status === 429 && !isRetry) {
+      // TMDB doesn't document a fixed rate limit today (the old 40-per-10s
+      // cap was disabled in 2019), but their CDN still enforces one under
+      // load. Retry once, honouring Retry-After when present; a second 429
+      // is surfaced to the caller rather than looped on indefinitely. This
+      // matters more now than at launch: the metadata refresher
+      // (apps/api/src/metadata/refresh.ts) makes unattended bursts of these
+      // calls, unlike the user-initiated search/import paths.
+      const retryAfter = Number.parseInt(res.headers.get('retry-after') ?? '5', 10)
+      await sleep(Math.min(retryAfter, MAX_RETRY_AFTER_SECONDS) * 1000)
+      return this.request<T>(path, locale, params, true)
+    }
+
     if (!res.ok) {
       throw new Error(`TMDB request failed: ${res.status} ${res.statusText} (${path})`)
     }
@@ -124,6 +163,15 @@ export class TmdbProvider implements MetadataProvider {
       year: this.yearOf(s.first_air_date),
       overview: s.overview ?? null,
       posterPath: this.posterUrl(s.poster_path),
+      status: s.status ?? null,
+      genres: (s.genres ?? []).map((g) => g.name),
+      seasons: (s.seasons ?? []).map((season): ProviderSeasonSummary => ({
+        seasonNumber: season.season_number,
+        name: season.name ?? null,
+        episodeCount: season.episode_count ?? 0,
+        airDate: season.air_date ?? null,
+        posterPath: this.posterUrl(season.poster_path),
+      })),
     }
   }
 

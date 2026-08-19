@@ -5,6 +5,7 @@ import { createApp } from './app.js'
 import { loadEnv } from './env.js'
 import { createMetadataProvider } from './providers/index.js'
 import { runTraktImport } from './import/trakt.js'
+import { scheduleMetadataRefresh } from './metadata/refresh.js'
 
 const env = loadEnv()
 const db = createDatabase(env.DATABASE_URL)
@@ -31,6 +32,13 @@ async function resumeInterruptedImports() {
   }
 }
 void resumeInterruptedImports()
+
+// Same reasoning as resumeInterruptedImports above: deliberately not inside
+// createApp(), since testApp() runs createApp() in every test and this must
+// not fire there. Covers the initial season-count backfill, ongoing airing
+// shows, and TMDB's 6-month cache-retention limit — see
+// apps/api/src/metadata/refresh.ts.
+scheduleMetadataRefresh(db, metadataProvider)
 
 serve({ fetch: app.fetch, port: env.PORT }, (info) => {
   console.log(`rwnd.tv API listening on http://localhost:${info.port}`)

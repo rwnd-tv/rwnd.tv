@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import type { SearchResult } from '@rwnd/shared'
 import { api } from '../lib/api-client.js'
+import { invalidateWatchData } from '../lib/query-client.js'
 import { Button } from './ui/Button.js'
 import { Field } from './ui/Field.js'
 
@@ -25,7 +26,7 @@ export function SearchResultCard({ result }: { result: SearchResult }) {
               episodeNumber: episode,
             },
           }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['plays'] }),
+    onSuccess: () => invalidateWatchData(queryClient),
   })
 
   return (

@@ -4,9 +4,12 @@
     "tagline": "Suivez ce que vous regardez."
   },
   "nav": {
+    "main": "Navigation principale",
+    "collapseSidebar": "Réduire le menu",
+    "expandSidebar": "Déplier le menu",
+    "dashboard": "Tableau de bord",
     "shows": "Séries",
     "movies": "Films",
-    "search": "Recherche",
     "history": "Historique",
     "import": "Importer",
     "settings": "Paramètres",
@@ -39,8 +42,10 @@
     "loginLink": "Se connecter",
     "closed": "Les inscriptions ne sont pas ouvertes sur cette instance."
   },
+  "dashboard": {
+    "title": "Tableau de bord"
+  },
   "search": {
-    "title": "Recherche",
     "placeholder": "Rechercher un film ou une série…",
     "noResults": "Aucun résultat pour l'instant — essayez une recherche.",
     "logWatch": "Enregistrer",
@@ -51,7 +56,8 @@
     "filterLabel": "Filtrer les séries",
     "filterPlaceholder": "Filtrer par titre…",
     "sortLabel": "Trier par",
-    "sortLastWatched": "Vues récemment",
+    "sortLastWatchedDesc": "Vu (Décroissant)",
+    "sortLastWatchedAsc": "Vu (Croissant)",
     "sortTitleAsc": "Titre (A - Z)",
     "sortTitleDesc": "Titre (Z - A)",
     "sortYearDesc": "Année (Décroissant)",
@@ -71,10 +77,20 @@
       "include": "Inclure",
       "exclude": "Exclure",
       "released": "Sortie",
+      "watched": "Vu",
       "after": "Après",
       "before": "Avant",
+      "unknown": "Inconnue",
       "reset": "Réinitialiser"
     }
+  },
+  "showDetail": {
+    "notFound": "Cette série est introuvable.",
+    "seasonsTitle": "Saisons",
+    "specials": "Spéciaux",
+    "seasonProgressAria": "{{season}} : {{watched}} épisodes vus sur {{total}}",
+    "watchedPeriod": "Vu {{range}}",
+    "watchedUnknown": "Vu : Inconnu"
   },
   "movies": {
     "title": "Films",
@@ -95,7 +111,8 @@
     "loadMore": "Charger plus",
     "remove": "Supprimer",
     "episodeLabelShort": "S{{season}} E{{episode}}",
-    "episodeLabelLong": "Saison {{season}} Épisode {{episode}}"
+    "episodeLabelLong": "Saison {{season}} Épisode {{episode}}",
+    "unknownDate": "Date inconnue"
   },
   "import": {
     "title": "Importer",

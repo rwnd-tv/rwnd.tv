@@ -8,7 +8,7 @@ import { Select } from '../ui/Select.js'
  * without this component needing to know about either. No debounce on the
  * filter: the whole library is already in memory, so filtering is a plain
  * array operation with nothing to save by delaying it — unlike the network
- * search on SearchPage, which useDebouncedValue exists for. */
+ * search on DashboardPage, which useDebouncedValue exists for. */
 export function LibraryControls<SortKey extends string>({
   filterValue,
   onFilterChange,

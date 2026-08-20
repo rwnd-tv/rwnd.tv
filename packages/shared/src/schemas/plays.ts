@@ -29,6 +29,9 @@ const playMediaSummarySchema = z.object({
   title: z.string(),
   posterPath: z.string().nullable(),
   showTitle: z.string().optional(),
+  /** Present only for episodes — links History entries to the show's page
+   * (apps/web/src/routes/ShowDetailPage.tsx). */
+  showSlug: z.string().optional(),
   seasonNumber: z.number().int().optional(),
   episodeNumber: z.number().int().optional(),
 })

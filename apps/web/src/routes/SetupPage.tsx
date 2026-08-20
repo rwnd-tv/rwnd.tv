@@ -40,7 +40,7 @@ export function SetupPage() {
     try {
       await api.setup.create({ displayName, email, password })
       await queryClient.invalidateQueries({ queryKey: ['auth', 'me'] })
-      navigate('/history')
+      navigate('/dashboard')
     } catch (err) {
       setError(err instanceof ApiError ? err.message : t('common.somethingWentWrong'))
     } finally {

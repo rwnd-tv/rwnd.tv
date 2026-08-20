@@ -32,7 +32,7 @@ export function LoginPage() {
     )
   }
   if (setupStatus?.required) return <Navigate to="/setup" replace />
-  if (user) return <Navigate to="/history" replace />
+  if (user) return <Navigate to="/dashboard" replace />
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
@@ -41,7 +41,7 @@ export function LoginPage() {
     try {
       await api.auth.login({ email, password })
       await queryClient.invalidateQueries({ queryKey: ['auth', 'me'] })
-      navigate('/history')
+      navigate('/dashboard')
     } catch (err) {
       setError(err instanceof ApiError ? err.message : t('common.somethingWentWrong'))
     } finally {

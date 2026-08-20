@@ -15,6 +15,7 @@ import {
   type RegisterRequest,
   type SearchResponse,
   type SetupRequest,
+  type ShowDetail,
   type TraktConnectionStatus,
   type TraktDevicePairing,
   type UpdateInstanceSettingsRequest,
@@ -83,6 +84,7 @@ export const api = {
   library: {
     // Whole-library responses, not paginated — see packages/shared/src/schemas/library.ts.
     shows: () => get<ListLibraryShowsResponse>('/library/shows'),
+    show: (slug: string) => get<ShowDetail>(`/library/shows/${encodeURIComponent(slug)}`),
     movies: () => get<ListLibraryMoviesResponse>('/library/movies'),
   },
   settings: {

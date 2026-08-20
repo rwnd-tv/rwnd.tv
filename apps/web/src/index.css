@@ -47,6 +47,14 @@
   --color-focus-ring: #818cf8;
 }
 
+html {
+  /* Reserves the vertical scrollbar's width on every page, scrollbar or
+     not — otherwise a page tall enough to scroll gets ~15px less available
+     width than a short one, and the centered reading column (mx-auto
+     max-w-4xl in Layout.tsx) lands in a visibly different spot per page. */
+  scrollbar-gutter: stable;
+}
+
 body {
   background-color: var(--color-bg);
   color: var(--color-fg);

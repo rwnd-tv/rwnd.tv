@@ -6,7 +6,7 @@ import { api } from '../lib/api-client.js'
 import { useAuth } from '../lib/auth-context.js'
 import {
   filterByTitle,
-  lastWatchedComparator,
+  lastWatchedComparatorDesc,
   titleComparatorAsc,
   yearComparatorDesc,
 } from '../lib/library-filter.js'
@@ -27,7 +27,7 @@ function sortMovies(movies: LibraryMovie[], sortBy: SortKey, locale: string): Li
     case 'year':
       return sorted.sort(yearComparatorDesc)
     case 'lastWatched':
-      return sorted.sort(lastWatchedComparator)
+      return sorted.sort(lastWatchedComparatorDesc)
     case 'timesWatched':
       return sorted.sort((a, b) => b.playCount - a.playCount)
   }

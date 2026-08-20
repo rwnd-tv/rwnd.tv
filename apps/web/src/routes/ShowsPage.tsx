@@ -9,9 +9,12 @@ import {
   filterByGenres,
   filterByReleaseYear,
   filterByTitle,
-  lastWatchedComparator,
+  filterByWatchedYear,
+  lastWatchedComparatorAsc,
+  lastWatchedComparatorDesc,
   titleComparatorAsc,
   titleComparatorDesc,
+  watchedYearRange,
   yearComparatorAsc,
   yearComparatorDesc,
   yearRange,
@@ -19,6 +22,7 @@ import {
 import { useSortCookie } from '../lib/use-sort-cookie.js'
 import { useGenreFilterCookie } from '../lib/use-genre-filter-cookie.js'
 import { useYearRangeCookie } from '../lib/use-year-range-cookie.js'
+import { useBooleanCookie } from '../lib/use-boolean-cookie.js'
 import { PosterGrid } from '../components/library/PosterGrid.js'
 import { PosterTile } from '../components/library/PosterTile.js'
 import { ProgressBar } from '../components/library/ProgressBar.js'
@@ -26,11 +30,13 @@ import { LibraryControls } from '../components/library/LibraryControls.js'
 import { FiltersPanel } from '../components/library/FiltersPanel.js'
 import { GenreFilterPanel } from '../components/library/GenreFilterPanel.js'
 import { ReleaseYearFilterPanel } from '../components/library/ReleaseYearFilterPanel.js'
+import { WatchedYearFilterPanel } from '../components/library/WatchedYearFilterPanel.js'
 import { Button } from '../components/ui/Button.js'
 import { Spinner } from '../components/ui/Spinner.js'
 
 const SORT_KEYS = [
-  'lastWatched',
+  'lastWatchedDesc',
+  'lastWatchedAsc',
   'titleAsc',
   'titleDesc',
   'yearDesc',
@@ -72,8 +78,10 @@ function sortShows(shows: LibraryShow[], sortBy: SortKey, locale: string): Libra
       return sorted.sort(yearComparatorDesc)
     case 'yearAsc':
       return sorted.sort(yearComparatorAsc)
-    case 'lastWatched':
-      return sorted.sort(lastWatchedComparator)
+    case 'lastWatchedDesc':
+      return sorted.sort(lastWatchedComparatorDesc)
+    case 'lastWatchedAsc':
+      return sorted.sort(lastWatchedComparatorAsc)
     case 'progressDesc':
       return sorted.sort(progressComparator(-1))
     case 'progressAsc':
@@ -86,7 +94,7 @@ export function ShowsPage() {
   const { user } = useAuth()
   const locale = user?.locale ?? 'en-GB'
   const [filter, setFilter] = useState('')
-  const [sortBy, setSortBy] = useSortCookie('rwnd_shows_sort', SORT_KEYS, 'lastWatched')
+  const [sortBy, setSortBy] = useSortCookie('rwnd_shows_sort', SORT_KEYS, 'lastWatchedDesc')
   const [genreFilters, setGenreFilters] = useGenreFilterCookie('rwnd_shows_genre_filters')
   const [filtersOpen, setFiltersOpen] = useState(false)
 
@@ -106,19 +114,56 @@ export function ShowsPage() {
     libraryYearRange?.max ?? 0,
     libraryYearRange !== null,
   )
+  // 1900 (Trakt's "I don't remember when" sentinel) is excluded from this
+  // range entirely — see watchedYearRange() — so the "After" slider can
+  // never be dragged back to it. Shows with that sentinel are governed by
+  // includeUnknownWatched instead, not by the slider.
+  const libraryWatchedYearRange = useMemo(() => watchedYearRange(data?.shows ?? []), [data])
+  const [watchedYearFilter, setWatchedYearFilter] = useYearRangeCookie(
+    'rwnd_shows_watched_year_filter',
+    libraryWatchedYearRange?.min ?? 0,
+    libraryWatchedYearRange?.max ?? 0,
+    libraryWatchedYearRange !== null,
+  )
+  const [includeUnknownWatched, setIncludeUnknownWatched] = useBooleanCookie(
+    'rwnd_shows_watched_unknown',
+    true,
+  )
 
   const shows = useMemo(() => {
     const byTitle = filterByTitle(data?.shows ?? [], filter)
     const byGenre = filterByGenres(byTitle, genreFilters)
     const byYear = filterByReleaseYear(byGenre, yearFilter.after, yearFilter.before)
-    return sortShows(byYear, sortBy, locale)
-  }, [data, filter, genreFilters, yearFilter, sortBy, locale])
+    const byWatchedYear = filterByWatchedYear(
+      byYear,
+      watchedYearFilter.after,
+      watchedYearFilter.before,
+      includeUnknownWatched,
+    )
+    return sortShows(byWatchedYear, sortBy, locale)
+  }, [
+    data,
+    filter,
+    genreFilters,
+    yearFilter,
+    watchedYearFilter,
+    includeUnknownWatched,
+    sortBy,
+    locale,
+  ])
 
   function resetFilters() {
     setGenreFilters(() => ({}))
     if (libraryYearRange) {
       setYearFilter({ after: libraryYearRange.min, before: libraryYearRange.max })
     }
+    if (libraryWatchedYearRange) {
+      setWatchedYearFilter({
+        after: libraryWatchedYearRange.min,
+        before: libraryWatchedYearRange.max,
+      })
+    }
+    setIncludeUnknownWatched(true)
   }
 
   if (isLoading) return <Spinner label={t('common.loading')} />
@@ -158,7 +203,8 @@ export function ShowsPage() {
             onSortChange={setSortBy}
             sortLabel={t('shows.sortLabel')}
             sortOptions={[
-              { value: 'lastWatched', label: t('shows.sortLastWatched') },
+              { value: 'lastWatchedDesc', label: t('shows.sortLastWatchedDesc') },
+              { value: 'lastWatchedAsc', label: t('shows.sortLastWatchedAsc') },
               { value: 'titleAsc', label: t('shows.sortTitleAsc') },
               { value: 'titleDesc', label: t('shows.sortTitleDesc') },
               { value: 'yearDesc', label: t('shows.sortYearDesc') },
@@ -189,6 +235,20 @@ export function ShowsPage() {
                   beforeLabel={t('shows.filtersPanel.before')}
                 />
               )}
+              {libraryWatchedYearRange && (
+                <WatchedYearFilterPanel
+                  min={libraryWatchedYearRange.min}
+                  max={libraryWatchedYearRange.max}
+                  range={watchedYearFilter}
+                  onChange={setWatchedYearFilter}
+                  includeUnknown={includeUnknownWatched}
+                  onIncludeUnknownChange={setIncludeUnknownWatched}
+                  groupLabel={t('shows.filtersPanel.watched')}
+                  afterLabel={t('shows.filtersPanel.after')}
+                  beforeLabel={t('shows.filtersPanel.before')}
+                  unknownLabel={t('shows.filtersPanel.unknown')}
+                />
+              )}
               <div>
                 <Button variant="secondary" type="button" onClick={resetFilters}>
                   {t('shows.filtersPanel.reset')}
@@ -209,6 +269,7 @@ export function ShowsPage() {
                   title={show.title}
                   year={show.year}
                   posterPath={show.posterPath}
+                  to={`/shows/${show.slug}`}
                 >
                   {show.totalEpisodes !== null ? (
                     <div className="flex flex-col gap-1">

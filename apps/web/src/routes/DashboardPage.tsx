@@ -7,7 +7,7 @@ import { SearchResultCard } from '../components/SearchResultCard.js'
 import { Field } from '../components/ui/Field.js'
 import { Spinner } from '../components/ui/Spinner.js'
 
-export function SearchPage() {
+export function DashboardPage() {
   const { t } = useTranslation()
   const [query, setQuery] = useState('')
   const debouncedQuery = useDebouncedValue(query, 350)
@@ -20,7 +20,7 @@ export function SearchPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-2xl font-semibold">{t('search.title')}</h1>
+      <h1 className="text-2xl font-semibold">{t('dashboard.title')}</h1>
       <Field
         label={t('search.placeholder')}
         hideLabel

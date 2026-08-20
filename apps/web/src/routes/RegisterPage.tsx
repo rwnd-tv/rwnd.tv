@@ -31,7 +31,7 @@ export function RegisterPage() {
       </div>
     )
   }
-  if (user) return <Navigate to="/history" replace />
+  if (user) return <Navigate to="/dashboard" replace />
 
   if (settings?.registrationMode === 'closed') {
     return (
@@ -58,7 +58,7 @@ export function RegisterPage() {
         inviteCode: inviteCode || undefined,
       })
       await queryClient.invalidateQueries({ queryKey: ['auth', 'me'] })
-      navigate('/history')
+      navigate('/dashboard')
     } catch (err) {
       setError(err instanceof ApiError ? err.message : t('common.somethingWentWrong'))
     } finally {

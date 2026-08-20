@@ -2,6 +2,7 @@ import { and, eq } from 'drizzle-orm'
 import type { Database } from '@rwnd/db'
 import { episodes, externalIds, movies, seasons, shows } from '@rwnd/db'
 import type { MetadataProvider } from '../providers/types.js'
+import { generateUniqueShowSlug } from './slug.js'
 
 /** TMDB frequently has no episode title yet for very recent/unaired episodes. */
 export function episodeDisplayTitle(
@@ -78,7 +79,7 @@ export async function resolveShow(
   provider: MetadataProvider,
   showExternalId: string,
   locale: string,
-): Promise<{ id: string; title: string }> {
+): Promise<{ id: string; title: string; slug: string }> {
   const [existing] = await db
     .select({ id: externalIds.entityId })
     .from(externalIds)
@@ -93,14 +94,16 @@ export async function resolveShow(
 
   if (existing) {
     const [show] = await db.select().from(shows).where(eq(shows.id, existing.id)).limit(1)
-    if (show) return { id: show.id, title: show.title }
+    if (show) return { id: show.id, title: show.title, slug: show.slug }
   }
 
   const fetched = await provider.getShow(showExternalId, locale)
+  const slug = await generateUniqueShowSlug(db, fetched.title, fetched.year)
   const [show] = await db
     .insert(shows)
     .values({
       title: fetched.title,
+      slug,
       year: fetched.year,
       overview: fetched.overview,
       posterPath: fetched.posterPath,
@@ -139,7 +142,7 @@ export async function resolveShow(
       .onConflictDoNothing()
   }
 
-  return { id: show.id, title: show.title }
+  return { id: show.id, title: show.title, slug: show.slug }
 }
 
 export async function resolveEpisode(
@@ -153,6 +156,7 @@ export async function resolveEpisode(
   id: string
   title: string | null
   posterPath: string | null
+  showSlug: string
   showTitle: string
   seasonNumber: number
   episodeNumber: number
@@ -177,6 +181,7 @@ export async function resolveEpisode(
       id: existing.id,
       title: existing.title,
       posterPath: showRow?.posterPath ?? null,
+      showSlug: show.slug,
       showTitle: show.title,
       seasonNumber: existing.seasonNumber,
       episodeNumber: existing.episodeNumber,
@@ -213,6 +218,7 @@ export async function resolveEpisode(
     id: episode.id,
     title: episode.title,
     posterPath: showRow?.posterPath ?? null,
+    showSlug: show.slug,
     showTitle: show.title,
     seasonNumber: episode.seasonNumber,
     episodeNumber: episode.episodeNumber,

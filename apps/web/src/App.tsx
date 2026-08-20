@@ -5,9 +5,10 @@ import type { RouteHandle } from './lib/route-handle.js'
 import { SetupPage } from './routes/SetupPage.js'
 import { LoginPage } from './routes/LoginPage.js'
 import { RegisterPage } from './routes/RegisterPage.js'
-import { SearchPage } from './routes/SearchPage.js'
+import { DashboardPage } from './routes/DashboardPage.js'
 import { HistoryPage } from './routes/HistoryPage.js'
 import { ShowsPage } from './routes/ShowsPage.js'
+import { ShowDetailPage } from './routes/ShowDetailPage.js'
 import { MoviesPage } from './routes/MoviesPage.js'
 import { ImportPage } from './routes/ImportPage.js'
 import { SettingsPage } from './routes/SettingsPage.js'
@@ -28,14 +29,14 @@ const router = createBrowserRouter([
       {
         element: <Layout />,
         children: [
-          // Deliberately still History, not Shows/Movies — every post-auth
+          // Dashboard is the app's default landing page — every post-auth
           // redirect (LoginPage, RegisterPage, SetupPage) independently
-          // hardcodes '/history' too, and changing the app's default
-          // landing page is a real UX decision beyond this feature's scope.
-          { path: '/', element: <Navigate to="/history" replace /> },
+          // hardcodes '/dashboard' too.
+          { path: '/', element: <Navigate to="/dashboard" replace /> },
+          { path: '/dashboard', element: <DashboardPage /> },
           { path: '/shows', element: <ShowsPage />, handle: fullWidthHandle },
+          { path: '/shows/:slug', element: <ShowDetailPage />, handle: fullWidthHandle },
           { path: '/movies', element: <MoviesPage />, handle: fullWidthHandle },
-          { path: '/search', element: <SearchPage /> },
           { path: '/history', element: <HistoryPage /> },
           { path: '/import', element: <ImportPage /> },
           { path: '/settings', element: <SettingsPage /> },

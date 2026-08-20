@@ -47,6 +47,9 @@ async function insertShow(opts: {
     .insert(shows)
     .values({
       title: 'Some Show',
+      // Each call needs a distinct slug (shows.slug is unique) — the tmdb id
+      // is a convenient distinguisher when set, otherwise a random one.
+      slug: `some-show-${opts.tmdbId ?? crypto.randomUUID()}`,
       status: opts.status ?? null,
       metadataRefreshedAt: opts.metadataRefreshedAt,
       genres: opts.genres ?? [],

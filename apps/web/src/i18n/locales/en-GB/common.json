@@ -4,9 +4,12 @@
     "tagline": "Track what you watch."
   },
   "nav": {
+    "main": "Main navigation",
+    "collapseSidebar": "Collapse sidebar",
+    "expandSidebar": "Expand sidebar",
+    "dashboard": "Dashboard",
     "shows": "TV Shows",
     "movies": "Movies",
-    "search": "Search",
     "history": "History",
     "import": "Import",
     "settings": "Settings",
@@ -39,8 +42,10 @@
     "loginLink": "Log in",
     "closed": "Registration is not currently open on this instance."
   },
+  "dashboard": {
+    "title": "Dashboard"
+  },
   "search": {
-    "title": "Search",
     "placeholder": "Search for a movie or show…",
     "noResults": "No results yet — try searching for something.",
     "logWatch": "Log watch",
@@ -51,7 +56,8 @@
     "filterLabel": "Filter shows",
     "filterPlaceholder": "Filter by title…",
     "sortLabel": "Sort by",
-    "sortLastWatched": "Recently watched",
+    "sortLastWatchedDesc": "Watched (Descending)",
+    "sortLastWatchedAsc": "Watched (Ascending)",
     "sortTitleAsc": "Title (A - Z)",
     "sortTitleDesc": "Title (Z - A)",
     "sortYearDesc": "Year (Descending)",
@@ -71,10 +77,20 @@
       "include": "Include",
       "exclude": "Exclude",
       "released": "Released",
+      "watched": "Watched",
       "after": "After",
       "before": "Before",
+      "unknown": "Unknown",
       "reset": "Reset"
     }
+  },
+  "showDetail": {
+    "notFound": "This show couldn't be found.",
+    "seasonsTitle": "Seasons",
+    "specials": "Specials",
+    "seasonProgressAria": "{{season}}: {{watched}} of {{total}} episodes watched",
+    "watchedPeriod": "Watched {{range}}",
+    "watchedUnknown": "Watched: Unknown"
   },
   "movies": {
     "title": "Movies",
@@ -95,7 +111,8 @@
     "loadMore": "Load more",
     "remove": "Remove",
     "episodeLabelShort": "S{{season}} E{{episode}}",
-    "episodeLabelLong": "Season {{season}} Episode {{episode}}"
+    "episodeLabelLong": "Season {{season}} Episode {{episode}}",
+    "unknownDate": "Unknown date"
   },
   "import": {
     "title": "Import",

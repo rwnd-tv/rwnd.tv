@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { plays } from '@rwnd/db'
 import type { ListPlaysResponse, Play, User } from '@rwnd/shared'
 import { createLocalUser, extractCookie, json, resetDb, testApp, testDb } from './helpers.js'
+import { BREAKING_BAD_SHOW_TMDB_ID, tmdbBreakingBadShow } from './fixtures/trakt.js'
 
 const db = testDb()
 const app = testApp()
@@ -48,6 +49,15 @@ describe('plays', () => {
               { status: 200 },
             )
           }
+          if (url.pathname === `/3/tv/${BREAKING_BAD_SHOW_TMDB_ID}`) {
+            return new Response(JSON.stringify(tmdbBreakingBadShow), { status: 200 })
+          }
+          if (url.pathname === `/3/tv/${BREAKING_BAD_SHOW_TMDB_ID}/season/1/episode/1`) {
+            return new Response(
+              JSON.stringify({ name: 'Pilot', season_number: 1, episode_number: 1, runtime: 58 }),
+              { status: 200 },
+            )
+          }
           throw new Error(`Unexpected fetch in test: ${url}`)
         }),
       )
@@ -75,6 +85,35 @@ describe('plays', () => {
       const { plays: history } = await json<ListPlaysResponse>(list)
       expect(history).toHaveLength(1)
       expect(history[0]?.id).toBe(play.id)
+    })
+
+    it('logs an episode watch with a showSlug that links to the show page', async () => {
+      const cookie = await createUserAndCookie()
+
+      const created = await app.request('/api/v1/plays', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', cookie },
+        body: JSON.stringify({
+          episode: {
+            source: 'tmdb',
+            showExternalId: String(BREAKING_BAD_SHOW_TMDB_ID),
+            seasonNumber: 1,
+            episodeNumber: 1,
+          },
+        }),
+      })
+      expect(created.status).toBe(201)
+      const play = await json<Play>(created)
+      expect(play.media).toMatchObject({
+        type: 'episode',
+        title: 'Pilot',
+        showTitle: 'Breaking Bad',
+        showSlug: 'breaking-bad-2008',
+      })
+
+      const list = await app.request('/api/v1/plays', { headers: { cookie } })
+      const { plays: history } = await json<ListPlaysResponse>(list)
+      expect(history[0]?.media).toMatchObject({ showSlug: 'breaking-bad-2008' })
     })
 
     it("does not let a different user delete someone else's play", async () => {

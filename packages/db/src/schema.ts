@@ -171,6 +171,13 @@ export const movies = pgTable('movies', {
 export const shows = pgTable('shows', {
   id: uuid('id').primaryKey().defaultRandom(),
   title: text('title').notNull(),
+  // URL-friendly identifier (e.g. "battlestar-galactica-1978"), generated
+  // once from title+year when the show is first resolved (see
+  // generateUniqueShowSlug() in apps/api/src/lib/media.ts) and never
+  // recomputed afterwards, so a show keeps the same URL even if a later
+  // metadata refresh changes its title. Unique per-instance only — nothing
+  // needs slugs to agree across separate rwnd.tv installs.
+  slug: text('slug').notNull().unique(),
   year: integer('year'),
   overview: text('overview'),
   posterPath: text('poster_path'),

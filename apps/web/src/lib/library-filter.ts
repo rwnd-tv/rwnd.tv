@@ -66,9 +66,18 @@ export function yearComparatorAsc(a: { year: number | null }, b: { year: number 
   return a.year - b.year
 }
 
-/** Descending by an ISO datetime field — most-recently-watched first. */
-export function lastWatchedComparator<T extends { lastWatchedAt: string }>(a: T, b: T): number {
+/** By an ISO datetime field — Desc is most-recently-watched first, Asc is
+ * least-recently-watched (i.e. longest-untouched) first. Every show in this
+ * list has at least one play, so unlike the year comparators there's no
+ * null/unknown case to sort specially — even a 1900-01-01 (Trakt's "I don't
+ * remember when" sentinel) watch is still a real, comparable timestamp
+ * here, just an old one. */
+export function lastWatchedComparatorDesc<T extends { lastWatchedAt: string }>(a: T, b: T): number {
   return new Date(b.lastWatchedAt).getTime() - new Date(a.lastWatchedAt).getTime()
+}
+
+export function lastWatchedComparatorAsc<T extends { lastWatchedAt: string }>(a: T, b: T): number {
+  return new Date(a.lastWatchedAt).getTime() - new Date(b.lastWatchedAt).getTime()
 }
 
 /**
@@ -144,4 +153,45 @@ export function filterByReleaseYear<T extends { year: number | null }>(
   before: number,
 ): T[] {
   return items.filter((item) => item.year === null || (item.year >= after && item.year <= before))
+}
+
+/**
+ * "Watched" filter panel (ShowsPage.tsx / WatchedYearFilterPanel.tsx).
+ * `lastWatchedAt` dated exactly 1900-01-01 is Trakt's "I don't remember
+ * when" sentinel (see ShowDetailPage.tsx/HistoryPage.tsx's own handling of
+ * it) — treated as "unknown", not a real year, everywhere in this filter.
+ * Checked via UTC year so it can't be thrown off by the browser's timezone
+ * shifting the calendar day around midnight.
+ */
+export function watchedYearOf(item: { lastWatchedAt: string }): number | null {
+  const year = new Date(item.lastWatchedAt).getUTCFullYear()
+  return year === 1900 ? null : year
+}
+
+/** Same shape as yearRange() above, but over known watched years only —
+ * 1900 is excluded from the range itself, not just clamped into it, so the
+ * "After" slider can never be dragged back to it. `null` when every item's
+ * watched year is unknown (nothing to build a slider range from). */
+export function watchedYearRange<T extends { lastWatchedAt: string }>(
+  items: T[],
+): YearRange | null {
+  const years = items.map(watchedYearOf).filter((year): year is number => year !== null)
+  if (years.length === 0) return null
+  return { min: Math.min(...years), max: Math.max(...years) }
+}
+
+/** Inclusive on both ends for known years. An unknown watched year (see
+ * watchedYearOf) is governed entirely by `includeUnknown` instead — it's
+ * categorical, not a value the After/Before range could meaningfully place
+ * inside or outside of. */
+export function filterByWatchedYear<T extends { lastWatchedAt: string }>(
+  items: T[],
+  after: number,
+  before: number,
+  includeUnknown: boolean,
+): T[] {
+  return items.filter((item) => {
+    const year = watchedYearOf(item)
+    return year === null ? includeUnknown : year >= after && year <= before
+  })
 }

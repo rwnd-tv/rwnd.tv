@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
+import { Link } from 'react-router'
 import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import type { Play } from '@rwnd/shared'
 import { api } from '../lib/api-client.js'
@@ -8,15 +9,26 @@ import { useAuth } from '../lib/auth-context.js'
 import { Button } from '../components/ui/Button.js'
 import { Spinner } from '../components/ui/Spinner.js'
 
+/** Sentinel group key for plays dated exactly 1900-01-01 — Trakt's "I don't
+ * remember when" marker, not a real date — so they bucket under one
+ * "Unknown date" heading instead of a bogus "1 January 1900" per play.
+ * Checked via UTC year, not the locale-formatted string, so it can't be
+ * thrown off by the browser's timezone shifting the calendar day. */
+const UNKNOWN_DATE_KEY = '__unknown_date__'
+
 function groupByDay(plays: Play[], locale: string) {
   const groups = new Map<string, Play[]>()
   for (const play of plays) {
-    const day = new Date(play.watchedAt).toLocaleDateString(locale, {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    })
+    const watchedDate = new Date(play.watchedAt)
+    const day =
+      watchedDate.getUTCFullYear() === 1900
+        ? UNKNOWN_DATE_KEY
+        : watchedDate.toLocaleDateString(locale, {
+            weekday: 'long',
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+          })
     const existing = groups.get(day) ?? []
     existing.push(play)
     groups.set(day, existing)
@@ -71,7 +83,7 @@ export function HistoryPage() {
                 id={`day-${day}`}
                 className="mb-2 text-sm font-semibold text-[var(--color-fg-muted)]"
               >
-                {day}
+                {day === UNKNOWN_DATE_KEY ? t('history.unknownDate') : day}
               </h2>
               <ul className="flex flex-col gap-2">
                 {plays.map((play) => (
@@ -80,16 +92,36 @@ export function HistoryPage() {
                     className="flex items-center justify-between gap-4 rounded-lg border border-[var(--color-border)] p-3"
                   >
                     <div className="flex min-w-0 items-center gap-3">
-                      {play.media.posterPath && (
-                        <img
-                          src={play.media.posterPath}
-                          alt=""
-                          width={40}
-                          height={60}
-                          className="h-[60px] w-10 shrink-0 rounded object-cover"
-                        />
+                      {play.media.type === 'episode' && play.media.showSlug ? (
+                        <Link
+                          to={`/shows/${play.media.showSlug}`}
+                          className="flex min-w-0 items-center gap-3 hover:underline"
+                        >
+                          {play.media.posterPath && (
+                            <img
+                              src={play.media.posterPath}
+                              alt=""
+                              width={40}
+                              height={60}
+                              className="h-[60px] w-10 shrink-0 rounded object-cover"
+                            />
+                          )}
+                          <span className="truncate">{playTitle(play, t)}</span>
+                        </Link>
+                      ) : (
+                        <>
+                          {play.media.posterPath && (
+                            <img
+                              src={play.media.posterPath}
+                              alt=""
+                              width={40}
+                              height={60}
+                              className="h-[60px] w-10 shrink-0 rounded object-cover"
+                            />
+                          )}
+                          <span className="truncate">{playTitle(play, t)}</span>
+                        </>
                       )}
-                      <span className="truncate">{playTitle(play, t)}</span>
                     </div>
                     <Button
                       variant="ghost"

@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { episodes, movies, plays, seasons, shows } from '@rwnd/db'
-import type { ListLibraryMoviesResponse, ListLibraryShowsResponse, User } from '@rwnd/shared'
+import type {
+  ListLibraryMoviesResponse,
+  ListLibraryShowsResponse,
+  ShowDetail,
+  User,
+} from '@rwnd/shared'
 import { createLocalUser, extractCookie, json, resetDb, testApp, testDb } from './helpers.js'
 
 const db = testDb()
@@ -41,7 +46,12 @@ describe('library', () => {
 
       const [show] = await db
         .insert(shows)
-        .values({ title: 'Breaking Bad', year: 2008, genres: ['Drama', 'Crime'] })
+        .values({
+          title: 'Breaking Bad',
+          slug: 'breaking-bad',
+          year: 2008,
+          genres: ['Drama', 'Crime'],
+        })
         .returning()
       if (!show) throw new Error('failed to insert show')
 
@@ -90,7 +100,10 @@ describe('library', () => {
       const cookie = await createUserAndCookie()
       const userId = await meId(cookie)
 
-      const [show] = await db.insert(shows).values({ title: 'Doctor Who' }).returning()
+      const [show] = await db
+        .insert(shows)
+        .values({ title: 'Doctor Who', slug: 'doctor-who' })
+        .returning()
       if (!show) throw new Error('failed to insert show')
 
       await db.insert(seasons).values([
@@ -124,7 +137,10 @@ describe('library', () => {
       const cookie = await createUserAndCookie()
       const userId = await meId(cookie)
 
-      const [show] = await db.insert(shows).values({ title: 'Special Edition' }).returning()
+      const [show] = await db
+        .insert(shows)
+        .values({ title: 'Special Edition', slug: 'special-edition' })
+        .returning()
       if (!show) throw new Error('failed to insert show')
       await db.insert(seasons).values({ showId: show.id, seasonNumber: 0, episodeCount: 3 })
       const [special] = await db
@@ -145,7 +161,10 @@ describe('library', () => {
       const cookie = await createUserAndCookie()
       const userId = await meId(cookie)
 
-      const [show] = await db.insert(shows).values({ title: 'Not Yet Refreshed' }).returning()
+      const [show] = await db
+        .insert(shows)
+        .values({ title: 'Not Yet Refreshed', slug: 'not-yet-refreshed' })
+        .returning()
       if (!show) throw new Error('failed to insert show')
       const [ep] = await db
         .insert(episodes)
@@ -169,7 +188,10 @@ describe('library', () => {
       })
       const cookieB = extractCookie(loginB)!
 
-      const [show] = await db.insert(shows).values({ title: 'Only Bs' }).returning()
+      const [show] = await db
+        .insert(shows)
+        .values({ title: 'Only Bs', slug: 'only-bs' })
+        .returning()
       if (!show) throw new Error('failed to insert show')
       const [ep] = await db
         .insert(episodes)
@@ -184,6 +206,228 @@ describe('library', () => {
 
       const resB = await app.request('/api/v1/library/shows', { headers: { cookie: cookieB } })
       expect((await json<ListLibraryShowsResponse>(resB)).shows).toHaveLength(1)
+    })
+  })
+
+  describe('GET /library/shows/:id', () => {
+    it('returns 404 for a show that does not exist', async () => {
+      const cookie = await createUserAndCookie()
+      const res = await app.request('/api/v1/library/shows/no-such-show', { headers: { cookie } })
+      expect(res.status).toBe(404)
+    })
+
+    it('reports real per-season watched counts, but excludes specials from the header total (regression)', async () => {
+      const cookie = await createUserAndCookie()
+      const userId = await meId(cookie)
+
+      const [show] = await db
+        .insert(shows)
+        .values({
+          title: 'Doctor Who',
+          slug: 'doctor-who-2005',
+          year: 2005,
+          overview: 'A Time Lord.',
+          genres: ['Sci-Fi'],
+        })
+        .returning()
+      if (!show) throw new Error('failed to insert show')
+
+      await db.insert(seasons).values([
+        { showId: show.id, seasonNumber: 0, episodeCount: 2, name: 'Specials' },
+        { showId: show.id, seasonNumber: 1, episodeCount: 10, name: 'Season 1' },
+      ])
+
+      const [special, ep1, ep2] = await db
+        .insert(episodes)
+        .values([
+          { showId: show.id, seasonNumber: 0, episodeNumber: 1 },
+          { showId: show.id, seasonNumber: 1, episodeNumber: 1 },
+          { showId: show.id, seasonNumber: 1, episodeNumber: 2 },
+        ])
+        .returning()
+      if (!special || !ep1 || !ep2) throw new Error('failed to insert episodes')
+
+      await db.insert(plays).values([
+        { userId, episodeId: special.id, watchedAt: new Date('2026-01-01') },
+        { userId, episodeId: ep1.id, watchedAt: new Date('2026-01-02') },
+        { userId, episodeId: ep2.id, watchedAt: new Date('2026-01-03') },
+      ])
+
+      const res = await app.request(`/api/v1/library/shows/${show.slug}`, { headers: { cookie } })
+      expect(res.status).toBe(200)
+      const detail = await json<ShowDetail>(res)
+
+      // Header mirrors /library/shows: specials excluded from both halves.
+      expect(detail).toMatchObject({
+        id: show.id,
+        title: 'Doctor Who',
+        watchedEpisodes: 2,
+        totalEpisodes: 10,
+      })
+      // But each season's own count is real — the special genuinely was watched.
+      expect(detail.seasons).toEqual([
+        expect.objectContaining({ seasonNumber: 0, episodeCount: 2, watchedEpisodes: 1 }),
+        expect.objectContaining({ seasonNumber: 1, episodeCount: 10, watchedEpisodes: 2 }),
+      ])
+    })
+
+    it('reports a null total and zero watched counts for a show with no plays or cached seasons', async () => {
+      const cookie = await createUserAndCookie()
+      const [show] = await db
+        .insert(shows)
+        .values({ title: 'Unwatched Show', slug: 'unwatched-show' })
+        .returning()
+      if (!show) throw new Error('failed to insert show')
+
+      const res = await app.request(`/api/v1/library/shows/${show.slug}`, { headers: { cookie } })
+      const detail = await json<ShowDetail>(res)
+      expect(detail).toMatchObject({
+        watchedEpisodes: 0,
+        totalEpisodes: null,
+        firstWatchedAt: null,
+        lastWatchedAt: null,
+        hasUnknownWatchDate: false,
+        seasons: [],
+      })
+    })
+
+    it('reports the first/last watch across the whole show, specials included', async () => {
+      const cookie = await createUserAndCookie()
+      const userId = await meId(cookie)
+
+      const [show] = await db
+        .insert(shows)
+        .values({ title: 'Long Runner', slug: 'long-runner' })
+        .returning()
+      if (!show) throw new Error('failed to insert show')
+      await db.insert(seasons).values([
+        { showId: show.id, seasonNumber: 0, episodeCount: 1 },
+        { showId: show.id, seasonNumber: 1, episodeCount: 2 },
+      ])
+      const [special, ep1, ep2] = await db
+        .insert(episodes)
+        .values([
+          { showId: show.id, seasonNumber: 0, episodeNumber: 1 },
+          { showId: show.id, seasonNumber: 1, episodeNumber: 1 },
+          { showId: show.id, seasonNumber: 1, episodeNumber: 2 },
+        ])
+        .returning()
+      if (!special || !ep1 || !ep2) throw new Error('failed to insert episodes')
+
+      // The earliest watch is the special (2012), the latest is ep2
+      // (2014) — both must count even though the header totals exclude
+      // season 0.
+      await db.insert(plays).values([
+        { userId, episodeId: ep1.id, watchedAt: new Date('2013-06-15') },
+        { userId, episodeId: special.id, watchedAt: new Date('2012-03-28') },
+        { userId, episodeId: ep2.id, watchedAt: new Date('2014-09-12') },
+      ])
+
+      const res = await app.request(`/api/v1/library/shows/${show.slug}`, { headers: { cookie } })
+      const detail = await json<ShowDetail>(res)
+      expect(new Date(detail.firstWatchedAt!).toISOString()).toBe(
+        new Date('2012-03-28').toISOString(),
+      )
+      expect(new Date(detail.lastWatchedAt!).toISOString()).toBe(
+        new Date('2014-09-12').toISOString(),
+      )
+    })
+
+    it('excludes 1900-01-01 (Trakt\'s "unknown date" sentinel) from the watched range', async () => {
+      const cookie = await createUserAndCookie()
+      const userId = await meId(cookie)
+
+      const [show] = await db
+        .insert(shows)
+        .values({ title: 'Mixed Dates Show', slug: 'mixed-dates-show' })
+        .returning()
+      if (!show) throw new Error('failed to insert show')
+      const [known, unknown] = await db
+        .insert(episodes)
+        .values([
+          { showId: show.id, seasonNumber: 1, episodeNumber: 1 },
+          { showId: show.id, seasonNumber: 1, episodeNumber: 2 },
+        ])
+        .returning()
+      if (!known || !unknown) throw new Error('failed to insert episodes')
+
+      await db.insert(plays).values([
+        { userId, episodeId: known.id, watchedAt: new Date('2016-05-01') },
+        { userId, episodeId: unknown.id, watchedAt: new Date('1900-01-01') },
+      ])
+
+      const res = await app.request(`/api/v1/library/shows/${show.slug}`, { headers: { cookie } })
+      const detail = await json<ShowDetail>(res)
+      // The range reflects only the known-dated play — the 1900 one must
+      // not drag firstWatchedAt back to 1900 — but hasUnknownWatchDate
+      // still flags that an unknown-dated play exists.
+      expect(new Date(detail.firstWatchedAt!).toISOString()).toBe(
+        new Date('2016-05-01').toISOString(),
+      )
+      expect(new Date(detail.lastWatchedAt!).toISOString()).toBe(
+        new Date('2016-05-01').toISOString(),
+      )
+      expect(detail.hasUnknownWatchDate).toBe(true)
+    })
+
+    it('reports a null range with hasUnknownWatchDate true when every play is dated 1900-01-01', async () => {
+      const cookie = await createUserAndCookie()
+      const userId = await meId(cookie)
+
+      const [show] = await db
+        .insert(shows)
+        .values({ title: 'All Unknown Dates', slug: 'all-unknown-dates' })
+        .returning()
+      if (!show) throw new Error('failed to insert show')
+      const [ep] = await db
+        .insert(episodes)
+        .values({ showId: show.id, seasonNumber: 1, episodeNumber: 1 })
+        .returning()
+      if (!ep) throw new Error('failed to insert episode')
+      await db.insert(plays).values({ userId, episodeId: ep.id, watchedAt: new Date('1900-01-01') })
+
+      const res = await app.request(`/api/v1/library/shows/${show.slug}`, { headers: { cookie } })
+      const detail = await json<ShowDetail>(res)
+      expect(detail).toMatchObject({
+        firstWatchedAt: null,
+        lastWatchedAt: null,
+        hasUnknownWatchDate: true,
+      })
+    })
+
+    it("does not count another user's plays", async () => {
+      const cookieA = await createUserAndCookie('a2@example.com')
+      await createLocalUser(db, 'b2@example.com', 'correct-horse-battery-staple')
+      const loginB = await app.request('/api/v1/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: 'b2@example.com', password: 'correct-horse-battery-staple' }),
+      })
+      const cookieB = extractCookie(loginB)!
+      const userIdB = await meId(cookieB)
+
+      const [show] = await db
+        .insert(shows)
+        .values({ title: 'Only Bs Watched This', slug: 'only-bs-watched-this' })
+        .returning()
+      if (!show) throw new Error('failed to insert show')
+      await db.insert(seasons).values({ showId: show.id, seasonNumber: 1, episodeCount: 1 })
+      const [ep] = await db
+        .insert(episodes)
+        .values({ showId: show.id, seasonNumber: 1, episodeNumber: 1 })
+        .returning()
+      if (!ep) throw new Error('failed to insert episode')
+      await db.insert(plays).values({ userId: userIdB, episodeId: ep.id, watchedAt: new Date() })
+
+      const resA = await app.request(`/api/v1/library/shows/${show.slug}`, {
+        headers: { cookie: cookieA },
+      })
+      expect((await json<ShowDetail>(resA)).watchedEpisodes).toBe(0)
+
+      const resB = await app.request(`/api/v1/library/shows/${show.slug}`, {
+        headers: { cookie: cookieB },
+      })
+      expect((await json<ShowDetail>(resB)).watchedEpisodes).toBe(1)
     })
   })
 

@@ -9,6 +9,7 @@ import {
   jsonb,
   pgEnum,
   pgTable,
+  real,
   smallint,
   text,
   timestamp,
@@ -192,6 +193,12 @@ export const shows = pgTable('shows', {
   // no per-genre metadata beyond the name. Backs the shows gallery's genre
   // filter panel (apps/web/src/components/library/GenreFilterPanel.tsx).
   genres: text('genres').array().notNull().default([]),
+  // TMDB's raw vote_average (0-10, one decimal place in their UI). Null
+  // until the metadata refresher has cached this show, or genuinely null
+  // for a show TMDB has no votes for yet — both cases are treated the same
+  // by the gallery (see ShowsPage.tsx's rating filter/sort). Not a user's
+  // own rating of the show — that's the separate `ratings` table below.
+  voteAverage: real('vote_average'),
   metadataRefreshedAt: timestamp('metadata_refreshed_at', { withTimezone: true })
     .notNull()
     .defaultNow(),

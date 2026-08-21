@@ -63,6 +63,9 @@ export interface ProviderShow {
    * shows gallery's genre filter panel — see packages/db/src/schema.ts's
    * `shows.genres` column. */
   genres: string[]
+  /** Provider's average rating (TMDB: 0-10, one decimal place in their UI),
+   * or null if the provider doesn't expose one / has no votes yet. */
+  voteAverage: number | null
   /** Per-season episode counts, cached locally so the shows library gallery
    * can compute watched-progress without calling the provider — see
    * packages/db/src/schema.ts's `seasons` table. Excludes nothing itself;

@@ -6,30 +6,39 @@ import { api } from '../lib/api-client.js'
 import { useAuth } from '../lib/auth-context.js'
 import {
   collectGenres,
+  collectStatuses,
   filterByGenres,
+  filterByRating,
   filterByReleaseYear,
+  filterByStatus,
   filterByTitle,
   filterByWatchedYear,
   lastWatchedComparatorAsc,
   lastWatchedComparatorDesc,
+  ratingComparatorAsc,
+  ratingComparatorDesc,
+  ratingRange,
   titleComparatorAsc,
   titleComparatorDesc,
+  UNKNOWN_WATCHED_MODES,
   watchedYearRange,
   yearComparatorAsc,
   yearComparatorDesc,
   yearRange,
 } from '../lib/library-filter.js'
+import type { UnknownWatchedMode } from '../lib/library-filter.js'
 import { useSortCookie } from '../lib/use-sort-cookie.js'
 import { useGenreFilterCookie } from '../lib/use-genre-filter-cookie.js'
 import { useYearRangeCookie } from '../lib/use-year-range-cookie.js'
-import { useBooleanCookie } from '../lib/use-boolean-cookie.js'
 import { PosterGrid } from '../components/library/PosterGrid.js'
 import { PosterTile } from '../components/library/PosterTile.js'
 import { ProgressBar } from '../components/library/ProgressBar.js'
 import { LibraryControls } from '../components/library/LibraryControls.js'
 import { FiltersPanel } from '../components/library/FiltersPanel.js'
 import { GenreFilterPanel } from '../components/library/GenreFilterPanel.js'
+import { StatusFilterPanel } from '../components/library/StatusFilterPanel.js'
 import { ReleaseYearFilterPanel } from '../components/library/ReleaseYearFilterPanel.js'
+import { RatingFilterPanel } from '../components/library/RatingFilterPanel.js'
 import { WatchedYearFilterPanel } from '../components/library/WatchedYearFilterPanel.js'
 import { Button } from '../components/ui/Button.js'
 import { Spinner } from '../components/ui/Spinner.js'
@@ -43,6 +52,8 @@ const SORT_KEYS = [
   'yearAsc',
   'progressDesc',
   'progressAsc',
+  'ratingDesc',
+  'ratingAsc',
 ] as const
 type SortKey = (typeof SORT_KEYS)[number]
 
@@ -86,6 +97,10 @@ function sortShows(shows: LibraryShow[], sortBy: SortKey, locale: string): Libra
       return sorted.sort(progressComparator(-1))
     case 'progressAsc':
       return sorted.sort(progressComparator(1))
+    case 'ratingDesc':
+      return sorted.sort(ratingComparatorDesc)
+    case 'ratingAsc':
+      return sorted.sort(ratingComparatorAsc)
   }
 }
 
@@ -96,6 +111,9 @@ export function ShowsPage() {
   const [filter, setFilter] = useState('')
   const [sortBy, setSortBy] = useSortCookie('rwnd_shows_sort', SORT_KEYS, 'lastWatchedDesc')
   const [genreFilters, setGenreFilters] = useGenreFilterCookie('rwnd_shows_genre_filters')
+  // Reuses the genre cookie hook — its logic is already fully generic over
+  // a Record<string, 'include'|'exclude'>, nothing genre-specific about it.
+  const [statusFilters, setStatusFilters] = useGenreFilterCookie('rwnd_shows_status_filters')
   const [filtersOpen, setFiltersOpen] = useState(false)
 
   const { data, isLoading, isError } = useQuery({
@@ -104,6 +122,22 @@ export function ShowsPage() {
   })
 
   const availableGenres = useMemo(() => collectGenres(data?.shows ?? [], locale), [data, locale])
+  // TMDB doesn't localize `status` itself, so it's translated here rather
+  // than at cache time — falls back to the raw string for a status this
+  // app doesn't have a translation for yet (see refresh.ts's own comment
+  // about "a status this list doesn't know about yet").
+  function statusLabel(status: string): string {
+    return t(`shows.filtersPanel.statusValues.${status}`, { defaultValue: status })
+  }
+  const availableStatuses = useMemo(() => {
+    const collator = new Intl.Collator(locale, { sensitivity: 'base' })
+    return collectStatuses(data?.shows ?? []).sort((a, b) =>
+      collator.compare(
+        t(`shows.filtersPanel.statusValues.${a}`, { defaultValue: a }),
+        t(`shows.filtersPanel.statusValues.${b}`, { defaultValue: b }),
+      ),
+    )
+  }, [data, locale, t])
   // null when nothing in the library has a known year — ShowsPage doesn't
   // render the Released section at all in that case, so there's no slider
   // with a broken/empty range to show.
@@ -114,10 +148,19 @@ export function ShowsPage() {
     libraryYearRange?.max ?? 0,
     libraryYearRange !== null,
   )
+  // null when nothing in the library has a cached rating yet — same
+  // "don't render a broken/empty slider" treatment as libraryYearRange.
+  const libraryRatingRange = useMemo(() => ratingRange(data?.shows ?? []), [data])
+  const [ratingFilter, setRatingFilter] = useYearRangeCookie(
+    'rwnd_shows_rating_filter',
+    libraryRatingRange?.min ?? 0,
+    libraryRatingRange?.max ?? 0,
+    libraryRatingRange !== null,
+  )
   // 1900 (Trakt's "I don't remember when" sentinel) is excluded from this
   // range entirely — see watchedYearRange() — so the "After" slider can
   // never be dragged back to it. Shows with that sentinel are governed by
-  // includeUnknownWatched instead, not by the slider.
+  // unknownWatchedMode instead, not by the slider.
   const libraryWatchedYearRange = useMemo(() => watchedYearRange(data?.shows ?? []), [data])
   const [watchedYearFilter, setWatchedYearFilter] = useYearRangeCookie(
     'rwnd_shows_watched_year_filter',
@@ -125,37 +168,46 @@ export function ShowsPage() {
     libraryWatchedYearRange?.max ?? 0,
     libraryWatchedYearRange !== null,
   )
-  const [includeUnknownWatched, setIncludeUnknownWatched] = useBooleanCookie(
-    'rwnd_shows_watched_unknown',
-    true,
+  const [unknownWatchedMode, setUnknownWatchedMode] = useSortCookie<UnknownWatchedMode>(
+    'rwnd_shows_watched_unknown_mode',
+    UNKNOWN_WATCHED_MODES,
+    'neutral',
   )
 
   const shows = useMemo(() => {
     const byTitle = filterByTitle(data?.shows ?? [], filter)
     const byGenre = filterByGenres(byTitle, genreFilters)
-    const byYear = filterByReleaseYear(byGenre, yearFilter.after, yearFilter.before)
+    const byStatus = filterByStatus(byGenre, statusFilters)
+    const byYear = filterByReleaseYear(byStatus, yearFilter.after, yearFilter.before)
+    const byRating = filterByRating(byYear, ratingFilter.after, ratingFilter.before)
     const byWatchedYear = filterByWatchedYear(
-      byYear,
+      byRating,
       watchedYearFilter.after,
       watchedYearFilter.before,
-      includeUnknownWatched,
+      unknownWatchedMode,
     )
     return sortShows(byWatchedYear, sortBy, locale)
   }, [
     data,
     filter,
     genreFilters,
+    statusFilters,
     yearFilter,
+    ratingFilter,
     watchedYearFilter,
-    includeUnknownWatched,
+    unknownWatchedMode,
     sortBy,
     locale,
   ])
 
   function resetFilters() {
     setGenreFilters(() => ({}))
+    setStatusFilters(() => ({}))
     if (libraryYearRange) {
       setYearFilter({ after: libraryYearRange.min, before: libraryYearRange.max })
+    }
+    if (libraryRatingRange) {
+      setRatingFilter({ after: libraryRatingRange.min, before: libraryRatingRange.max })
     }
     if (libraryWatchedYearRange) {
       setWatchedYearFilter({
@@ -163,7 +215,7 @@ export function ShowsPage() {
         before: libraryWatchedYearRange.max,
       })
     }
-    setIncludeUnknownWatched(true)
+    setUnknownWatchedMode('neutral')
   }
 
   if (isLoading) return <Spinner label={t('common.loading')} />
@@ -211,6 +263,8 @@ export function ShowsPage() {
               { value: 'yearAsc', label: t('shows.sortYearAsc') },
               { value: 'progressDesc', label: t('shows.sortProgressDesc') },
               { value: 'progressAsc', label: t('shows.sortProgressAsc') },
+              { value: 'ratingDesc', label: t('shows.sortRatingDesc') },
+              { value: 'ratingAsc', label: t('shows.sortRatingAsc') },
             ]}
           />
 
@@ -221,6 +275,15 @@ export function ShowsPage() {
                 filters={genreFilters}
                 onChange={setGenreFilters}
                 groupLabel={t('shows.filtersPanel.genres')}
+                includeLabel={t('shows.filtersPanel.include')}
+                excludeLabel={t('shows.filtersPanel.exclude')}
+              />
+              <StatusFilterPanel
+                statuses={availableStatuses}
+                labelFor={statusLabel}
+                filters={statusFilters}
+                onChange={setStatusFilters}
+                groupLabel={t('shows.filtersPanel.status')}
                 includeLabel={t('shows.filtersPanel.include')}
                 excludeLabel={t('shows.filtersPanel.exclude')}
               />
@@ -235,18 +298,31 @@ export function ShowsPage() {
                   beforeLabel={t('shows.filtersPanel.before')}
                 />
               )}
+              {libraryRatingRange && (
+                <RatingFilterPanel
+                  min={libraryRatingRange.min}
+                  max={libraryRatingRange.max}
+                  range={ratingFilter}
+                  onChange={setRatingFilter}
+                  groupLabel={t('shows.filtersPanel.rating')}
+                  minLabel={t('shows.filtersPanel.min')}
+                  maxLabel={t('shows.filtersPanel.max')}
+                />
+              )}
               {libraryWatchedYearRange && (
                 <WatchedYearFilterPanel
                   min={libraryWatchedYearRange.min}
                   max={libraryWatchedYearRange.max}
                   range={watchedYearFilter}
                   onChange={setWatchedYearFilter}
-                  includeUnknown={includeUnknownWatched}
-                  onIncludeUnknownChange={setIncludeUnknownWatched}
+                  unknownMode={unknownWatchedMode}
+                  onUnknownModeChange={setUnknownWatchedMode}
                   groupLabel={t('shows.filtersPanel.watched')}
                   afterLabel={t('shows.filtersPanel.after')}
                   beforeLabel={t('shows.filtersPanel.before')}
                   unknownLabel={t('shows.filtersPanel.unknown')}
+                  includeLabel={t('shows.filtersPanel.include')}
+                  excludeLabel={t('shows.filtersPanel.exclude')}
                 />
               )}
               <div>

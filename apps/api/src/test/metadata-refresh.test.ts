@@ -13,6 +13,7 @@ function tmdbShowResponse(overrides: {
   id: number
   status: string
   genres?: string[]
+  voteAverage?: number
   seasons: Array<{ season_number: number; episode_count: number }>
 }) {
   return JSON.stringify({
@@ -23,6 +24,10 @@ function tmdbShowResponse(overrides: {
     poster_path: '/poster.jpg',
     status: overrides.status,
     genres: (overrides.genres ?? []).map((name, i) => ({ id: i, name })),
+    // vote_count > 0 whenever a test supplies a rating — TmdbProvider.getShow
+    // treats a zero vote_count as "no rating" regardless of vote_average.
+    vote_average: overrides.voteAverage,
+    vote_count: overrides.voteAverage === undefined ? 0 : 100,
     seasons: overrides.seasons.map((s) => ({
       season_number: s.season_number,
       name: `Season ${s.season_number}`,
@@ -42,6 +47,10 @@ async function insertShow(opts: {
    * that assert "should NOT be refetched" need to set this explicitly, or
    * they're really just re-testing the empty-genres backfill clause. */
   genres?: string[]
+  /** Defaults to null, same as a real row before its first fetch — same
+   * "should NOT be refetched" caveat as `genres` above, for the
+   * never-had-a-rating-fetched backfill clause. */
+  voteAverage?: number | null
 }) {
   const [show] = await db
     .insert(shows)
@@ -53,6 +62,7 @@ async function insertShow(opts: {
       status: opts.status ?? null,
       metadataRefreshedAt: opts.metadataRefreshedAt,
       genres: opts.genres ?? [],
+      voteAverage: opts.voteAverage ?? null,
     })
     .returning()
   if (!show) throw new Error('failed to insert show')
@@ -87,6 +97,7 @@ describe('metadata refresh', () => {
               id: 1,
               status: 'Ended',
               genres: ['Drama', 'Crime'],
+              voteAverage: 8.7,
               seasons: [{ season_number: 1, episode_count: 8 }],
             }),
             { status: 200 },
@@ -100,6 +111,7 @@ describe('metadata refresh', () => {
     const [updated] = await db.select().from(shows).where(eq(shows.id, show.id))
     expect(updated?.status).toBe('Ended')
     expect(updated?.genres).toEqual(['Drama', 'Crime'])
+    expect(updated?.voteAverage).toBe(8.7)
     const showSeasons = await db.select().from(seasons).where(eq(seasons.showId, show.id))
     expect(showSeasons).toHaveLength(1)
     expect(showSeasons[0]?.episodeCount).toBe(8)
@@ -112,6 +124,7 @@ describe('metadata refresh', () => {
       metadataRefreshedAt: new Date(),
       withSeasons: true,
       genres: ['Drama'],
+      voteAverage: 8.1,
     })
     const fetchMock = vi.fn()
     vi.stubGlobal('fetch', fetchMock)
@@ -194,6 +207,7 @@ describe('metadata refresh', () => {
       metadataRefreshedAt: new Date(Date.now() - 1 * DAY_MS), // within the 7-day interval
       withSeasons: true,
       genres: ['Drama'],
+      voteAverage: 7.4,
     })
     const fetchMock = vi.fn()
     vi.stubGlobal('fetch', fetchMock)

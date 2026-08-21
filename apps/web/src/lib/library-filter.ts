@@ -125,6 +125,47 @@ export function collectGenres<T extends { genres: string[] }>(
   return [...set].sort(new Intl.Collator(locale, { sensitivity: 'base' }).compare)
 }
 
+/**
+ * "Status" filter panel (ShowsPage.tsx / StatusFilterPanel.tsx). Same
+ * include/exclude shape as the genre filter above — reusing its mode type
+ * rather than redeclaring an identical union — but over a single-valued
+ * field (`status`) instead of an array, since a show only ever has one
+ * status. A null status (not yet cached by the metadata refresher) never
+ * matches an include or exclude rule, same treatment as a genre-less show
+ * against the genre filter: invisible to a specific rule, not specially
+ * hidden or shown by it.
+ */
+export type StatusFilterMode = GenreFilterMode
+export type StatusFilters = GenreFilters
+
+export function filterByStatus<T extends { status: string | null }>(
+  items: T[],
+  filters: StatusFilters,
+): T[] {
+  const entries = Object.entries(filters)
+  const includes = entries.filter(([, mode]) => mode === 'include').map(([status]) => status)
+  const excludes = entries.filter(([, mode]) => mode === 'exclude').map(([status]) => status)
+  if (includes.length === 0 && excludes.length === 0) return items
+
+  return items.filter((item) => {
+    if (includes.length > 0 && (item.status === null || !includes.includes(item.status))) {
+      return false
+    }
+    return item.status === null || !excludes.includes(item.status)
+  })
+}
+
+/** Every distinct status present across the library. Returned as TMDB's raw
+ * canonical strings, unsorted by display order — ShowsPage.tsx sorts these
+ * by their *translated* label before handing them to the panel, since the
+ * display text is locale-dependent (TMDB doesn't localize `status` itself)
+ * and this module stays free of i18n/React per the file docstring. */
+export function collectStatuses<T extends { status: string | null }>(items: T[]): string[] {
+  const set = new Set<string>()
+  for (const item of items) if (item.status !== null) set.add(item.status)
+  return [...set]
+}
+
 /** "Released" filter panel (ShowsPage.tsx / ReleaseYearFilterPanel.tsx). */
 export interface YearRange {
   min: number
@@ -156,6 +197,55 @@ export function filterByReleaseYear<T extends { year: number | null }>(
 }
 
 /**
+ * "Rating" filter panel (ShowsPage.tsx / RatingFilterPanel.tsx) and the
+ * Rating sort options. TMDB's `voteAverage` (0-10, one decimal of real
+ * precision) — reuses `YearRange`'s shape rather than a new interface, it's
+ * just a min/max pair either way.
+ */
+export function ratingRange<T extends { voteAverage: number | null }>(
+  items: T[],
+): YearRange | null {
+  const ratings = items.map((item) => item.voteAverage).filter((r): r is number => r !== null)
+  if (ratings.length === 0) return null
+  return { min: Math.min(...ratings), max: Math.max(...ratings) }
+}
+
+/** Inclusive on both ends. Same "no basis to place it" treatment as
+ * filterByReleaseYear above for a show with no cached rating yet. */
+export function filterByRating<T extends { voteAverage: number | null }>(
+  items: T[],
+  after: number,
+  before: number,
+): T[] {
+  return items.filter(
+    (item) =>
+      item.voteAverage === null || (item.voteAverage >= after && item.voteAverage <= before),
+  )
+}
+
+/** Same "unknown sorts last in both directions" treatment as
+ * yearComparatorDesc/Asc above. */
+export function ratingComparatorDesc(
+  a: { voteAverage: number | null },
+  b: { voteAverage: number | null },
+): number {
+  if (a.voteAverage === b.voteAverage) return 0
+  if (a.voteAverage === null) return 1
+  if (b.voteAverage === null) return -1
+  return b.voteAverage - a.voteAverage
+}
+
+export function ratingComparatorAsc(
+  a: { voteAverage: number | null },
+  b: { voteAverage: number | null },
+): number {
+  if (a.voteAverage === b.voteAverage) return 0
+  if (a.voteAverage === null) return 1
+  if (b.voteAverage === null) return -1
+  return a.voteAverage - b.voteAverage
+}
+
+/**
  * "Watched" filter panel (ShowsPage.tsx / WatchedYearFilterPanel.tsx).
  * `lastWatchedAt` dated exactly 1900-01-01 is Trakt's "I don't remember
  * when" sentinel (see ShowDetailPage.tsx/HistoryPage.tsx's own handling of
@@ -180,18 +270,29 @@ export function watchedYearRange<T extends { lastWatchedAt: string }>(
   return { min: Math.min(...years), max: Math.max(...years) }
 }
 
+/** The "Unknown" control in the Watched filter section (see
+ * WatchedYearFilterPanel.tsx) — a tri-state condition, not a genre-style set
+ * of named items, so it gets its own mode type rather than reusing
+ * GenreFilterMode's two-value union: `'neutral'` shows both known
+ * (in-range) and unknown shows (the default), `'exclude'` hides unknown
+ * entirely, and `'include'` shows *only* unknown shows, ignoring the
+ * After/Before range entirely. */
+export const UNKNOWN_WATCHED_MODES = ['neutral', 'exclude', 'include'] as const
+export type UnknownWatchedMode = (typeof UNKNOWN_WATCHED_MODES)[number]
+
 /** Inclusive on both ends for known years. An unknown watched year (see
- * watchedYearOf) is governed entirely by `includeUnknown` instead — it's
+ * watchedYearOf) is governed entirely by `unknownMode` instead — it's
  * categorical, not a value the After/Before range could meaningfully place
  * inside or outside of. */
 export function filterByWatchedYear<T extends { lastWatchedAt: string }>(
   items: T[],
   after: number,
   before: number,
-  includeUnknown: boolean,
+  unknownMode: UnknownWatchedMode,
 ): T[] {
   return items.filter((item) => {
     const year = watchedYearOf(item)
-    return year === null ? includeUnknown : year >= after && year <= before
+    if (year === null) return unknownMode !== 'exclude'
+    return unknownMode !== 'include' && year >= after && year <= before
   })
 }

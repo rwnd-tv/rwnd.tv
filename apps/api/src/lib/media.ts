@@ -109,6 +109,7 @@ export async function resolveShow(
       posterPath: fetched.posterPath,
       status: fetched.status,
       genres: fetched.genres,
+      voteAverage: fetched.voteAverage,
     })
     .returning()
   if (!show) throw new Error('Failed to insert show')

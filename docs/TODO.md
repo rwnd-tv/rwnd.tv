@@ -35,31 +35,6 @@ Format:
       string compare — "The Wire" sorts under T, not W. Real per-language
       leading-article rules are a bigger job than this feature needed; left
       as a known simplification.
-- [ ] **Status filter section on the Shows gallery** (2026-08-21 01:15)\
-      A new filter section for `shows.status` (TMDB's raw string —
-      "Returning Series", "Ended", "Canceled", etc., see
-      `apps/api/src/metadata/refresh.ts`), same shape as the existing
-      Genre/Released/Watched sections in `WatchedYearFilterPanel.tsx` /
-      `ReleaseYearFilterPanel.tsx` / `GenreFilterPanel.tsx`.
-- [ ] **TMDB rating on the per-show page, plus a rating filter + sort** (2026-08-21 01:15)\
-      Show the TMDB rating on `ShowDetailPage.tsx` (not cached in `shows`
-      yet — needs a new column, populated the same way `status`/`genres`
-      are via `resolveShow()`/the metadata refresher). Then a rating
-      filter section on the Shows gallery (range slider, same pattern as
-      Released/Watched) and a couple of new sort options
-      ("Rating (Descending)"/"(Ascending)").
-- [ ] **Three-state "Unknown" toggle in the Watched filter section** (2026-08-21 01:20)\
-      `WatchedYearFilterPanel.tsx`'s "Unknown" checkbox is binary today
-      (include/exclude unknown-dated shows alongside the After/Before
-      range). Want a third state — _only_ unknown-dated shows, hiding
-      everything else regardless of the range — using the same
-      plus/minus include/exclude button UI as `GenreFilterPanel.tsx`
-      rather than a plain checkbox. Semantics differ slightly from
-      genre's per-item include/exclude (this is one boolean condition,
-      not a set of named items): neutral = show both known (in-range)
-      and unknown (today's default), exclude = hide unknown entirely
-      (today's unchecked state), include = show _only_ unknown, ignoring
-      the range sliders.
 
 ## Metadata & matching
 

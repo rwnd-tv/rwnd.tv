@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useParams } from 'react-router'
 import { useQuery } from '@tanstack/react-query'
@@ -5,6 +6,16 @@ import { api, ApiError } from '../lib/api-client.js'
 import { PosterGrid } from '../components/library/PosterGrid.js'
 import { ProgressBar } from '../components/library/ProgressBar.js'
 import { Spinner } from '../components/ui/Spinner.js'
+
+/** TMDB's own CDN-hosted logo asset — same "short" mark already used for
+ * the required attribution footer in README.md, reused here rather than a
+ * bare "★" so the rating is attributed to its source the way a Trakt-style
+ * rating chip credits IMDb/RT/Metacritic. Not bundled as a local asset:
+ * TMDB's attribution terms require using their logo unmodified, and
+ * linking their own hosted copy is the simplest way not to accidentally
+ * violate that (no local crop/recolor/re-export to get out of sync with). */
+const TMDB_LOGO_URL =
+  'https://www.themoviedb.org/assets/2/v4/logos/v2/blue_short-8e7b30f73a4020692ccca9c88bafe5dcb6f8a62a4c6bc55cd9ba82bb2cd95f6c.svg'
 
 /** "2012" when the first and last watch land in the same year, otherwise
  * "2012 - 2014" — matches what was asked for over always showing a range,
@@ -66,9 +77,39 @@ export function ShowDetailPage() {
 
         <div className="flex min-w-0 flex-col gap-3">
           <h1 className="text-2xl font-semibold">{show.title}</h1>
-          <p className="text-sm text-[var(--color-fg-muted)]">
-            {[show.year, show.genres.join(', '), show.status].filter(Boolean).join(' · ')}
-          </p>
+          <div className="flex flex-wrap items-center gap-x-1.5 text-sm text-[var(--color-fg-muted)]">
+            {(
+              [
+                show.year,
+                show.genres.length > 0 ? show.genres.join(', ') : null,
+                show.status,
+                show.voteAverage !== null ? (
+                  <span className="inline-flex items-center gap-1.5">
+                    {show.tmdbId ? (
+                      <a
+                        href={`https://www.themoviedb.org/tv/${show.tmdbId}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title={t('showDetail.viewOnTmdb')}
+                      >
+                        <img src={TMDB_LOGO_URL} alt={t('showDetail.viewOnTmdb')} className="h-3" />
+                      </a>
+                    ) : (
+                      <img src={TMDB_LOGO_URL} alt={t('showDetail.ratingSource')} className="h-3" />
+                    )}
+                    {show.voteAverage.toFixed(1)}
+                  </span>
+                ) : null,
+              ] satisfies (ReactNode | null)[]
+            )
+              .filter((fact) => fact !== null)
+              .map((fact, index) => (
+                <span key={index} className="flex items-center gap-1.5">
+                  {index > 0 && <span aria-hidden="true">·</span>}
+                  {fact}
+                </span>
+              ))}
+          </div>
           {show.overview && <p className="max-w-2xl text-sm">{show.overview}</p>}
 
           {show.totalEpisodes !== null ? (

@@ -51,6 +51,8 @@ interface TmdbShow {
   status?: string | null
   genres?: TmdbGenre[]
   seasons?: TmdbSeasonSummary[]
+  vote_average?: number | null
+  vote_count?: number
 }
 interface TmdbGenre {
   id: number
@@ -165,6 +167,10 @@ export class TmdbProvider implements MetadataProvider {
       posterPath: this.posterUrl(s.poster_path),
       status: s.status ?? null,
       genres: (s.genres ?? []).map((g) => g.name),
+      // TMDB returns vote_average: 0 for a show with zero votes, not null —
+      // treated as "no rating" here rather than a real 0/10, same as this
+      // function already does for other absent-vs-empty provider fields.
+      voteAverage: s.vote_count ? (s.vote_average ?? null) : null,
       seasons: (s.seasons ?? []).map((season): ProviderSeasonSummary => ({
         seasonNumber: season.season_number,
         name: season.name ?? null,

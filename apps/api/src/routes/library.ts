@@ -5,7 +5,7 @@ import {
   listLibraryShowsResponseSchema,
   showDetailSchema,
 } from '@rwnd/shared'
-import { episodes, movies, plays, seasons, shows } from '@rwnd/db'
+import { episodes, externalIds, movies, plays, seasons, shows } from '@rwnd/db'
 import type { AppEnv } from '../types.js'
 import { requireAuth } from '../middleware/auth.js'
 
@@ -100,7 +100,9 @@ libraryRoutes.openapi(
         title: shows.title,
         year: shows.year,
         posterPath: shows.posterPath,
+        status: shows.status,
         genres: shows.genres,
+        voteAverage: shows.voteAverage,
         watchedEpisodes: watched.watchedEpisodes,
         lastWatchedAt: watched.lastWatchedAt,
         // Absent (null) until the metadata refresher has cached this show's
@@ -120,7 +122,9 @@ libraryRoutes.openapi(
         title: row.title,
         year: row.year,
         posterPath: row.posterPath,
+        status: row.status,
         genres: row.genres,
+        voteAverage: row.voteAverage,
         watchedEpisodes: row.watchedEpisodes,
         totalEpisodes: row.totalEpisodes ?? null,
         lastWatchedAt: row.lastWatchedAt.toISOString(),
@@ -159,6 +163,21 @@ libraryRoutes.openapi(
 
     const [show] = await db.select().from(shows).where(eq(shows.slug, slug)).limit(1)
     if (!show) return c.json({ error: 'Show not found' }, 404)
+
+    // Backs the TMDB rating badge's link to the show's TMDB page (see
+    // ShowDetailPage.tsx) — null for a show resolved before TMDB was the
+    // only provider, or (in principle) a future non-TMDB provider match.
+    const [tmdbExternalId] = await db
+      .select({ externalId: externalIds.externalId })
+      .from(externalIds)
+      .where(
+        and(
+          eq(externalIds.entityType, 'show'),
+          eq(externalIds.entityId, show.id),
+          eq(externalIds.source, 'tmdb'),
+        ),
+      )
+      .limit(1)
 
     const seasonRows = await db
       .select()
@@ -229,6 +248,8 @@ libraryRoutes.openapi(
       posterPath: show.posterPath,
       status: show.status,
       genres: show.genres,
+      voteAverage: show.voteAverage,
+      tmdbId: tmdbExternalId?.externalId ?? null,
       watchedEpisodes,
       totalEpisodes,
       firstWatchedAt: watchedRange?.firstWatchedAt

@@ -17,9 +17,20 @@ export const libraryShowSchema = z.object({
   title: z.string(),
   year: z.number().int().nullable(),
   posterPath: z.string().nullable(),
+  /** TMDB's raw status string (e.g. 'Returning Series', 'Ended') — not
+   * localized by TMDB itself, so the gallery translates it for display (see
+   * StatusFilterPanel.tsx). Null until the metadata refresher has cached
+   * this show. Backs the gallery's status filter panel — see
+   * ShowsPage.tsx. */
+  status: z.string().nullable(),
   /** TMDB genre names verbatim (e.g. 'Drama', 'Animation'). Backs the
    * gallery's genre filter panel — see ShowsPage.tsx. */
   genres: z.array(z.string()),
+  /** TMDB's average rating, 0-10. Null until the metadata refresher has
+   * cached this show, or genuinely null for a show TMDB has no votes for
+   * yet — both render the same way (no rating shown). Backs the gallery's
+   * rating filter/sort — see ShowsPage.tsx. */
+  voteAverage: z.number().nullable(),
   /** Distinct episodes watched, season 0 (specials) excluded. */
   watchedEpisodes: z.number().int(),
   /** SUM of cached season episode counts, season 0 excluded. `null` means
@@ -65,6 +76,14 @@ export const showDetailSchema = z.object({
   posterPath: z.string().nullable(),
   status: z.string().nullable(),
   genres: z.array(z.string()),
+  /** TMDB's average rating, 0-10 — see libraryShowSchema's `voteAverage`
+   * for the null-handling convention. */
+  voteAverage: z.number().nullable(),
+  /** TMDB's own numeric id for this show (e.g. "94605"), for linking to its
+   * TMDB page — see ShowDetailPage.tsx's rating badge. Null for a show with
+   * no external id on record (shouldn't happen with TMDB as the only
+   * provider today, but not guaranteed by the schema). */
+  tmdbId: z.string().nullable(),
   watchedEpisodes: z.number().int(),
   totalEpisodes: z.number().int().nullable(),
   /** When the current user watched their first/most recent episode of this

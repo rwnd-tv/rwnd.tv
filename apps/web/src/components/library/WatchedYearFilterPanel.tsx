@@ -1,37 +1,117 @@
+import type { UnknownWatchedMode } from '../../lib/library-filter.js'
 import type { AfterBefore } from '../../lib/use-year-range-cookie.js'
+
+function PlusIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width={16}
+      height={16}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2.5}
+      strokeLinecap="round"
+      aria-hidden="true"
+    >
+      <path d="M12 5v14M5 12h14" />
+    </svg>
+  )
+}
+
+function MinusIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width={16}
+      height={16}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2.5}
+      strokeLinecap="round"
+      aria-hidden="true"
+    >
+      <path d="M5 12h14" />
+    </svg>
+  )
+}
+
+/** Same plus/minus include/exclude button as GenreFilterPanel.tsx's
+ * GenreModeButton — duplicated rather than shared, matching this
+ * codebase's existing precedent of one small component per filter section
+ * (see StatusFilterPanel.tsx). Unlike the genre/status version, `active`
+ * here reflects a single tri-state value rather than a per-item map entry. */
+function UnknownModeButton({
+  mode,
+  active,
+  onClick,
+  label,
+}: {
+  mode: Exclude<UnknownWatchedMode, 'neutral'>
+  active: boolean
+  onClick: () => void
+  label: string
+}) {
+  const activeClass = mode === 'include' ? 'text-emerald-500' : 'text-[var(--color-danger)]'
+  return (
+    <button
+      type="button"
+      aria-pressed={active}
+      aria-label={label}
+      title={label}
+      onClick={onClick}
+      className={`flex items-center justify-center rounded p-1 hover:bg-[var(--color-border)] ${
+        active ? activeClass : 'text-[var(--color-fg-muted)]'
+      }`}
+    >
+      {mode === 'include' ? <PlusIcon /> : <MinusIcon />}
+    </button>
+  )
+}
 
 /**
  * Same shape as ReleaseYearFilterPanel — two native "After"/"Before" range
- * sliders — plus one addition: a checkbox for shows whose watched date is
- * unknown (Trakt's 1900-01-01 sentinel, see watchedYearOf() in
- * library-filter.ts). That's a categorical toggle, not a value the range
- * sliders could place inside or outside of, so it's a separate control
- * rather than trying to fold "unknown" into the slider range itself — see
- * ShowsPage.tsx's `watchedYearRange`, which excludes 1900 from `min`/`max`
- * entirely so the "After" slider can never be dragged back to it.
+ * sliders — plus one addition: an include/exclude toggle for shows whose
+ * watched date is unknown (Trakt's 1900-01-01 sentinel, see watchedYearOf()
+ * in library-filter.ts). That's a categorical condition, not a value the
+ * range sliders could place inside or outside of, so it's a separate
+ * control rather than trying to fold "unknown" into the slider range
+ * itself — see ShowsPage.tsx's `watchedYearRange`, which excludes 1900 from
+ * `min`/`max` entirely so the "After" slider can never be dragged back to
+ * it.
+ *
+ * The control is a tri-state plus/minus toggle (same icon-button UI as
+ * GenreFilterPanel.tsx), not a checkbox: neutral shows both known-in-range
+ * and unknown shows (the default), exclude hides unknown entirely, and
+ * include shows *only* unknown shows, ignoring the range sliders above.
+ * Clicking an already-active icon falls back to neutral, same as a genre
+ * toggle falling back to "no rule".
  */
 export function WatchedYearFilterPanel({
   min,
   max,
   range,
   onChange,
-  includeUnknown,
-  onIncludeUnknownChange,
+  unknownMode,
+  onUnknownModeChange,
   groupLabel,
   afterLabel,
   beforeLabel,
   unknownLabel,
+  includeLabel,
+  excludeLabel,
 }: {
   min: number
   max: number
   range: AfterBefore
   onChange: (next: AfterBefore) => void
-  includeUnknown: boolean
-  onIncludeUnknownChange: (next: boolean) => void
+  unknownMode: UnknownWatchedMode
+  onUnknownModeChange: (next: UnknownWatchedMode) => void
   groupLabel: string
   afterLabel: string
   beforeLabel: string
   unknownLabel: string
+  includeLabel: string
+  excludeLabel: string
 }) {
   function setAfter(value: number) {
     onChange({ after: Math.min(value, range.before), before: range.before })
@@ -39,6 +119,10 @@ export function WatchedYearFilterPanel({
 
   function setBefore(value: number) {
     onChange({ after: range.after, before: Math.max(value, range.after) })
+  }
+
+  function setUnknownMode(mode: Exclude<UnknownWatchedMode, 'neutral'>) {
+    onUnknownModeChange(unknownMode === mode ? 'neutral' : mode)
   }
 
   return (
@@ -79,14 +163,23 @@ export function WatchedYearFilterPanel({
             className="w-full accent-[var(--color-primary)]"
           />
         </div>
-        <label className="flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            checked={includeUnknown}
-            onChange={(e) => onIncludeUnknownChange(e.target.checked)}
-          />
-          {unknownLabel}
-        </label>
+        <div className="flex items-center justify-between gap-2 text-sm">
+          <span>{unknownLabel}</span>
+          <span className="flex shrink-0 items-center gap-1">
+            <UnknownModeButton
+              mode="include"
+              active={unknownMode === 'include'}
+              onClick={() => setUnknownMode('include')}
+              label={`${includeLabel} ${unknownLabel}`}
+            />
+            <UnknownModeButton
+              mode="exclude"
+              active={unknownMode === 'exclude'}
+              onClick={() => setUnknownMode('exclude')}
+              label={`${excludeLabel} ${unknownLabel}`}
+            />
+          </span>
+        </div>
       </div>
     </details>
   )

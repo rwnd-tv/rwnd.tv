@@ -11,6 +11,11 @@ import { MenuIcon } from './icons.js'
 
 const SIDEBAR_COLLAPSED_COOKIE = 'sidebar-collapsed'
 
+// Matches Tailwind's default `sm` breakpoint — see Sidebar.tsx's own doc
+// comment for why "collapsed" means something different below it (hidden
+// entirely vs. an icon rail).
+const MOBILE_BREAKPOINT_QUERY = '(max-width: 639px)'
+
 export function Layout() {
   const { t } = useTranslation()
   const { data: settings } = usePublicSettings()
@@ -22,6 +27,22 @@ export function Layout() {
       const next = !current
       setSessionCookie(SIDEBAR_COLLAPSED_COOKIE, String(next))
       return next
+    })
+  }
+
+  // On mobile, the expanded sidebar is a full overlay (see Sidebar.tsx) —
+  // clicking a nav link inside it should close it back down rather than
+  // leaving it floating over the page it just navigated to. On desktop the
+  // expanded rail is meant to stay open across navigation, same as always,
+  // so this only acts below the breakpoint — checked at click time rather
+  // than tracked in state, since nothing else here needs to re-render on
+  // resize.
+  function closeSidebarIfMobile() {
+    if (!window.matchMedia(MOBILE_BREAKPOINT_QUERY).matches) return
+    setCollapsed((current) => {
+      if (current) return current
+      setSessionCookie(SIDEBAR_COLLAPSED_COOKIE, 'true')
+      return true
     })
   }
 
@@ -69,7 +90,7 @@ export function Layout() {
         <EnvironmentBadge label={settings?.environmentLabel} />
       </header>
       <div className="flex flex-1">
-        <Sidebar collapsed={collapsed} />
+        <Sidebar collapsed={collapsed} onNavigate={closeSidebarIfMobile} />
         <div className="min-w-0 flex-1">
           <main id="main-content" className={`py-6 ${containerClass}`}>
             <Outlet />

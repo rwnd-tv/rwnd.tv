@@ -1,4 +1,4 @@
-import { and, eq, inArray, lt, notExists, or, sql } from 'drizzle-orm'
+import { and, eq, inArray, isNull, lt, notExists, or, sql } from 'drizzle-orm'
 import type { Database } from '@rwnd/db'
 import { externalIds, instanceSettings, movies, seasons, shows } from '@rwnd/db'
 import type { MetadataProvider } from '../providers/types.js'
@@ -94,6 +94,11 @@ async function findStaleShows(db: Database): Promise<RefreshCandidate[]> {
         // extra refetch every sweep — accepted, same tradeoff as a show
         // with no TMDB id below.
         sql`cardinality(${shows.genres}) = 0`,
+        // Never had a rating fetched — same "never populated" reasoning
+        // and same accepted tradeoff as the genres clause above: a show
+        // TMDB genuinely has no votes for matches this forever and gets a
+        // harmless extra refetch every sweep.
+        isNull(shows.voteAverage),
         // Still airing and due for a check-in. An inclusion list (rather
         // than e.g. `status NOT IN ('Ended','Canceled')`) is deliberate: a
         // NULL status would make a NOT-IN predicate evaluate to NULL (i.e.
@@ -139,6 +144,7 @@ async function refreshOneShow(
       posterPath: fetched.posterPath,
       status: fetched.status,
       genres: fetched.genres,
+      voteAverage: fetched.voteAverage,
       metadataRefreshedAt: new Date(),
     })
     .where(eq(shows.id, candidate.id))

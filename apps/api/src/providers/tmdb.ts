@@ -2,12 +2,16 @@ import type {
   MetadataProvider,
   ProviderEpisode,
   ProviderMovie,
+  ProviderSeason,
   ProviderSearchResult,
   ProviderSeasonSummary,
   ProviderShow,
 } from './types.js'
 
 const POSTER_SIZE = 'w342'
+// Episode stills are much smaller/wider than posters — TMDB's own web
+// player uses w300 for the season episode-list thumbnails this mirrors.
+const STILL_SIZE = 'w300'
 const MAX_RETRY_AFTER_SECONDS = 60
 
 function sleep(ms: number): Promise<void> {
@@ -71,8 +75,11 @@ interface TmdbEpisode {
   episode_number: number
   runtime?: number | null
   air_date?: string | null
+  overview?: string | null
+  still_path?: string | null
 }
 interface TmdbSeason {
+  overview?: string | null
   episodes: TmdbEpisode[]
 }
 
@@ -88,6 +95,10 @@ export class TmdbProvider implements MetadataProvider {
 
   private posterUrl(path: string | null | undefined): string | null {
     return path ? `${this.options.imageBaseUrl}/${POSTER_SIZE}${path}` : null
+  }
+
+  private stillUrl(path: string | null | undefined): string | null {
+    return path ? `${this.options.imageBaseUrl}/${STILL_SIZE}${path}` : null
   }
 
   private yearOf(date: string | undefined): number | null {
@@ -197,6 +208,8 @@ export class TmdbProvider implements MetadataProvider {
       episodeNumber: e.episode_number,
       runtimeMinutes: e.runtime ?? null,
       firstAired: e.air_date ?? null,
+      overview: e.overview ?? null,
+      stillPath: this.stillUrl(e.still_path),
     }
   }
 
@@ -204,14 +217,19 @@ export class TmdbProvider implements MetadataProvider {
     showExternalId: string,
     seasonNumber: number,
     locale: string,
-  ): Promise<ProviderEpisode[]> {
+  ): Promise<ProviderSeason> {
     const s = await this.request<TmdbSeason>(`/tv/${showExternalId}/season/${seasonNumber}`, locale)
-    return s.episodes.map((e) => ({
-      title: e.name ?? null,
-      seasonNumber: e.season_number,
-      episodeNumber: e.episode_number,
-      runtimeMinutes: e.runtime ?? null,
-      firstAired: e.air_date ?? null,
-    }))
+    return {
+      overview: s.overview ?? null,
+      episodes: s.episodes.map((e) => ({
+        title: e.name ?? null,
+        seasonNumber: e.season_number,
+        episodeNumber: e.episode_number,
+        runtimeMinutes: e.runtime ?? null,
+        firstAired: e.air_date ?? null,
+        overview: e.overview ?? null,
+        stillPath: this.stillUrl(e.still_path),
+      })),
+    }
   }
 }

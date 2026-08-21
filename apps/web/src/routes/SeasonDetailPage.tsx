@@ -1,0 +1,333 @@
+import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import { Link, useParams } from 'react-router'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import type { EpisodeWatchedStatus, SeasonDetail, SeasonEpisode } from '@rwnd/shared'
+import { api, ApiError } from '../lib/api-client.js'
+import { invalidateWatchData } from '../lib/query-client.js'
+import { useAuth } from '../lib/auth-context.js'
+import { PosterGrid } from '../components/library/PosterGrid.js'
+import { ProgressBar } from '../components/library/ProgressBar.js'
+import { WatchDateDialog } from '../components/library/WatchDateDialog.js'
+import { UnwatchConfirmDialog } from '../components/library/UnwatchConfirmDialog.js'
+import { Spinner } from '../components/ui/Spinner.js'
+
+function CheckIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width={16}
+      height={16}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={3}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M5 13l4 4L19 7" />
+    </svg>
+  )
+}
+
+/**
+ * One episode tile in the season grid (apps/web/src/routes/SeasonDetailPage.tsx),
+ * styled after Plex's own season view — a still image with a checkmark
+ * toggle overlaid top-right. Its own component (not inlined in the parent's
+ * .map) so it owns its own `useMutation`, the same "one card, one mutation"
+ * shape SearchResultCard.tsx already uses — each tile gets independent
+ * pending state instead of one mutation shared/racing across the grid.
+ */
+function EpisodeCard({
+  episode,
+  slug,
+  seasonNumber,
+  tmdbId,
+}: {
+  episode: SeasonEpisode
+  slug: string
+  seasonNumber: number
+  tmdbId: string | null
+}) {
+  const { t } = useTranslation()
+  const { user } = useAuth()
+  const locale = user?.locale ?? 'en-GB'
+  const queryClient = useQueryClient()
+  const [dialogOpen, setDialogOpen] = useState(false)
+  const [unwatchConfirmOpen, setUnwatchConfirmOpen] = useState(false)
+
+  // Fetched only while the confirmation dialog is actually open — most
+  // episodes have at most one play, so there's no reason to fetch every
+  // episode's full watch list up front just to back a dialog most clicks
+  // never open.
+  const { data: watches } = useQuery({
+    queryKey: ['show', slug, 'season', seasonNumber, 'episode', episode.episodeNumber, 'watches'],
+    queryFn: () => api.library.episodeWatches(slug, seasonNumber, episode.episodeNumber),
+    enabled: unwatchConfirmOpen,
+  })
+
+  function patchEpisode(status: EpisodeWatchedStatus) {
+    // Same cache-patch technique ShowDetailPage's drop/undrop toggle uses —
+    // both mutation paths already return the episode's new status, so a
+    // full season refetch would be redundant.
+    queryClient.setQueryData(
+      ['show', slug, 'season', seasonNumber],
+      (prev: SeasonDetail | undefined) =>
+        prev
+          ? {
+              ...prev,
+              episodes: prev.episodes.map((e) =>
+                e.episodeNumber === episode.episodeNumber ? { ...e, ...status } : e,
+              ),
+            }
+          : prev,
+    )
+  }
+
+  function onMutationSuccess(status: EpisodeWatchedStatus) {
+    patchEpisode(status)
+    void invalidateWatchData(queryClient)
+    // Not covered by invalidateWatchData — the parent show's own progress
+    // bar and Seasons grid (ShowDetailPage.tsx) would otherwise go stale
+    // after a toggle here.
+    void queryClient.invalidateQueries({ queryKey: ['show', slug] })
+  }
+
+  // Unwatching doesn't need a date dialog the way marking watched does
+  // (see markWatched below) — but it does clear *every* logged play for
+  // the episode at once, so it's gated behind UnwatchConfirmDialog rather
+  // than firing immediately on click.
+  const unwatch = useMutation({
+    mutationFn: (): Promise<EpisodeWatchedStatus> =>
+      api.library.unwatchEpisode(slug, seasonNumber, episode.episodeNumber),
+    onSuccess: (status) => {
+      onMutationSuccess(status)
+      setUnwatchConfirmOpen(false)
+    },
+  })
+
+  const markWatched = useMutation({
+    mutationFn: async (watchedAt: string): Promise<EpisodeWatchedStatus> => {
+      // POST /plays already resolves/creates the local episode row and
+      // returns the logged play — no dedicated "mark watched" endpoint
+      // needed (see the plan's backend section).
+      const play = await api.plays.create({
+        episode: {
+          source: 'tmdb',
+          showExternalId: tmdbId!,
+          seasonNumber,
+          episodeNumber: episode.episodeNumber,
+        },
+        watchedAt,
+      })
+      return {
+        watched: true,
+        watchedCount: episode.watchedCount + 1,
+        lastWatchedAt: play.watchedAt,
+      }
+    },
+    onSuccess: onMutationSuccess,
+  })
+
+  const episodeLabel = t('import.progress.episode', { number: episode.episodeNumber })
+  const toggleLabel = t(episode.watched ? 'showDetail.markUnwatched' : 'showDetail.markWatched')
+  // Can only mark watched when the show has a TMDB id on record (POST
+  // /plays needs it) — unwatching never needs it, so only guarded here.
+  const toggleDisabled = unwatch.isPending || markWatched.isPending || (!episode.watched && !tmdbId)
+
+  return (
+    <li className="flex flex-col gap-2">
+      <div
+        className="relative aspect-video w-full overflow-hidden rounded-lg bg-[var(--color-surface)]"
+        title={episode.overview ?? undefined}
+      >
+        {episode.stillPath ? (
+          <img
+            src={episode.stillPath}
+            alt=""
+            loading="lazy"
+            decoding="async"
+            width={300}
+            height={169}
+            className="h-full w-full object-cover"
+          />
+        ) : (
+          <div
+            aria-hidden="true"
+            className="flex h-full items-center justify-center text-xl font-semibold text-[var(--color-fg-muted)]"
+          >
+            {episode.episodeNumber}
+          </div>
+        )}
+        <button
+          type="button"
+          aria-pressed={episode.watched}
+          aria-label={toggleLabel}
+          title={toggleLabel}
+          disabled={toggleDisabled}
+          onClick={() => (episode.watched ? setUnwatchConfirmOpen(true) : setDialogOpen(true))}
+          className={`absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full border transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
+            episode.watched
+              ? 'border-[var(--color-primary)] bg-[var(--color-primary)] text-[var(--color-primary-fg)]'
+              : 'border-white/70 bg-black/40 text-white/90 hover:bg-black/60'
+          }`}
+        >
+          <CheckIcon />
+        </button>
+      </div>
+      <div>
+        <h3 className="truncate text-sm font-medium" title={episode.title ?? episodeLabel}>
+          {episode.title ?? episodeLabel}
+        </h3>
+        <p className="text-xs text-[var(--color-fg-muted)]">{episodeLabel}</p>
+        {episode.watchedCount > 1 && (
+          <p className="text-xs text-[var(--color-fg-muted)]">
+            {t('showDetail.episodeWatchedCount', { count: episode.watchedCount })}
+          </p>
+        )}
+      </div>
+
+      <WatchDateDialog
+        open={dialogOpen}
+        episodeLabel={episodeLabel}
+        episode={{
+          title: episode.title,
+          runtimeMinutes: episode.runtimeMinutes,
+          firstAired: episode.firstAired,
+        }}
+        locale={locale}
+        onConfirm={(watchedAt) => {
+          markWatched.mutate(watchedAt)
+          setDialogOpen(false)
+        }}
+        onCancel={() => setDialogOpen(false)}
+      />
+
+      <UnwatchConfirmDialog
+        open={unwatchConfirmOpen}
+        watchedCountHint={episode.watchedCount}
+        watchedAt={watches?.watchedAt}
+        locale={locale}
+        onConfirm={() => unwatch.mutate()}
+        onCancel={() => setUnwatchConfirmOpen(false)}
+      />
+    </li>
+  )
+}
+
+export function SeasonDetailPage() {
+  const { t } = useTranslation()
+  const { slug, seasonNumber: seasonNumberParam } = useParams<{
+    slug: string
+    seasonNumber: string
+  }>()
+  const seasonNumber = Number(seasonNumberParam)
+  const seasonNumberValid = Number.isInteger(seasonNumber)
+
+  // Same queryKey ShowDetailPage.tsx/PageTitleEffect.tsx use — shared React
+  // Query cache, so this is free if the user navigated here from the show
+  // page. Only used for the back-link/poster fallback/tmdbId here; the
+  // season's own data comes from the query below.
+  const { data: show } = useQuery({
+    queryKey: ['show', slug],
+    queryFn: () => api.library.show(slug!),
+    enabled: Boolean(slug),
+  })
+
+  const {
+    data: season,
+    isLoading,
+    error,
+  } = useQuery({
+    queryKey: ['show', slug, 'season', seasonNumber],
+    queryFn: () => api.library.season(slug!, seasonNumber),
+    enabled: Boolean(slug) && seasonNumberValid,
+  })
+
+  if (isLoading) return <Spinner label={t('common.loading')} />
+
+  if (error) {
+    return (
+      <p className="text-[var(--color-fg-muted)]">
+        {error instanceof ApiError && error.status === 404
+          ? t('showDetail.seasonNotFound')
+          : t('common.somethingWentWrong')}
+      </p>
+    )
+  }
+  if (!season) return null
+
+  // Same fallback chain as the season cards on ShowDetailPage.tsx.
+  const seasonName =
+    season.name ??
+    (season.seasonNumber === 0
+      ? t('showDetail.specials')
+      : t('import.progress.season', { number: season.seasonNumber }))
+  const posterPath = season.posterPath ?? show?.posterPath ?? null
+  const watchedEpisodes = season.episodes.filter((episode) => episode.watched).length
+
+  return (
+    <div className="flex flex-col gap-8">
+      <div className="flex flex-col gap-6 sm:flex-row">
+        <div className="aspect-[2/3] w-48 flex-shrink-0 overflow-hidden rounded-lg bg-[var(--color-surface)]">
+          {posterPath ? (
+            <img
+              src={posterPath}
+              alt=""
+              width={342}
+              height={513}
+              className="h-full w-full object-cover"
+            />
+          ) : (
+            <div
+              aria-hidden="true"
+              className="flex h-full items-center justify-center text-4xl font-semibold text-[var(--color-fg-muted)]"
+            >
+              {seasonName.charAt(0)}
+            </div>
+          )}
+        </div>
+
+        <div className="flex min-w-0 flex-col gap-3">
+          {show && (
+            <Link
+              to={`/shows/${show.slug}`}
+              className="w-fit text-sm text-[var(--color-fg-muted)] hover:underline"
+            >
+              ← {show.title}
+            </Link>
+          )}
+          <h1 className="text-2xl font-semibold">{seasonName}</h1>
+          {season.overview && <p className="max-w-2xl text-sm">{season.overview}</p>}
+
+          <div className="flex max-w-xs flex-col gap-1">
+            <ProgressBar
+              value={watchedEpisodes}
+              max={season.episodes.length}
+              label={t('shows.progressAria', {
+                title: seasonName,
+                watched: watchedEpisodes,
+                total: season.episodes.length,
+              })}
+            />
+            <p className="text-xs text-[var(--color-fg-muted)]">
+              {t('shows.progress', { watched: watchedEpisodes, total: season.episodes.length })}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <PosterGrid minTileWidth="16rem">
+        {season.episodes.map((episode) => (
+          <EpisodeCard
+            key={episode.episodeNumber}
+            episode={episode}
+            slug={slug!}
+            seasonNumber={season.seasonNumber}
+            tmdbId={show?.tmdbId ?? null}
+          />
+        ))}
+      </PosterGrid>
+    </div>
+  )
+}

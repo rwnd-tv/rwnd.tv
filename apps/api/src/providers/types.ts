@@ -18,16 +18,20 @@ export interface MetadataProvider {
     locale: string,
   ): Promise<ProviderEpisode>
   /**
-   * All episodes of one season in a single call. Used by the Trakt importer
+   * All episodes of one season in a single call, plus the season's own
+   * synopsis (both come back on the same provider response — see
+   * apps/api/src/routes/library.ts's season detail route, the only caller
+   * that uses `overview`). Used by the Trakt importer
    * (apps/api/src/import/match.ts) instead of `getEpisode` per episode —
    * resolving a large history one episode at a time would mean thousands of
    * redundant calls for shows with many watched episodes.
    */
-  getSeason(
-    showExternalId: string,
-    seasonNumber: number,
-    locale: string,
-  ): Promise<ProviderEpisode[]>
+  getSeason(showExternalId: string, seasonNumber: number, locale: string): Promise<ProviderSeason>
+}
+
+export interface ProviderSeason {
+  overview: string | null
+  episodes: ProviderEpisode[]
 }
 
 export interface ProviderSearchResult {
@@ -87,4 +91,11 @@ export interface ProviderEpisode {
   episodeNumber: number
   runtimeMinutes: number | null
   firstAired: string | null // YYYY-MM-DD
+  /** Episode-level synopsis, or null if the provider has none yet (common
+   * for unaired episodes). Not cached locally — see the season detail
+   * route in apps/api/src/routes/library.ts, which fetches this live. */
+  overview: string | null
+  /** Episode thumbnail/still image, already a full URL — null if the
+   * provider has none (again, common pre-air). */
+  stillPath: string | null
 }

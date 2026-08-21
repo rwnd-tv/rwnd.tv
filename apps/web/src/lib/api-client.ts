@@ -5,6 +5,8 @@ import {
   type CreateImportJobRequest,
   type CreatePlayRequest,
   type DroppedStatus,
+  type EpisodeWatchedStatus,
+  type EpisodeWatches,
   type ImportJob,
   type InstanceSettings,
   type ListImportJobsResponse,
@@ -15,6 +17,7 @@ import {
   type Play,
   type RegisterRequest,
   type SearchResponse,
+  type SeasonDetail,
   type SetupRequest,
   type ShowDetail,
   type TraktConnectionStatus,
@@ -90,6 +93,16 @@ export const api = {
       post<DroppedStatus>(`/library/shows/${encodeURIComponent(slug)}/dropped`),
     undropShow: (slug: string) =>
       del<DroppedStatus>(`/library/shows/${encodeURIComponent(slug)}/dropped`),
+    season: (slug: string, seasonNumber: number) =>
+      get<SeasonDetail>(`/library/shows/${encodeURIComponent(slug)}/seasons/${seasonNumber}`),
+    unwatchEpisode: (slug: string, seasonNumber: number, episodeNumber: number) =>
+      del<EpisodeWatchedStatus>(
+        `/library/shows/${encodeURIComponent(slug)}/seasons/${seasonNumber}/episodes/${episodeNumber}/plays`,
+      ),
+    episodeWatches: (slug: string, seasonNumber: number, episodeNumber: number) =>
+      get<EpisodeWatches>(
+        `/library/shows/${encodeURIComponent(slug)}/seasons/${seasonNumber}/episodes/${episodeNumber}/plays`,
+      ),
     movies: () => get<ListLibraryMoviesResponse>('/library/movies'),
   },
   settings: {

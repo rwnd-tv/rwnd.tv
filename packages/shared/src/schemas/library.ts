@@ -115,6 +115,75 @@ export const showDetailSchema = z.object({
 export type ShowDetail = z.infer<typeof showDetailSchema>
 
 /**
+ * Backs the season detail page (apps/web/src/routes/SeasonDetailPage.tsx),
+ * linked to from a season card on ShowDetailPage.tsx. Episode metadata
+ * (title/overview/still/runtime/air date) is fetched live from the
+ * provider on every request rather than cached locally — unlike the show
+ * and season-summary rows, there's no local `episodes` row for an episode
+ * the user hasn't logged a watch of yet, so there's nothing to read
+ * instead of calling out. `watched`/`watchedCount`/`lastWatchedAt` are the
+ * only per-user, locally-sourced fields on each episode.
+ */
+export const seasonEpisodeSchema = z.object({
+  episodeNumber: z.number().int(),
+  title: z.string().nullable(),
+  overview: z.string().nullable(),
+  stillPath: z.string().nullable(),
+  runtimeMinutes: z.number().int().nullable(),
+  firstAired: z.string().nullable(),
+  watched: z.boolean(),
+  /** How many times the current user has logged a play of this episode —
+   * shown next to the watched toggle so a rewatch isn't silently hidden by
+   * the boolean (see SeasonDetailPage.tsx). */
+  watchedCount: z.number().int(),
+  lastWatchedAt: z.string().datetime().nullable(),
+})
+export type SeasonEpisode = z.infer<typeof seasonEpisodeSchema>
+
+export const seasonDetailSchema = z.object({
+  seasonNumber: z.number().int(),
+  name: z.string().nullable(),
+  /** The season's own synopsis — fetched live from the provider on every
+   * request, same as the episode list itself, not cached on the local
+   * `seasons` row (see packages/db/src/schema.ts). */
+  overview: z.string().nullable(),
+  posterPath: z.string().nullable(),
+  airDate: z.string().nullable(),
+  episodes: z.array(seasonEpisodeSchema),
+})
+export type SeasonDetail = z.infer<typeof seasonDetailSchema>
+
+/**
+ * Response shape for the per-episode watched toggle
+ * (POST /plays to mark watched, DELETE
+ * /library/shows/{slug}/seasons/{seasonNumber}/episodes/{episodeNumber}/plays
+ * to un-watch — see SeasonDetailPage.tsx). Same "just the changed fields"
+ * reasoning as droppedStatusSchema below — the frontend patches this into
+ * its already-cached season list rather than refetching the whole season.
+ */
+export const episodeWatchedStatusSchema = z.object({
+  watched: z.boolean(),
+  watchedCount: z.number().int(),
+  lastWatchedAt: z.string().datetime().nullable(),
+})
+export type EpisodeWatchedStatus = z.infer<typeof episodeWatchedStatusSchema>
+
+/**
+ * Every one of the current user's individual watch timestamps for one
+ * episode, newest first — backs the "are you sure you want to remove
+ * this/these watch(es)?" confirmation shown before un-watching
+ * (UnwatchConfirmDialog.tsx) clears all of them. Deliberately not part of
+ * seasonDetailSchema/seasonEpisodeSchema above — most episodes have at
+ * most one play, so fetching every episode's full watch list on every
+ * season page load would be wasted work for the common case; this is
+ * fetched on demand only when the confirmation dialog opens.
+ */
+export const episodeWatchesSchema = z.object({
+  watchedAt: z.array(z.string().datetime()),
+})
+export type EpisodeWatches = z.infer<typeof episodeWatchesSchema>
+
+/**
  * Response shape for the manual drop/undrop toggle
  * (POST/DELETE /library/shows/{slug}/dropped — see ShowDetailPage.tsx).
  * Deliberately just the two changed fields, not the full showDetailSchema —

@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useParams } from 'react-router'
+import { Link, useParams } from 'react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { ShowDetail } from '@rwnd/shared'
 import { api, ApiError } from '../lib/api-client.js'
@@ -205,42 +205,47 @@ export function ShowDetailPage() {
                   : null
               return (
                 <li key={season.seasonNumber} className="flex flex-col gap-2">
-                  <div className="aspect-[2/3] w-full overflow-hidden rounded-lg bg-[var(--color-surface)]">
-                    {posterPath ? (
-                      <img
-                        src={posterPath}
-                        alt=""
-                        loading="lazy"
-                        decoding="async"
-                        width={342}
-                        height={513}
-                        className="h-full w-full object-cover"
-                      />
-                    ) : (
-                      <div
-                        aria-hidden="true"
-                        className="flex h-full items-center justify-center text-2xl font-semibold text-[var(--color-fg-muted)]"
-                      >
-                        {seasonName.charAt(0)}
-                      </div>
-                    )}
-                  </div>
-                  <div>
-                    <h3 className="truncate text-sm font-medium" title={seasonName}>
-                      {seasonName}
-                    </h3>
-                    <p className="text-xs text-[var(--color-fg-muted)]">
-                      {[
-                        t('shows.progress', {
-                          watched: season.watchedEpisodes,
-                          total: season.episodeCount,
-                        }),
-                        seasonYear,
-                      ]
-                        .filter(Boolean)
-                        .join(' · ')}
-                    </p>
-                  </div>
+                  <Link
+                    to={`/shows/${show.slug}/season/${season.seasonNumber}`}
+                    className="flex flex-col gap-2 rounded-lg"
+                  >
+                    <div className="aspect-[2/3] w-full overflow-hidden rounded-lg bg-[var(--color-surface)]">
+                      {posterPath ? (
+                        <img
+                          src={posterPath}
+                          alt=""
+                          loading="lazy"
+                          decoding="async"
+                          width={342}
+                          height={513}
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        <div
+                          aria-hidden="true"
+                          className="flex h-full items-center justify-center text-2xl font-semibold text-[var(--color-fg-muted)]"
+                        >
+                          {seasonName.charAt(0)}
+                        </div>
+                      )}
+                    </div>
+                    <div>
+                      <h3 className="truncate text-sm font-medium" title={seasonName}>
+                        {seasonName}
+                      </h3>
+                      <p className="text-xs text-[var(--color-fg-muted)]">
+                        {[
+                          t('shows.progress', {
+                            watched: season.watchedEpisodes,
+                            total: season.episodeCount,
+                          }),
+                          seasonYear,
+                        ]
+                          .filter(Boolean)
+                          .join(' · ')}
+                      </p>
+                    </div>
+                  </Link>
                   <ProgressBar
                     value={season.watchedEpisodes}
                     max={season.episodeCount}

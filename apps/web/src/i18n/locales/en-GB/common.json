@@ -111,7 +111,32 @@
     "viewOnTmdb": "View on TMDB",
     "droppedFact": "Dropped",
     "drop": "Drop",
-    "undrop": "Undrop"
+    "undrop": "Undrop",
+    "seasonNotFound": "This season couldn't be found.",
+    "markWatched": "Mark watched",
+    "markUnwatched": "Mark unwatched",
+    "episodeWatchedCount_one": "Watched once",
+    "episodeWatchedCount_other": "Watched {{count}} times",
+    "watchDialog": {
+      "title": "When did you watch \"{{episode}}\"?",
+      "legend": "When did you watch this?",
+      "nowWatching": "Now watching",
+      "justFinished": "Just finished",
+      "releaseDate": "Release date ({{date}})",
+      "otherDate": "Other date",
+      "unknown": "Unknown",
+      "otherDateDateLabel": "Date",
+      "otherDateTimeLabel": "Time",
+      "otherDateTextLabel": "Date and time",
+      "confirm": "Log watch",
+      "cancel": "Cancel"
+    },
+    "unwatchDialog": {
+      "titleSingle": "Are you sure you want to remove this watch?",
+      "titleMultiple": "Are you sure you want to remove all these watches?",
+      "remove": "Remove",
+      "removeAll": "Remove all watches"
+    }
   },
   "movies": {
     "title": "Movies",

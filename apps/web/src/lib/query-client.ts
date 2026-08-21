@@ -5,7 +5,12 @@ export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       retry: (failureCount, error) => {
-        if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
+        // Any 4xx is the server telling us the request itself won't
+        // succeed no matter how many times it's repeated (not found,
+        // forbidden, bad input, ...) — retrying only delays showing the
+        // real error. Only worth retrying on 5xx/network failures, which
+        // can be transient.
+        if (error instanceof ApiError && error.status >= 400 && error.status < 500) {
           return false
         }
         return failureCount < 2

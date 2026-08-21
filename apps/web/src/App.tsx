@@ -9,6 +9,7 @@ import { DashboardPage } from './routes/DashboardPage.js'
 import { HistoryPage } from './routes/HistoryPage.js'
 import { ShowsPage } from './routes/ShowsPage.js'
 import { ShowDetailPage } from './routes/ShowDetailPage.js'
+import { SeasonDetailPage } from './routes/SeasonDetailPage.js'
 import { MoviesPage } from './routes/MoviesPage.js'
 import { ImportPage } from './routes/ImportPage.js'
 import { SettingsPage } from './routes/SettingsPage.js'
@@ -36,6 +37,11 @@ const router = createBrowserRouter([
           { path: '/dashboard', element: <DashboardPage /> },
           { path: '/shows', element: <ShowsPage />, handle: fullWidthHandle },
           { path: '/shows/:slug', element: <ShowDetailPage />, handle: fullWidthHandle },
+          {
+            path: '/shows/:slug/season/:seasonNumber',
+            element: <SeasonDetailPage />,
+            handle: fullWidthHandle,
+          },
           { path: '/movies', element: <MoviesPage />, handle: fullWidthHandle },
           { path: '/history', element: <HistoryPage /> },
           { path: '/import', element: <ImportPage /> },

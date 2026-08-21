@@ -111,7 +111,32 @@
     "viewOnTmdb": "Voir sur TMDB",
     "droppedFact": "Abandonnée",
     "drop": "Abandonner",
-    "undrop": "Annuler l'abandon"
+    "undrop": "Annuler l'abandon",
+    "seasonNotFound": "Cette saison est introuvable.",
+    "markWatched": "Marquer comme vu",
+    "markUnwatched": "Marquer comme non vu",
+    "episodeWatchedCount_one": "Vu une fois",
+    "episodeWatchedCount_other": "Vu {{count}} fois",
+    "watchDialog": {
+      "title": "Quand avez-vous regardé « {{episode}} » ?",
+      "legend": "Quand avez-vous regardé ceci ?",
+      "nowWatching": "En train de regarder",
+      "justFinished": "Viens de terminer",
+      "releaseDate": "Date de sortie ({{date}})",
+      "otherDate": "Autre date",
+      "unknown": "Inconnu",
+      "otherDateDateLabel": "Date",
+      "otherDateTimeLabel": "Heure",
+      "otherDateTextLabel": "Date et heure",
+      "confirm": "Enregistrer le visionnage",
+      "cancel": "Annuler"
+    },
+    "unwatchDialog": {
+      "titleSingle": "Voulez-vous vraiment supprimer ce visionnage ?",
+      "titleMultiple": "Voulez-vous vraiment supprimer tous ces visionnages ?",
+      "remove": "Supprimer",
+      "removeAll": "Supprimer tous les visionnages"
+    }
   },
   "movies": {
     "title": "Films",

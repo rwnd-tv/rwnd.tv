@@ -270,7 +270,7 @@ export async function matchEpisode(
   const seasonKey = `${show.id}:${traktEpisode.season}`
   if (!caches.seasons.has(seasonKey)) {
     try {
-      const seasonEpisodes = await provider.getSeason(
+      const { episodes: seasonEpisodes } = await provider.getSeason(
         show.tmdbExternalId,
         traktEpisode.season,
         locale,

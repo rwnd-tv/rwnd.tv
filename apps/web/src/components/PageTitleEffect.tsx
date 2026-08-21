@@ -33,15 +33,27 @@ export function PageTitleEffect() {
   const location = useLocation()
   const { data: settings } = usePublicSettings()
   const showMatch = useMatch('/shows/:slug')
+  const seasonMatch = useMatch('/shows/:slug/season/:seasonNumber')
+  // Either match supplies a slug — a season page needs the show's title
+  // too, same as the show page itself.
+  const slug = showMatch?.params.slug ?? seasonMatch?.params.slug
 
   // Same queryKey as ShowDetailPage.tsx — React Query dedupes/shares the
   // fetch rather than issuing a second request, so this is free once that
   // page's own query has resolved (or resolves this one first, on a
   // fresh load/refresh where this effect mounts before the page does).
   const { data: show } = useQuery({
-    queryKey: ['show', showMatch?.params.slug],
-    queryFn: () => api.library.show(showMatch!.params.slug!),
-    enabled: Boolean(showMatch),
+    queryKey: ['show', slug],
+    queryFn: () => api.library.show(slug!),
+    enabled: Boolean(slug),
+  })
+
+  // Same queryKey as SeasonDetailPage.tsx.
+  const seasonNumber = seasonMatch ? Number(seasonMatch.params.seasonNumber) : NaN
+  const { data: season } = useQuery({
+    queryKey: ['show', slug, 'season', seasonNumber],
+    queryFn: () => api.library.season(slug!, seasonNumber),
+    enabled: Boolean(seasonMatch) && Number.isInteger(seasonNumber),
   })
 
   useEffect(() => {
@@ -54,10 +66,21 @@ export function PageTitleEffect() {
     } else if (showMatch) {
       segments.push(t('nav.shows'))
       if (show) segments.push(show.year ? `${show.title} (${show.year})` : show.title)
+    } else if (seasonMatch) {
+      segments.push(t('nav.shows'))
+      if (show) segments.push(show.year ? `${show.title} (${show.year})` : show.title)
+      if (season) {
+        segments.push(
+          season.name ??
+            (season.seasonNumber === 0
+              ? t('showDetail.specials')
+              : t('import.progress.season', { number: season.seasonNumber })),
+        )
+      }
     }
 
     document.title = segments.join(' > ')
-  }, [location.pathname, settings?.environmentLabel, showMatch, show, t])
+  }, [location.pathname, settings?.environmentLabel, showMatch, seasonMatch, show, season, t])
 
   return null
 }

@@ -1,9 +1,12 @@
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi'
-import { and, asc, eq, gt, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, gt, sql } from 'drizzle-orm'
 import {
   droppedStatusSchema,
+  episodeWatchedStatusSchema,
+  episodeWatchesSchema,
   listLibraryMoviesResponseSchema,
   listLibraryShowsResponseSchema,
+  seasonDetailSchema,
   showDetailSchema,
 } from '@rwnd/shared'
 import { droppedShows, episodes, externalIds, movies, plays, seasons, shows } from '@rwnd/db'
@@ -300,6 +303,257 @@ libraryRoutes.openapi(
         watchedEpisodes: watchedMap.get(season.seasonNumber) ?? 0,
       })),
     })
+  },
+)
+
+/**
+ * Backs the season detail page (apps/web/src/routes/SeasonDetailPage.tsx),
+ * linked to from a season card on the show page. Episode metadata (title,
+ * overview, still image, runtime, air date) is fetched live from the
+ * provider on every request rather than cached locally — unlike the show
+ * itself, there's no local table of every episode a show has, only ones
+ * the current user has actually logged a play against (see
+ * apps/api/src/lib/media.ts's resolveEpisode), so there's nothing cached
+ * to serve instead of asking the provider.
+ */
+libraryRoutes.openapi(
+  createRoute({
+    method: 'get',
+    path: '/library/shows/{slug}/seasons/{seasonNumber}',
+    summary: 'Get one season of a show, with the current user’s per-episode watch status',
+    middleware: [requireAuth] as const,
+    request: {
+      params: z.object({ slug: z.string(), seasonNumber: z.coerce.number().int().min(0) }),
+    },
+    responses: {
+      200: {
+        description: 'Season detail',
+        content: { 'application/json': { schema: seasonDetailSchema } },
+      },
+      404: { description: 'Show or season not found' },
+    },
+  }),
+  async (c) => {
+    const { slug, seasonNumber } = c.req.valid('param')
+    const user = c.get('user')!
+    const db = c.get('db')
+    const provider = c.get('metadataProvider')
+
+    const [show] = await db.select().from(shows).where(eq(shows.slug, slug)).limit(1)
+    if (!show) return c.json({ error: 'Show not found' }, 404)
+
+    // Only reachable via a season card already rendered from show.seasons
+    // (see ShowDetailPage.tsx), so a season not yet cached here shouldn't
+    // normally happen — treated as 404 rather than falling through to a
+    // provider call for a season number nobody linked to.
+    const [seasonRow] = await db
+      .select()
+      .from(seasons)
+      .where(and(eq(seasons.showId, show.id), eq(seasons.seasonNumber, seasonNumber)))
+      .limit(1)
+    if (!seasonRow) return c.json({ error: 'Season not found' }, 404)
+
+    // Same join already used for the TMDB rating badge's link — see the
+    // show-detail route above.
+    const [tmdbExternalId] = await db
+      .select({ externalId: externalIds.externalId })
+      .from(externalIds)
+      .where(
+        and(
+          eq(externalIds.entityType, 'show'),
+          eq(externalIds.entityId, show.id),
+          eq(externalIds.source, 'tmdb'),
+        ),
+      )
+      .limit(1)
+    if (!tmdbExternalId) return c.json({ error: 'Season not found' }, 404)
+
+    const { overview: seasonOverview, episodes: providerEpisodes } = await provider.getSeason(
+      tmdbExternalId.externalId,
+      seasonNumber,
+      user.locale,
+    )
+
+    // Scoped to the current user in the join condition (not a WHERE
+    // clause) so an episode with no plays from this user still gets a row
+    // — same reasoning as the droppedShows join in the gallery query
+    // above.
+    const watchRows = await db
+      .select({
+        episodeNumber: episodes.episodeNumber,
+        watchedCount: sql<number>`count(${plays.id})`.mapWith(Number),
+        lastWatchedAt: sql<string | null>`max(${plays.watchedAt})`,
+      })
+      .from(episodes)
+      .leftJoin(plays, and(eq(plays.episodeId, episodes.id), eq(plays.userId, user.id)))
+      .where(and(eq(episodes.showId, show.id), eq(episodes.seasonNumber, seasonNumber)))
+      .groupBy(episodes.episodeNumber)
+
+    const watchedByEpisode = new Map(watchRows.map((row) => [row.episodeNumber, row]))
+
+    return c.json({
+      seasonNumber: seasonRow.seasonNumber,
+      name: seasonRow.name,
+      // Live from the provider, not cached locally — same reasoning as the
+      // episode list itself (see this route's doc comment above).
+      overview: seasonOverview,
+      posterPath: seasonRow.posterPath,
+      airDate: seasonRow.airDate,
+      episodes: providerEpisodes
+        .slice()
+        .sort((a, b) => a.episodeNumber - b.episodeNumber)
+        .map((episode) => {
+          // Absent entirely (not just zero) when the episode has never been
+          // logged locally at all — resolveEpisode only ever creates a row
+          // on the first watch.
+          const watch = watchedByEpisode.get(episode.episodeNumber)
+          const watchedCount = watch?.watchedCount ?? 0
+          return {
+            episodeNumber: episode.episodeNumber,
+            title: episode.title,
+            overview: episode.overview,
+            stillPath: episode.stillPath,
+            runtimeMinutes: episode.runtimeMinutes,
+            firstAired: episode.firstAired,
+            watched: watchedCount > 0,
+            watchedCount,
+            lastWatchedAt: watch?.lastWatchedAt
+              ? new Date(watch.lastWatchedAt).toISOString()
+              : null,
+          }
+        }),
+    })
+  },
+)
+
+/**
+ * Every one of the current user's watch timestamps for one episode, newest
+ * first — backs the "are you sure?" confirmation shown before the DELETE
+ * route below clears all of them (UnwatchConfirmDialog.tsx). Fetched on
+ * demand only when that confirmation dialog opens, not part of the season
+ * list response above — see episodeWatchesSchema's doc comment.
+ */
+libraryRoutes.openapi(
+  createRoute({
+    method: 'get',
+    path: '/library/shows/{slug}/seasons/{seasonNumber}/episodes/{episodeNumber}/plays',
+    summary: "List the current user's watch timestamps for one episode",
+    middleware: [requireAuth] as const,
+    request: {
+      params: z.object({
+        slug: z.string(),
+        seasonNumber: z.coerce.number().int().min(0),
+        episodeNumber: z.coerce.number().int().min(1),
+      }),
+    },
+    responses: {
+      200: {
+        description: 'Watch timestamps, newest first',
+        content: { 'application/json': { schema: episodeWatchesSchema } },
+      },
+      404: { description: 'Show not found' },
+    },
+  }),
+  async (c) => {
+    const { slug, seasonNumber, episodeNumber } = c.req.valid('param')
+    const userId = c.get('user')!.id
+    const db = c.get('db')
+
+    const [show] = await db
+      .select({ id: shows.id })
+      .from(shows)
+      .where(eq(shows.slug, slug))
+      .limit(1)
+    if (!show) return c.json({ error: 'Show not found' }, 404)
+
+    // No local episode row at all means it's never been logged — nothing
+    // to list, same "harmless empty result" precedent as the DELETE route
+    // below's no-op.
+    const [episodeRow] = await db
+      .select({ id: episodes.id })
+      .from(episodes)
+      .where(
+        and(
+          eq(episodes.showId, show.id),
+          eq(episodes.seasonNumber, seasonNumber),
+          eq(episodes.episodeNumber, episodeNumber),
+        ),
+      )
+      .limit(1)
+    if (!episodeRow) return c.json({ watchedAt: [] })
+
+    const rows = await db
+      .select({ watchedAt: plays.watchedAt })
+      .from(plays)
+      .where(and(eq(plays.userId, userId), eq(plays.episodeId, episodeRow.id)))
+      .orderBy(desc(plays.watchedAt))
+
+    return c.json({ watchedAt: rows.map((row) => row.watchedAt.toISOString()) })
+  },
+)
+
+/**
+ * Un-watch an episode (apps/web/src/routes/SeasonDetailPage.tsx) — clears
+ * every one of the current user's logged plays against it, not just the
+ * most recent one. Mirrors the Plex-style boolean watched/unwatched toggle
+ * this page is modelled on; individual watch events for a rewatched
+ * episode stay manageable on the History page instead of here.
+ */
+libraryRoutes.openapi(
+  createRoute({
+    method: 'delete',
+    path: '/library/shows/{slug}/seasons/{seasonNumber}/episodes/{episodeNumber}/plays',
+    summary: "Clear the current user's watch history for one episode",
+    middleware: [requireAuth] as const,
+    request: {
+      params: z.object({
+        slug: z.string(),
+        seasonNumber: z.coerce.number().int().min(0),
+        episodeNumber: z.coerce.number().int().min(1),
+      }),
+    },
+    responses: {
+      200: {
+        description: 'Episode watch status',
+        content: { 'application/json': { schema: episodeWatchedStatusSchema } },
+      },
+      404: { description: 'Show not found' },
+    },
+  }),
+  async (c) => {
+    const { slug, seasonNumber, episodeNumber } = c.req.valid('param')
+    const userId = c.get('user')!.id
+    const db = c.get('db')
+
+    const [show] = await db
+      .select({ id: shows.id })
+      .from(shows)
+      .where(eq(shows.slug, slug))
+      .limit(1)
+    if (!show) return c.json({ error: 'Show not found' }, 404)
+
+    // A no-op if this episode was never logged locally at all — nothing to
+    // clear, same "harmless no-op" precedent as undropping a never-dropped
+    // show above.
+    const [episodeRow] = await db
+      .select({ id: episodes.id })
+      .from(episodes)
+      .where(
+        and(
+          eq(episodes.showId, show.id),
+          eq(episodes.seasonNumber, seasonNumber),
+          eq(episodes.episodeNumber, episodeNumber),
+        ),
+      )
+      .limit(1)
+
+    if (episodeRow) {
+      await db
+        .delete(plays)
+        .where(and(eq(plays.userId, userId), eq(plays.episodeId, episodeRow.id)))
+    }
+
+    return c.json({ watched: false, watchedCount: 0, lastWatchedAt: null })
   },
 )
 

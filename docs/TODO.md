@@ -36,6 +36,75 @@ Format:
       leading-article rules are a bigger job than this feature needed; left
       as a known simplification.
 
+- [ ] **Single two-handle range slider for Watched/Rating/Released filters** (2026-08-21 23:00 added)\
+      `WatchedYearFilterPanel.tsx`, `RatingFilterPanel.tsx`, and
+      `ReleaseYearFilterPanel.tsx` each use two independent sliders
+      (After/Before, Min/Max) that can currently be dragged past each
+      other. Preferred fix: a single range slider with two handles.
+      Fallback if that's not practical: keep two sliders, but instead of
+      blocking a drag that would cross the other handle, push that other
+      handle out of the way so After can never end up past Before (and
+      vice versa) without a stuck-at-the-boundary interaction.
+
+## Settings page
+
+- [ ] **Horizontal rule under each panel's title** (2026-08-21 23:00 added)\
+      Every panel on `SettingsPage.tsx` (Profile, API tokens, Database,
+      Instance settings) — add a horizontal line under the `<h2>` title,
+      before the panel's body content.
+
+- [ ] **Backups section above Clear database** (2026-08-21 23:00 added)\
+      In `DatabasePanel.tsx`, reorder so the Backups section renders
+      before the Clear database checkboxes/button, not after.
+
+- [ ] **Confirmation dialog on Delete backup** (2026-08-21 23:00 added)\
+      Delete currently fires immediately (matches `TokensPanel.tsx`'s
+      Revoke button precedent) — James wants a confirm dialog before it
+      actually deletes the file, same shape as Restore's existing
+      confirmation.
+
+## TV Show pages
+
+- [ ] **Previous/next season navigation on the season page** (2026-08-21 23:00 added)\
+      `SeasonDetailPage.tsx` — add `<`/`>` buttons to jump to the
+      previous/next season without going back through the show page.
+
+- [ ] **Episode pages** (2026-08-21 23:00 added)\
+      No dedicated page per episode yet — only the season grid
+      (`SeasonDetailPage.tsx`) and its inline watch toggle. Needs
+      scoping: what an episode page shows beyond what the season grid
+      already does (overview, still image, watched toggle).
+
+## Terminology
+
+- [ ] **"TV Show" vs "Show" consistency pass** (2026-08-21 23:00 added)\
+      Site-wide audit — James wants the full "TV Show" used consistently
+      rather than "Show" wherever it currently appears (nav label,
+      headings, filter panel copy, etc.), in both en-GB and fr-FR.
+
+## Dashboard
+
+- [ ] **"On Deck" row** (2026-08-21 23:00 added)\
+      Next unwatched episode of any incomplete show with a watch logged
+      in the last ~30 days (exact window TBD) and not dropped. One row,
+      capped at a single row's worth of cards — needs a mobile-specific
+      treatment since a single row of poster cards won't fit well narrow.
+
+- [ ] **"Up Next" row** (2026-08-21 23:00 added)\
+      Next _airing_ episode of any incomplete show the user has an
+      existing watch for and hasn't dropped. Same one-row cap and
+      mobile-layout caveat as On Deck above. Needs air-date data the
+      season/episode fetch already carries (`firstAired`) — the first
+      airing after "now" with no logged watch.
+
+## General
+
+- [ ] **A way to log an additional watch without going through History** (2026-08-21 23:00 added)\
+      Right now logging a rewatch of something already fully watched
+      means going to the History page. James wants a more direct
+      mechanism — exact UX still to be decided (e.g. a "log another
+      watch" action from the show/season/episode page itself).
+
 ## Metadata & matching
 
 - [ ] **Multi-provider metadata (tmdb/imdb/tvdb)** (2026-08-11 22:20)\

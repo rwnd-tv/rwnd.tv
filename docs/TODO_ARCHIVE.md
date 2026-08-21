@@ -25,3 +25,11 @@ grouping, sorted oldest to newest.
       reliably under mirrored networking, host mode sidesteps it; the
       compose file itself is kept local at `~/rwnd-tv-dev/` inside WSL,
       not in the repo). Confirmed working end to end with a real login.
+
+## TV Shows / Movies gallery follow-ups
+
+- [x] **Gallery nav overflow on narrow viewports** (2026-08-19 15:25)\
+      Adding TV Shows/Movies brought the header nav to 7 items, wrapping
+      on narrow viewports. Done (2026-08-20): replaced the horizontal nav
+      entirely with a collapsible sidebar (`Sidebar.tsx`) under a
+      full-width top bar — no wrapping regardless of item count.

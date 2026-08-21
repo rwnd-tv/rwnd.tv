@@ -51,14 +51,14 @@ Format:
 - [ ] **Three-state "Unknown" toggle in the Watched filter section** (2026-08-21 01:20)\
       `WatchedYearFilterPanel.tsx`'s "Unknown" checkbox is binary today
       (include/exclude unknown-dated shows alongside the After/Before
-      range). Want a third state — *only* unknown-dated shows, hiding
+      range). Want a third state — _only_ unknown-dated shows, hiding
       everything else regardless of the range — using the same
       plus/minus include/exclude button UI as `GenreFilterPanel.tsx`
       rather than a plain checkbox. Semantics differ slightly from
       genre's per-item include/exclude (this is one boolean condition,
       not a set of named items): neutral = show both known (in-range)
       and unknown (today's default), exclude = hide unknown entirely
-      (today's unchecked state), include = show *only* unknown, ignoring
+      (today's unchecked state), include = show _only_ unknown, ignoring
       the range sliders.
 
 ## Metadata & matching

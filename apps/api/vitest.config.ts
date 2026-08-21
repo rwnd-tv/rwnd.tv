@@ -1,3 +1,5 @@
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { defineConfig } from 'vitest/config'
 
 export default defineConfig({
@@ -19,6 +21,11 @@ export default defineConfig({
       TRAKT_CLIENT_SECRET: 'ci-placeholder-client-secret',
       // 32 zero bytes, base64-encoded — deterministic, not a real secret.
       ENCRYPTION_KEY: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
+      // Backup files land under a per-user subdirectory, keyed by email —
+      // a fixed literal per test, not a fresh random id, so
+      // src/test/backups.test.ts wipes this directory itself in
+      // beforeEach rather than relying on it staying clean across runs.
+      BACKUP_DIR: join(tmpdir(), 'rwnd-tv-test-backups'),
     },
   },
 })

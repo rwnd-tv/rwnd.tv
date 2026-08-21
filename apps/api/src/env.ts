@@ -44,6 +44,13 @@ const rawEnvSchema = z.object({
   // Trakt requests, so they're encrypted rather than hashed. Generate with
   // `openssl rand -base64 32`. Required whenever TRAKT_CLIENT_ID is set.
   ENCRYPTION_KEY: z.string().optional(),
+  // Per-user backup/restore (Settings > Database). Optional, same pattern as
+  // TRAKT_CLIENT_ID above — unset means the feature hides itself in the web
+  // app (see instanceSettingsSchema's backupsConfigured) rather than
+  // erroring. Must be a directory the container's unprivileged `rwnd` user
+  // (see Dockerfile) can write to; apps/api/src/backup/paths.ts creates the
+  // per-user subdirectory under it on first use, but not this root itself.
+  BACKUP_DIR: z.string().optional(),
 })
 
 const envSchema = rawEnvSchema.transform((data) => ({

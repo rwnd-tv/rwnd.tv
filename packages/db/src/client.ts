@@ -4,6 +4,18 @@ import * as schema from './schema.js'
 
 export type Database = ReturnType<typeof createDatabase>
 
+/**
+ * The `tx` handle inside `db.transaction(async (tx) => {...})` — structurally
+ * compatible with `Database` for querying, but a distinct type Drizzle
+ * generates internally, so a helper that needs to run either inside or
+ * outside a transaction (e.g. apps/api/src/lib/slug.ts's
+ * generateUniqueShowSlug, reused by both show-resolution and backup
+ * restore) has to accept `Database | Tx`, not just `Database`. Derived from
+ * `Database` itself via utility types rather than importing Drizzle's
+ * internal transaction type by name, so it can't drift out of sync with it.
+ */
+export type Tx = Parameters<Parameters<Database['transaction']>[0]>[0]
+
 export function createDatabase(connectionString: string) {
   // Postgres NOTICE messages (e.g. "truncate cascades to table X") are
   // informational, not warnings — the default handler logs them to stderr,

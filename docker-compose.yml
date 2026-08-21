@@ -16,8 +16,18 @@ services:
       TRAKT_CLIENT_ID: ${TRAKT_CLIENT_ID:-}
       TRAKT_CLIENT_SECRET: ${TRAKT_CLIENT_SECRET:-}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY:-}
+      # Uncomment to enable Settings > Database's per-user backup/restore —
+      # BACKUP_DIR must match the mount path on the right of the volume
+      # line below. Leave both commented out and that section just doesn't
+      # appear (see instanceSettingsSchema's backupsConfigured). See
+      # docs/self-hosting.md's Backups section.
+      # BACKUP_DIR: /data/backups
     ports:
       - '3000:3000'
+    # Uncomment alongside BACKUP_DIR above — ./backups is a path on this
+    # host, relative to wherever you run `docker compose` from.
+    # volumes:
+    #   - ./backups:/data/backups
     restart: unless-stopped
 
   db:

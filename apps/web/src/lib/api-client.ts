@@ -1,7 +1,11 @@
 import {
+  type AccountDataCounts,
   type ApiToken,
+  type BackupSummary,
+  type ClearDataRequest,
   type CreateApiTokenRequest,
   type CreateApiTokenResponse,
+  type CreateBackupRequest,
   type CreateImportJobRequest,
   type CreatePlayRequest,
   type DroppedStatus,
@@ -9,6 +13,7 @@ import {
   type EpisodeWatches,
   type ImportJob,
   type InstanceSettings,
+  type ListBackupsResponse,
   type ListImportJobsResponse,
   type ListLibraryMoviesResponse,
   type ListLibraryShowsResponse,
@@ -16,6 +21,7 @@ import {
   type LoginRequest,
   type Play,
   type RegisterRequest,
+  type RestoreBackupResponse,
   type SearchResponse,
   type SeasonDetail,
   type SetupRequest,
@@ -61,6 +67,17 @@ const patch = <T>(path: string, body: unknown) =>
 const del = <T>(path: string) => request<T>(path, { method: 'DELETE' })
 
 export const api = {
+  account: {
+    dataCounts: () => get<AccountDataCounts>('/account/data-counts'),
+    clearData: (body: ClearDataRequest) => post<void>('/account/clear-data', body),
+  },
+  backups: {
+    list: () => get<ListBackupsResponse>('/backups'),
+    create: (body: CreateBackupRequest) => post<BackupSummary>('/backups', body),
+    restore: (id: string) =>
+      post<RestoreBackupResponse>(`/backups/${encodeURIComponent(id)}/restore`),
+    delete: (id: string) => del<void>(`/backups/${encodeURIComponent(id)}`),
+  },
   setup: {
     status: () => get<{ required: boolean }>('/setup'),
     create: (body: SetupRequest) => post<User>('/setup', body),

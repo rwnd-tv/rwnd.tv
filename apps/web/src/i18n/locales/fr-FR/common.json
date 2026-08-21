@@ -236,6 +236,30 @@
       "neverUsed": "Jamais utilisé",
       "revoke": "Révoquer"
     },
+    "database": {
+      "title": "Base de données",
+      "description": "Supprimez définitivement vos propres données suivies. Cette action est irréversible.",
+      "watchHistory": "Historique de visionnage",
+      "ratings": "Notes",
+      "watchlists": "Listes à voir",
+      "droppedShows": "Séries abandonnées",
+      "clearButton": "Vider la base de données",
+      "confirmTitle": "Voulez-vous vraiment supprimer les éléments suivants de la base de données ?",
+      "backup": {
+        "title": "Sauvegardes",
+        "description": "Enregistrez une copie de votre historique de visionnage, de vos notes, de vos listes à voir et de vos séries abandonnées, afin de pouvoir la restaurer plus tard.",
+        "createButton": "Sauvegarder la base de données",
+        "descriptionLabel": "Description",
+        "empty": "Aucune sauvegarde pour le moment.",
+        "counts": "{{watchHistory}} visionnages, {{ratings}} notes, {{watchlist}} liste à voir, {{droppedShows}} abandonnées",
+        "skipped_one": "{{count}} élément n'a pas pu être inclus (aucune correspondance TMDB)",
+        "skipped_other": "{{count}} éléments n'ont pas pu être inclus (aucune correspondance TMDB)",
+        "restore": "Restaurer",
+        "delete": "Supprimer",
+        "confirmRestoreTitle": "Voulez-vous vraiment restaurer cette sauvegarde ?",
+        "confirmRestoreBody": "Cela remplace votre historique de visionnage, vos notes, vos listes à voir et vos séries abandonnées actuels par « {{description}} » ({{date}}). Cette action est irréversible."
+      }
+    },
     "instance": {
       "title": "Paramètres de l'instance",
       "instanceName": "Nom de l'instance",

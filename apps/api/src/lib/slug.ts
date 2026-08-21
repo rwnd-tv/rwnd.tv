@@ -1,11 +1,14 @@
 import { eq, like, or } from 'drizzle-orm'
-import type { Database } from '@rwnd/db'
+import type { Database, Tx } from '@rwnd/db'
 import { shows } from '@rwnd/db'
 
 /** Same transform as the `0004_same_iron_patriot.sql` backfill migration —
  * keep them in sync, or old and new shows end up with inconsistently
- * formatted slugs. */
-function slugify(title: string): string {
+ * formatted slugs. Exported for apps/api/src/backup/paths.ts, which reuses
+ * it verbatim for the human-readable part of a backup's filename — same
+ * "lowercase, non-alphanumeric runs collapse to one dash" rule applies
+ * equally well to free-text there. */
+export function slugify(title: string): string {
   return title
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
@@ -20,7 +23,7 @@ function slugify(title: string): string {
  * numbering the backfill migration uses for pre-existing duplicates.
  */
 export async function generateUniqueShowSlug(
-  db: Database,
+  db: Database | Tx,
   title: string,
   year: number | null,
 ): Promise<string> {

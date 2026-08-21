@@ -236,6 +236,30 @@
       "neverUsed": "Never used",
       "revoke": "Revoke"
     },
+    "database": {
+      "title": "Database",
+      "description": "Permanently delete your own tracked data. This can't be undone.",
+      "watchHistory": "Watch history",
+      "ratings": "Ratings",
+      "watchlists": "Watchlists",
+      "droppedShows": "Dropped shows",
+      "clearButton": "Clear database",
+      "confirmTitle": "Are you sure you want to clear the following from the database?",
+      "backup": {
+        "title": "Backups",
+        "description": "Save a copy of your watch history, ratings, watchlists, and dropped shows, so you can restore it later.",
+        "createButton": "Backup database",
+        "descriptionLabel": "Description",
+        "empty": "No backups yet.",
+        "counts": "{{watchHistory}} watches, {{ratings}} ratings, {{watchlist}} watchlist, {{droppedShows}} dropped",
+        "skipped_one": "{{count}} item couldn't be included (no matching TMDB entry)",
+        "skipped_other": "{{count}} items couldn't be included (no matching TMDB entry)",
+        "restore": "Restore",
+        "delete": "Delete",
+        "confirmRestoreTitle": "Are you sure you want to restore this backup?",
+        "confirmRestoreBody": "This replaces your current watch history, ratings, watchlists, and dropped shows with \"{{description}}\" ({{date}}). This can't be undone."
+      }
+    },
     "instance": {
       "title": "Instance settings",
       "instanceName": "Instance name",

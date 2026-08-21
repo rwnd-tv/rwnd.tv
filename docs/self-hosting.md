@@ -33,6 +33,7 @@ All configuration is environment variables, set in `.env` (see `.env.example` fo
 | `TRAKT_CLIENT_ID`     | No                               | Enables Trakt import (Settings > Import) — free app at trakt.tv/oauth/applications |
 | `TRAKT_CLIENT_SECRET` | Only if `TRAKT_CLIENT_ID` is set | Paired with the client id above                                                    |
 | `ENCRYPTION_KEY`      | Only if `TRAKT_CLIENT_ID` is set | 32 bytes, base64 (`openssl rand -base64 32`) — encrypts stored Trakt tokens        |
+| `BACKUP_DIR`          | No                               | Enables per-user backup/restore (Settings > Database) — see Backups below          |
 
 ## Putting it behind a reverse proxy
 
@@ -54,3 +55,16 @@ Everything that matters lives in the `db-data` volume (the Postgres data directo
 ```sh
 docker compose exec db pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB" > backup.sql
 ```
+
+### Per-user backup/restore
+
+Settings > Database also lets each user back up (and restore) their own watch history, ratings, watchlist, and dropped shows as a single portable file — independent of the Postgres dump above, and not a substitute for it: it covers one user's tracked activity, not accounts, instance settings, or anything another user has done. It's off by default. To enable it, uncomment the `BACKUP_DIR` environment variable and the matching `volumes:` line under the `app` service in `docker-compose.yml`, pointing the host side of that mount at a real directory:
+
+```yaml
+environment:
+  BACKUP_DIR: /data/backups
+volumes:
+  - ./backups:/data/backups
+```
+
+Then `docker compose up -d`. The container runs as an unprivileged user, so `./backups` needs to be writable by it — if you hit permission errors, `chown` the host directory to match rather than loosening it further. Leave both commented out (the default) and the Backups section of the Database panel just doesn't appear.

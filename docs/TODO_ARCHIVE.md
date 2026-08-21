@@ -282,6 +282,155 @@ grouping, sorted oldest to newest.
       prop renamed `watchedCount` → `watchedCountHint` to make that
       "best-effort guess, not the source of truth" role explicit.
 
+- [x] **"Clear database" panel on Settings** (James, 2026-08-21)\
+      A new "Database" card on the Settings page — checkboxes for Watch
+      history/Ratings/Watchlists/Dropped shows, a red "Clear database"
+      button, and a confirmation dialog listing exactly the categories
+      checked before anything is deleted. Scoped to the current user's
+      own data only, not an instance-wide admin action: every one of the
+      four tables (`plays`/`ratings`/`watchlist_items`/`dropped_shows`)
+      already has its own `user_id` column, so `POST /account/clear-data`
+      (new `apps/api/src/routes/account.ts`, deliberately separate from
+      `auth.ts`'s identity/session routes and `settings.ts`'s
+      instance-admin-only ones) just needs `requireAuth`, not
+      `requireAdmin` — same tier as the existing Profile/API-tokens
+      panels, unlike the admin-gated Instance settings panel below it.
+      Wrapped in a single `db.transaction()` so a multi-category clear
+      can't partially apply. Confirmation dialog reuses the `Dialog`
+      primitive and `UnwatchConfirmDialog.tsx`'s exact shape (title, a
+      list of only what's actually being removed, Cancel/destructive
+      footer). Verified for real on dev.rwnd.tv rather than just in
+      review, given how irreversible this is — checked with James first,
+      then cleared just "Dropped shows" (cheapest to re-import
+      afterward): confirmed `dropped_shows` went to 0 rows in Postgres
+      and a previously-dropped show's page correctly flipped back to
+      showing "Drop" instead of "Dropped"/"Undrop".
+
+- [x] **Seventh follow-up same day: item counts next to Database checkboxes** (James, 2026-08-21)\
+      Each checkbox in the new Database panel now shows its category's row
+      count, e.g. "Watch history (10878)". New `GET /account/data-counts`
+      (same `apps/api/src/routes/account.ts`, `requireAuth`-only like
+      `clear-data`) runs a `count(*)` per table via the established
+      `sql<number>\`count(*)\`.mapWith(Number)`pattern from`library.ts`.
+`droppedShows`'s count matches exactly what a clear would delete —
+every row ever touched by a manual toggle or Trakt import, not just
+currently-dropped shows, since a row can have both
+`traktDropped`/`manualDropped` null after reconciliation and still
+      exist. Counts also appear in the confirmation dialog's list, next to
+      each checked category. Verified live on dev.rwnd.tv against James's
+      real dev-account data (Watch history 10878, Ratings 0, Watchlists 1,
+      Dropped shows 0) and confirmed the dialog shows the matching count
+      when a category is checked — cancelled rather than confirming, since
+      no fresh go-ahead was given for another real deletion this round.
+
+- [x] **Per-user database backup/restore** (James, 2026-08-21)\
+      A "Backups" section added to the Database panel — a "Backup database"
+      button prompting for a description, a list of backups with
+      date/description/counts, and Restore/Delete per backup. Per-user
+      scope only (watch history/ratings/watchlist/dropped shows), same as
+      Clear database beside it. Design settled through several rounds of
+      back-and-forth: backups are files, not table rows, so a copy can
+      leave the server; entries are identified by TMDB id (plus
+      season/episode number) rather than rwnd.tv's own row UUIDs, since
+      those only exist on the database that generated them; the file
+      carries its own show/movie/season/episode metadata alongside, so
+      restoring onto a database that's lost that metadata (a rebuilt
+      server, or a user who never imported from Trakt) still works —
+      `resolveShow()`/`resolveEpisode()` (`apps/api/src/lib/media.ts`)
+      already only hit TMDB on an `external_ids` miss, so restore reuses
+      that same "create from what's given" path instead of ever calling
+      the provider. New `apps/api/src/backup/{build,restore,paths}.ts` +
+      thin HTTP layer in `routes/backups.ts` (`GET/POST /backups`,
+      `POST /backups/{id}/restore`, `DELETE /backups/{id}`, all
+      `requireAuth`); restore runs in one `db.transaction()`, wiping and
+      rewriting the four tables with no merge, matching Clear database's
+      own semantics exactly. Gated behind a new optional `BACKUP_DIR` env
+      var (`instanceSettingsSchema.backupsConfigured`, same pattern as
+      `traktConfigured`) — commented out by default in `docker-compose.yml`
+      so existing deployments are unaffected until a self-hoster opts in
+      (see `docs/self-hosting.md`'s expanded Backups section). 5 new tests
+      in `apps/api/src/test/backups.test.ts` (round-trip through clear,
+      restore after deleting the metadata rows entirely, path-traversal
+      rejection on `{id}`, cross-user isolation) — full 69-test suite run
+      locally against a throwaway Postgres (matching CI's setup, kept
+      strictly separate from James's real dev database) before deploying.
+      Also fixed `resetDb`'s `TABLES` list in `test/helpers.ts`, missing
+      `dropped_shows` (harmless in practice — cascades via `shows` — but
+      now explicit). Deployed to dev.rwnd.tv: added `BACKUP_DIR` +
+      a bind-mounted `./rwnd-tv-dev/backups` volume to the server's
+      `rwnd-tv-dev` service (backed up `docker-compose.yaml` first,
+      `docker compose config --quiet` validated, host directory chowned
+      to the container's `rwnd` uid/gid via a throwaway root container
+      since the SSH user has no passwordless sudo). Verified for real:
+      backed up James's actual dev account (10,878 plays, 562 movies, 477
+      shows, ~3.1 MB, 0 skipped), confirmed the file's structure and
+      on-disk size, then ran one real restore — Postgres row counts
+      identical before/after, a show's page (A Certain Magical Index)
+      still showed all 74/74 episodes and the correct per-season progress
+      afterward — and confirmed Delete removes the file from disk.
+
+- [x] **Follow-up: human-readable backup directory names** (James, 2026-08-21)\
+      Backup files were being written under `${BACKUP_DIR}/<userId>/`, a
+      raw UUID with no way to tell whose backups you're looking at from
+      the filesystem. James asked to use "the username" instead, noting
+      it's unique by definition — there's no separate username field
+      (`packages/db/src/schema.ts`'s `users` table has only `email`,
+      unique, and `displayName`, not unique and user-editable), so
+      `email` is the identifier that actually fits: unique, and — checked
+      before relying on it — not editable anywhere in the app today
+      (`updateProfileRequestSchema` only covers displayName/locale/
+      timezone/theme). New `sanitizeEmailForPath()` in
+      `apps/api/src/backup/paths.ts` percent-escapes anything outside
+      `[A-Za-z0-9@._+-]`, so an ordinary email passes through unchanged
+      as the directory name, but stays injective (no two emails can ever
+      collide on the same escaped path, preserving the per-user isolation
+      guarantee) against the one real edge case: Zod's `.email()` doesn't
+      rule out RFC 5322's unquoted local-part allowing a literal `/`.
+      `backupUserDir`/`backupFilePath` and all four routes in
+      `routes/backups.ts` switched from `user.id` to `user.email` for
+      path purposes only — `userId` is unchanged everywhere it's used to
+      scope an actual database row. Full 69-test suite re-run against a
+      throwaway Postgres to confirm cross-user isolation still holds.
+      Redeployed to dev.rwnd.tv; found two backups already sitting under
+      the old UUID directory that James had apparently made independently
+      while trying out the feature ("Test", "Test 2") — migrated them
+      into the new `james.bulman@rwnd.tv` directory (`chown`ed back to
+      the container's uid/gid) rather than discarding them, confirmed
+      both still list correctly in the panel afterward.
+
+- [x] **Follow-up: backup filenames include the description** (James, 2026-08-21)\
+      Individual backup files were named just `<timestamp>-<hex>.json` —
+      unique, but unrecognisable in a directory listing. `slugify()`
+      (`apps/api/src/lib/slug.ts`, previously only used for show URLs)
+      exported and reused for an optional `--<slug>` suffix on the id,
+      e.g. `20260821T204512Z-cfa968da--before-trakt-reimport.json`. The
+      slug is capped at 50 characters and dropped entirely (no dangling
+      `--`) when the description has nothing sluggable, e.g. all
+      emoji/punctuation. `BACKUP_ID_RE`
+      (`apps/api/src/backup/paths.ts`) and its duplicate,
+      `backupIdSchema` (`packages/shared/src/schemas/backups.ts`), both
+      widened to accept the suffix, still bounded to `[a-z0-9-]{1,50}` —
+      the same strict-allow-list defence against a path-traversal-shaped
+      `{id}` route param as before, just wider. Two new tests: the
+      round-trip test now asserts the slug appears in the returned id;
+      a new test confirms the no-sluggable-content fallback and that a
+      200-character description truncates to ≤50. Fixed a real test-hygiene
+      gap surfaced while re-running the suite: `apps/api/vitest.config.ts`'s
+      shared `BACKUP_DIR` used to be safe to leave dirty between runs only
+      because directories were keyed by a fresh random `userId` every
+      time — now they're keyed by a handful of literal test emails
+      (`owner@example.com` etc.), so a second run in the same session
+      found 2 backups where a test expected 1. Fixed in
+      `test/backups.test.ts`'s `beforeEach` by `rm -rf`-ing `BACKUP_DIR`
+      itself alongside `resetDb()`, not by trying to track which emails
+      happen to be in use. Verified twice in a row locally (confirming
+      the collision is actually gone, not just not-hit-this-time) before
+      redeploying. Live-tested on dev.rwnd.tv with a deliberately hostile
+      description (`café/mötley crüe! 🎉` — accents, an emoji, and a
+      literal `/`): the panel showed it unchanged, and the file landed as
+      `...--filename-slug-check-caf-m-tley-cr-e.json` — no stray
+      subdirectory, no crash.
+
 ## Mobile / responsive
 
 - [x] **Sidebar bottom items hidden behind the mobile address bar** (2026-08-21)\

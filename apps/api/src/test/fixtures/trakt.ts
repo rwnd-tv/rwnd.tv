@@ -1,5 +1,6 @@
 import type {
   TraktDeviceCodeResponse,
+  TraktHiddenItem,
   TraktHistoryItem,
   TraktRatingItem,
   TraktSettingsResponse,
@@ -194,6 +195,18 @@ export const matrixWatchlistItem: TraktWatchlistItem = {
   listed_at: '2024-01-05T00:00:00.000Z',
   type: 'movie',
   movie: matrixHistoryItem.movie,
+}
+
+/** Dropping is show-only in Trakt's own model (see trakt/types.ts's
+ * TraktHiddenItem) — reuses `pilotHistoryItem`'s Breaking Bad show object,
+ * same as matrixRatingItem/matrixWatchlistItem reuse matrixHistoryItem's
+ * movie. */
+export function breakingBadDroppedItem(hiddenAt: string): TraktHiddenItem {
+  return {
+    hidden_at: hiddenAt,
+    type: 'show',
+    show: pilotHistoryItem.show,
+  }
 }
 
 /** `metadata_entity_type` has no 'season' value — rwnd.tv has nowhere to

@@ -1,6 +1,7 @@
-import { eq } from 'drizzle-orm'
+import { eq, sql } from 'drizzle-orm'
 import type { Database } from '@rwnd/db'
 import {
+  droppedShows,
   importJobs,
   plays,
   ratings,
@@ -14,7 +15,12 @@ import type { MetadataProvider } from '../providers/types.js'
 import { decryptSecret, encryptSecret } from '../lib/crypto.js'
 import { TraktClient, type PagedResult } from '../trakt/client.js'
 import { refreshAccessToken } from '../trakt/auth.js'
-import type { TraktHistoryItem, TraktRatingItem, TraktWatchlistItem } from '../trakt/types.js'
+import type {
+  TraktHiddenItem,
+  TraktHistoryItem,
+  TraktRatingItem,
+  TraktWatchlistItem,
+} from '../trakt/types.js'
 import {
   matchEpisode,
   matchMovie,
@@ -29,15 +35,18 @@ import {
  * route handler makes, and so apps/api/src/index.ts can resume a job that
  * was mid-flight when the process last stopped.
  *
- * Phases run in order history -> ratings -> watchlist (history first means
- * the later phases mostly hit shows/episodes this job — or a previous
- * one — already resolved). Progress (counters + a {phase, page} cursor) is
+ * Phases run in order history -> ratings -> watchlist -> dropped (history
+ * first means the later phases mostly hit shows/episodes this job — or a
+ * previous one — already resolved). Progress (counters + a {phase, page}
+ * cursor) is
  * persisted after every page, which is both what drives the UI's progress
  * bar and what makes resuming after a restart possible.
  */
 
 const PAGE_LIMIT = 1000
-const PHASES = ['history', 'ratings', 'watchlist'] as const
+// 'dropped' runs last — a dropped show already has history, so this needs
+// no reordering of the matching work the earlier phases already do.
+const PHASES = ['history', 'ratings', 'watchlist', 'dropped'] as const
 type Phase = (typeof PHASES)[number]
 type JobStatus = (typeof importJobStatusEnum.enumValues)[number]
 /** Refresh proactively rather than waiting for a request to 401 — Trakt
@@ -56,6 +65,7 @@ interface JobRow {
   includeHistory: boolean
   includeRatings: boolean
   includeWatchlist: boolean
+  includeDropped: boolean
   cursor: { phase: Phase; page: number } | null
   itemsTotal: number | null
   itemsProcessed: number
@@ -139,7 +149,8 @@ export async function runTraktImport(
     (phase) =>
       (phase === 'history' && job.includeHistory) ||
       (phase === 'ratings' && job.includeRatings) ||
-      (phase === 'watchlist' && job.includeWatchlist),
+      (phase === 'watchlist' && job.includeWatchlist) ||
+      (phase === 'dropped' && job.includeDropped),
   )
 
   let startIndex = 0
@@ -271,6 +282,44 @@ export async function runTraktImport(
     return 'imported'
   }
 
+  async function processDroppedItem(item: TraktHiddenItem): Promise<'imported' | 'skipped'> {
+    // matchTraktMediaItem already handles `type: 'show'` items structurally
+    // (it doesn't care that this came from /users/hidden rather than
+    // /sync/ratings or /sync/watchlist) — no changes needed in match.ts.
+    const match = await matchTraktMediaItem(db, provider, item, locale, caches)
+    if (!match.ok) {
+      pushFailure('dropped', match)
+      return 'skipped'
+    }
+    const traktDroppedAt = new Date(item.hidden_at)
+    await db
+      .insert(droppedShows)
+      .values({
+        userId,
+        showId: match.entityId,
+        traktDropped: true,
+        traktDroppedAt,
+        manualDropped: null,
+        manualDroppedAt: null,
+      })
+      .onConflictDoUpdate({
+        target: [droppedShows.userId, droppedShows.showId],
+        set: {
+          traktDropped: true,
+          traktDroppedAt,
+          // A manual override that's no longer needed — Trakt has caught
+          // up to exactly what the user last chose here — is cleared back
+          // to null rather than left sticky forever. A manual *undrop*
+          // stays protected: it's a real, ongoing disagreement with
+          // Trakt's own "still dropped" state, not a stale one. See
+          // droppedShows's doc comment in packages/db/src/schema.ts.
+          manualDropped: sql`case when ${droppedShows.manualDropped} = true then null else ${droppedShows.manualDropped} end`,
+          manualDroppedAt: sql`case when ${droppedShows.manualDropped} = true then null else ${droppedShows.manualDroppedAt} end`,
+        },
+      })
+    return 'imported'
+  }
+
   /** Runs one phase from `fromPage` to completion. Returns true if the job
    * was cancelled mid-phase (caller should stop entirely). */
   async function runPhase(phase: Phase, fromPage: number): Promise<boolean> {
@@ -283,10 +332,13 @@ export async function runTraktImport(
         accessToken,
       })
 
-      let result: PagedResult<TraktHistoryItem | TraktRatingItem | TraktWatchlistItem>
+      let result: PagedResult<
+        TraktHistoryItem | TraktRatingItem | TraktWatchlistItem | TraktHiddenItem
+      >
       if (phase === 'history') result = await client.getHistoryPage(page, PAGE_LIMIT)
       else if (phase === 'ratings') result = await client.getRatingsPage(page, PAGE_LIMIT)
-      else result = await client.getWatchlistPage(page, PAGE_LIMIT)
+      else if (phase === 'watchlist') result = await client.getWatchlistPage(page, PAGE_LIMIT)
+      else result = await client.getHiddenPage('dropped', page, PAGE_LIMIT)
 
       if (page === 1 && result.itemCount != null) {
         state.itemsTotal = (state.itemsTotal ?? 0) + result.itemCount
@@ -310,7 +362,9 @@ export async function runTraktImport(
               ? await processHistoryItem(item as TraktHistoryItem)
               : phase === 'ratings'
                 ? await processRatingItem(item as TraktRatingItem)
-                : await processWatchlistItem(item as TraktWatchlistItem)
+                : phase === 'watchlist'
+                  ? await processWatchlistItem(item as TraktWatchlistItem)
+                  : await processDroppedItem(item as TraktHiddenItem)
         } catch (err) {
           pushFailure(phase, { reason: describeUnexpectedError(err) })
           outcome = 'skipped'

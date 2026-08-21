@@ -4,6 +4,7 @@ import {
   type CreateApiTokenResponse,
   type CreateImportJobRequest,
   type CreatePlayRequest,
+  type DroppedStatus,
   type ImportJob,
   type InstanceSettings,
   type ListImportJobsResponse,
@@ -85,6 +86,10 @@ export const api = {
     // Whole-library responses, not paginated — see packages/shared/src/schemas/library.ts.
     shows: () => get<ListLibraryShowsResponse>('/library/shows'),
     show: (slug: string) => get<ShowDetail>(`/library/shows/${encodeURIComponent(slug)}`),
+    dropShow: (slug: string) =>
+      post<DroppedStatus>(`/library/shows/${encodeURIComponent(slug)}/dropped`),
+    undropShow: (slug: string) =>
+      del<DroppedStatus>(`/library/shows/${encodeURIComponent(slug)}/dropped`),
     movies: () => get<ListLibraryMoviesResponse>('/library/movies'),
   },
   settings: {

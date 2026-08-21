@@ -238,6 +238,7 @@ function serializeJob(row: typeof importJobs.$inferSelect): ImportJob {
     includeHistory: row.includeHistory,
     includeRatings: row.includeRatings,
     includeWatchlist: row.includeWatchlist,
+    includeDropped: row.includeDropped,
     itemsTotal: row.itemsTotal,
     itemsProcessed: row.itemsProcessed,
     itemsImported: row.itemsImported,
@@ -303,6 +304,7 @@ importRoutes.openapi(
         includeHistory: body.history,
         includeRatings: body.ratings,
         includeWatchlist: body.watchlist,
+        includeDropped: body.dropped,
       })
       .returning()
     if (!job) throw new Error('Failed to create import job')

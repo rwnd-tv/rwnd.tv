@@ -68,6 +68,15 @@ export interface TraktWatchlistItem {
   episode?: TraktEpisode
 }
 
+/** One row of GET /users/hidden/dropped. Unlike ratings/watchlist, Trakt's
+ * "drop" feature only ever applies to shows — no movie/season/episode
+ * variant — so `type` is always 'show' here. */
+export interface TraktHiddenItem {
+  hidden_at: string
+  type: 'show'
+  show?: TraktShow
+}
+
 export interface TraktDeviceCodeResponse {
   device_code: string
   user_code: string

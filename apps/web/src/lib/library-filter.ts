@@ -296,3 +296,21 @@ export function filterByWatchedYear<T extends { lastWatchedAt: string }>(
     return unknownMode !== 'include' && year >= after && year <= before
   })
 }
+
+/**
+ * "Dropped" filter panel (ShowsPage.tsx / DroppedFilterPanel.tsx). Same
+ * tri-state shape as `UnknownWatchedMode` above — a single condition, not a
+ * genre-style set of named items — but a different default: dropped shows
+ * are meant to be hidden unless asked for, so ShowsPage.tsx seeds this
+ * cookie at `'exclude'` rather than `'neutral'`.
+ */
+export const DROPPED_FILTER_MODES = ['neutral', 'exclude', 'include'] as const
+export type DroppedFilterMode = (typeof DROPPED_FILTER_MODES)[number]
+
+export function filterByDropped<T extends { dropped: boolean }>(
+  items: T[],
+  mode: DroppedFilterMode,
+): T[] {
+  if (mode === 'neutral') return items
+  return items.filter((item) => item.dropped === (mode === 'include'))
+}

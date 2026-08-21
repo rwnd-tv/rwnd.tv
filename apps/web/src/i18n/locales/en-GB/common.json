@@ -74,6 +74,7 @@
     "noMatches": "No shows match \"{{query}}\".",
     "noFilterMatches": "No shows match the selected filters.",
     "filtersButton": "Filters…",
+    "droppedBadge": "Dropped",
     "filtersPanel": {
       "genres": "Genres",
       "include": "Include",
@@ -95,6 +96,7 @@
       "after": "After",
       "before": "Before",
       "unknown": "Unknown",
+      "dropped": "Dropped",
       "reset": "Reset"
     }
   },
@@ -106,7 +108,10 @@
     "watchedPeriod": "Watched {{range}}",
     "watchedUnknown": "Watched: Unknown",
     "ratingSource": "TMDB rating",
-    "viewOnTmdb": "View on TMDB"
+    "viewOnTmdb": "View on TMDB",
+    "droppedFact": "Dropped",
+    "drop": "Drop",
+    "undrop": "Undrop"
   },
   "movies": {
     "title": "Movies",
@@ -150,6 +155,7 @@
       "history": "Watch history",
       "ratings": "Ratings",
       "watchlist": "Watchlist",
+      "dropped": "Dropped shows",
       "submit": "Start import",
       "alreadyRunning": "An import is already in progress."
     },
@@ -171,12 +177,14 @@
       "phase": {
         "history": "W",
         "ratings": "R",
-        "watchlist": "WL"
+        "watchlist": "WL",
+        "dropped": "D"
       },
       "phaseLabel": {
         "history": "Watch",
         "ratings": "Rating",
-        "watchlist": "Watchlist"
+        "watchlist": "Watchlist",
+        "dropped": "Dropped"
       }
     }
   },

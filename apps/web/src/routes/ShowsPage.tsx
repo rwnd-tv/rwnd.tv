@@ -7,6 +7,8 @@ import { useAuth } from '../lib/auth-context.js'
 import {
   collectGenres,
   collectStatuses,
+  DROPPED_FILTER_MODES,
+  filterByDropped,
   filterByGenres,
   filterByRating,
   filterByReleaseYear,
@@ -26,7 +28,7 @@ import {
   yearComparatorDesc,
   yearRange,
 } from '../lib/library-filter.js'
-import type { UnknownWatchedMode } from '../lib/library-filter.js'
+import type { DroppedFilterMode, UnknownWatchedMode } from '../lib/library-filter.js'
 import { useSortCookie } from '../lib/use-sort-cookie.js'
 import { useGenreFilterCookie } from '../lib/use-genre-filter-cookie.js'
 import { useYearRangeCookie } from '../lib/use-year-range-cookie.js'
@@ -40,6 +42,7 @@ import { StatusFilterPanel } from '../components/library/StatusFilterPanel.js'
 import { ReleaseYearFilterPanel } from '../components/library/ReleaseYearFilterPanel.js'
 import { RatingFilterPanel } from '../components/library/RatingFilterPanel.js'
 import { WatchedYearFilterPanel } from '../components/library/WatchedYearFilterPanel.js'
+import { DroppedFilterPanel } from '../components/library/DroppedFilterPanel.js'
 import { Button } from '../components/ui/Button.js'
 import { Spinner } from '../components/ui/Spinner.js'
 
@@ -173,6 +176,13 @@ export function ShowsPage() {
     UNKNOWN_WATCHED_MODES,
     'neutral',
   )
+  // Default 'exclude', unlike unknownWatchedMode's 'neutral' default —
+  // dropped shows are meant to be hidden from the gallery unless asked for.
+  const [droppedMode, setDroppedMode] = useSortCookie<DroppedFilterMode>(
+    'rwnd_shows_dropped_mode',
+    DROPPED_FILTER_MODES,
+    'exclude',
+  )
 
   const shows = useMemo(() => {
     const byTitle = filterByTitle(data?.shows ?? [], filter)
@@ -186,7 +196,8 @@ export function ShowsPage() {
       watchedYearFilter.before,
       unknownWatchedMode,
     )
-    return sortShows(byWatchedYear, sortBy, locale)
+    const byDropped = filterByDropped(byWatchedYear, droppedMode)
+    return sortShows(byDropped, sortBy, locale)
   }, [
     data,
     filter,
@@ -196,6 +207,7 @@ export function ShowsPage() {
     ratingFilter,
     watchedYearFilter,
     unknownWatchedMode,
+    droppedMode,
     sortBy,
     locale,
   ])
@@ -216,6 +228,7 @@ export function ShowsPage() {
       })
     }
     setUnknownWatchedMode('neutral')
+    setDroppedMode('exclude')
   }
 
   if (isLoading) return <Spinner label={t('common.loading')} />
@@ -309,6 +322,14 @@ export function ShowsPage() {
                   maxLabel={t('shows.filtersPanel.max')}
                 />
               )}
+              <DroppedFilterPanel
+                mode={droppedMode}
+                onChange={setDroppedMode}
+                groupLabel={t('shows.filtersPanel.dropped')}
+                rowLabel={t('shows.filtersPanel.dropped')}
+                includeLabel={t('shows.filtersPanel.include')}
+                excludeLabel={t('shows.filtersPanel.exclude')}
+              />
               {libraryWatchedYearRange && (
                 <WatchedYearFilterPanel
                   min={libraryWatchedYearRange.min}
@@ -347,6 +368,11 @@ export function ShowsPage() {
                   posterPath={show.posterPath}
                   to={`/shows/${show.slug}`}
                 >
+                  {show.dropped && (
+                    <p className="text-xs font-medium text-[var(--color-danger)]">
+                      {t('shows.droppedBadge')}
+                    </p>
+                  )}
                   {show.totalEpisodes !== null ? (
                     <div className="flex flex-col gap-1">
                       <ProgressBar

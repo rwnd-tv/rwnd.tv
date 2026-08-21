@@ -1,11 +1,12 @@
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi'
 import { and, asc, eq, gt, sql } from 'drizzle-orm'
 import {
+  droppedStatusSchema,
   listLibraryMoviesResponseSchema,
   listLibraryShowsResponseSchema,
   showDetailSchema,
 } from '@rwnd/shared'
-import { episodes, externalIds, movies, plays, seasons, shows } from '@rwnd/db'
+import { droppedShows, episodes, externalIds, movies, plays, seasons, shows } from '@rwnd/db'
 import type { AppEnv } from '../types.js'
 import { requireAuth } from '../middleware/auth.js'
 
@@ -103,6 +104,14 @@ libraryRoutes.openapi(
         status: shows.status,
         genres: shows.genres,
         voteAverage: shows.voteAverage,
+        // Null when this user has no droppedShows row at all for this show
+        // (never dropped) — joined (not a subquery) and scoped to userId in
+        // the join condition itself, not a WHERE clause, so a show this
+        // user hasn't dropped still gets a row instead of being excluded.
+        // manualDropped (when set) always wins over traktDropped — see
+        // droppedShows's doc comment in packages/db/src/schema.ts.
+        traktDropped: droppedShows.traktDropped,
+        manualDropped: droppedShows.manualDropped,
         watchedEpisodes: watched.watchedEpisodes,
         lastWatchedAt: watched.lastWatchedAt,
         // Absent (null) until the metadata refresher has cached this show's
@@ -113,6 +122,10 @@ libraryRoutes.openapi(
       .from(watched)
       .innerJoin(shows, eq(shows.id, watched.showId))
       .leftJoin(totals, eq(totals.showId, watched.showId))
+      .leftJoin(
+        droppedShows,
+        and(eq(droppedShows.showId, watched.showId), eq(droppedShows.userId, userId)),
+      )
       .orderBy(asc(shows.title))
 
     return c.json({
@@ -125,6 +138,7 @@ libraryRoutes.openapi(
         status: row.status,
         genres: row.genres,
         voteAverage: row.voteAverage,
+        dropped: row.manualDropped ?? row.traktDropped ?? false,
         watchedEpisodes: row.watchedEpisodes,
         totalEpisodes: row.totalEpisodes ?? null,
         lastWatchedAt: row.lastWatchedAt.toISOString(),
@@ -178,6 +192,22 @@ libraryRoutes.openapi(
         ),
       )
       .limit(1)
+
+    const [droppedRow] = await db
+      .select({
+        traktDropped: droppedShows.traktDropped,
+        traktDroppedAt: droppedShows.traktDroppedAt,
+        manualDropped: droppedShows.manualDropped,
+        manualDroppedAt: droppedShows.manualDroppedAt,
+      })
+      .from(droppedShows)
+      .where(and(eq(droppedShows.userId, userId), eq(droppedShows.showId, show.id)))
+      .limit(1)
+    // manualDropped (when set) always wins over traktDropped — see
+    // droppedShows's doc comment in packages/db/src/schema.ts.
+    const dropped = droppedRow?.manualDropped ?? droppedRow?.traktDropped ?? false
+    const droppedAt =
+      droppedRow?.manualDropped != null ? droppedRow.manualDroppedAt : droppedRow?.traktDroppedAt
 
     const seasonRows = await db
       .select()
@@ -250,6 +280,8 @@ libraryRoutes.openapi(
       genres: show.genres,
       voteAverage: show.voteAverage,
       tmdbId: tmdbExternalId?.externalId ?? null,
+      dropped,
+      droppedAt: dropped && droppedAt ? droppedAt.toISOString() : null,
       watchedEpisodes,
       totalEpisodes,
       firstWatchedAt: watchedRange?.firstWatchedAt
@@ -268,6 +300,133 @@ libraryRoutes.openapi(
         watchedEpisodes: watchedMap.get(season.seasonNumber) ?? 0,
       })),
     })
+  },
+)
+
+/**
+ * Manual drop/undrop toggle (apps/web/src/routes/ShowDetailPage.tsx) — the
+ * in-app counterpart to importing Trakt's own "Dropped" list
+ * (apps/api/src/import/trakt.ts). Returns just `droppedStatusSchema`
+ * (dropped + droppedAt), not the full show detail: the frontend patches
+ * those two fields into its already-cached ShowDetail rather than
+ * refetching, so this route doesn't need to rebuild seasons/watched counts
+ * just to toggle a boolean.
+ */
+libraryRoutes.openapi(
+  createRoute({
+    method: 'post',
+    path: '/library/shows/{slug}/dropped',
+    summary: 'Mark a show as dropped for the current user',
+    middleware: [requireAuth] as const,
+    request: { params: z.object({ slug: z.string() }) },
+    responses: {
+      200: {
+        description: 'Show marked as dropped',
+        content: { 'application/json': { schema: droppedStatusSchema } },
+      },
+      404: { description: 'Show not found' },
+    },
+  }),
+  async (c) => {
+    const { slug } = c.req.valid('param')
+    const userId = c.get('user')!.id
+    const db = c.get('db')
+
+    const [show] = await db
+      .select({ id: shows.id })
+      .from(shows)
+      .where(eq(shows.slug, slug))
+      .limit(1)
+    if (!show) return c.json({ error: 'Show not found' }, 404)
+
+    // manualDropped is only an *override* — if Trakt's own state for this
+    // show is already "dropped", there's nothing to override, so it's left
+    // (or cleared back to) null rather than pinned to true forever. See
+    // droppedShows's doc comment in packages/db/src/schema.ts.
+    const manualDroppedAt = new Date()
+    const [row] = await db
+      .insert(droppedShows)
+      .values({
+        userId,
+        showId: show.id,
+        traktDropped: null,
+        traktDroppedAt: null,
+        manualDropped: true,
+        manualDroppedAt,
+      })
+      .onConflictDoUpdate({
+        target: [droppedShows.userId, droppedShows.showId],
+        set: {
+          manualDropped: sql`case when ${droppedShows.traktDropped} = true then null else true end`,
+          manualDroppedAt: sql`case when ${droppedShows.traktDropped} = true then null else ${manualDroppedAt.toISOString()}::timestamptz end`,
+        },
+      })
+      .returning({
+        traktDropped: droppedShows.traktDropped,
+        traktDroppedAt: droppedShows.traktDroppedAt,
+        manualDropped: droppedShows.manualDropped,
+        manualDroppedAt: droppedShows.manualDroppedAt,
+      })
+
+    const dropped = row!.manualDropped ?? row!.traktDropped ?? false
+    const droppedAt = row!.manualDropped != null ? row!.manualDroppedAt : row!.traktDroppedAt
+    return c.json({ dropped, droppedAt: dropped && droppedAt ? droppedAt.toISOString() : null })
+  },
+)
+
+libraryRoutes.openapi(
+  createRoute({
+    method: 'delete',
+    path: '/library/shows/{slug}/dropped',
+    summary: 'Un-drop a show for the current user',
+    middleware: [requireAuth] as const,
+    request: { params: z.object({ slug: z.string() }) },
+    responses: {
+      200: {
+        description: 'Show no longer marked as dropped',
+        content: { 'application/json': { schema: droppedStatusSchema } },
+      },
+      404: { description: 'Show not found' },
+    },
+  }),
+  async (c) => {
+    const { slug } = c.req.valid('param')
+    const userId = c.get('user')!.id
+    const db = c.get('db')
+
+    const [show] = await db
+      .select({ id: shows.id })
+      .from(shows)
+      .where(eq(shows.slug, slug))
+      .limit(1)
+    if (!show) return c.json({ error: 'Show not found' }, 404)
+
+    // A no-op (0 rows affected) if the show was never dropped in the first
+    // place — nothing to undo, no row worth creating. Otherwise, same
+    // override-vs-clear logic as the drop route above: manualDropped only
+    // needs to record `false` while Trakt still disagrees (still thinks
+    // this show is dropped); once Trakt agrees it isn't, the override
+    // clears back to null rather than staying pinned to false forever.
+    const manualDroppedAt = new Date()
+    const [row] = await db
+      .update(droppedShows)
+      .set({
+        manualDropped: sql`case when ${droppedShows.traktDropped} = true then false else null end`,
+        manualDroppedAt: sql`case when ${droppedShows.traktDropped} = true then ${manualDroppedAt.toISOString()}::timestamptz else null end`,
+      })
+      .where(and(eq(droppedShows.userId, userId), eq(droppedShows.showId, show.id)))
+      .returning({
+        traktDropped: droppedShows.traktDropped,
+        traktDroppedAt: droppedShows.traktDroppedAt,
+        manualDropped: droppedShows.manualDropped,
+        manualDroppedAt: droppedShows.manualDroppedAt,
+      })
+
+    if (!row) return c.json({ dropped: false, droppedAt: null })
+
+    const dropped = row.manualDropped ?? row.traktDropped ?? false
+    const droppedAt = row.manualDropped != null ? row.manualDroppedAt : row.traktDroppedAt
+    return c.json({ dropped, droppedAt: dropped && droppedAt ? droppedAt.toISOString() : null })
   },
 )
 

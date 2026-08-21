@@ -16,6 +16,7 @@ export function ImportPage() {
   const [history, setHistory] = useState(true)
   const [ratings, setRatings] = useState(true)
   const [watchlist, setWatchlist] = useState(true)
+  const [dropped, setDropped] = useState(true)
 
   const { data: connection } = useQuery({
     queryKey: ['import', 'trakt', 'connection'],
@@ -31,7 +32,7 @@ export function ImportPage() {
   const activeJob = jobsData?.jobs.find((j) => j.status === 'pending' || j.status === 'running')
 
   const startImport = useMutation({
-    mutationFn: () => api.imports.start({ history, ratings, watchlist }),
+    mutationFn: () => api.imports.start({ history, ratings, watchlist, dropped }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['import', 'jobs'] }),
   })
 
@@ -86,6 +87,14 @@ export function ImportPage() {
                 onChange={(e) => setWatchlist(e.target.checked)}
               />
               {t('import.start.watchlist')}
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={dropped}
+                onChange={(e) => setDropped(e.target.checked)}
+              />
+              {t('import.start.dropped')}
             </label>
             <div>
               <Button type="submit" isLoading={startImport.isPending} disabled={Boolean(activeJob)}>

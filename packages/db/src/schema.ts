@@ -361,7 +361,11 @@ export const importJobs = pgTable(
     includeHistory: boolean('include_history').notNull().default(true),
     includeRatings: boolean('include_ratings').notNull().default(true),
     includeWatchlist: boolean('include_watchlist').notNull().default(true),
-    cursor: jsonb('cursor').$type<{ phase: 'history' | 'ratings' | 'watchlist'; page: number }>(),
+    includeDropped: boolean('include_dropped').notNull().default(true),
+    cursor: jsonb('cursor').$type<{
+      phase: 'history' | 'ratings' | 'watchlist' | 'dropped'
+      page: number
+    }>(),
     itemsTotal: integer('items_total'),
     itemsProcessed: integer('items_processed').notNull().default(0),
     itemsImported: integer('items_imported').notNull().default(0),
@@ -440,6 +444,62 @@ export const watchlistItems = pgTable(
   ],
 )
 
+/**
+ * A show the user has partially watched but doesn't intend to finish —
+ * mirrors Trakt's own "Dropped" feature (apps/api/src/trakt/types.ts's
+ * TraktHiddenItem, imported from `/users/hidden/dropped`). Unlike
+ * `ratings`/`watchlist_items` above, this is **not** polymorphic — Trakt's
+ * drop concept only applies to shows, so a real FK to `shows.id` is simpler
+ * and stricter than reusing the (entityType, entityId) pattern for a
+ * single entity type. Settable either by importing from Trakt or via a
+ * manual toggle in rwnd.tv itself (apps/api/src/routes/library.ts) — the
+ * first piece of per-user state that isn't Trakt-import-only.
+ *
+ * Trakt's state and the user's own manual choice are tracked as two
+ * separate, independently-updated pairs rather than one collapsed
+ * `dropped`/`source` value (which is what this table originally shipped
+ * with, 2026-08-21) — `traktDropped` is always freely overwritten by the
+ * next import, and `manualDropped` (nullable: null means "no override,
+ * defer to Trakt") is only ever set by the manual toggle routes in
+ * apps/api/src/routes/library.ts. The effective state read everywhere
+ * else is `manualDropped ?? traktDropped ?? false`.
+ *
+ * The reason for the split: a single collapsed value made a manual
+ * override "sticky" forever once set, even after toggling it back to
+ * exactly what Trakt already said — there was no way to tell the system
+ * "I'm not overriding anymore." With two fields, both the manual routes
+ * and the importer can each *clear* `manualDropped` back to null the
+ * moment it matches the (possibly just-updated) `traktDropped` value,
+ * so an override only persists for as long as a real disagreement exists
+ * (James, 2026-08-21).
+ */
+export const droppedShows = pgTable(
+  'dropped_shows',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    showId: uuid('show_id')
+      .notNull()
+      .references(() => shows.id, { onDelete: 'cascade' }),
+    // Trakt's own state as of the last import that processed this show —
+    // null until an import has ever reported it. Always kept in sync by
+    // apps/api/src/import/trakt.ts, never blocked by a manual override.
+    traktDropped: boolean('trakt_dropped'),
+    traktDroppedAt: timestamp('trakt_dropped_at', { withTimezone: true }),
+    // The user's own explicit choice, when it disagrees with (or predates)
+    // Trakt's state — null means no override. Set by the manual
+    // drop/undrop routes, auto-cleared back to null (by either the manual
+    // routes or the importer) the moment it stops disagreeing with
+    // `traktDropped`.
+    manualDropped: boolean('manual_dropped'),
+    manualDroppedAt: timestamp('manual_dropped_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [uniqueIndex('dropped_shows_user_show_idx').on(table.userId, table.showId)],
+)
+
 // ---------------------------------------------------------------------------
 // Relations (for Drizzle's relational query API)
 // ---------------------------------------------------------------------------
@@ -456,6 +516,7 @@ export const usersRelations = relations(users, ({ many, one }) => ({
   importJobs: many(importJobs),
   ratings: many(ratings),
   watchlistItems: many(watchlistItems),
+  droppedShows: many(droppedShows),
 }))
 
 export const traktConnectionsRelations = relations(traktConnections, ({ one }) => ({
@@ -474,6 +535,11 @@ export const watchlistItemsRelations = relations(watchlistItems, ({ one }) => ({
   user: one(users, { fields: [watchlistItems.userId], references: [users.id] }),
 }))
 
+export const droppedShowsRelations = relations(droppedShows, ({ one }) => ({
+  user: one(users, { fields: [droppedShows.userId], references: [users.id] }),
+  show: one(shows, { fields: [droppedShows.showId], references: [shows.id] }),
+}))
+
 export const userCredentialsRelations = relations(userCredentials, ({ one }) => ({
   user: one(users, { fields: [userCredentials.userId], references: [users.id] }),
 }))
@@ -489,6 +555,7 @@ export const apiTokensRelations = relations(apiTokens, ({ one }) => ({
 export const showsRelations = relations(shows, ({ many }) => ({
   episodes: many(episodes),
   seasons: many(seasons),
+  droppedShows: many(droppedShows),
 }))
 
 export const seasonsRelations = relations(seasons, ({ one }) => ({

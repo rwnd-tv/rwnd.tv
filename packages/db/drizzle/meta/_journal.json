@@ -43,6 +43,13 @@
       "when": 1787305716528,
       "tag": "0005_busy_havok",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1787323294246,
+      "tag": "0006_flimsy_master_chief",
+      "breakpoints": true
     }
   ]
 }

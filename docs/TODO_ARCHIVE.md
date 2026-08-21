@@ -136,3 +136,82 @@ grouping, sorted oldest to newest.
       a nav link or the logout button is used, so it doesn't stay open
       over whatever page it just navigated to — desktop's expanded rail is
       unaffected and stays open across navigation same as always.
+
+## Per-user show state
+
+- [x] **"Dropped" property on watched shows** (James, 2026-08-21)\
+      Mirrors Trakt's own "Dropped" feature — a show partially watched but
+      no longer being continued. New `dropped_shows` table (real FK to
+      `shows.id`, not polymorphic like `ratings`/`watchlist_items` — Trakt's
+      drop concept is shows-only). Two ways to set it, both shipped
+      together: a manual Drop/Undrop button on `ShowDetailPage.tsx` (the
+      first piece of per-user state settable directly in rwnd.tv — ratings
+      and watchlist are still Trakt-import-only), and a 4th Trakt import
+      phase (`GET /users/hidden/dropped`, same `history`/`ratings`/
+      `watchlist` pipeline shape in `apps/api/src/import/trakt.ts`, reusing
+      `matchTraktMediaItem` unchanged since a dropped item is structurally
+      just a `type: 'show'` entry). Hidden from the Shows gallery by
+      default (`DroppedFilterPanel.tsx`, a tri-state include/exclude/only
+      toggle seeded at `'exclude'` rather than `WatchedYearFilterPanel`'s
+      `'neutral'` default), with a small red "Dropped" badge on the gallery
+      card and a "Dropped" fact + Drop/Undrop button on the show page
+      (moved to sit right after the progress bar, per James, rather than
+      above the overview).
+
+- [x] **Follow-up same day: manual drop/undrop must survive a re-import** (James, 2026-08-21)\
+      James anticipated running more Trakt imports and didn't want them
+      silently reverting a manual drop/undrop — the import's original
+      `onConflictDoUpdate` blindly overwrote any existing row with
+      whatever Trakt currently said. Fixed by adding `dropped` (now a
+      real boolean column, not inferred from row presence — an undrop
+      updates it to false rather than deleting the row, so "this was
+      undone on purpose" survives) and `source` (manual or trakt) to
+      `dropped_shows`. The manual routes always set source to manual
+      (upgrading a trakt-sourced row if needed); the import's upsert
+      gained a Drizzle conditional-update clause on that column, so
+      `ON CONFLICT ... DO UPDATE` only fires against rows still sourced
+      from Trakt — a manually-touched row is left alone in either
+      direction until changed again in rwnd.tv itself. Verified against
+      James's real Trakt account on dev.rwnd.tv, not just the mocked
+      test suite: seeded a trakt-sourced dropped row for Arcane,
+      undropped it manually, ran a real dropped-only re-import (Trakt
+      still lists Arcane as dropped) — the row stayed manually-undropped
+      while the other 26 shows on the real dropped list still updated
+      normally as trakt-sourced. Since none of this had shipped past dev
+      yet, the original migration (uncommitted) was regenerated in place
+      with the final `dropped_shows` shape rather than layered under a
+      second migration — dev's actual table was manually dropped and
+      recreated to match (James: fine to lose the dev-only test data for
+      a clean start).
+
+- [x] **Second follow-up same day: the manual override never let go** (James, 2026-08-21)\
+      James: manually drop-then-undropping a show (or the reverse) didn't
+      return it to Trakt's own state, it got permanently stuck as a manual
+      override. Root cause: `source` was one flag shared by two different
+      questions — "who touched this last" and "should this stay pinned" —
+      so once `source` became `'manual'` nothing could ever set it back to
+      `'trakt'` short of another Trakt re-import. Fixed by replacing
+      `dropped`/`source` with two independently nullable pairs,
+      `traktDropped`/`traktDroppedAt` and `manualDropped`/
+      `manualDroppedAt` — `manualDropped` is `null` unless the user has an
+      active disagreement with `traktDropped`'s current value, and it
+      auto-clears back to `null` the moment it stops disagreeing, checked
+      both on a manual toggle (`POST`/`DELETE /library/shows/{slug}/dropped`
+      in `apps/api/src/routes/library.ts`) and on a Trakt re-import
+      (`processDroppedItem` in `apps/api/src/import/trakt.ts`), both via a
+      Postgres `CASE` clause referencing the row's other column rather than
+      a value read back beforehand. Verified live on dev.rwnd.tv: seeded a
+      trakt-dropped row directly in Postgres (no real Trakt account
+      involved this time), then drove the real Drop/Undrop button —
+      undrop set `manualDropped: false` (an active override, since Trakt
+      still disagreed), and dropping it again cleared `manualDropped` back
+      to `null` rather than pinning it to `true`. Caught and fixed two bugs
+      along the way that only showed up against real Postgres, not the
+      mocked unit tests: interpolating a raw `Date` into a `sql` template
+      needs `.toISOString()` first (drizzle only converts `Date` → text
+      automatically for typed `.values()`/`.set()`, not raw `sql` calls),
+      and that string then needs an explicit `::timestamptz` cast inside a
+      `CASE` expression, or Postgres refuses the column assignment with a
+      type-mismatch error. Since this table still hadn't shipped past dev,
+      the migration was regenerated in place again rather than layered,
+      same as the fix above.

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { and, eq } from 'drizzle-orm'
 import {
+  droppedShows,
   episodes,
   externalIds,
   importJobs,
@@ -25,7 +26,12 @@ import {
 import { loadEnv } from '../env.js'
 import { createMetadataProvider } from '../providers/index.js'
 import { runTraktImport } from '../import/trakt.js'
-import type { TraktHistoryItem, TraktRatingItem, TraktWatchlistItem } from '../trakt/types.js'
+import type {
+  TraktHiddenItem,
+  TraktHistoryItem,
+  TraktRatingItem,
+  TraktWatchlistItem,
+} from '../trakt/types.js'
 import * as fx from './fixtures/trakt.js'
 
 const db = testDb()
@@ -67,6 +73,7 @@ function createFetchStub(
     historyItems?: TraktHistoryItem[]
     ratingsItems?: TraktRatingItem[]
     watchlistItemsList?: TraktWatchlistItem[]
+    droppedItems?: TraktHiddenItem[]
     seasonCalls?: { count: number }
     showCalls?: { count: number }
   } = {},
@@ -75,6 +82,7 @@ function createFetchStub(
     historyItems = [],
     ratingsItems = [],
     watchlistItemsList = [],
+    droppedItems = [],
     seasonCalls,
     showCalls,
   } = opts
@@ -123,6 +131,12 @@ function createFetchStub(
         return jsonResponse(watchlistItemsList, {
           'X-Pagination-Page-Count': '1',
           'X-Pagination-Item-Count': String(watchlistItemsList.length),
+        })
+      }
+      if (url.pathname === '/users/hidden/dropped') {
+        return jsonResponse(droppedItems, {
+          'X-Pagination-Page-Count': '1',
+          'X-Pagination-Item-Count': String(droppedItems.length),
         })
       }
       throw new Error(`Unexpected Trakt API fetch in test: ${url}`)
@@ -421,6 +435,157 @@ describe('Trakt import', () => {
     const secondPass = await db.select().from(ratings).where(eq(ratings.userId, me.id))
     expect(secondPass).toHaveLength(1)
     expect(secondPass[0]?.rating).toBe(9)
+  })
+
+  it('imports a dropped show, and re-importing with a new hidden_at updates it rather than duplicating', async () => {
+    const cookie = await createUserAndCookie()
+    const me = await json<User>(await app.request('/api/v1/auth/me', { headers: { cookie } }))
+    await createTraktConnection(db, me.id)
+
+    vi.stubGlobal(
+      'fetch',
+      createFetchStub({ droppedItems: [fx.breakingBadDroppedItem('2024-02-01T00:00:00.000Z')] }),
+    )
+    const [job1] = await db
+      .insert(importJobs)
+      .values({
+        userId: me.id,
+        includeHistory: false,
+        includeRatings: false,
+        includeWatchlist: false,
+      })
+      .returning()
+    await runTraktImport(db, provider, env, job1!.id)
+
+    const firstPass = await db.select().from(droppedShows).where(eq(droppedShows.userId, me.id))
+    expect(firstPass).toHaveLength(1)
+    expect(firstPass[0]?.traktDroppedAt?.toISOString()).toBe('2024-02-01T00:00:00.000Z')
+
+    vi.stubGlobal(
+      'fetch',
+      createFetchStub({ droppedItems: [fx.breakingBadDroppedItem('2024-03-01T00:00:00.000Z')] }),
+    )
+    const [job2] = await db
+      .insert(importJobs)
+      .values({
+        userId: me.id,
+        includeHistory: false,
+        includeRatings: false,
+        includeWatchlist: false,
+      })
+      .returning()
+    await runTraktImport(db, provider, env, job2!.id)
+
+    const secondPass = await db.select().from(droppedShows).where(eq(droppedShows.userId, me.id))
+    expect(secondPass).toHaveLength(1)
+    expect(secondPass[0]?.traktDroppedAt?.toISOString()).toBe('2024-03-01T00:00:00.000Z')
+  })
+
+  it('does not revert a manually-set drop/undrop on a later re-import', async () => {
+    const cookie = await createUserAndCookie()
+    const me = await json<User>(await app.request('/api/v1/auth/me', { headers: { cookie } }))
+    await createTraktConnection(db, me.id)
+
+    // First import: Trakt reports the show as dropped, creating a
+    // trakt-sourced row.
+    vi.stubGlobal(
+      'fetch',
+      createFetchStub({ droppedItems: [fx.breakingBadDroppedItem('2024-02-01T00:00:00.000Z')] }),
+    )
+    const [job1] = await db
+      .insert(importJobs)
+      .values({
+        userId: me.id,
+        includeHistory: false,
+        includeRatings: false,
+        includeWatchlist: false,
+      })
+      .returning()
+    await runTraktImport(db, provider, env, job1!.id)
+
+    const [row] = await db.select().from(droppedShows).where(eq(droppedShows.userId, me.id))
+    expect(row?.traktDropped).toBe(true)
+    expect(row?.manualDropped).toBeNull()
+
+    // The user manually undrops it in rwnd.tv — same effect as
+    // DELETE /library/shows/{slug}/dropped, an active override since it
+    // disagrees with Trakt's own (still "dropped") state — see
+    // apps/api/src/routes/library.ts.
+    await db
+      .update(droppedShows)
+      .set({ manualDropped: false, manualDroppedAt: new Date('2024-02-15T00:00:00.000Z') })
+      .where(eq(droppedShows.id, row!.id))
+
+    // Trakt still reports the show as dropped — a naive re-import would
+    // silently overwrite the manual override.
+    vi.stubGlobal(
+      'fetch',
+      createFetchStub({ droppedItems: [fx.breakingBadDroppedItem('2024-03-01T00:00:00.000Z')] }),
+    )
+    const [job2] = await db
+      .insert(importJobs)
+      .values({
+        userId: me.id,
+        includeHistory: false,
+        includeRatings: false,
+        includeWatchlist: false,
+      })
+      .returning()
+    await runTraktImport(db, provider, env, job2!.id)
+
+    const [after] = await db.select().from(droppedShows).where(eq(droppedShows.userId, me.id))
+    expect(after?.traktDropped).toBe(true)
+    expect(after?.manualDropped).toBe(false)
+  })
+
+  it('clears a manual drop override once Trakt catches up and agrees', async () => {
+    // The user manually drops a show in rwnd.tv while Trakt has no opinion
+    // on it yet (a bare override, traktDropped still null), then a later
+    // import reports Trakt now also considers it dropped — the redundant
+    // override should auto-clear to null rather than stay pinned to true
+    // forever. See processDroppedItem in apps/api/src/import/trakt.ts.
+    const cookie = await createUserAndCookie()
+    const me = await json<User>(await app.request('/api/v1/auth/me', { headers: { cookie } }))
+    await createTraktConnection(db, me.id)
+
+    // History import first, just to get the show matched/created locally
+    // — dropping is unrelated to watch history, but this is the simplest
+    // existing way to resolve a real show row to attach the manual
+    // override to.
+    vi.stubGlobal('fetch', createFetchStub({ historyItems: [fx.pilotHistoryItem] }))
+    const [job1] = await db
+      .insert(importJobs)
+      .values({ userId: me.id, includeRatings: false, includeWatchlist: false })
+      .returning()
+    await runTraktImport(db, provider, env, job1!.id)
+    const [show] = await db.select().from(shows).where(eq(shows.title, 'Breaking Bad')).limit(1)
+    if (!show) throw new Error('history import did not create the show')
+
+    await db.insert(droppedShows).values({
+      userId: me.id,
+      showId: show.id,
+      manualDropped: true,
+      manualDroppedAt: new Date('2024-01-15T00:00:00.000Z'),
+    })
+
+    vi.stubGlobal(
+      'fetch',
+      createFetchStub({ droppedItems: [fx.breakingBadDroppedItem('2024-02-01T00:00:00.000Z')] }),
+    )
+    const [job2] = await db
+      .insert(importJobs)
+      .values({
+        userId: me.id,
+        includeHistory: false,
+        includeRatings: false,
+        includeWatchlist: false,
+      })
+      .returning()
+    await runTraktImport(db, provider, env, job2!.id)
+
+    const [after] = await db.select().from(droppedShows).where(eq(droppedShows.userId, me.id))
+    expect(after?.traktDropped).toBe(true)
+    expect(after?.manualDropped).toBeNull()
   })
 
   it('reports a season-level watchlist entry as unmatched instead of inserting it', async () => {

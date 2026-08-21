@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import { episodes, movies, plays, seasons, shows } from '@rwnd/db'
+import { eq } from 'drizzle-orm'
+import { droppedShows, episodes, movies, plays, seasons, shows } from '@rwnd/db'
 import type {
   ListLibraryMoviesResponse,
   ListLibraryShowsResponse,
@@ -428,6 +429,130 @@ describe('library', () => {
         headers: { cookie: cookieB },
       })
       expect((await json<ShowDetail>(resB)).watchedEpisodes).toBe(1)
+    })
+  })
+
+  describe('POST/DELETE /library/shows/{slug}/dropped', () => {
+    it('marks a show as dropped, then un-drops it — reflected in both the detail and gallery endpoints', async () => {
+      const cookie = await createUserAndCookie()
+      const userId = await meId(cookie)
+      const [show] = await db
+        .insert(shows)
+        .values({ title: 'Some Show', slug: 'some-show-dropped-1' })
+        .returning()
+      if (!show) throw new Error('failed to insert show')
+      // Needs at least one play to appear in /library/shows at all — see
+      // the "does not double-count" test above for why that query drives
+      // from watched plays, not the shows table.
+      await db.insert(seasons).values({ showId: show.id, seasonNumber: 1, episodeCount: 1 })
+      const [ep] = await db
+        .insert(episodes)
+        .values({ showId: show.id, seasonNumber: 1, episodeNumber: 1 })
+        .returning()
+      if (!ep) throw new Error('failed to insert episode')
+      await db.insert(plays).values({ userId, episodeId: ep.id, watchedAt: new Date() })
+
+      const dropRes = await app.request(`/api/v1/library/shows/${show.slug}/dropped`, {
+        method: 'POST',
+        headers: { cookie },
+      })
+      expect(dropRes.status).toBe(200)
+      const dropped = await json<{ dropped: boolean; droppedAt: string | null }>(dropRes)
+      expect(dropped.dropped).toBe(true)
+      expect(dropped.droppedAt).not.toBeNull()
+
+      const detail = await json<ShowDetail>(
+        await app.request(`/api/v1/library/shows/${show.slug}`, { headers: { cookie } }),
+      )
+      expect(detail.dropped).toBe(true)
+
+      const gallery = await json<ListLibraryShowsResponse>(
+        await app.request('/api/v1/library/shows', { headers: { cookie } }),
+      )
+      expect(gallery.shows.find((s) => s.slug === show.slug)?.dropped).toBe(true)
+
+      const undropRes = await app.request(`/api/v1/library/shows/${show.slug}/dropped`, {
+        method: 'DELETE',
+        headers: { cookie },
+      })
+      expect(undropRes.status).toBe(200)
+      expect(await json<{ dropped: boolean; droppedAt: string | null }>(undropRes)).toEqual({
+        dropped: false,
+        droppedAt: null,
+      })
+
+      const detailAfterUndrop = await json<ShowDetail>(
+        await app.request(`/api/v1/library/shows/${show.slug}`, { headers: { cookie } }),
+      )
+      expect(detailAfterUndrop.dropped).toBe(false)
+    })
+
+    it("manually toggling back to Trakt's own state clears the override instead of pinning it", async () => {
+      // Reproduces James's report: a show Trakt already lists as dropped,
+      // manually undropped then re-dropped in rwnd.tv, should end up with
+      // no manual override at all (not stuck "manually dropped" forever) —
+      // see droppedShows's doc comment in packages/db/src/schema.ts.
+      const cookie = await createUserAndCookie()
+      const userId = await meId(cookie)
+      const [show] = await db
+        .insert(shows)
+        .values({ title: 'Trakt Dropped Show', slug: 'trakt-dropped-show' })
+        .returning()
+      if (!show) throw new Error('failed to insert show')
+      await db.insert(droppedShows).values({
+        userId,
+        showId: show.id,
+        traktDropped: true,
+        traktDroppedAt: new Date('2026-01-01T00:00:00.000Z'),
+      })
+
+      const undropRes = await app.request(`/api/v1/library/shows/${show.slug}/dropped`, {
+        method: 'DELETE',
+        headers: { cookie },
+      })
+      expect(await json<{ dropped: boolean }>(undropRes)).toMatchObject({ dropped: false })
+      const [afterUndrop] = await db
+        .select()
+        .from(droppedShows)
+        .where(eq(droppedShows.showId, show.id))
+      expect(afterUndrop?.manualDropped).toBe(false)
+
+      const dropRes = await app.request(`/api/v1/library/shows/${show.slug}/dropped`, {
+        method: 'POST',
+        headers: { cookie },
+      })
+      expect(await json<{ dropped: boolean }>(dropRes)).toMatchObject({ dropped: true })
+      const [afterRedrop] = await db
+        .select()
+        .from(droppedShows)
+        .where(eq(droppedShows.showId, show.id))
+      expect(afterRedrop?.manualDropped).toBeNull()
+      expect(afterRedrop?.traktDropped).toBe(true)
+    })
+
+    it('undropping a show that was never dropped is a harmless no-op', async () => {
+      const cookie = await createUserAndCookie()
+      const [show] = await db
+        .insert(shows)
+        .values({ title: 'Never Dropped', slug: 'never-dropped' })
+        .returning()
+      if (!show) throw new Error('failed to insert show')
+
+      const res = await app.request(`/api/v1/library/shows/${show.slug}/dropped`, {
+        method: 'DELETE',
+        headers: { cookie },
+      })
+      expect(res.status).toBe(200)
+      expect(await json<{ dropped: boolean }>(res)).toMatchObject({ dropped: false })
+    })
+
+    it('404s for a show that does not exist', async () => {
+      const cookie = await createUserAndCookie()
+      const res = await app.request('/api/v1/library/shows/no-such-show/dropped', {
+        method: 'POST',
+        headers: { cookie },
+      })
+      expect(res.status).toBe(404)
     })
   })
 

@@ -41,6 +41,7 @@ export const createImportJobRequestSchema = z.object({
   history: z.boolean().default(true),
   ratings: z.boolean().default(true),
   watchlist: z.boolean().default(true),
+  dropped: z.boolean().default(true),
 })
 export type CreateImportJobRequest = z.infer<typeof createImportJobRequestSchema>
 
@@ -66,6 +67,7 @@ export const importJobSchema = z.object({
   includeHistory: z.boolean(),
   includeRatings: z.boolean(),
   includeWatchlist: z.boolean(),
+  includeDropped: z.boolean(),
   itemsTotal: z.number().int().nullable(),
   itemsProcessed: z.number().int(),
   itemsImported: z.number().int(),

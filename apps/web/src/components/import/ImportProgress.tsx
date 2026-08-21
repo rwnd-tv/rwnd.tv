@@ -101,6 +101,7 @@ const PHASE_CHIP_CLASSES: Record<string, string> = {
   history: 'border-sky-500/40 bg-sky-500/15 text-sky-500',
   ratings: 'border-fuchsia-500/40 bg-fuchsia-500/15 text-fuchsia-500',
   watchlist: 'border-emerald-500/40 bg-emerald-500/15 text-emerald-500',
+  dropped: 'border-amber-500/40 bg-amber-500/15 text-amber-500',
 }
 
 /** Same pill shape as EnvironmentBadge, one colour per import phase so a

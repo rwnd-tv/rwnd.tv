@@ -1,4 +1,5 @@
 import type {
+  TraktHiddenItem,
   TraktHistoryItem,
   TraktRatingItem,
   TraktSettingsResponse,
@@ -100,6 +101,18 @@ export class TraktClient {
     limit = DEFAULT_PAGE_LIMIT,
   ): Promise<PagedResult<TraktWatchlistItem>> {
     return this.getPage<TraktWatchlistItem>('/sync/watchlist', page, limit)
+  }
+
+  /** `section` is currently only ever called with 'dropped' — kept as a
+   * parameter rather than hardcoded since it mirrors Trakt's own hidden
+   * items API shape (other sections exist, e.g. 'progress_watched',
+   * 'calendar', that rwnd.tv has no use for today). */
+  getHiddenPage(
+    section: string,
+    page: number,
+    limit = DEFAULT_PAGE_LIMIT,
+  ): Promise<PagedResult<TraktHiddenItem>> {
+    return this.getPage<TraktHiddenItem>(`/users/hidden/${section}`, page, limit)
   }
 
   async getSettings(): Promise<TraktSettingsResponse> {

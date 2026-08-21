@@ -31,6 +31,11 @@ export const libraryShowSchema = z.object({
    * yet — both render the same way (no rating shown). Backs the gallery's
    * rating filter/sort — see ShowsPage.tsx. */
   voteAverage: z.number().nullable(),
+  /** Whether the current user has marked this show as "dropped" — partially
+   * watched, no longer intending to finish (mirrors Trakt's own "Dropped"
+   * feature). Hidden from the gallery by default — see ShowsPage.tsx's
+   * dropped filter. */
+  dropped: z.boolean(),
   /** Distinct episodes watched, season 0 (specials) excluded. */
   watchedEpisodes: z.number().int(),
   /** SUM of cached season episode counts, season 0 excluded. `null` means
@@ -84,6 +89,12 @@ export const showDetailSchema = z.object({
    * no external id on record (shouldn't happen with TMDB as the only
    * provider today, but not guaranteed by the schema). */
   tmdbId: z.string().nullable(),
+  /** See libraryShowSchema's `dropped` for what this means. */
+  dropped: z.boolean(),
+  /** When the show was dropped — from Trakt's `hidden_at` if imported, or
+   * the moment of the manual toggle otherwise. Null when `dropped` is
+   * false. */
+  droppedAt: z.string().datetime().nullable(),
   watchedEpisodes: z.number().int(),
   totalEpisodes: z.number().int().nullable(),
   /** When the current user watched their first/most recent episode of this
@@ -102,6 +113,20 @@ export const showDetailSchema = z.object({
   seasons: z.array(showSeasonSchema),
 })
 export type ShowDetail = z.infer<typeof showDetailSchema>
+
+/**
+ * Response shape for the manual drop/undrop toggle
+ * (POST/DELETE /library/shows/{slug}/dropped — see ShowDetailPage.tsx).
+ * Deliberately just the two changed fields, not the full showDetailSchema —
+ * the frontend patches these into its already-cached ShowDetail rather than
+ * refetching, so the route doesn't need to rebuild the whole detail
+ * response (seasons, watched counts, etc.) just to toggle a boolean.
+ */
+export const droppedStatusSchema = z.object({
+  dropped: z.boolean(),
+  droppedAt: z.string().datetime().nullable(),
+})
+export type DroppedStatus = z.infer<typeof droppedStatusSchema>
 
 export const libraryMovieSchema = z.object({
   id: z.string().uuid(),

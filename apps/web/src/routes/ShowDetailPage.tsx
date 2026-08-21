@@ -1,10 +1,12 @@
 import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useParams } from 'react-router'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import type { ShowDetail } from '@rwnd/shared'
 import { api, ApiError } from '../lib/api-client.js'
 import { PosterGrid } from '../components/library/PosterGrid.js'
 import { ProgressBar } from '../components/library/ProgressBar.js'
+import { Button } from '../components/ui/Button.js'
 import { Spinner } from '../components/ui/Spinner.js'
 
 /** TMDB's own CDN-hosted logo asset — same "short" mark already used for
@@ -29,6 +31,7 @@ function watchedPeriodRange(firstWatchedAt: string, lastWatchedAt: string): stri
 export function ShowDetailPage() {
   const { t } = useTranslation()
   const { slug } = useParams<{ slug: string }>()
+  const queryClient = useQueryClient()
 
   const {
     data: show,
@@ -38,6 +41,27 @@ export function ShowDetailPage() {
     queryKey: ['show', slug],
     queryFn: () => api.library.show(slug!),
     enabled: Boolean(slug),
+  })
+
+  // Toggles between the two endpoints based on current cache state rather
+  // than needing a separate "drop"/"undrop" mutation pair — mutate() takes
+  // no arguments either way, and the button's own label already reflects
+  // which action is next.
+  const toggleDropped = useMutation({
+    mutationFn: () => (show?.dropped ? api.library.undropShow(slug!) : api.library.dropShow(slug!)),
+    onSuccess: (status) => {
+      // Patches the two changed fields into the already-cached ShowDetail
+      // rather than refetching — the endpoint already returns them, so a
+      // second round trip would be redundant (see droppedStatusSchema's
+      // doc comment in packages/shared/src/schemas/library.ts).
+      queryClient.setQueryData(['show', slug], (prev: ShowDetail | undefined) =>
+        prev ? { ...prev, ...status } : prev,
+      )
+      // The gallery's own cached list needs the same update, but isn't
+      // held here — invalidate rather than patch, same reasoning as
+      // invalidateWatchData in lib/query-client.ts.
+      void queryClient.invalidateQueries({ queryKey: ['library'] })
+    },
   })
 
   if (isLoading) return <Spinner label={t('common.loading')} />
@@ -83,6 +107,7 @@ export function ShowDetailPage() {
                 show.year,
                 show.genres.length > 0 ? show.genres.join(', ') : null,
                 show.status,
+                show.dropped ? t('showDetail.droppedFact') : null,
                 show.voteAverage !== null ? (
                   <span className="inline-flex items-center gap-1.5">
                     {show.tmdbId ? (
@@ -132,6 +157,17 @@ export function ShowDetailPage() {
               {t('shows.progressUnknown', { count: show.watchedEpisodes })}
             </p>
           )}
+
+          <div>
+            <Button
+              variant="secondary"
+              type="button"
+              disabled={toggleDropped.isPending}
+              onClick={() => toggleDropped.mutate()}
+            >
+              {t(show.dropped ? 'showDetail.undrop' : 'showDetail.drop')}
+            </Button>
+          </div>
 
           {show.firstWatchedAt && show.lastWatchedAt ? (
             <p className="text-xs text-[var(--color-fg-muted)]">

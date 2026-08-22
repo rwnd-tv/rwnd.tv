@@ -54,7 +54,33 @@ describe('plays', () => {
           }
           if (url.pathname === `/3/tv/${BREAKING_BAD_SHOW_TMDB_ID}/season/1/episode/1`) {
             return new Response(
-              JSON.stringify({ name: 'Pilot', season_number: 1, episode_number: 1, runtime: 58 }),
+              JSON.stringify({
+                name: 'Pilot',
+                season_number: 1,
+                episode_number: 1,
+                runtime: 58,
+                air_date: '2008-01-20',
+              }),
+              { status: 200 },
+            )
+          }
+          // No air_date at all — unaired, same as an episode TMDB hasn't
+          // scheduled yet.
+          if (url.pathname === `/3/tv/${BREAKING_BAD_SHOW_TMDB_ID}/season/1/episode/2`) {
+            return new Response(
+              JSON.stringify({ name: "Cat's in the Bag...", season_number: 1, episode_number: 2 }),
+              { status: 200 },
+            )
+          }
+          // A future air_date — announced but not yet aired.
+          if (url.pathname === `/3/tv/${BREAKING_BAD_SHOW_TMDB_ID}/season/1/episode/3`) {
+            return new Response(
+              JSON.stringify({
+                name: "...And the Bag's in the River",
+                season_number: 1,
+                episode_number: 3,
+                air_date: '2099-01-01',
+              }),
               { status: 200 },
             )
           }
@@ -114,6 +140,59 @@ describe('plays', () => {
       const list = await app.request('/api/v1/plays', { headers: { cookie } })
       const { plays: history } = await json<ListPlaysResponse>(list)
       expect(history[0]?.media).toMatchObject({ showSlug: 'breaking-bad-2008' })
+    })
+
+    it('rejects a watchedAt in the future', async () => {
+      const cookie = await createUserAndCookie()
+
+      const res = await app.request('/api/v1/plays', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', cookie },
+        body: JSON.stringify({
+          movie: { source: 'tmdb', externalId: '603' },
+          watchedAt: '2099-01-01T00:00:00.000Z',
+        }),
+      })
+      expect(res.status).toBe(400)
+
+      const list = await app.request('/api/v1/plays', { headers: { cookie } })
+      expect((await json<ListPlaysResponse>(list)).plays).toHaveLength(0)
+    })
+
+    it('rejects logging a watch for an episode with no known air date', async () => {
+      const cookie = await createUserAndCookie()
+
+      const res = await app.request('/api/v1/plays', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', cookie },
+        body: JSON.stringify({
+          episode: {
+            source: 'tmdb',
+            showExternalId: String(BREAKING_BAD_SHOW_TMDB_ID),
+            seasonNumber: 1,
+            episodeNumber: 2,
+          },
+        }),
+      })
+      expect(res.status).toBe(400)
+    })
+
+    it('rejects logging a watch for an episode that has not aired yet', async () => {
+      const cookie = await createUserAndCookie()
+
+      const res = await app.request('/api/v1/plays', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', cookie },
+        body: JSON.stringify({
+          episode: {
+            source: 'tmdb',
+            showExternalId: String(BREAKING_BAD_SHOW_TMDB_ID),
+            seasonNumber: 1,
+            episodeNumber: 3,
+          },
+        }),
+      })
+      expect(res.status).toBe(400)
     })
 
     it("does not let a different user delete someone else's play", async () => {

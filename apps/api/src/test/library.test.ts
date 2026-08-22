@@ -1168,6 +1168,18 @@ describe('library', () => {
       })
       expect(res.status).toBe(404)
     })
+
+    it('rejects a watchedAt in the future', async () => {
+      const cookie = await createUserAndCookie()
+      const show = await insertShowWithSeasons()
+
+      const res = await app.request(`/api/v1/library/shows/${show.slug}/watched`, {
+        method: 'POST',
+        headers: { cookie, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ watchedAt: '2099-01-01T00:00:00.000Z' }),
+      })
+      expect(res.status).toBe(400)
+    })
   })
 
   describe('DELETE /library/shows/{slug}/watched', () => {
@@ -1455,6 +1467,18 @@ describe('library', () => {
         body: JSON.stringify({ watchedAt: '2026-01-01T00:00:00.000Z' }),
       })
       expect(res.status).toBe(404)
+    })
+
+    it('rejects a watchedAt in the future', async () => {
+      const cookie = await createUserAndCookie()
+      const show = await insertShowWithSeason0And1()
+
+      const res = await app.request(`/api/v1/library/shows/${show.slug}/seasons/1/watched`, {
+        method: 'POST',
+        headers: { cookie, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ watchedAt: '2099-01-01T00:00:00.000Z' }),
+      })
+      expect(res.status).toBe(400)
     })
   })
 

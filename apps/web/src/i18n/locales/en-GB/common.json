@@ -112,6 +112,7 @@
     "droppedFact": "Dropped",
     "watchedButton": "Watched",
     "watchedButtonDisabled": "This show has no TMDB match, so episodes can't be resolved",
+    "episodeNotAiredYet": "This episode hasn't aired yet",
     "removeAllWatchesTitle": "Are you sure you want to remove all watches?",
     "removeAllWatchesConfirm": "Remove all watches",
     "drop": "Drop",

@@ -176,9 +176,19 @@ function EpisodeCard({
 
   const episodeLabel = t('import.progress.episode', { number: episode.episodeNumber })
   const toggleLabel = t(episode.watched ? 'showDetail.markUnwatched' : 'showDetail.markWatched')
+  // An unaired episode (no known firstAired, or one still in the future)
+  // can't have been watched yet — same rule the bulk "Watched" button's
+  // logMissingWatches enforces server-side (apps/api/src/routes/library.ts),
+  // now enforced here too so the toggle never opens a dialog whose only
+  // possible outcome is the POST /plays 400 this would otherwise hit.
+  const notAiredYet = episode.firstAired === null || new Date(episode.firstAired) > new Date()
   // Can only mark watched when the show has a TMDB id on record (POST
-  // /plays needs it) — unwatching never needs it, so only guarded here.
-  const toggleDisabled = unwatch.isPending || markWatched.isPending || (!episode.watched && !tmdbId)
+  // /plays needs it) and the episode has actually aired — unwatching needs
+  // neither, so only guarded here.
+  const toggleDisabled =
+    unwatch.isPending || markWatched.isPending || (!episode.watched && (!tmdbId || notAiredYet))
+  const toggleTitle =
+    !episode.watched && notAiredYet ? t('showDetail.episodeNotAiredYet') : toggleLabel
 
   return (
     <li className="flex flex-col gap-2">
@@ -207,8 +217,8 @@ function EpisodeCard({
         <button
           type="button"
           aria-pressed={episode.watched}
-          aria-label={toggleLabel}
-          title={toggleLabel}
+          aria-label={toggleTitle}
+          title={toggleTitle}
           disabled={toggleDisabled}
           onClick={() => (episode.watched ? setUnwatchConfirmOpen(true) : setDialogOpen(true))}
           className={`absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full border transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${

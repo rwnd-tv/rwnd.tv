@@ -256,6 +256,7 @@ export async function resolveEpisode(
   showTitle: string
   seasonNumber: number
   episodeNumber: number
+  firstAired: string | null
 }> {
   const show = await resolveShow(db, provider, showExternalId, locale)
 
@@ -281,6 +282,7 @@ export async function resolveEpisode(
       showTitle: show.title,
       seasonNumber: existing.seasonNumber,
       episodeNumber: existing.episodeNumber,
+      firstAired: existing.firstAired,
     }
   }
 
@@ -318,5 +320,6 @@ export async function resolveEpisode(
     showTitle: show.title,
     seasonNumber: episode.seasonNumber,
     episodeNumber: episode.episodeNumber,
+    firstAired: episode.firstAired,
   }
 }

@@ -675,6 +675,7 @@ libraryRoutes.openapi(
         description: 'Watches logged',
         content: { 'application/json': { schema: markShowWatchedResponseSchema } },
       },
+      400: { description: 'watchedAt is in the future' },
       404: { description: 'Show not found' },
     },
   }),
@@ -684,6 +685,13 @@ libraryRoutes.openapi(
     const user = c.get('user')!
     const db = c.get('db')
     const provider = c.get('metadataProvider')
+
+    // Same backstop as POST /plays — a client-picked "Other date" is
+    // already clamped to "now" (WatchDateDialog.tsx), but nothing here
+    // trusts that a client did its job.
+    if (body.watchedAt && new Date(body.watchedAt).getTime() > Date.now()) {
+      return c.json({ error: 'watchedAt cannot be in the future' }, 400)
+    }
 
     const [show] = await db.select().from(shows).where(eq(shows.slug, slug)).limit(1)
     if (!show) return c.json({ error: 'Show not found' }, 404)
@@ -921,6 +929,7 @@ libraryRoutes.openapi(
         description: 'Watches logged',
         content: { 'application/json': { schema: markShowWatchedResponseSchema } },
       },
+      400: { description: 'watchedAt is in the future' },
       404: { description: 'Show not found' },
     },
   }),
@@ -930,6 +939,13 @@ libraryRoutes.openapi(
     const user = c.get('user')!
     const db = c.get('db')
     const provider = c.get('metadataProvider')
+
+    // Same backstop as POST /plays — a client-picked "Other date" is
+    // already clamped to "now" (WatchDateDialog.tsx), but nothing here
+    // trusts that a client did its job.
+    if (body.watchedAt && new Date(body.watchedAt).getTime() > Date.now()) {
+      return c.json({ error: 'watchedAt cannot be in the future' }, 400)
+    }
 
     const [show] = await db.select().from(shows).where(eq(shows.slug, slug)).limit(1)
     if (!show) return c.json({ error: 'Show not found' }, 404)

@@ -112,6 +112,7 @@
     "droppedFact": "Abandonnée",
     "watchedButton": "Vu",
     "watchedButtonDisabled": "Cette série n'a pas de correspondance TMDB, les épisodes ne peuvent pas être résolus",
+    "episodeNotAiredYet": "Cet épisode n'est pas encore diffusé",
     "removeAllWatchesTitle": "Voulez-vous vraiment supprimer tous les visionnages ?",
     "removeAllWatchesConfirm": "Supprimer tous les visionnages",
     "drop": "Abandonner",

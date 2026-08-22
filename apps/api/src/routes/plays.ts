@@ -83,6 +83,7 @@ playRoutes.openapi(
     request: { body: { content: { 'application/json': { schema: createPlayRequestSchema } } } },
     responses: {
       201: { description: 'Play logged', content: { 'application/json': { schema: playSchema } } },
+      400: { description: 'watchedAt is in the future, or the episode has not aired yet' },
     },
   }),
   async (c) => {
@@ -91,6 +92,15 @@ playRoutes.openapi(
     const provider = c.get('metadataProvider')
     const user = c.get('user')!
     const watchedAt = body.watchedAt ? new Date(body.watchedAt) : new Date()
+
+    // Never guess a watch into the future — the client already clamps its
+    // own date pickers to "now" (WatchDateDialog.tsx), but this is the
+    // real backstop: nothing here trusts that a client did its job. The
+    // 1900-01-01 "unknown date" sentinel (UNKNOWN_WATCHED_AT) is always
+    // safely in the past, so it's unaffected.
+    if (watchedAt.getTime() > Date.now()) {
+      return c.json({ error: 'watchedAt cannot be in the future' }, 400)
+    }
 
     if (body.movie) {
       const movie = await resolveMovie(db, provider, body.movie.externalId, user.locale)
@@ -120,6 +130,15 @@ playRoutes.openapi(
       ep.episodeNumber,
       user.locale,
     )
+
+    // Same "no unaired episode" rule as the bulk "Watched" button's
+    // logMissingWatches (apps/api/src/routes/library.ts) — an episode with
+    // no known or future firstAired can't have been watched yet, no matter
+    // what watchedAt is requested.
+    if (episode.firstAired === null || new Date(episode.firstAired) > new Date()) {
+      return c.json({ error: 'This episode has not aired yet' }, 400)
+    }
+
     const [play] = await db
       .insert(plays)
       .values({ userId: user.id, episodeId: episode.id, watchedAt, source: 'manual' })

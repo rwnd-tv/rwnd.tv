@@ -38,11 +38,6 @@ Format:
 
 ## Settings page
 
-- [ ] **Horizontal rule under each panel's title** (2026-08-21 23:00 added)\
-      Every panel on `SettingsPage.tsx` (Profile, API tokens, Database,
-      Instance settings) — add a horizontal line under the `<h2>` title,
-      before the panel's body content.
-
 - [ ] **Backups section above Clear database** (2026-08-21 23:00 added)\
       In `DatabasePanel.tsx`, reorder so the Backups section renders
       before the Clear database checkboxes/button, not after.

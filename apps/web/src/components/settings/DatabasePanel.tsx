@@ -111,7 +111,8 @@ export function DatabasePanel() {
 
   return (
     <Card>
-      <h2 className="mb-1 text-lg font-semibold">{t('settings.database.title')}</h2>
+      <h2 className="text-lg font-semibold">{t('settings.database.title')}</h2>
+      <div className="mt-1 mb-4 border-t border-[var(--color-border)]" />
       <p className="mb-4 text-sm text-[var(--color-fg-muted)]">
         {t('settings.database.description')}
       </p>

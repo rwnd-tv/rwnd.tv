@@ -28,7 +28,8 @@ export function ProfileForm() {
 
   return (
     <Card>
-      <h2 className="mb-4 text-lg font-semibold">{t('settings.profile.title')}</h2>
+      <h2 className="text-lg font-semibold">{t('settings.profile.title')}</h2>
+      <div className="mt-1 mb-4 border-t border-[var(--color-border)]" />
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <Field
           label={t('settings.profile.displayName')}

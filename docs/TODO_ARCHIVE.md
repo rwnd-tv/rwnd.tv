@@ -628,3 +628,16 @@ currently-dropped shows, since a row can have both
       (including the "Dropped TV shows (99)" count) all render the new
       copy in en-GB; switching the account's language to fr-FR and back
       confirmed French renders unchanged throughout.
+
+## Settings page
+
+- [x] **Horizontal rule under each panel's title** (2026-08-21 23:00 added)\
+      Every panel on `SettingsPage.tsx` (Profile, API tokens, Database,
+      Instance settings) — add a horizontal line under the `<h2>` title,
+      before the panel's body content. Done (2026-08-22): a
+      `border-t border-[var(--color-border)]` div under each panel's
+      `<h2>` in `ProfileForm.tsx`/`TokensPanel.tsx`/`DatabasePanel.tsx`/
+      `InstanceSettingsPanel.tsx` — a div rather than a literal `<hr>`, to
+      match the border-div pattern `DatabasePanel.tsx`'s own Backups
+      section already used for its internal separator. Verified live on
+      `dev.rwnd.tv`: all four panels render the rule under their title.

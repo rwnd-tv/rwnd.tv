@@ -767,6 +767,39 @@ describe('library', () => {
       expect(await json<MarkShowWatchedResponse>(res)).toEqual({ count: 1 })
     })
 
+    it('skips unaired episodes (unknown or future release date) even with a manual watchedAt', async () => {
+      const cookie = await createUserAndCookie()
+      const show = await insertShowWithSeasons()
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (input: string | URL) => {
+          const url = new URL(input)
+          if (url.pathname === '/3/tv/50001/season/1') {
+            return jsonResponse({
+              episodes: [
+                { name: 'Ep 1', season_number: 1, episode_number: 1, air_date: '2020-01-01' },
+                { name: 'Ep 2', season_number: 1, episode_number: 2, air_date: '2099-01-01' }, // future
+              ],
+            })
+          }
+          if (url.pathname === '/3/tv/50001/season/2') {
+            return jsonResponse({
+              episodes: [{ name: 'Ep 1', season_number: 2, episode_number: 1 }], // unaired — no air_date
+            })
+          }
+          throw new Error(`Unexpected TMDB fetch in test: ${url}`)
+        }),
+      )
+
+      const res = await app.request(`/api/v1/library/shows/${show.slug}/watched`, {
+        method: 'POST',
+        headers: { cookie, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ watchedAt: '2026-06-01T00:00:00.000Z' }),
+      })
+      // Only season 1 episode 1 has actually aired.
+      expect(await json<MarkShowWatchedResponse>(res)).toEqual({ count: 1 })
+    })
+
     it('404s for a show that does not exist', async () => {
       const cookie = await createUserAndCookie()
       const res = await app.request('/api/v1/library/shows/no-such-show/watched', {
@@ -1041,6 +1074,34 @@ describe('library', () => {
       const byEpisode = new Map(playRows.map((r) => [r.episodeNumber, r.watchedAt.toISOString()]))
       expect(byEpisode.get(1)).toBe('2020-01-01T00:00:00.000Z')
       expect(byEpisode.get(2)).toBe('2020-01-08T00:00:00.000Z')
+    })
+
+    it('skips unaired episodes (unknown or future release date) even with a manual watchedAt', async () => {
+      const cookie = await createUserAndCookie()
+      const show = await insertShowWithSeason0And1()
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (input: string | URL) => {
+          const url = new URL(input)
+          if (url.pathname === '/3/tv/60001/season/1') {
+            return jsonResponse({
+              episodes: [
+                { name: 'Ep 1', season_number: 1, episode_number: 1, air_date: '2020-01-01' },
+                { name: 'Ep 2', season_number: 1, episode_number: 2, air_date: '2099-01-01' }, // future
+              ],
+            })
+          }
+          throw new Error(`Unexpected TMDB fetch in test: ${url}`)
+        }),
+      )
+
+      const res = await app.request(`/api/v1/library/shows/${show.slug}/seasons/1/watched`, {
+        method: 'POST',
+        headers: { cookie, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ watchedAt: '2026-06-01T00:00:00.000Z' }),
+      })
+      // Only episode 1 has actually aired.
+      expect(await json<MarkShowWatchedResponse>(res)).toEqual({ count: 1 })
     })
 
     it('404s for a show that does not exist', async () => {

@@ -334,10 +334,19 @@ export function SeasonDetailPage() {
       : t('import.progress.season', { number: season.seasonNumber }))
   const posterPath = season.posterPath ?? show?.posterPath ?? null
   const watchedEpisodes = season.episodes.filter((episode) => episode.watched).length
-  // Purple/primary once every episode of this season has been watched —
-  // same "Watched" button behaviour as ShowDetailPage.tsx, just scoped to
-  // one season (specials included, unlike the show-level button).
-  const fullyWatched = season.episodes.length > 0 && watchedEpisodes === season.episodes.length
+  // Purple/primary once every *aired* episode of this season has been
+  // watched — same "Watched" button behaviour as ShowDetailPage.tsx, just
+  // scoped to one season (specials included, unlike the show-level
+  // button). Compared against aired episodes only, not season.episodes
+  // .length, so a currently-airing season can't be "fully watched" while
+  // it still has unaired episodes left. The progress bar below is
+  // deliberately untouched — it still shows progress against the whole
+  // season, aired or not.
+  const airedEpisodes = season.episodes.filter(
+    (episode) => episode.firstAired !== null && new Date(episode.firstAired) <= new Date(),
+  )
+  const watchedAiredEpisodes = airedEpisodes.filter((episode) => episode.watched).length
+  const fullyWatched = airedEpisodes.length > 0 && watchedAiredEpisodes === airedEpisodes.length
 
   // show.seasons is already ordered by seasonNumber ascending (see
   // apps/api/src/routes/library.ts) — adjacent array entries are exactly

@@ -38,6 +38,20 @@ function tmdbShowResponse(overrides: {
   })
 }
 
+// Only hit for an airing show's current season — see refreshOneShow's doc
+// comment in apps/api/src/metadata/refresh.ts.
+function tmdbSeasonResponse(episodes: Array<{ episode_number: number; air_date?: string }>) {
+  return JSON.stringify({
+    overview: 'A season overview.',
+    episodes: episodes.map((e) => ({
+      name: `Episode ${e.episode_number}`,
+      season_number: 1,
+      episode_number: e.episode_number,
+      air_date: e.air_date,
+    })),
+  })
+}
+
 async function insertShow(opts: {
   tmdbId?: number
   status?: string | null
@@ -51,6 +65,11 @@ async function insertShow(opts: {
    * "should NOT be refetched" caveat as `genres` above, for the
    * never-had-a-rating-fetched backfill clause. */
   voteAverage?: number | null
+  /** Defaults to null (same as a real season row before its first
+   * aired-count computation) whenever `withSeasons` is set — same "should
+   * NOT be refetched" caveat as `genres`/`voteAverage` above, for the
+   * never-had-an-aired-count-computed backfill clause. */
+  airedEpisodeCount?: number | null
 }) {
   const [show] = await db
     .insert(shows)
@@ -75,7 +94,12 @@ async function insertShow(opts: {
     })
   }
   if (opts.withSeasons) {
-    await db.insert(seasons).values({ showId: show.id, seasonNumber: 1, episodeCount: 5 })
+    await db.insert(seasons).values({
+      showId: show.id,
+      seasonNumber: 1,
+      episodeCount: 5,
+      airedEpisodeCount: opts.airedEpisodeCount ?? null,
+    })
   }
   return show
 }
@@ -125,6 +149,7 @@ describe('metadata refresh', () => {
       withSeasons: true,
       genres: ['Drama'],
       voteAverage: 8.1,
+      airedEpisodeCount: 5,
     })
     const fetchMock = vi.fn()
     vi.stubGlobal('fetch', fetchMock)
@@ -178,18 +203,29 @@ describe('metadata refresh', () => {
     })
     vi.stubGlobal(
       'fetch',
-      vi.fn(
-        async () =>
-          new Response(
-            // A new episode aired since the last check — same season, bigger count.
-            tmdbShowResponse({
-              id: 3,
-              status: 'Returning Series',
-              seasons: [{ season_number: 1, episode_count: 9 }],
-            }),
+      vi.fn(async (input: string | URL) => {
+        const url = new URL(input)
+        if (url.pathname === '/3/tv/3/season/1') {
+          // 2 aired, 1 not yet — this show is still airing.
+          return new Response(
+            tmdbSeasonResponse([
+              { episode_number: 1, air_date: '2020-01-01' },
+              { episode_number: 2, air_date: '2020-01-08' },
+              { episode_number: 3, air_date: '2099-01-01' },
+            ]),
             { status: 200 },
-          ),
-      ),
+          )
+        }
+        // A new episode aired since the last check — same season, bigger count.
+        return new Response(
+          tmdbShowResponse({
+            id: 3,
+            status: 'Returning Series',
+            seasons: [{ season_number: 1, episode_count: 9 }],
+          }),
+          { status: 200 },
+        )
+      }),
     )
 
     const result = await runMetadataRefresh(db, provider)
@@ -198,6 +234,92 @@ describe('metadata refresh', () => {
     const showSeasons = await db.select().from(seasons).where(eq(seasons.showId, show.id))
     expect(showSeasons).toHaveLength(1) // upserted in place, not a second row
     expect(showSeasons[0]?.episodeCount).toBe(9)
+    // Only 2 of the season's (eventual) 9 episodes have actually aired.
+    expect(showSeasons[0]?.airedEpisodeCount).toBe(2)
+  })
+
+  it('sets airedEpisodeCount to the full episodeCount for a finished show, without an extra season fetch', async () => {
+    const show = await insertShow({
+      tmdbId: 7,
+      status: 'Ended',
+      metadataRefreshedAt: new Date(Date.now() - 200 * DAY_MS),
+      withSeasons: true,
+    })
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(
+          tmdbShowResponse({
+            id: 7,
+            status: 'Ended',
+            seasons: [{ season_number: 1, episode_count: 8 }],
+          }),
+          { status: 200 },
+        ),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await runMetadataRefresh(db, provider)
+    expect(result.showsRefreshed).toBe(1)
+
+    // Ended means every episode necessarily aired — no /season/1 call needed
+    // to figure that out.
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    const showSeasons = await db.select().from(seasons).where(eq(seasons.showId, show.id))
+    expect(showSeasons[0]?.airedEpisodeCount).toBe(8)
+  })
+
+  it('assumes a past season of an airing show already aired in full, without fetching it', async () => {
+    const show = await insertShow({
+      tmdbId: 8,
+      status: 'Returning Series',
+      metadataRefreshedAt: new Date(Date.now() - 10 * DAY_MS),
+      withSeasons: false,
+    })
+    // Pre-existing season 1, already fully aired from a past refresh.
+    await db.insert(seasons).values({
+      showId: show.id,
+      seasonNumber: 1,
+      episodeCount: 8,
+      airedEpisodeCount: 8,
+    })
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: string | URL) => {
+        const url = new URL(input)
+        if (url.pathname === '/3/tv/8/season/2') {
+          return new Response(
+            tmdbSeasonResponse([
+              { episode_number: 1, air_date: '2026-01-01' },
+              { episode_number: 2, air_date: '2099-01-01' },
+            ]),
+            { status: 200 },
+          )
+        }
+        if (url.pathname === '/3/tv/8/season/1') {
+          throw new Error('season 1 should not be refetched — it already aired in full')
+        }
+        return new Response(
+          tmdbShowResponse({
+            id: 8,
+            status: 'Returning Series',
+            seasons: [
+              { season_number: 1, episode_count: 8 },
+              { season_number: 2, episode_count: 10 },
+            ],
+          }),
+          { status: 200 },
+        )
+      }),
+    )
+
+    const result = await runMetadataRefresh(db, provider)
+    expect(result.showsRefreshed).toBe(1)
+
+    const showSeasons = await db.select().from(seasons).where(eq(seasons.showId, show.id))
+    const bySeason = new Map(showSeasons.map((s) => [s.seasonNumber, s]))
+    expect(bySeason.get(1)?.airedEpisodeCount).toBe(8)
+    expect(bySeason.get(2)?.airedEpisodeCount).toBe(1) // only the latest season got fetched
   })
 
   it('does not refetch an airing show that is not yet stale', async () => {
@@ -208,6 +330,7 @@ describe('metadata refresh', () => {
       withSeasons: true,
       genres: ['Drama'],
       voteAverage: 7.4,
+      airedEpisodeCount: 5,
     })
     const fetchMock = vi.fn()
     vi.stubGlobal('fetch', fetchMock)

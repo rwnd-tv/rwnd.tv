@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNull, lt, notExists, or, sql } from 'drizzle-orm'
+import { and, eq, exists, gt, inArray, isNull, lt, notExists, or, sql } from 'drizzle-orm'
 import type { Database } from '@rwnd/db'
 import { externalIds, instanceSettings, movies, seasons, shows } from '@rwnd/db'
 import type { MetadataProvider } from '../providers/types.js'
@@ -99,6 +99,24 @@ async function findStaleShows(db: Database): Promise<RefreshCandidate[]> {
         // TMDB genuinely has no votes for matches this forever and gets a
         // harmless extra refetch every sweep.
         isNull(shows.voteAverage),
+        // Never had an aired-episode count computed for at least one
+        // regular season — same "never populated" backfill reasoning as
+        // the genres/voteAverage clauses above. Needed as its own clause
+        // because resolveShow (apps/api/src/lib/media.ts) already creates
+        // `seasons` rows at show-creation time, so the no-seasons-yet
+        // clause above wouldn't catch a show that predates this column.
+        exists(
+          db
+            .select({ one: sql`1` })
+            .from(seasons)
+            .where(
+              and(
+                eq(seasons.showId, shows.id),
+                gt(seasons.seasonNumber, 0),
+                isNull(seasons.airedEpisodeCount),
+              ),
+            ),
+        ),
         // Still airing and due for a check-in. An inclusion list (rather
         // than e.g. `status NOT IN ('Ended','Canceled')`) is deliberate: a
         // NULL status would make a NOT-IN predicate evaluate to NULL (i.e.
@@ -150,6 +168,30 @@ async function refreshOneShow(
     .where(eq(shows.id, candidate.id))
 
   if (fetched.seasons.length > 0) {
+    const regularSeasons = fetched.seasons.filter((s) => s.seasonNumber > 0)
+    const latestSeasonNumber =
+      regularSeasons.length > 0 ? Math.max(...regularSeasons.map((s) => s.seasonNumber)) : null
+    const isAiring = fetched.status !== null && AIRING_STATUSES.includes(fetched.status)
+
+    // A past season, or any season once the show itself has finished, has
+    // necessarily aired in full — only the current season of a still-
+    // airing show might have unaired episodes left, so that's the one case
+    // worth an extra per-episode fetch for (see showDetailSchema's
+    // `airedEpisodes` doc comment for why this number exists at all).
+    let latestSeasonAiredCount: number | null = null
+    if (isAiring && latestSeasonNumber !== null && candidate.tmdbExternalId) {
+      const { episodes: latestEpisodes } = await provider.getSeason(
+        candidate.tmdbExternalId,
+        latestSeasonNumber,
+        locale,
+      )
+      const now = new Date()
+      latestSeasonAiredCount = latestEpisodes.filter(
+        (e) => e.firstAired !== null && new Date(e.firstAired) <= now,
+      ).length
+      await sleep(REQUEST_STAGGER_MS)
+    }
+
     await db
       .insert(seasons)
       .values(
@@ -158,6 +200,12 @@ async function refreshOneShow(
           seasonNumber: season.seasonNumber,
           name: season.name,
           episodeCount: season.episodeCount,
+          airedEpisodeCount:
+            season.seasonNumber === 0
+              ? null
+              : isAiring && season.seasonNumber === latestSeasonNumber
+                ? latestSeasonAiredCount
+                : season.episodeCount,
           airDate: season.airDate,
           posterPath: season.posterPath,
         })),
@@ -167,6 +215,7 @@ async function refreshOneShow(
         set: {
           name: sql`excluded.name`,
           episodeCount: sql`excluded.episode_count`,
+          airedEpisodeCount: sql`excluded.aired_episode_count`,
           airDate: sql`excluded.air_date`,
           posterPath: sql`excluded.poster_path`,
         },

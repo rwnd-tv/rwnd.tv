@@ -44,38 +44,6 @@ Format:
       scoping: what an episode page shows beyond what the season grid
       already does (overview, still image, watched toggle).
 
-- [ ] **"Watched" button must not log or count unaired episodes** (2026-08-22 13:00 added)\
-      Two related bugs in the "Watched" button on both
-      `ShowDetailPage.tsx` and `SeasonDetailPage.tsx`, for a currently-
-      airing show: 1. Clicking it can create plays for episodes that haven't aired
-      yet. `logMissingWatches` (`apps/api/src/lib/media.ts:30-64`),
-      used by both the show- and season-level "mark watched" routes
-      in `apps/api/src/routes/library.ts`, marks every episode
-      `resolveShowEpisodes`/`resolveSeasonEpisodes` return with no
-      `firstAired`-vs-now check at all — need to exclude any episode
-      whose `firstAired` is null or in the future, under all
-      circumstances (both the user-picked-date and
-      `useReleaseDate` modes). 2. The purple/"fully watched" button state compares watched
-      count against the _eventual_ episode total, not what's aired
-      so far, so it can never turn purple mid-season even once
-      every aired episode is watched. Show page:
-      `ShowDetailPage.tsx:145-148` compares `watchedEpisodes` to
-      `totalEpisodes`, which is `sum(season.episodeCount)` from
-      TMDB (`apps/api/src/routes/library.ts:317-320`) — the season's
-      full/planned count, not aired-so-far. Season page:
-      `SeasonDetailPage.tsx:340` compares against
-      `season.episodes.length`, which includes not-yet-aired
-      episodes too (that list already carries each episode's
-      `firstAired` per `library.ts:452-471`, so the season page fix
-      is likely a client-side filter). The show page has no
-      per-episode air dates to filter by today, so it likely needs
-      a new "aired episode count" aggregate from the show-detail
-      route rather than reusing `totalEpisodes` as-is. Note: this
-      is scoped to the _button_'s purple state only — whether the
-      progress bar should also switch to counting against
-      aired-so-far (vs. the eventual total it shows today) is a
-      separate open question, not decided here.
-
 ## Season pages
 
 - [ ] **Subheading with year, TMDB score, and TMDB link** (2026-08-22 12:00 added)\

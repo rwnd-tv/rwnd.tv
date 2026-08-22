@@ -50,6 +50,13 @@
       "when": 1787323294246,
       "tag": "0006_flimsy_master_chief",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1787428436989,
+      "tag": "0007_sloppy_living_mummy",
+      "breakpoints": true
     }
   ]
 }

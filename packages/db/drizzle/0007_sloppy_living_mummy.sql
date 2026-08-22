@@ -1,0 +1,1 @@
+ALTER TABLE "seasons" ADD COLUMN "aired_episode_count" integer;

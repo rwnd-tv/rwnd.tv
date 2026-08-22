@@ -97,6 +97,15 @@ export const showDetailSchema = z.object({
   droppedAt: z.string().datetime().nullable(),
   watchedEpisodes: z.number().int(),
   totalEpisodes: z.number().int().nullable(),
+  /** How many of `totalEpisodes` have actually aired so far, season 0
+   * excluded — distinct from `totalEpisodes` itself, which is the
+   * eventual/planned count and includes episodes of a still-airing season
+   * that haven't come out yet. Null until the metadata refresher has
+   * computed it for every regular season (see
+   * apps/api/src/metadata/refresh.ts); the "Watched" button only turns
+   * purple once `watchedEpisodes` reaches this, not `totalEpisodes` — see
+   * ShowDetailPage.tsx's `fullyWatched`. */
+  airedEpisodes: z.number().int().nullable(),
   /** When the current user watched their first/most recent episode of this
    * show — across every season, specials included. Both null if they
    * haven't watched anything of it *with a known date* — a play dated

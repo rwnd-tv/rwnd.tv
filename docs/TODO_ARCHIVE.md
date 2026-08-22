@@ -703,3 +703,33 @@ currently-dropped shows, since a row can have both
       after the reflow, since the button row's `shrink-0` group sits
       opposite a `w-fit` link with no explicit wrap handling — confirmed
       no overflow.
+
+- [x] **"Watched" button must not log or count unaired episodes** (2026-08-22 13:00 added)\
+      Two related bugs in the "Watched" button on both
+      `ShowDetailPage.tsx` and `SeasonDetailPage.tsx`, for a currently-
+      airing show. Done (2026-08-22): 1. `logMissingWatches`
+      (`apps/api/src/routes/library.ts`) now excludes any episode with
+      no or future `firstAired` before logging plays, in both the
+      user-picked-date and `useReleaseDate` modes, for both the show-
+      and season-level "mark watched" routes. 2. The purple/"fully
+      watched" button state now compares watched count against what's
+      actually aired, not the eventual total. Season page
+      (`SeasonDetailPage.tsx`): a client-side filter over the episode
+      list's existing `firstAired` field, since that page already
+      fetches live per-episode air dates. Show page
+      (`ShowDetailPage.tsx`): needed real data first, since the cached
+      `seasons.episodeCount` is TMDB's eventual/planned total with no
+      per-episode air dates behind it — added a new `airedEpisodeCount`
+      column on `seasons`, computed by the metadata refresher
+      (`apps/api/src/metadata/refresh.ts`): a past season, or any
+      season once the show itself has finished, is assumed fully aired
+      (no extra fetch); only a still-airing show's _current_ season
+      gets one extra `getSeason()` call per refresh to count real
+      aired episodes. Surfaced as a new `airedEpisodes` aggregate on
+      `showDetailSchema`, deliberately separate from `totalEpisodes` —
+      the progress bar still shows the eventual total, only the
+      button's purple state changed, per the original note that these
+      were separate questions. Backfilled via a new "never had an
+      aired-count computed" refresher clause (same pattern as the
+      existing genres/voteAverage backfill clauses), so existing shows
+      pick it up on their next pass rather than staying null forever.

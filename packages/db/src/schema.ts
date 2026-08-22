@@ -223,6 +223,12 @@ export const seasons = pgTable(
     seasonNumber: integer('season_number').notNull(),
     name: text('name'),
     episodeCount: integer('episode_count').notNull(),
+    // How many of this season's episodes had actually aired as of the last
+    // metadata refresh — null until the refresher computes it (see
+    // apps/api/src/metadata/refresh.ts). Distinct from episodeCount, which
+    // is TMDB's eventual/planned total and includes unaired episodes for a
+    // still-airing season.
+    airedEpisodeCount: integer('aired_episode_count'),
     airDate: date('air_date'),
     posterPath: text('poster_path'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

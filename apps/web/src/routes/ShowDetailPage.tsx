@@ -137,15 +137,18 @@ export function ShowDetailPage() {
   }
   if (!show) return null
 
-  // Purple/primary once every non-special episode has been watched — both
-  // counts already exclude specials (see showDetailSchema's doc comment in
-  // packages/shared/src/schemas/library.ts). `totalEpisodes` is null for a
-  // show with no cached season data yet and 0 for one with only specials;
-  // neither should read as "fully watched".
+  // Purple/primary once every *aired* non-special episode has been watched
+  // — both counts already exclude specials (see showDetailSchema's doc
+  // comment in packages/shared/src/schemas/library.ts). Compared against
+  // `airedEpisodes`, not `totalEpisodes` (the eventual/planned total), so a
+  // currently-airing show can't be "fully watched" while it still has
+  // unaired episodes left. `airedEpisodes` is null until the metadata
+  // refresher has computed it and 0 for a show with only specials; neither
+  // should read as "fully watched".
   const fullyWatched =
-    show.totalEpisodes !== null &&
-    show.totalEpisodes > 0 &&
-    show.watchedEpisodes === show.totalEpisodes
+    show.airedEpisodes !== null &&
+    show.airedEpisodes > 0 &&
+    show.watchedEpisodes === show.airedEpisodes
 
   return (
     <div className="flex flex-col gap-8">

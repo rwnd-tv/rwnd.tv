@@ -21,11 +21,12 @@ import { resolveSeasonEpisodes, resolveShowEpisodes, type ResolvedEpisode } from
 /**
  * Shared by the show- and season-level "Watched" button routes below.
  * `resolvedEpisodes` is every episode in scope (already resolved to local
- * rows) — this filters out ones the user has already watched and logs a
- * new play only for what's missing, either all at the same `watchedAt` or
- * (when `useReleaseDate` is set) each at its own episode's release date,
- * skipping any episode whose release date isn't known rather than
- * guessing. Returns how many plays were actually logged.
+ * rows) — this filters out ones the user has already watched, and ones
+ * that haven't aired yet (unknown or future `firstAired` — never guess a
+ * watch for an episode that isn't out), then logs a new play for what's
+ * left, either all at the same `watchedAt` or (when `useReleaseDate` is
+ * set) each at its own episode's release date. Returns how many plays
+ * were actually logged.
  */
 async function logMissingWatches(
   db: Database,
@@ -41,23 +42,19 @@ async function logMissingWatches(
     .from(plays)
     .where(and(eq(plays.userId, userId), inArray(plays.episodeId, episodeIds)))
   const alreadyWatched = new Set(alreadyWatchedRows.map((row) => row.episodeId))
-  const missing = resolvedEpisodes.filter((e) => !alreadyWatched.has(e.id))
 
-  const values = body.useReleaseDate
-    ? missing
-        .filter((e): e is ResolvedEpisode & { firstAired: string } => e.firstAired !== null)
-        .map((e) => ({
-          userId,
-          episodeId: e.id,
-          watchedAt: new Date(e.firstAired),
-          source: 'manual' as const,
-        }))
-    : missing.map((e) => ({
-        userId,
-        episodeId: e.id,
-        watchedAt: new Date(body.watchedAt!),
-        source: 'manual' as const,
-      }))
+  const now = new Date()
+  const missing = resolvedEpisodes.filter(
+    (e): e is ResolvedEpisode & { firstAired: string } =>
+      !alreadyWatched.has(e.id) && e.firstAired !== null && new Date(e.firstAired) <= now,
+  )
+
+  const values = missing.map((e) => ({
+    userId,
+    episodeId: e.id,
+    watchedAt: body.useReleaseDate ? new Date(e.firstAired) : new Date(body.watchedAt!),
+    source: 'manual' as const,
+  }))
 
   if (values.length > 0) await db.insert(plays).values(values)
   return values.length
@@ -318,6 +315,16 @@ libraryRoutes.openapi(
       regularSeasons.length > 0
         ? regularSeasons.reduce((sum, season) => sum + season.episodeCount, 0)
         : null
+    // Null until every regular season has an aired-episode count cached —
+    // see showDetailSchema's doc comment on `airedEpisodes` and the
+    // metadata refresher (apps/api/src/metadata/refresh.ts), which is what
+    // actually computes it. Only summed once complete, same as
+    // totalEpisodes' own null-until-cached convention, so the button never
+    // reads "fully watched" off a partial count.
+    const airedEpisodes =
+      regularSeasons.length > 0 && regularSeasons.every((s) => s.airedEpisodeCount !== null)
+        ? regularSeasons.reduce((sum, season) => sum + (season.airedEpisodeCount ?? 0), 0)
+        : null
     const watchedEpisodes = [...watchedMap.entries()]
       .filter(([seasonNumber]) => seasonNumber > 0)
       .reduce((sum, [, count]) => sum + count, 0)
@@ -337,6 +344,7 @@ libraryRoutes.openapi(
       droppedAt: dropped && droppedAt ? droppedAt.toISOString() : null,
       watchedEpisodes,
       totalEpisodes,
+      airedEpisodes,
       firstWatchedAt: watchedRange?.firstWatchedAt
         ? new Date(watchedRange.firstWatchedAt).toISOString()
         : null,

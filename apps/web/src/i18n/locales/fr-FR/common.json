@@ -131,7 +131,7 @@
       "releaseDate": "Date de sortie ({{date}})",
       "releaseDatePerEpisode": "Date de sortie",
       "otherDate": "Autre date",
-      "unknown": "Inconnu",
+      "unknown": "Date inconnue",
       "otherDateDateLabel": "Date",
       "otherDateTimeLabel": "Heure",
       "otherDateTextLabel": "Date et heure",

@@ -155,11 +155,11 @@ export function DatabasePanel() {
               {t('settings.database.backup.empty')}
             </p>
           ) : (
-            <ul className="flex flex-col gap-2">
+            <ul className="@container flex flex-col gap-2">
               {backupsData?.backups.map((backup) => (
                 <li
                   key={backup.id}
-                  className="flex flex-col gap-3 rounded-md border border-[var(--color-border)] p-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4"
+                  className="flex flex-col gap-3 rounded-md border border-[var(--color-border)] p-3 @lg:flex-row @lg:items-center @lg:justify-between @lg:gap-4"
                 >
                   <div className="min-w-0">
                     <p className="truncate font-medium">{backup.description}</p>
@@ -175,7 +175,7 @@ export function DatabasePanel() {
                       </p>
                     )}
                   </div>
-                  <div className="flex flex-wrap gap-2 sm:shrink-0">
+                  <div className="flex flex-wrap gap-2 @lg:shrink-0">
                     <Button type="button" variant="secondary" onClick={() => setDiffTarget(backup)}>
                       {t('settings.database.backup.diff')}
                     </Button>

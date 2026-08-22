@@ -110,6 +110,8 @@
     "ratingSource": "TMDB rating",
     "viewOnTmdb": "View on TMDB",
     "droppedFact": "Dropped",
+    "watchedButton": "Watched",
+    "watchedButtonDisabled": "This show has no TMDB match, so episodes can't be resolved",
     "drop": "Drop",
     "undrop": "Undrop",
     "seasonNotFound": "This season couldn't be found.",

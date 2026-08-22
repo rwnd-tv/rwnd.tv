@@ -110,6 +110,8 @@
     "ratingSource": "Note TMDB",
     "viewOnTmdb": "Voir sur TMDB",
     "droppedFact": "Abandonnée",
+    "watchedButton": "Vu",
+    "watchedButtonDisabled": "Cette série n'a pas de correspondance TMDB, les épisodes ne peuvent pas être résolus",
     "drop": "Abandonner",
     "undrop": "Annuler l'abandon",
     "seasonNotFound": "Cette saison est introuvable.",

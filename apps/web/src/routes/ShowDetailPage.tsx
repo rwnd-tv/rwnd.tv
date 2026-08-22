@@ -1,13 +1,37 @@
-import type { ReactNode } from 'react'
+import { type ReactNode, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useParams } from 'react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { ShowDetail } from '@rwnd/shared'
 import { api, ApiError } from '../lib/api-client.js'
+import { invalidateWatchData } from '../lib/query-client.js'
+import { useAuth } from '../lib/auth-context.js'
 import { PosterGrid } from '../components/library/PosterGrid.js'
 import { ProgressBar } from '../components/library/ProgressBar.js'
+import { WatchDateDialog } from '../components/library/WatchDateDialog.js'
 import { Button } from '../components/ui/Button.js'
 import { Spinner } from '../components/ui/Spinner.js'
+
+/** Same tick used on episode tiles (SeasonDetailPage.tsx's CheckIcon) —
+ * duplicated rather than shared/exported, matching this codebase's existing
+ * precedent of one small icon component per file. */
+function CheckIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width={16}
+      height={16}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={3}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M5 13l4 4L19 7" />
+    </svg>
+  )
+}
 
 /** TMDB's own CDN-hosted logo asset — same "short" mark already used for
  * the required attribution footer in README.md, reused here rather than a
@@ -31,7 +55,10 @@ function watchedPeriodRange(firstWatchedAt: string, lastWatchedAt: string): stri
 export function ShowDetailPage() {
   const { t } = useTranslation()
   const { slug } = useParams<{ slug: string }>()
+  const { user } = useAuth()
+  const locale = user?.locale ?? 'en-GB'
   const queryClient = useQueryClient()
+  const [watchDialogOpen, setWatchDialogOpen] = useState(false)
 
   const {
     data: show,
@@ -61,6 +88,23 @@ export function ShowDetailPage() {
       // held here — invalidate rather than patch, same reasoning as
       // invalidateWatchData in lib/query-client.ts.
       void queryClient.invalidateQueries({ queryKey: ['library'] })
+    },
+  })
+
+  // Logs a new watch for every non-special episode of the show at once —
+  // the show-level equivalent of EpisodeCard's markWatched in
+  // SeasonDetailPage.tsx. Unlike toggleDropped above, there's no single
+  // changed field to patch into the cache: watched counts, per-season
+  // progress, and history all need a real refetch.
+  const markWatched = useMutation({
+    mutationFn: (watchedAt: string) => api.library.markShowWatched(slug!, watchedAt),
+    onSuccess: () => {
+      setWatchDialogOpen(false)
+      void invalidateWatchData(queryClient)
+      // Prefix match — invalidates this show's own detail query and any
+      // cached season pages under it (['show', slug, 'season', N]) in one
+      // call, since every one of them just went stale.
+      void queryClient.invalidateQueries({ queryKey: ['show', slug] })
     },
   })
 
@@ -158,7 +202,17 @@ export function ShowDetailPage() {
             </p>
           )}
 
-          <div>
+          <div className="flex gap-2">
+            <Button
+              variant="secondary"
+              type="button"
+              disabled={!show.tmdbId}
+              title={show.tmdbId ? undefined : t('showDetail.watchedButtonDisabled')}
+              onClick={() => setWatchDialogOpen(true)}
+            >
+              <CheckIcon />
+              {t('showDetail.watchedButton')}
+            </Button>
             <Button
               variant="secondary"
               type="button"
@@ -184,6 +238,15 @@ export function ShowDetailPage() {
           )}
         </div>
       </div>
+
+      <WatchDateDialog
+        open={watchDialogOpen}
+        episodeLabel={show.title}
+        episode={{ title: show.title, runtimeMinutes: null, firstAired: null }}
+        locale={locale}
+        onConfirm={(watchedAt) => markWatched.mutate(watchedAt)}
+        onCancel={() => setWatchDialogOpen(false)}
+      />
 
       {show.seasons.length > 0 && (
         <div className="flex flex-col gap-3">

@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm'
+import { and, eq, gt } from 'drizzle-orm'
 import type { Database } from '@rwnd/db'
 import { episodes, externalIds, movies, seasons, shows } from '@rwnd/db'
 import type { MetadataProvider } from '../providers/types.js'
@@ -144,6 +144,61 @@ export async function resolveShow(
   }
 
   return { id: show.id, title: show.title, slug: show.slug }
+}
+
+/**
+ * Resolves every non-special (season > 0) episode of a show to a local
+ * episode id, fetching each season's full episode list from the provider
+ * in one call — the same "one provider call per season, not per episode"
+ * shape as apps/api/src/import/match.ts's matchEpisode, rather than N
+ * individual resolveEpisode() fetches. Used by the "mark whole show
+ * watched" action (apps/api/src/routes/library.ts), where every episode
+ * needs a local row regardless of whether it's ever been individually
+ * logged before.
+ */
+export async function resolveShowEpisodes(
+  db: Database,
+  provider: MetadataProvider,
+  showExternalId: string,
+  locale: string,
+): Promise<string[]> {
+  const show = await resolveShow(db, provider, showExternalId, locale)
+
+  const seasonRows = await db
+    .select({ seasonNumber: seasons.seasonNumber })
+    .from(seasons)
+    .where(and(eq(seasons.showId, show.id), gt(seasons.seasonNumber, 0)))
+
+  const perSeason = await Promise.all(
+    seasonRows.map(async ({ seasonNumber }) => {
+      const { episodes: seasonEpisodes } = await provider.getSeason(
+        showExternalId,
+        seasonNumber,
+        locale,
+      )
+      if (seasonEpisodes.length > 0) {
+        await db
+          .insert(episodes)
+          .values(
+            seasonEpisodes.map((e) => ({
+              showId: show.id,
+              seasonNumber: e.seasonNumber,
+              episodeNumber: e.episodeNumber,
+              title: e.title,
+              runtimeMinutes: e.runtimeMinutes,
+              firstAired: e.firstAired,
+            })),
+          )
+          .onConflictDoNothing()
+      }
+      return db
+        .select({ id: episodes.id })
+        .from(episodes)
+        .where(and(eq(episodes.showId, show.id), eq(episodes.seasonNumber, seasonNumber)))
+    }),
+  )
+
+  return perSeason.flat().map((row) => row.id)
 }
 
 export async function resolveEpisode(

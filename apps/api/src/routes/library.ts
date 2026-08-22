@@ -6,12 +6,15 @@ import {
   episodeWatchesSchema,
   listLibraryMoviesResponseSchema,
   listLibraryShowsResponseSchema,
+  markShowWatchedRequestSchema,
+  markShowWatchedResponseSchema,
   seasonDetailSchema,
   showDetailSchema,
 } from '@rwnd/shared'
 import { droppedShows, episodes, externalIds, movies, plays, seasons, shows } from '@rwnd/db'
 import type { AppEnv } from '../types.js'
 import { requireAuth } from '../middleware/auth.js'
+import { resolveShowEpisodes } from '../lib/media.js'
 
 export const libraryRoutes = new OpenAPIHono<AppEnv>()
 
@@ -681,6 +684,82 @@ libraryRoutes.openapi(
     const dropped = row.manualDropped ?? row.traktDropped ?? false
     const droppedAt = row.manualDropped != null ? row.manualDroppedAt : row.traktDroppedAt
     return c.json({ dropped, droppedAt: dropped && droppedAt ? droppedAt.toISOString() : null })
+  },
+)
+
+/**
+ * The show page's "Watched" button (apps/web/src/routes/ShowDetailPage.tsx)
+ * — the show-level equivalent of marking one episode watched from the
+ * season grid. Logs one new play at `watchedAt` for every non-special
+ * episode, unconditionally (not just previously-unwatched ones), so it
+ * doubles as "log a full rewatch" for a show already fully watched.
+ * Episodes not yet resolved locally are created from the provider first —
+ * see resolveShowEpisodes's doc comment (apps/api/src/lib/media.ts) for why
+ * that's one call per season rather than per episode.
+ */
+libraryRoutes.openapi(
+  createRoute({
+    method: 'post',
+    path: '/library/shows/{slug}/watched',
+    summary: 'Log a new watch for every non-special episode of a show',
+    middleware: [requireAuth] as const,
+    request: {
+      params: z.object({ slug: z.string() }),
+      body: { content: { 'application/json': { schema: markShowWatchedRequestSchema } } },
+    },
+    responses: {
+      201: {
+        description: 'Watches logged',
+        content: { 'application/json': { schema: markShowWatchedResponseSchema } },
+      },
+      404: { description: 'Show not found' },
+    },
+  }),
+  async (c) => {
+    const { slug } = c.req.valid('param')
+    const { watchedAt } = c.req.valid('json')
+    const user = c.get('user')!
+    const db = c.get('db')
+    const provider = c.get('metadataProvider')
+
+    const [show] = await db.select().from(shows).where(eq(shows.slug, slug)).limit(1)
+    if (!show) return c.json({ error: 'Show not found' }, 404)
+
+    // Same reasoning as the season detail route above: without a tmdb id
+    // there's no provider to resolve episodes from.
+    const [tmdbExternalId] = await db
+      .select({ externalId: externalIds.externalId })
+      .from(externalIds)
+      .where(
+        and(
+          eq(externalIds.entityType, 'show'),
+          eq(externalIds.entityId, show.id),
+          eq(externalIds.source, 'tmdb'),
+        ),
+      )
+      .limit(1)
+    if (!tmdbExternalId) return c.json({ error: 'Show not found' }, 404)
+
+    const episodeIds = await resolveShowEpisodes(
+      db,
+      provider,
+      tmdbExternalId.externalId,
+      user.locale,
+    )
+
+    if (episodeIds.length > 0) {
+      const watchedAtDate = new Date(watchedAt)
+      await db.insert(plays).values(
+        episodeIds.map((episodeId) => ({
+          userId: user.id,
+          episodeId,
+          watchedAt: watchedAtDate,
+          source: 'manual' as const,
+        })),
+      )
+    }
+
+    return c.json({ count: episodeIds.length }, 201)
   },
 )
 

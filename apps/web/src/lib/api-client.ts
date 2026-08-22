@@ -20,6 +20,7 @@ import {
   type ListLibraryShowsResponse,
   type ListPlaysResponse,
   type LoginRequest,
+  type MarkShowWatchedResponse,
   type Play,
   type RegisterRequest,
   type RestoreBackupResponse,
@@ -112,6 +113,10 @@ export const api = {
       post<DroppedStatus>(`/library/shows/${encodeURIComponent(slug)}/dropped`),
     undropShow: (slug: string) =>
       del<DroppedStatus>(`/library/shows/${encodeURIComponent(slug)}/dropped`),
+    markShowWatched: (slug: string, watchedAt: string) =>
+      post<MarkShowWatchedResponse>(`/library/shows/${encodeURIComponent(slug)}/watched`, {
+        watchedAt,
+      }),
     season: (slug: string, seasonNumber: number) =>
       get<SeasonDetail>(`/library/shows/${encodeURIComponent(slug)}/seasons/${seasonNumber}`),
     unwatchEpisode: (slug: string, seasonNumber: number, episodeNumber: number) =>

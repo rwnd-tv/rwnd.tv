@@ -197,6 +197,23 @@ export const droppedStatusSchema = z.object({
 })
 export type DroppedStatus = z.infer<typeof droppedStatusSchema>
 
+/**
+ * Backs the show page's "Watched" button (POST /library/shows/{slug}/watched
+ * — see ShowDetailPage.tsx), the show-level equivalent of marking one
+ * episode watched from the season grid. Logs one new play at `watchedAt`
+ * for every non-special episode of the show, unconditionally — not just
+ * the ones not yet watched, so it also works as "log a full rewatch".
+ */
+export const markShowWatchedRequestSchema = z.object({
+  watchedAt: z.string().datetime(),
+})
+export type MarkShowWatchedRequest = z.infer<typeof markShowWatchedRequestSchema>
+
+export const markShowWatchedResponseSchema = z.object({
+  count: z.number().int(),
+})
+export type MarkShowWatchedResponse = z.infer<typeof markShowWatchedResponseSchema>
+
 export const libraryMovieSchema = z.object({
   id: z.string().uuid(),
   title: z.string(),

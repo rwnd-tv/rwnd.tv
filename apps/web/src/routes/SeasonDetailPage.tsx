@@ -33,6 +33,27 @@ function CheckIcon() {
   )
 }
 
+/** Icon for the icon-only "log an additional watch" button below —
+ * duplicated rather than shared, matching this file's existing per-file
+ * icon precedent (see CheckIcon above). */
+function PlusIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width={16}
+      height={16}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={3}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M12 5v14M5 12h14" />
+    </svg>
+  )
+}
+
 function ChevronLeftIcon() {
   return (
     <svg
@@ -78,10 +99,12 @@ const TMDB_LOGO_URL =
 /**
  * One episode tile in the season grid (apps/web/src/routes/SeasonDetailPage.tsx),
  * styled after Plex's own season view — a still image with a checkmark
- * toggle overlaid top-right. Its own component (not inlined in the parent's
- * .map) so it owns its own `useMutation`, the same "one card, one mutation"
- * shape SearchResultCard.tsx already uses — each tile gets independent
- * pending state instead of one mutation shared/racing across the grid.
+ * toggle overlaid top-right, plus (once the episode already has a watch
+ * logged) a hover-revealed "log an additional watch" button to its left.
+ * Its own component (not inlined in the parent's .map) so it owns its own
+ * `useMutation`, the same "one card, one mutation" shape SearchResultCard.tsx
+ * already uses — each tile gets independent pending state instead of one
+ * mutation shared/racing across the grid.
  */
 function EpisodeCard({
   episode,
@@ -99,6 +122,7 @@ function EpisodeCard({
   const locale = user?.locale ?? 'en-GB'
   const queryClient = useQueryClient()
   const [dialogOpen, setDialogOpen] = useState(false)
+  const [logAdditionalWatchOpen, setLogAdditionalWatchOpen] = useState(false)
   const [unwatchConfirmOpen, setUnwatchConfirmOpen] = useState(false)
 
   // Fetched only while the confirmation dialog is actually open — most
@@ -193,7 +217,7 @@ function EpisodeCard({
   return (
     <li className="flex flex-col gap-2">
       <div
-        className="relative aspect-video w-full overflow-hidden rounded-lg bg-[var(--color-surface)]"
+        className="group relative aspect-video w-full overflow-hidden rounded-lg bg-[var(--color-surface)]"
         title={episode.overview ?? undefined}
       >
         {episode.stillPath ? (
@@ -213,6 +237,18 @@ function EpisodeCard({
           >
             {episode.episodeNumber}
           </div>
+        )}
+        {episode.watched && (
+          <button
+            type="button"
+            disabled={unwatch.isPending || markWatched.isPending || !tmdbId}
+            title={t('showDetail.logAdditionalWatch')}
+            aria-label={t('showDetail.logAdditionalWatch')}
+            onClick={() => setLogAdditionalWatchOpen(true)}
+            className="absolute right-11 top-2 flex h-7 w-7 items-center justify-center rounded-full border border-white/70 bg-black/40 text-white/90 opacity-0 transition-opacity hover:bg-black/60 focus-visible:opacity-100 disabled:cursor-not-allowed disabled:opacity-60 group-hover:opacity-100"
+          >
+            <PlusIcon />
+          </button>
         )}
         <button
           type="button"
@@ -264,6 +300,22 @@ function EpisodeCard({
         onCancel={() => setDialogOpen(false)}
       />
 
+      <WatchDateDialog
+        open={logAdditionalWatchOpen}
+        episodeLabel={episodeLabel}
+        episode={{
+          title: episode.title,
+          runtimeMinutes: episode.runtimeMinutes,
+          firstAired: episode.firstAired,
+        }}
+        locale={locale}
+        onConfirm={(watchedAt) => {
+          markWatched.mutate(watchedAt)
+          setLogAdditionalWatchOpen(false)
+        }}
+        onCancel={() => setLogAdditionalWatchOpen(false)}
+      />
+
       <UnwatchConfirmDialog
         open={unwatchConfirmOpen}
         watchedCountHint={episode.watchedCount}
@@ -289,6 +341,7 @@ export function SeasonDetailPage() {
   const seasonNumber = Number(seasonNumberParam)
   const seasonNumberValid = Number.isInteger(seasonNumber)
   const [watchDialogOpen, setWatchDialogOpen] = useState(false)
+  const [logAdditionalWatchOpen, setLogAdditionalWatchOpen] = useState(false)
   const [removeWatchesConfirmOpen, setRemoveWatchesConfirmOpen] = useState(false)
 
   // Same queryKey ShowDetailPage.tsx/PageTitleEffect.tsx use — shared React
@@ -316,11 +369,17 @@ export function SeasonDetailPage() {
   // once it's showing every episode watched, removes them all). Neither
   // patches a single cached field the way EpisodeCard's per-episode
   // mutations above do: a whole season/show refetch is needed either way.
+  // Shared with the "log an additional watch" button below the same way
+  // ShowDetailPage.tsx's markWatched is — see that mutation's doc comment.
   const markSeasonWatched = useMutation({
-    mutationFn: (watchedAtIso: string) =>
-      api.library.markSeasonWatched(slug!, seasonNumber, markWatchedRequestBody(watchedAtIso)),
+    mutationFn: ({ watchedAtIso, additional }: { watchedAtIso: string; additional?: true }) =>
+      api.library.markSeasonWatched(slug!, seasonNumber, {
+        ...markWatchedRequestBody(watchedAtIso),
+        ...(additional ? { additional } : {}),
+      }),
     onSuccess: () => {
       setWatchDialogOpen(false)
+      setLogAdditionalWatchOpen(false)
       void invalidateWatchData(queryClient)
       void queryClient.invalidateQueries({ queryKey: ['show', slug] })
     },
@@ -491,7 +550,7 @@ export function SeasonDetailPage() {
             </p>
           </div>
 
-          <div>
+          <div className="flex gap-2">
             <Button
               variant={fullyWatched ? 'primary' : 'secondary'}
               type="button"
@@ -506,6 +565,19 @@ export function SeasonDetailPage() {
               <CheckIcon />
               {t('showDetail.watchedButton')}
             </Button>
+            {watchedEpisodes > 0 && (
+              <Button
+                variant="secondary"
+                type="button"
+                className="px-2.5 py-2.5"
+                disabled={markSeasonWatched.isPending || !show?.tmdbId}
+                title={t('showDetail.logAdditionalWatch')}
+                aria-label={t('showDetail.logAdditionalWatch')}
+                onClick={() => setLogAdditionalWatchOpen(true)}
+              >
+                <PlusIcon />
+              </Button>
+            )}
           </div>
         </div>
       </div>
@@ -517,8 +589,21 @@ export function SeasonDetailPage() {
         locale={locale}
         allowNowWatching={false}
         allowReleaseDate
-        onConfirm={(watchedAt) => markSeasonWatched.mutate(watchedAt)}
+        onConfirm={(watchedAt) => markSeasonWatched.mutate({ watchedAtIso: watchedAt })}
         onCancel={() => setWatchDialogOpen(false)}
+      />
+
+      <WatchDateDialog
+        open={logAdditionalWatchOpen}
+        episodeLabel={seasonName}
+        episode={{ title: seasonName, runtimeMinutes: null, firstAired: null }}
+        locale={locale}
+        allowNowWatching={false}
+        allowReleaseDate
+        onConfirm={(watchedAt) =>
+          markSeasonWatched.mutate({ watchedAtIso: watchedAt, additional: true })
+        }
+        onCancel={() => setLogAdditionalWatchOpen(false)}
       />
 
       <Dialog

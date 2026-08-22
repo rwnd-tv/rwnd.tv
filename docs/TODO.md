@@ -59,24 +59,6 @@ Format:
       season/episode fetch already carries (`firstAired`) — the first
       airing after "now" with no logged watch.
 
-## General
-
-- [ ] **A way to log an additional watch without going through History** (2026-08-21 23:00 added, detailed 2026-08-22 12:15)\
-      Right now logging a rewatch of something already fully watched
-      means going to the History page. James wants a more direct
-      mechanism. Decided UX: a square, icon-only (plus icon, no text)
-      secondary button to the right of the existing "Watched" button
-      on both `ShowDetailPage.tsx` and `SeasonDetailPage.tsx`. Only
-      rendered once some watches already exist on that page (i.e.
-      `firstWatchedAt` present — same condition the watched-period
-      text below the buttons already checks). Unlike "Watched" (which
-      marks all episodes watched for the _first_ time and is
-      disabled/hidden once nothing's left to mark), this button always
-      logs an _additional_ watch for every episode in scope (the whole
-      show, or just the season on the season page) regardless of
-      current watched state. Clicking it opens `WatchDateDialog` to
-      pick a date, same flow as the initial "Watched" click.
-
 ## Spoiler protection
 
 - [ ] **Blur/hide spoiler content for unwatched episodes** (2026-08-22 10:45 added)\

@@ -35,6 +35,25 @@ function CheckIcon() {
   )
 }
 
+/** Icon for the icon-only "log an additional watch" button below. */
+function PlusIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width={16}
+      height={16}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={3}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M12 5v14M5 12h14" />
+    </svg>
+  )
+}
+
 /** TMDB's own CDN-hosted logo asset — same "short" mark already used for
  * the required attribution footer in README.md, reused here rather than a
  * bare "★" so the rating is attributed to its source the way a Trakt-style
@@ -61,6 +80,7 @@ export function ShowDetailPage() {
   const locale = user?.locale ?? 'en-GB'
   const queryClient = useQueryClient()
   const [watchDialogOpen, setWatchDialogOpen] = useState(false)
+  const [logAdditionalWatchOpen, setLogAdditionalWatchOpen] = useState(false)
   const [removeWatchesConfirmOpen, setRemoveWatchesConfirmOpen] = useState(false)
 
   const {
@@ -98,12 +118,20 @@ export function ShowDetailPage() {
   // the show-level equivalent of EpisodeCard's markWatched in
   // SeasonDetailPage.tsx. Unlike toggleDropped above, there's no single
   // changed field to patch into the cache: watched counts, per-season
-  // progress, and history all need a real refetch.
+  // progress, and history all need a real refetch. Shared by both the
+  // "Watched" button (fills in only what's missing) and the "log an
+  // additional watch" button below (`additional: true` — every episode
+  // gets a new play regardless of current watched state, see
+  // logMissingWatches's doc comment in apps/api/src/routes/library.ts).
   const markWatched = useMutation({
-    mutationFn: (watchedAtIso: string) =>
-      api.library.markShowWatched(slug!, markWatchedRequestBody(watchedAtIso)),
+    mutationFn: ({ watchedAtIso, additional }: { watchedAtIso: string; additional?: true }) =>
+      api.library.markShowWatched(slug!, {
+        ...markWatchedRequestBody(watchedAtIso),
+        ...(additional ? { additional } : {}),
+      }),
     onSuccess: () => {
       setWatchDialogOpen(false)
+      setLogAdditionalWatchOpen(false)
       void invalidateWatchData(queryClient)
       // Prefix match — invalidates this show's own detail query and any
       // cached season pages under it (['show', slug, 'season', N]) in one
@@ -246,6 +274,19 @@ export function ShowDetailPage() {
               <CheckIcon />
               {t('showDetail.watchedButton')}
             </Button>
+            {show.firstWatchedAt && (
+              <Button
+                variant="secondary"
+                type="button"
+                className="px-2.5 py-2.5"
+                disabled={markWatched.isPending || !show.tmdbId}
+                title={t('showDetail.logAdditionalWatch')}
+                aria-label={t('showDetail.logAdditionalWatch')}
+                onClick={() => setLogAdditionalWatchOpen(true)}
+              >
+                <PlusIcon />
+              </Button>
+            )}
             <Button
               variant="secondary"
               type="button"
@@ -279,8 +320,19 @@ export function ShowDetailPage() {
         locale={locale}
         allowNowWatching={false}
         allowReleaseDate
-        onConfirm={(watchedAt) => markWatched.mutate(watchedAt)}
+        onConfirm={(watchedAt) => markWatched.mutate({ watchedAtIso: watchedAt })}
         onCancel={() => setWatchDialogOpen(false)}
+      />
+
+      <WatchDateDialog
+        open={logAdditionalWatchOpen}
+        episodeLabel={show.title}
+        episode={{ title: show.title, runtimeMinutes: null, firstAired: null }}
+        locale={locale}
+        allowNowWatching={false}
+        allowReleaseDate
+        onConfirm={(watchedAt) => markWatched.mutate({ watchedAtIso: watchedAt, additional: true })}
+        onCancel={() => setLogAdditionalWatchOpen(false)}
       />
 
       <Dialog

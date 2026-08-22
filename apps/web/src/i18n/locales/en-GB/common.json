@@ -113,6 +113,7 @@
     "watchedButton": "Watched",
     "watchedButtonDisabled": "This show has no TMDB match, so episodes can't be resolved",
     "episodeNotAiredYet": "This episode hasn't aired yet",
+    "logAdditionalWatch": "Log an additional watch",
     "removeAllWatchesTitle": "Are you sure you want to remove all watches?",
     "removeAllWatchesConfirm": "Remove all watches",
     "drop": "Drop",

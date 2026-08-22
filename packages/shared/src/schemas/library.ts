@@ -254,6 +254,14 @@ export const markShowWatchedRequestSchema = z
   .object({
     watchedAt: z.string().datetime().optional(),
     useReleaseDate: z.literal(true).optional(),
+    /** Log a new watch for every episode in scope regardless of its
+     * current watched state, rather than only filling in what's missing
+     * — backs the "log an additional watch" button
+     * (ShowDetailPage.tsx/SeasonDetailPage.tsx), shown once some watches
+     * already exist so a rewatch can be logged without going through
+     * History. Orthogonal to watchedAt/useReleaseDate — still exactly
+     * one of those two for what date to use. */
+    additional: z.literal(true).optional(),
   })
   .refine((v) => Boolean(v.watchedAt) !== Boolean(v.useReleaseDate), {
     message: 'Provide exactly one of watchedAt or useReleaseDate',

@@ -821,3 +821,35 @@ currently-dropped shows, since a row can have both
       constant and `history.unknownDate` ("Unknown date") copy — same
       convention `HistoryPage.tsx` already uses for grouping these —
       rather than inventing new wording.
+
+## General
+
+- [x] **A way to log an additional watch without going through History** (2026-08-21 23:00 added, detailed 2026-08-22 12:15)\
+      Right now logging a rewatch of something already fully watched
+      means going to the History page. Done (2026-08-22): a square,
+      icon-only (plus icon) secondary button next to the existing
+      "Watched" button on both `ShowDetailPage.tsx` and
+      `SeasonDetailPage.tsx`, shown only once some watches already
+      exist (`show.firstWatchedAt`/`watchedEpisodes > 0`
+      respectively). Unlike "Watched", clicking it always logs a new
+      watch for every episode in scope regardless of current watched
+      state — opens the same `WatchDateDialog` used for the initial
+      "Watched" click. Backed by a new `additional: true` flag on
+      `markShowWatchedRequestSchema`: `logMissingWatches`
+      (`apps/api/src/routes/library.ts`) skips its "already watched"
+      filter when set, but still excludes unaired episodes exactly as
+      before. Verified live end-to-end (logged an additional watch for
+      a whole season including previously-unwatched aired episodes,
+      confirmed unaired ones stayed untouched, then reverted).\
+      Follow-up (James, same day): also wanted the same thing
+      per-episode — a hover-revealed plus button to the left of the
+      watched-toggle badge on each episode tile in the season grid,
+      opening the same per-episode watch-date dialog. Done: no backend
+      change needed here, since `POST /plays` (already used for the
+      first-watch flow) has no "already watched" dedup to begin with —
+      it was just a matter of exposing a second entry point to the
+      same `markWatched` mutation already in `EpisodeCard`. Verified
+      live: hovering an already-watched tile reveals the button
+      (confirmed via computed styles and a zoomed screenshot), logging
+      a watch through it incremented that one episode's count without
+      touching its existing watch, then reverted.

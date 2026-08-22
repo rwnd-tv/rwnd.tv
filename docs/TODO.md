@@ -94,9 +94,9 @@ Format:
 - [ ] **Episode tile watched badge should show watch count** (2026-08-22 12:30 added)\
       The round watched-toggle badge on each episode tile
       (`SeasonDetailPage.tsx:201-215`, top-right of the thumbnail)
-      always shows `CheckIcon` when watched. When `episode.watchedCount
-    > 1`, show the count (e.g. "3") instead of the tick — same
-      threshold already used for the "watched Nx" text line below the
+      always shows `CheckIcon` when watched. When `episode.watchedCount > 1`,
+      show the count (e.g. "3") instead of the tick — same threshold
+      already used for the "watched Nx" text line below the
       title (`SeasonDetailPage.tsx:222-226`), just surfaced on the
       badge itself too.
 

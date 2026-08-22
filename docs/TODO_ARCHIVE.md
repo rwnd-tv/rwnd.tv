@@ -768,3 +768,14 @@ currently-dropped shows, since a row can have both
       entirely from the API field this app reads, so the numbers
       shown on TMDB's site were never going to match rwnd.tv's either
       way.
+
+- [x] **Episode tile watched badge should show watch count** (2026-08-22 12:30 added)\
+      The round watched-toggle badge on each episode tile
+      (`SeasonDetailPage.tsx`, top-right of the thumbnail) always
+      showed `CheckIcon` when watched. Done (2026-08-22): when
+      `episode.watchedCount > 1`, the badge now shows the count (e.g.
+      "3") instead of the tick — same threshold already used for the
+      "watched Nx" text line below the title. Verified live on
+      `dev.rwnd.tv`: episode 24 of _A Certain Scientific Railgun S_
+      (watched 3 times) shows a "3" badge, every other watched episode
+      on that season still shows the tick.

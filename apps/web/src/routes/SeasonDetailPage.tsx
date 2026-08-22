@@ -217,7 +217,13 @@ function EpisodeCard({
               : 'border-white/70 bg-black/40 text-white/90 hover:bg-black/60'
           }`}
         >
-          <CheckIcon />
+          {episode.watchedCount > 1 ? (
+            <span className="text-xs font-semibold" aria-hidden="true">
+              {episode.watchedCount}
+            </span>
+          ) : (
+            <CheckIcon />
+          )}
         </button>
       </div>
       <div>

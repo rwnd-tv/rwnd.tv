@@ -257,7 +257,9 @@
         "restore": "Restore",
         "delete": "Delete",
         "confirmRestoreTitle": "Are you sure you want to restore this backup?",
-        "confirmRestoreBody": "This replaces your current watch history, ratings, watchlists, and dropped TV shows with \"{{description}}\" ({{date}}). This can't be undone."
+        "confirmRestoreBody": "This replaces your current watch history, ratings, watchlists, and dropped TV shows with \"{{description}}\" ({{date}}). This can't be undone.",
+        "confirmDeleteTitle": "Are you sure you want to delete this backup?",
+        "confirmDeleteBody": "This permanently deletes \"{{description}}\" ({{date}}). This can't be undone."
       }
     },
     "instance": {

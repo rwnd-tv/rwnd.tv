@@ -36,14 +36,6 @@ Format:
       leading-article rules are a bigger job than this feature needed; left
       as a known simplification.
 
-## Settings page
-
-- [ ] **Confirmation dialog on Delete backup** (2026-08-21 23:00 added)\
-      Delete currently fires immediately (matches `TokensPanel.tsx`'s
-      Revoke button precedent) — James wants a confirm dialog before it
-      actually deletes the file, same shape as Restore's existing
-      confirmation.
-
 ## TV Show pages
 
 - [ ] **Previous/next season navigation on the season page** (2026-08-21 23:00 added)\

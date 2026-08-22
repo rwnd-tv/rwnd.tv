@@ -257,7 +257,9 @@
         "restore": "Restaurer",
         "delete": "Supprimer",
         "confirmRestoreTitle": "Voulez-vous vraiment restaurer cette sauvegarde ?",
-        "confirmRestoreBody": "Cela remplace votre historique de visionnage, vos notes, vos listes à voir et vos séries abandonnées actuels par « {{description}} » ({{date}}). Cette action est irréversible."
+        "confirmRestoreBody": "Cela remplace votre historique de visionnage, vos notes, vos listes à voir et vos séries abandonnées actuels par « {{description}} » ({{date}}). Cette action est irréversible.",
+        "confirmDeleteTitle": "Voulez-vous vraiment supprimer cette sauvegarde ?",
+        "confirmDeleteBody": "Cela supprime définitivement « {{description}} » ({{date}}). Cette action est irréversible."
       }
     },
     "instance": {

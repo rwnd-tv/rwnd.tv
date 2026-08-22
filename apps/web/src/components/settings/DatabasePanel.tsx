@@ -36,6 +36,7 @@ export function DatabasePanel() {
   const [backupDescription, setBackupDescription] = useState('')
   const [createBackupOpen, setCreateBackupOpen] = useState(false)
   const [restoreTarget, setRestoreTarget] = useState<BackupSummary>()
+  const [deleteTarget, setDeleteTarget] = useState<BackupSummary>()
 
   // Row counts next to each checkbox — undefined (nothing shown yet)
   // until loaded. Covered by the mutation's full-cache invalidation
@@ -106,13 +107,16 @@ export function DatabasePanel() {
 
   const deleteBackup = useMutation({
     mutationFn: (id: string) => api.backups.delete(id),
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['backups'] }),
+    onSuccess: () => {
+      setDeleteTarget(undefined)
+      void queryClient.invalidateQueries({ queryKey: ['backups'] })
+    },
   })
 
   return (
     <Card>
       <h2 className="text-lg font-semibold">{t('settings.database.title')}</h2>
-      <div className="mt-1 mb-4 border-t border-[var(--color-border)]" />
+      <div className="mb-4 mt-1 border-t border-[var(--color-border)]" />
 
       {backupsConfigured && (
         <div>
@@ -164,12 +168,7 @@ export function DatabasePanel() {
                     >
                       {t('settings.database.backup.restore')}
                     </Button>
-                    <Button
-                      type="button"
-                      variant="danger"
-                      isLoading={deleteBackup.isPending && deleteBackup.variables === backup.id}
-                      onClick={() => deleteBackup.mutate(backup.id)}
-                    >
+                    <Button type="button" variant="danger" onClick={() => setDeleteTarget(backup)}>
                       {t('settings.database.backup.delete')}
                     </Button>
                   </div>
@@ -306,6 +305,42 @@ export function DatabasePanel() {
                 onClick={() => restoreBackup.mutate(restoreTarget.id)}
               >
                 {t('settings.database.backup.restore')}
+              </Button>
+            </div>
+          </>
+        )}
+      </Dialog>
+
+      <Dialog
+        open={Boolean(deleteTarget)}
+        onClose={() => setDeleteTarget(undefined)}
+        title={t('settings.database.backup.confirmDeleteTitle')}
+      >
+        {deleteTarget && (
+          <>
+            <p className="text-sm text-[var(--color-fg-muted)]">
+              {t('settings.database.backup.confirmDeleteBody', {
+                description: deleteTarget.description,
+                date: new Date(deleteTarget.createdAt).toLocaleString(i18n.language),
+              })}
+            </p>
+            {deleteBackup.isError && (
+              <p className="mt-2 text-sm text-[var(--color-danger)]">
+                {t('common.somethingWentWrong')}
+              </p>
+            )}
+
+            <div className="mt-6 flex justify-end gap-2">
+              <Button type="button" variant="secondary" onClick={() => setDeleteTarget(undefined)}>
+                {t('common.cancel')}
+              </Button>
+              <Button
+                type="button"
+                variant="danger"
+                isLoading={deleteBackup.isPending}
+                onClick={() => deleteBackup.mutate(deleteTarget.id)}
+              >
+                {t('settings.database.backup.delete')}
               </Button>
             </div>
           </>

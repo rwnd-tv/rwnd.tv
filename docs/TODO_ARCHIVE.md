@@ -658,3 +658,19 @@ currently-dropped shows, since a row can have both
       Backups (with its create button and existing backup list) now
       renders first, Clear database second with a clean separator between
       them.
+
+- [x] **Confirmation dialog on Delete backup** (2026-08-21 23:00 added)\
+      Delete currently fires immediately (matches `TokensPanel.tsx`'s
+      Revoke button precedent) — James wants a confirm dialog before it
+      actually deletes the file, same shape as Restore's existing
+      confirmation. Done (2026-08-22): a `deleteTarget` state mirrors
+      `restoreTarget`'s existing pattern exactly — the list row's Delete
+      button now opens a confirm `Dialog` instead of calling
+      `deleteBackup.mutate()` directly, with new `confirmDeleteTitle`/
+      `confirmDeleteBody` keys in both locales (fr-FR included, unlike
+      the terminology-pass item above — this is app behavior/copy
+      parity, not the English-specific "TV Show" wording question).
+      Verified live on `dev.rwnd.tv` with a real throwaway backup: Delete
+      opens the dialog without deleting, Cancel closes it leaving the
+      backup in the list untouched, and confirming actually deletes it
+      and refreshes the list.

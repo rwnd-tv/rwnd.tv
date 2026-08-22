@@ -46,14 +46,14 @@
     "title": "Dashboard"
   },
   "search": {
-    "placeholder": "Search for a movie or show…",
+    "placeholder": "Search for a movie or TV show…",
     "noResults": "No results yet — try searching for something.",
     "logWatch": "Log watch",
     "logged": "Logged!"
   },
   "shows": {
     "title": "TV Shows",
-    "filterLabel": "Filter shows",
+    "filterLabel": "Filter TV shows",
     "filterPlaceholder": "Filter by title…",
     "sortLabel": "Sort by",
     "sortLastWatchedDesc": "Watched (Newest First)",
@@ -70,9 +70,9 @@
     "progressUnknown_one": "{{count}} episode watched",
     "progressUnknown_other": "{{count}} episodes watched",
     "progressAria": "{{title}}: {{watched}} of {{total}} episodes watched",
-    "empty": "Nothing here yet. Shows appear once you've logged an episode.",
-    "noMatches": "No shows match \"{{query}}\".",
-    "noFilterMatches": "No shows match the selected filters.",
+    "empty": "Nothing here yet. TV Shows appear once you've logged an episode.",
+    "noMatches": "No TV shows match \"{{query}}\".",
+    "noFilterMatches": "No TV shows match the selected filters.",
     "filtersButton": "Filters…",
     "droppedBadge": "Dropped",
     "filtersPanel": {
@@ -101,7 +101,7 @@
     }
   },
   "showDetail": {
-    "notFound": "This show couldn't be found.",
+    "notFound": "This TV show couldn't be found.",
     "seasonsTitle": "Seasons",
     "specials": "Specials",
     "seasonProgressAria": "{{season}}: {{watched}} of {{total}} episodes watched",
@@ -180,7 +180,7 @@
       "history": "Watch history",
       "ratings": "Ratings",
       "watchlist": "Watchlist",
-      "dropped": "Dropped shows",
+      "dropped": "Dropped TV shows",
       "submit": "Start import",
       "alreadyRunning": "An import is already in progress."
     },
@@ -242,12 +242,12 @@
       "watchHistory": "Watch history",
       "ratings": "Ratings",
       "watchlists": "Watchlists",
-      "droppedShows": "Dropped shows",
+      "droppedShows": "Dropped TV shows",
       "clearButton": "Clear database",
       "confirmTitle": "Are you sure you want to clear the following from the database?",
       "backup": {
         "title": "Backups",
-        "description": "Save a copy of your watch history, ratings, watchlists, and dropped shows, so you can restore it later.",
+        "description": "Save a copy of your watch history, ratings, watchlists, and dropped TV shows, so you can restore it later.",
         "createButton": "Backup database",
         "descriptionLabel": "Description",
         "empty": "No backups yet.",
@@ -257,7 +257,7 @@
         "restore": "Restore",
         "delete": "Delete",
         "confirmRestoreTitle": "Are you sure you want to restore this backup?",
-        "confirmRestoreBody": "This replaces your current watch history, ratings, watchlists, and dropped shows with \"{{description}}\" ({{date}}). This can't be undone."
+        "confirmRestoreBody": "This replaces your current watch history, ratings, watchlists, and dropped TV shows with \"{{description}}\" ({{date}}). This can't be undone."
       }
     },
     "instance": {

@@ -65,13 +65,6 @@ Format:
       scoping: what an episode page shows beyond what the season grid
       already does (overview, still image, watched toggle).
 
-## Terminology
-
-- [ ] **"TV Show" vs "Show" consistency pass** (2026-08-21 23:00 added)\
-      Site-wide audit — James wants the full "TV Show" used consistently
-      rather than "Show" wherever it currently appears (nav label,
-      headings, filter panel copy, etc.), in both en-GB and fr-FR.
-
 ## Dashboard
 
 - [ ] **"On Deck" row** (2026-08-21 23:00 added)\

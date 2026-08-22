@@ -598,3 +598,33 @@ currently-dropped shows, since a row can have both
       type-mismatch error. Since this table still hadn't shipped past dev,
       the migration was regenerated in place again rather than layered,
       same as the fix above.
+
+## Terminology
+
+- [x] **"TV Show" vs "Show" consistency pass** (2026-08-21 23:00 added)\
+      Site-wide audit — James wants the full "TV Show" used consistently
+      rather than "Show" wherever it currently appears (nav label,
+      headings, filter panel copy, etc.), in both en-GB and fr-FR. Done
+      (2026-08-22): a full grep of `apps/web/src` for user-facing text
+      confirmed every string lives in the two locale JSONs
+      (`i18n/locales/en-GB` / `fr-FR`) — no hardcoded copy in components —
+      so the pass was scoped to those. The en-GB nav label and page
+      heading were already "TV Shows"; the inconsistency was in the rest
+      of the copy, still bare "show"/"shows": `shows.filterLabel`
+      (a screen-reader-only label via `Field`'s `hideLabel`, not visible
+      text, but still in scope), `shows.empty`/`noMatches`/
+      `noFilterMatches`, `showDetail.notFound`, `search.placeholder`, and
+      three "Dropped shows" strings in `import.start.dropped`/
+      `settings.database.droppedShows`/`.backup.description`/
+      `.backup.confirmRestoreBody` — 9 keys total, all now "TV show(s)".
+      fr-FR was deliberately left untouched (confirmed with James first):
+      it already uses "série(s)" consistently everywhere a show is
+      mentioned, and unlike English "show" (ambiguous with game
+      shows/talk shows/etc., hence needing the "TV" qualifier), "série" is
+      already unambiguously a TV series in French — inserting a literal
+      "TV" there would just read as redundant. Verified live on
+      `dev.rwnd.tv`: the dashboard search placeholder, a 404'd show page,
+      an empty-filter-results state, and the Settings > Database panel
+      (including the "Dropped TV shows (99)" count) all render the new
+      copy in en-GB; switching the account's language to fr-FR and back
+      confirmed French renders unchanged throughout.

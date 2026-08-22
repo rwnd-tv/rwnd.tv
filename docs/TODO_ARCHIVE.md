@@ -680,16 +680,26 @@ currently-dropped shows, since a row can have both
 - [x] **Previous/next season navigation on the season page** (2026-08-21 23:00 added)\
       `SeasonDetailPage.tsx` — add `<`/`>` buttons to jump to the
       previous/next season without going back through the show page.
-      Done (2026-08-22): chevron `Button`s (ghost variant) flank the
-      season `<h1>`, disabled at either end of `show.seasons` — already
-      ordered by `seasonNumber` ascending server-side (see
-      `apps/api/src/routes/library.ts`), specials (`0`) included, so
-      adjacent array entries are exactly the previous/next season with
-      no extra sorting needed. Navigates via `useNavigate()` rather than
-      a `Link`, since the target season number is only known once
-      `show.seasons` has loaded. Verified live on `dev.rwnd.tv` against
-      True Blood (Specials + 7 real seasons): clicking through updates
-      the poster/title/overview/episode grid correctly, `‹` is disabled
-      on Specials and `›` is disabled on Season 7, and a direct URL
-      landing on either boundary (not just navigating there from the
-      show page) renders the same disabled state.
+      Done (2026-08-22): chevron `Button`s, disabled at either end of
+      `show.seasons` — already ordered by `seasonNumber` ascending
+      server-side (see `apps/api/src/routes/library.ts`), specials (`0`)
+      included, so adjacent array entries are exactly the previous/next
+      season with no extra sorting needed. Navigates via `useNavigate()`
+      rather than a `Link`, since the target season number is only known
+      once `show.seasons` has loaded. Verified live on `dev.rwnd.tv`
+      against True Blood (Specials + 7 real seasons): clicking through
+      updates the poster/title/overview/episode grid correctly, `‹` is
+      disabled on Specials and `›` is disabled on Season 7, and a direct
+      URL landing on either boundary (not just navigating there from the
+      show page) renders the same disabled state.\
+      Follow-up (James, same day): moved from flanking the `<h1>` to the
+      top-right corner of the page (their own row, `justify-between`
+      against the "← {show}" back-link so both stay pinned to their
+      corners regardless of whether `show` has loaded yet), and switched
+      from the `ghost` Button variant to `secondary` for a visible
+      border/background — `ghost` read as too subtle for a persistent
+      nav control. Checked for horizontal overflow at a ~500px viewport
+      via `document.documentElement.scrollWidth` vs. `window.innerWidth`
+      after the reflow, since the button row's `shrink-0` group sits
+      opposite a `w-fit` link with no explicit wrap handling — confirmed
+      no overflow.

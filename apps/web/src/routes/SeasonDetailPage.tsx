@@ -317,6 +317,43 @@ export function SeasonDetailPage() {
 
   return (
     <div className="flex flex-col gap-8">
+      <div className="flex items-start justify-between gap-4">
+        {show ? (
+          <Link
+            to={`/shows/${show.slug}`}
+            className="w-fit text-sm text-[var(--color-fg-muted)] hover:underline"
+          >
+            ← {show.title}
+          </Link>
+        ) : (
+          <span />
+        )}
+        <div className="flex shrink-0 gap-2">
+          <Button
+            type="button"
+            variant="secondary"
+            className="px-2.5 py-2.5"
+            disabled={!previousSeason}
+            aria-label={t('showDetail.previousSeason')}
+            title={t('showDetail.previousSeason')}
+            onClick={() => navigate(`/shows/${show!.slug}/season/${previousSeason!.seasonNumber}`)}
+          >
+            <ChevronLeftIcon />
+          </Button>
+          <Button
+            type="button"
+            variant="secondary"
+            className="px-2.5 py-2.5"
+            disabled={!nextSeason}
+            aria-label={t('showDetail.nextSeason')}
+            title={t('showDetail.nextSeason')}
+            onClick={() => navigate(`/shows/${show!.slug}/season/${nextSeason!.seasonNumber}`)}
+          >
+            <ChevronRightIcon />
+          </Button>
+        </div>
+      </div>
+
       <div className="flex flex-col gap-6 sm:flex-row">
         <div className="aspect-[2/3] w-48 flex-shrink-0 overflow-hidden rounded-lg bg-[var(--color-surface)]">
           {posterPath ? (
@@ -338,41 +375,7 @@ export function SeasonDetailPage() {
         </div>
 
         <div className="flex min-w-0 flex-col gap-3">
-          {show && (
-            <Link
-              to={`/shows/${show.slug}`}
-              className="w-fit text-sm text-[var(--color-fg-muted)] hover:underline"
-            >
-              ← {show.title}
-            </Link>
-          )}
-          <div className="flex items-center gap-2">
-            <Button
-              type="button"
-              variant="ghost"
-              className="px-1.5 py-1.5"
-              disabled={!previousSeason}
-              aria-label={t('showDetail.previousSeason')}
-              title={t('showDetail.previousSeason')}
-              onClick={() =>
-                navigate(`/shows/${show!.slug}/season/${previousSeason!.seasonNumber}`)
-              }
-            >
-              <ChevronLeftIcon />
-            </Button>
-            <h1 className="text-2xl font-semibold">{seasonName}</h1>
-            <Button
-              type="button"
-              variant="ghost"
-              className="px-1.5 py-1.5"
-              disabled={!nextSeason}
-              aria-label={t('showDetail.nextSeason')}
-              title={t('showDetail.nextSeason')}
-              onClick={() => navigate(`/shows/${show!.slug}/season/${nextSeason!.seasonNumber}`)}
-            >
-              <ChevronRightIcon />
-            </Button>
-          </div>
+          <h1 className="text-2xl font-semibold">{seasonName}</h1>
           {season.overview && <p className="max-w-2xl text-sm">{season.overview}</p>}
 
           <div className="flex max-w-xs flex-col gap-1">

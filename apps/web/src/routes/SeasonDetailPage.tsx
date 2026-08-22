@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Link, useParams } from 'react-router'
+import { Link, useNavigate, useParams } from 'react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { EpisodeWatchedStatus, SeasonDetail, SeasonEpisode } from '@rwnd/shared'
 import { api, ApiError } from '../lib/api-client.js'
@@ -10,6 +10,7 @@ import { PosterGrid } from '../components/library/PosterGrid.js'
 import { ProgressBar } from '../components/library/ProgressBar.js'
 import { WatchDateDialog } from '../components/library/WatchDateDialog.js'
 import { UnwatchConfirmDialog } from '../components/library/UnwatchConfirmDialog.js'
+import { Button } from '../components/ui/Button.js'
 import { Spinner } from '../components/ui/Spinner.js'
 
 function CheckIcon() {
@@ -26,6 +27,42 @@ function CheckIcon() {
       aria-hidden="true"
     >
       <path d="M5 13l4 4L19 7" />
+    </svg>
+  )
+}
+
+function ChevronLeftIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width={18}
+      height={18}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2.5}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M15 6l-6 6 6 6" />
+    </svg>
+  )
+}
+
+function ChevronRightIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width={18}
+      height={18}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2.5}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M9 6l6 6-6 6" />
     </svg>
   )
 }
@@ -217,6 +254,7 @@ function EpisodeCard({
 
 export function SeasonDetailPage() {
   const { t } = useTranslation()
+  const navigate = useNavigate()
   const { slug, seasonNumber: seasonNumberParam } = useParams<{
     slug: string
     seasonNumber: string
@@ -266,6 +304,17 @@ export function SeasonDetailPage() {
   const posterPath = season.posterPath ?? show?.posterPath ?? null
   const watchedEpisodes = season.episodes.filter((episode) => episode.watched).length
 
+  // show.seasons is already ordered by seasonNumber ascending (see
+  // apps/api/src/routes/library.ts) — adjacent array entries are exactly
+  // the previous/next season, specials (0) included like ShowDetailPage's
+  // own season list.
+  const seasonIndex = show?.seasons.findIndex((s) => s.seasonNumber === season.seasonNumber) ?? -1
+  const previousSeason = seasonIndex > 0 ? show!.seasons[seasonIndex - 1] : undefined
+  const nextSeason =
+    seasonIndex !== -1 && seasonIndex < show!.seasons.length - 1
+      ? show!.seasons[seasonIndex + 1]
+      : undefined
+
   return (
     <div className="flex flex-col gap-8">
       <div className="flex flex-col gap-6 sm:flex-row">
@@ -297,7 +346,33 @@ export function SeasonDetailPage() {
               ← {show.title}
             </Link>
           )}
-          <h1 className="text-2xl font-semibold">{seasonName}</h1>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="ghost"
+              className="px-1.5 py-1.5"
+              disabled={!previousSeason}
+              aria-label={t('showDetail.previousSeason')}
+              title={t('showDetail.previousSeason')}
+              onClick={() =>
+                navigate(`/shows/${show!.slug}/season/${previousSeason!.seasonNumber}`)
+              }
+            >
+              <ChevronLeftIcon />
+            </Button>
+            <h1 className="text-2xl font-semibold">{seasonName}</h1>
+            <Button
+              type="button"
+              variant="ghost"
+              className="px-1.5 py-1.5"
+              disabled={!nextSeason}
+              aria-label={t('showDetail.nextSeason')}
+              title={t('showDetail.nextSeason')}
+              onClick={() => navigate(`/shows/${show!.slug}/season/${nextSeason!.seasonNumber}`)}
+            >
+              <ChevronRightIcon />
+            </Button>
+          </div>
           {season.overview && <p className="max-w-2xl text-sm">{season.overview}</p>}
 
           <div className="flex max-w-xs flex-col gap-1">

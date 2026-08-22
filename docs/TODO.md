@@ -38,10 +38,6 @@ Format:
 
 ## TV Show pages
 
-- [ ] **Previous/next season navigation on the season page** (2026-08-21 23:00 added)\
-      `SeasonDetailPage.tsx` — add `<`/`>` buttons to jump to the
-      previous/next season without going back through the show page.
-
 - [ ] **Episode pages** (2026-08-21 23:00 added)\
       No dedicated page per episode yet — only the season grid
       (`SeasonDetailPage.tsx`) and its inline watch toggle. Needs

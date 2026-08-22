@@ -113,6 +113,8 @@
     "drop": "Drop",
     "undrop": "Undrop",
     "seasonNotFound": "This season couldn't be found.",
+    "previousSeason": "Previous season",
+    "nextSeason": "Next season",
     "markWatched": "Mark watched",
     "markUnwatched": "Mark unwatched",
     "episodeWatchedCount_one": "Watched once",

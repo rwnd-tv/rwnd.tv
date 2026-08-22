@@ -113,6 +113,8 @@
     "drop": "Abandonner",
     "undrop": "Annuler l'abandon",
     "seasonNotFound": "Cette saison est introuvable.",
+    "previousSeason": "Saison précédente",
+    "nextSeason": "Saison suivante",
     "markWatched": "Marquer comme vu",
     "markUnwatched": "Marquer comme non vu",
     "episodeWatchedCount_one": "Vu une fois",

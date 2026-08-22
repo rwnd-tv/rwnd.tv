@@ -4,6 +4,7 @@ import {
   clampDate,
   formatDateTimeInput,
   parseDateTimeInput,
+  RELEASE_DATE_WATCHED_AT,
   toDateInputValue,
   toTimeInputValue,
   UNKNOWN_WATCHED_AT,
@@ -18,15 +19,25 @@ type Mode = 'nowWatching' | 'justFinished' | 'releaseDate' | 'unknown' | 'other'
  * "When did you watch this?" — shown when marking a season episode watched
  * (see SeasonDetailPage.tsx) rather than always silently logging "now".
  * Written generically enough (takes plain episode fields, not a
- * SeasonEpisode) that it could back a similar prompt elsewhere later, e.g.
- * SearchResultCard.tsx's manual log-watch flow — not wired there yet,
- * James only asked about the season page.
+ * SeasonEpisode) that it also backs the show/season-level bulk "Watched"
+ * button (ShowDetailPage.tsx/SeasonDetailPage.tsx), via `allowNowWatching`/
+ * `allowReleaseDate` below — a bulk action has no single episode to be
+ * "now watching" or have "the release date" of.
  */
 export function WatchDateDialog({
   open,
   episodeLabel,
   episode,
   locale,
+  /** "Now watching" (now + runtime) only makes sense for one episode at a
+   * time — hidden for the bulk "Watched" button's dialog. */
+  allowNowWatching = true,
+  /** Offers "Release date" even though `episode.firstAired` is null (the
+   * bulk dialog has no single date — every episode gets its own). Selecting
+   * it resolves `onConfirm` to RELEASE_DATE_WATCHED_AT instead of a literal
+   * ISO string; ignored when `episode.firstAired` is actually set, since
+   * that already shows its own real-dated "Release date" option below. */
+  allowReleaseDate = false,
   onConfirm,
   onCancel,
 }: {
@@ -34,6 +45,8 @@ export function WatchDateDialog({
   episodeLabel: string
   episode: { title: string | null; runtimeMinutes: number | null; firstAired: string | null }
   locale: string
+  allowNowWatching?: boolean
+  allowReleaseDate?: boolean
   onConfirm: (watchedAtIso: string) => void
   onCancel: () => void
 }) {
@@ -112,6 +125,10 @@ export function WatchDateDialog({
       onConfirm(UNKNOWN_WATCHED_AT)
       return
     }
+    if (mode === 'releaseDate' && !episode.firstAired) {
+      onConfirm(RELEASE_DATE_WATCHED_AT)
+      return
+    }
     // Defensive clamp — every other mode's previewDate is already in
     // range by construction, but "other" came from user input.
     onConfirm(clampDate(previewDate, minDate, maxDate).toISOString())
@@ -121,11 +138,15 @@ export function WatchDateDialog({
     ? t('showDetail.watchDialog.releaseDate', {
         date: new Date(episode.firstAired).toLocaleDateString(locale, { dateStyle: 'medium' }),
       })
-    : null
+    : allowReleaseDate
+      ? t('showDetail.watchDialog.releaseDatePerEpisode')
+      : null
 
   const options: { value: Mode; label: string }[] = [
     { value: 'justFinished', label: t('showDetail.watchDialog.justFinished') },
-    { value: 'nowWatching', label: t('showDetail.watchDialog.nowWatching') },
+    ...(allowNowWatching
+      ? [{ value: 'nowWatching' as const, label: t('showDetail.watchDialog.nowWatching') }]
+      : []),
     ...(releaseDateLabel ? [{ value: 'releaseDate' as const, label: releaseDateLabel }] : []),
     { value: 'unknown', label: t('showDetail.watchDialog.unknown') },
     { value: 'other', label: t('showDetail.watchDialog.otherDate') },
@@ -193,7 +214,13 @@ export function WatchDateDialog({
         hideLabel
         type="text"
         readOnly={mode !== 'other'}
-        value={mode === 'unknown' ? t('showDetail.watchDialog.unknown') : previewText}
+        value={
+          mode === 'unknown'
+            ? t('showDetail.watchDialog.unknown')
+            : mode === 'releaseDate' && !episode.firstAired
+              ? t('showDetail.watchDialog.releaseDatePerEpisode')
+              : previewText
+        }
         onChange={(e) => handleTextChange(e.target.value)}
       />
 

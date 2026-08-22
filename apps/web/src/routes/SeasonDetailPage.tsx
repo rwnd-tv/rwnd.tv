@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { EpisodeWatchedStatus, SeasonDetail, SeasonEpisode } from '@rwnd/shared'
 import { api, ApiError } from '../lib/api-client.js'
 import { invalidateWatchData } from '../lib/query-client.js'
+import { markWatchedRequestBody } from '../lib/date.js'
 import { useAuth } from '../lib/auth-context.js'
 import { PosterGrid } from '../components/library/PosterGrid.js'
 import { ProgressBar } from '../components/library/ProgressBar.js'
@@ -294,8 +295,8 @@ export function SeasonDetailPage() {
   // patches a single cached field the way EpisodeCard's per-episode
   // mutations above do: a whole season/show refetch is needed either way.
   const markSeasonWatched = useMutation({
-    mutationFn: (watchedAt: string) =>
-      api.library.markSeasonWatched(slug!, seasonNumber, watchedAt),
+    mutationFn: (watchedAtIso: string) =>
+      api.library.markSeasonWatched(slug!, seasonNumber, markWatchedRequestBody(watchedAtIso)),
     onSuccess: () => {
       setWatchDialogOpen(false)
       void invalidateWatchData(queryClient)
@@ -451,6 +452,8 @@ export function SeasonDetailPage() {
         episodeLabel={seasonName}
         episode={{ title: seasonName, runtimeMinutes: null, firstAired: null }}
         locale={locale}
+        allowNowWatching={false}
+        allowReleaseDate
         onConfirm={(watchedAt) => markSeasonWatched.mutate(watchedAt)}
         onCancel={() => setWatchDialogOpen(false)}
       />

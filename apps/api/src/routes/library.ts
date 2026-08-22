@@ -12,10 +12,56 @@ import {
   seasonDetailSchema,
   showDetailSchema,
 } from '@rwnd/shared'
+import type { Database } from '@rwnd/db'
 import { droppedShows, episodes, externalIds, movies, plays, seasons, shows } from '@rwnd/db'
 import type { AppEnv } from '../types.js'
 import { requireAuth } from '../middleware/auth.js'
-import { resolveSeasonEpisodes, resolveShowEpisodes } from '../lib/media.js'
+import { resolveSeasonEpisodes, resolveShowEpisodes, type ResolvedEpisode } from '../lib/media.js'
+
+/**
+ * Shared by the show- and season-level "Watched" button routes below.
+ * `resolvedEpisodes` is every episode in scope (already resolved to local
+ * rows) — this filters out ones the user has already watched and logs a
+ * new play only for what's missing, either all at the same `watchedAt` or
+ * (when `useReleaseDate` is set) each at its own episode's release date,
+ * skipping any episode whose release date isn't known rather than
+ * guessing. Returns how many plays were actually logged.
+ */
+async function logMissingWatches(
+  db: Database,
+  userId: string,
+  resolvedEpisodes: ResolvedEpisode[],
+  body: { watchedAt?: string; useReleaseDate?: true },
+): Promise<number> {
+  if (resolvedEpisodes.length === 0) return 0
+
+  const episodeIds = resolvedEpisodes.map((e) => e.id)
+  const alreadyWatchedRows = await db
+    .select({ episodeId: plays.episodeId })
+    .from(plays)
+    .where(and(eq(plays.userId, userId), inArray(plays.episodeId, episodeIds)))
+  const alreadyWatched = new Set(alreadyWatchedRows.map((row) => row.episodeId))
+  const missing = resolvedEpisodes.filter((e) => !alreadyWatched.has(e.id))
+
+  const values = body.useReleaseDate
+    ? missing
+        .filter((e): e is ResolvedEpisode & { firstAired: string } => e.firstAired !== null)
+        .map((e) => ({
+          userId,
+          episodeId: e.id,
+          watchedAt: new Date(e.firstAired),
+          source: 'manual' as const,
+        }))
+    : missing.map((e) => ({
+        userId,
+        episodeId: e.id,
+        watchedAt: new Date(body.watchedAt!),
+        source: 'manual' as const,
+      }))
+
+  if (values.length > 0) await db.insert(plays).values(values)
+  return values.length
+}
 
 export const libraryRoutes = new OpenAPIHono<AppEnv>()
 
@@ -564,10 +610,10 @@ libraryRoutes.openapi(
 /**
  * The season page's "Watched" button (apps/web/src/routes/SeasonDetailPage.tsx)
  * — the season-scoped equivalent of the show page's own "Watched" button
- * above. Logs one new play at `watchedAt` for every episode of this one
- * season (specials included, unlike the show-level route — a season *is*
- * the unit here, so there's no "exclude specials" question), unconditionally,
- * so it also works as "log a rewatch of this season".
+ * above. Logs one new play for every episode of this one season (specials
+ * included, unlike the show-level route — a season *is* the unit here, so
+ * there's no "exclude specials" question) that isn't already watched — see
+ * logMissingWatches's doc comment for the watchedAt/useReleaseDate choice.
  */
 libraryRoutes.openapi(
   createRoute({
@@ -589,7 +635,7 @@ libraryRoutes.openapi(
   }),
   async (c) => {
     const { slug, seasonNumber } = c.req.valid('param')
-    const { watchedAt } = c.req.valid('json')
+    const body = c.req.valid('json')
     const user = c.get('user')!
     const db = c.get('db')
     const provider = c.get('metadataProvider')
@@ -610,7 +656,7 @@ libraryRoutes.openapi(
       .limit(1)
     if (!tmdbExternalId) return c.json({ error: 'Show not found' }, 404)
 
-    const episodeIds = await resolveSeasonEpisodes(
+    const resolvedEpisodes = await resolveSeasonEpisodes(
       db,
       provider,
       tmdbExternalId.externalId,
@@ -618,19 +664,8 @@ libraryRoutes.openapi(
       user.locale,
     )
 
-    if (episodeIds.length > 0) {
-      const watchedAtDate = new Date(watchedAt)
-      await db.insert(plays).values(
-        episodeIds.map((episodeId) => ({
-          userId: user.id,
-          episodeId,
-          watchedAt: watchedAtDate,
-          source: 'manual' as const,
-        })),
-      )
-    }
-
-    return c.json({ count: episodeIds.length }, 201)
+    const count = await logMissingWatches(db, user.id, resolvedEpisodes, body)
+    return c.json({ count }, 201)
   },
 )
 
@@ -819,12 +854,12 @@ libraryRoutes.openapi(
 /**
  * The show page's "Watched" button (apps/web/src/routes/ShowDetailPage.tsx)
  * — the show-level equivalent of marking one episode watched from the
- * season grid. Logs one new play at `watchedAt` for every non-special
- * episode, unconditionally (not just previously-unwatched ones), so it
- * doubles as "log a full rewatch" for a show already fully watched.
- * Episodes not yet resolved locally are created from the provider first —
- * see resolveShowEpisodes's doc comment (apps/api/src/lib/media.ts) for why
- * that's one call per season rather than per episode.
+ * season grid. Logs one new play for every non-special episode that isn't
+ * already watched — see logMissingWatches's doc comment for the
+ * watchedAt/useReleaseDate choice. Episodes not yet resolved locally are
+ * created from the provider first — see resolveShowEpisodes's doc comment
+ * (apps/api/src/lib/media.ts) for why that's one call per season rather
+ * than per episode.
  */
 libraryRoutes.openapi(
   createRoute({
@@ -846,7 +881,7 @@ libraryRoutes.openapi(
   }),
   async (c) => {
     const { slug } = c.req.valid('param')
-    const { watchedAt } = c.req.valid('json')
+    const body = c.req.valid('json')
     const user = c.get('user')!
     const db = c.get('db')
     const provider = c.get('metadataProvider')
@@ -869,26 +904,15 @@ libraryRoutes.openapi(
       .limit(1)
     if (!tmdbExternalId) return c.json({ error: 'Show not found' }, 404)
 
-    const episodeIds = await resolveShowEpisodes(
+    const resolvedEpisodes = await resolveShowEpisodes(
       db,
       provider,
       tmdbExternalId.externalId,
       user.locale,
     )
 
-    if (episodeIds.length > 0) {
-      const watchedAtDate = new Date(watchedAt)
-      await db.insert(plays).values(
-        episodeIds.map((episodeId) => ({
-          userId: user.id,
-          episodeId,
-          watchedAt: watchedAtDate,
-          source: 'manual' as const,
-        })),
-      )
-    }
-
-    return c.json({ count: episodeIds.length }, 201)
+    const count = await logMissingWatches(db, user.id, resolvedEpisodes, body)
+    return c.json({ count }, 201)
   },
 )
 

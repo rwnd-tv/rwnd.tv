@@ -146,6 +146,14 @@ export async function resolveShow(
   return { id: show.id, title: show.title, slug: show.slug }
 }
 
+/** One episode resolved to a local row, with just the fields the "Watched"
+ * button's release-date mode needs on top of the id itself (see
+ * resolveShowEpisodes/resolveSeasonEpisodes below). */
+export interface ResolvedEpisode {
+  id: string
+  firstAired: string | null
+}
+
 /**
  * Resolves every episode of one season to a local episode id, fetching the
  * season's full episode list from the provider in one call — the same
@@ -161,7 +169,7 @@ async function resolveSeason(
   showExternalId: string,
   seasonNumber: number,
   locale: string,
-): Promise<string[]> {
+): Promise<ResolvedEpisode[]> {
   const { episodes: seasonEpisodes } = await provider.getSeason(
     showExternalId,
     seasonNumber,
@@ -182,11 +190,10 @@ async function resolveSeason(
       )
       .onConflictDoNothing()
   }
-  const rows = await db
-    .select({ id: episodes.id })
+  return db
+    .select({ id: episodes.id, firstAired: episodes.firstAired })
     .from(episodes)
     .where(and(eq(episodes.showId, showId), eq(episodes.seasonNumber, seasonNumber)))
-  return rows.map((row) => row.id)
 }
 
 /**
@@ -200,7 +207,7 @@ export async function resolveShowEpisodes(
   provider: MetadataProvider,
   showExternalId: string,
   locale: string,
-): Promise<string[]> {
+): Promise<ResolvedEpisode[]> {
   const show = await resolveShow(db, provider, showExternalId, locale)
 
   const seasonRows = await db
@@ -229,7 +236,7 @@ export async function resolveSeasonEpisodes(
   showExternalId: string,
   seasonNumber: number,
   locale: string,
-): Promise<string[]> {
+): Promise<ResolvedEpisode[]> {
   const show = await resolveShow(db, provider, showExternalId, locale)
   return resolveSeason(db, provider, show.id, showExternalId, seasonNumber, locale)
 }

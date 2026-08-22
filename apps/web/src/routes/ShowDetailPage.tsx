@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { ShowDetail } from '@rwnd/shared'
 import { api, ApiError } from '../lib/api-client.js'
 import { invalidateWatchData } from '../lib/query-client.js'
+import { markWatchedRequestBody } from '../lib/date.js'
 import { useAuth } from '../lib/auth-context.js'
 import { PosterGrid } from '../components/library/PosterGrid.js'
 import { ProgressBar } from '../components/library/ProgressBar.js'
@@ -99,7 +100,8 @@ export function ShowDetailPage() {
   // changed field to patch into the cache: watched counts, per-season
   // progress, and history all need a real refetch.
   const markWatched = useMutation({
-    mutationFn: (watchedAt: string) => api.library.markShowWatched(slug!, watchedAt),
+    mutationFn: (watchedAtIso: string) =>
+      api.library.markShowWatched(slug!, markWatchedRequestBody(watchedAtIso)),
     onSuccess: () => {
       setWatchDialogOpen(false)
       void invalidateWatchData(queryClient)
@@ -272,6 +274,8 @@ export function ShowDetailPage() {
         episodeLabel={show.title}
         episode={{ title: show.title, runtimeMinutes: null, firstAired: null }}
         locale={locale}
+        allowNowWatching={false}
+        allowReleaseDate
         onConfirm={(watchedAt) => markWatched.mutate(watchedAt)}
         onCancel={() => setWatchDialogOpen(false)}
       />

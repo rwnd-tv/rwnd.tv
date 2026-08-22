@@ -199,14 +199,28 @@ export type DroppedStatus = z.infer<typeof droppedStatusSchema>
 
 /**
  * Backs the show page's "Watched" button (POST /library/shows/{slug}/watched
- * — see ShowDetailPage.tsx), the show-level equivalent of marking one
- * episode watched from the season grid. Logs one new play at `watchedAt`
- * for every non-special episode of the show, unconditionally — not just
- * the ones not yet watched, so it also works as "log a full rewatch".
+ * — see ShowDetailPage.tsx and its season-scoped counterpart,
+ * SeasonDetailPage.tsx), the show-level equivalent of marking one episode
+ * watched from the season grid. Logs one new play for every non-special
+ * episode of the show that doesn't already have one — already-watched
+ * episodes are left alone, so this fills in what's missing rather than
+ * logging a rewatch of everything.
+ *
+ * Exactly one of `watchedAt` (every newly-logged play gets this same
+ * timestamp) or `useReleaseDate` (each episode instead gets its own —
+ * skipped entirely if that episode's release date isn't known) — mirrors
+ * the "exactly one of" `.refine()` shape createPlayRequestSchema already
+ * uses (schemas/plays.ts) rather than a discriminated union, since these
+ * aren't otherwise tagged variants of the same shape.
  */
-export const markShowWatchedRequestSchema = z.object({
-  watchedAt: z.string().datetime(),
-})
+export const markShowWatchedRequestSchema = z
+  .object({
+    watchedAt: z.string().datetime().optional(),
+    useReleaseDate: z.literal(true).optional(),
+  })
+  .refine((v) => Boolean(v.watchedAt) !== Boolean(v.useReleaseDate), {
+    message: 'Provide exactly one of watchedAt or useReleaseDate',
+  })
 export type MarkShowWatchedRequest = z.infer<typeof markShowWatchedRequestSchema>
 
 export const markShowWatchedResponseSchema = z.object({

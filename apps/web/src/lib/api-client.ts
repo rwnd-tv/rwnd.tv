@@ -20,6 +20,7 @@ import {
   type ListLibraryShowsResponse,
   type ListPlaysResponse,
   type LoginRequest,
+  type MarkShowWatchedRequest,
   type MarkShowWatchedResponse,
   type Play,
   type RegisterRequest,
@@ -114,18 +115,16 @@ export const api = {
       post<DroppedStatus>(`/library/shows/${encodeURIComponent(slug)}/dropped`),
     undropShow: (slug: string) =>
       del<DroppedStatus>(`/library/shows/${encodeURIComponent(slug)}/dropped`),
-    markShowWatched: (slug: string, watchedAt: string) =>
-      post<MarkShowWatchedResponse>(`/library/shows/${encodeURIComponent(slug)}/watched`, {
-        watchedAt,
-      }),
+    markShowWatched: (slug: string, body: MarkShowWatchedRequest) =>
+      post<MarkShowWatchedResponse>(`/library/shows/${encodeURIComponent(slug)}/watched`, body),
     removeShowWatches: (slug: string) =>
       del<RemoveShowWatchesResponse>(`/library/shows/${encodeURIComponent(slug)}/watched`),
     season: (slug: string, seasonNumber: number) =>
       get<SeasonDetail>(`/library/shows/${encodeURIComponent(slug)}/seasons/${seasonNumber}`),
-    markSeasonWatched: (slug: string, seasonNumber: number, watchedAt: string) =>
+    markSeasonWatched: (slug: string, seasonNumber: number, body: MarkShowWatchedRequest) =>
       post<MarkShowWatchedResponse>(
         `/library/shows/${encodeURIComponent(slug)}/seasons/${seasonNumber}/watched`,
-        { watchedAt },
+        body,
       ),
     removeSeasonWatches: (slug: string, seasonNumber: number) =>
       del<RemoveShowWatchesResponse>(

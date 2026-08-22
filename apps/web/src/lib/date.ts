@@ -7,6 +7,31 @@
 export const UNKNOWN_WATCHED_AT = '1900-01-01T00:00:00.000Z'
 
 /**
+ * Signals "log each episode at its own release date" from the bulk
+ * "Watched" button's dialog (WatchDateDialog.tsx's `allowReleaseDate`
+ * mode, used by ShowDetailPage.tsx/SeasonDetailPage.tsx) — never a real
+ * ISO datetime, so it can't collide with a genuine watchedAt value. The
+ * mutation functions that receive this from `onConfirm` check for it and
+ * call the API with `{ useReleaseDate: true }` instead of a literal
+ * `watchedAt`, since a bulk action has no single date to send — see
+ * markShowWatchedRequestSchema's doc comment (packages/shared/src/schemas/library.ts).
+ */
+export const RELEASE_DATE_WATCHED_AT = 'release-date'
+
+/**
+ * Converts a WatchDateDialog `onConfirm` value into the bulk "Watched"
+ * button's request body — shared by ShowDetailPage.tsx/SeasonDetailPage.tsx
+ * so the RELEASE_DATE_WATCHED_AT check isn't duplicated in both.
+ */
+export function markWatchedRequestBody(
+  watchedAtIso: string,
+): { watchedAt: string } | { useReleaseDate: true } {
+  return watchedAtIso === RELEASE_DATE_WATCHED_AT
+    ? { useReleaseDate: true }
+    : { watchedAt: watchedAtIso }
+}
+
+/**
  * Locale-formatted "date and time" string for a free-text field a user can
  * type directly into (see WatchDateDialog.tsx). Both locales this app
  * supports (en-GB, fr-FR) render day-month-year order with a 24-hour

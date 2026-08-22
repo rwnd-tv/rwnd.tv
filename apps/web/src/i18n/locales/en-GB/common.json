@@ -129,6 +129,7 @@
       "nowWatching": "Now watching",
       "justFinished": "Just finished",
       "releaseDate": "Release date ({{date}})",
+      "releaseDatePerEpisode": "Release date",
       "otherDate": "Other date",
       "unknown": "Unknown",
       "otherDateDateLabel": "Date",

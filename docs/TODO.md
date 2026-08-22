@@ -44,6 +44,81 @@ Format:
       scoping: what an episode page shows beyond what the season grid
       already does (overview, still image, watched toggle).
 
+- [ ] **"Watched" button must not log or count unaired episodes** (2026-08-22 13:00 added)\
+      Two related bugs in the "Watched" button on both
+      `ShowDetailPage.tsx` and `SeasonDetailPage.tsx`, for a currently-
+      airing show:
+      1. Clicking it can create plays for episodes that haven't aired
+         yet. `logMissingWatches` (`apps/api/src/lib/media.ts:30-64`),
+         used by both the show- and season-level "mark watched" routes
+         in `apps/api/src/routes/library.ts`, marks every episode
+         `resolveShowEpisodes`/`resolveSeasonEpisodes` return with no
+         `firstAired`-vs-now check at all — need to exclude any episode
+         whose `firstAired` is null or in the future, under all
+         circumstances (both the user-picked-date and
+         `useReleaseDate` modes).
+      2. The purple/"fully watched" button state compares watched
+         count against the *eventual* episode total, not what's aired
+         so far, so it can never turn purple mid-season even once
+         every aired episode is watched. Show page:
+         `ShowDetailPage.tsx:145-148` compares `watchedEpisodes` to
+         `totalEpisodes`, which is `sum(season.episodeCount)` from
+         TMDB (`apps/api/src/routes/library.ts:317-320`) — the season's
+         full/planned count, not aired-so-far. Season page:
+         `SeasonDetailPage.tsx:340` compares against
+         `season.episodes.length`, which includes not-yet-aired
+         episodes too (that list already carries each episode's
+         `firstAired` per `library.ts:452-471`, so the season page fix
+         is likely a client-side filter). The show page has no
+         per-episode air dates to filter by today, so it likely needs
+         a new "aired episode count" aggregate from the show-detail
+         route rather than reusing `totalEpisodes` as-is. Note: this
+         is scoped to the *button*'s purple state only — whether the
+         progress bar should also switch to counting against
+         aired-so-far (vs. the eventual total it shows today) is a
+         separate open question, not decided here.
+
+## Season pages
+
+- [ ] **Subheading with year, TMDB score, and TMDB link** (2026-08-22 12:00 added)\
+      `SeasonDetailPage.tsx` should get the same subheading treatment
+      `ShowDetailPage.tsx` already has: the year the season's first
+      episode aired, the TMDB review score badge (`voteAverage`, TMDB
+      logo, linking to `https://www.themoviedb.org/tv/{tmdbId}` when
+      present, matching the pattern around `ShowDetailPage.tsx:181`),
+      and a link out to the TMDB *season* page specifically (not just
+      the show page) — likely
+      `https://www.themoviedb.org/tv/{tmdbId}/season/{seasonNumber}`.
+      Needs checking whether the season API response already carries a
+      season-level `voteAverage`/air date or whether `library.ts`
+      needs extending.
+
+- [ ] **Episode tile watched badge should show watch count** (2026-08-22 12:30 added)\
+      The round watched-toggle badge on each episode tile
+      (`SeasonDetailPage.tsx:201-215`, top-right of the thumbnail)
+      always shows `CheckIcon` when watched. When `episode.watchedCount
+      > 1`, show the count (e.g. "3") instead of the tick — same
+      threshold already used for the "watched Nx" text line below the
+      title (`SeasonDetailPage.tsx:222-226`), just surfaced on the
+      badge itself too.
+
+- [ ] **Selective removal in the per-episode unwatch dialog** (2026-08-22 12:45 added)\
+      `UnwatchConfirmDialog.tsx` currently lists every logged watch
+      (`watchedAt.map` at line 53) but removing always clears all of
+      them via one `onConfirm`. Add a tick box next to each watch,
+      ticked by default, and only remove the ticked ones. Title/button
+      copy needs to react to selection: `unwatchDialog.titleMultiple` /
+      `removeAll` copy only when every watch is ticked, otherwise
+      switch to new "Remove selected watches" copy
+      (`unwatchDialog.titleSelected` / `removeSelected` or similar new
+      keys). The remove button should be `disabled` when zero watches
+      are ticked. `onConfirm` will need to change from `() => void` to
+      passing the selected watch ids/timestamps through to the caller
+      (`SeasonDetailPage.tsx`'s `unwatch` mutation) — check what the
+      unwatch API/`library.ts` route currently accepts (probably
+      "remove all" only today) and whether it needs a
+      selective-removal variant.
+
 ## Dashboard
 
 - [ ] **"On Deck" row** (2026-08-21 23:00 added)\
@@ -61,11 +136,21 @@ Format:
 
 ## General
 
-- [ ] **A way to log an additional watch without going through History** (2026-08-21 23:00 added)\
+- [ ] **A way to log an additional watch without going through History** (2026-08-21 23:00 added, detailed 2026-08-22 12:15)\
       Right now logging a rewatch of something already fully watched
       means going to the History page. James wants a more direct
-      mechanism — exact UX still to be decided (e.g. a "log another
-      watch" action from the show/season/episode page itself).
+      mechanism. Decided UX: a square, icon-only (plus icon, no text)
+      secondary button to the right of the existing "Watched" button
+      on both `ShowDetailPage.tsx` and `SeasonDetailPage.tsx`. Only
+      rendered once some watches already exist on that page (i.e.
+      `firstWatchedAt` present — same condition the watched-period
+      text below the buttons already checks). Unlike "Watched" (which
+      marks all episodes watched for the *first* time and is
+      disabled/hidden once nothing's left to mark), this button always
+      logs an *additional* watch for every episode in scope (the whole
+      show, or just the season on the season page) regardless of
+      current watched state. Clicking it opens `WatchDateDialog` to
+      pick a date, same flow as the initial "Watched" click.
 
 ## Spoiler protection
 

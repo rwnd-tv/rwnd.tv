@@ -512,6 +512,82 @@ describe('library', () => {
       })
       expect((await json<SeasonDetail>(res)).voteAverage).toBeNull()
     })
+
+    it('marks an episode hasUnknownWatch once one of its plays is dated 1900-01-01', async () => {
+      const cookie = await createUserAndCookie()
+      const userId = await meId(cookie)
+      const show = await insertShowWithSeason('2020-01-01')
+      const [episode] = await db
+        .insert(episodes)
+        .values({ showId: show.id, seasonNumber: 1, episodeNumber: 1, title: 'Ep 1' })
+        .returning()
+      if (!episode) throw new Error('failed to insert episode')
+      await db
+        .insert(plays)
+        .values({ userId, episodeId: episode.id, watchedAt: new Date('1900-01-01T00:00:00.000Z') })
+
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (input: string | URL) => {
+          const url = new URL(input)
+          if (url.pathname === '/3/tv/70001/season/1') {
+            return new Response(
+              JSON.stringify({
+                overview: null,
+                episodes: [
+                  { name: 'Ep 1', season_number: 1, episode_number: 1, air_date: '2020-01-01' },
+                ],
+              }),
+              { status: 200 },
+            )
+          }
+          throw new Error(`Unexpected TMDB fetch in test: ${url}`)
+        }),
+      )
+
+      const res = await app.request(`/api/v1/library/shows/${show.slug}/seasons/1`, {
+        headers: { cookie },
+      })
+      expect((await json<SeasonDetail>(res)).episodes[0]?.hasUnknownWatch).toBe(true)
+    })
+
+    it('does not mark an episode hasUnknownWatch for a normal-dated watch', async () => {
+      const cookie = await createUserAndCookie()
+      const userId = await meId(cookie)
+      const show = await insertShowWithSeason('2020-01-01')
+      const [episode] = await db
+        .insert(episodes)
+        .values({ showId: show.id, seasonNumber: 1, episodeNumber: 1, title: 'Ep 1' })
+        .returning()
+      if (!episode) throw new Error('failed to insert episode')
+      await db
+        .insert(plays)
+        .values({ userId, episodeId: episode.id, watchedAt: new Date('2020-06-01T00:00:00.000Z') })
+
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (input: string | URL) => {
+          const url = new URL(input)
+          if (url.pathname === '/3/tv/70001/season/1') {
+            return new Response(
+              JSON.stringify({
+                overview: null,
+                episodes: [
+                  { name: 'Ep 1', season_number: 1, episode_number: 1, air_date: '2020-01-01' },
+                ],
+              }),
+              { status: 200 },
+            )
+          }
+          throw new Error(`Unexpected TMDB fetch in test: ${url}`)
+        }),
+      )
+
+      const res = await app.request(`/api/v1/library/shows/${show.slug}/seasons/1`, {
+        headers: { cookie },
+      })
+      expect((await json<SeasonDetail>(res)).episodes[0]?.hasUnknownWatch).toBe(false)
+    })
   })
 
   describe('GET/DELETE /library/shows/{slug}/seasons/{seasonNumber}/episodes/{episodeNumber}/plays', () => {
@@ -1026,6 +1102,56 @@ describe('library', () => {
         method: 'POST',
         headers: { cookie, 'Content-Type': 'application/json' },
         body: JSON.stringify({ watchedAt: '2026-01-01T00:00:00.000Z' }),
+      })
+      expect(await json<MarkShowWatchedResponse>(firstRes)).toEqual({ count: 3 })
+
+      const secondRes = await app.request(`/api/v1/library/shows/${show.slug}/watched`, {
+        method: 'POST',
+        headers: { cookie, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ watchedAt: '2026-06-01T00:00:00.000Z', additional: true }),
+      })
+      expect(await json<MarkShowWatchedResponse>(secondRes)).toEqual({ count: 3 })
+
+      const totalPlays = await db.select().from(plays).where(eq(plays.userId, userId))
+      expect(totalPlays).toHaveLength(6)
+    })
+
+    it('excludes an episode that already has an unknown-date watch when logging with the unknown sentinel, even in additional mode', async () => {
+      const cookie = await createUserAndCookie()
+      const userId = await meId(cookie)
+      const show = await insertShowWithSeasons()
+      stubTmdbSeasons()
+
+      const firstRes = await app.request(`/api/v1/library/shows/${show.slug}/watched`, {
+        method: 'POST',
+        headers: { cookie, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ watchedAt: '1900-01-01T00:00:00.000Z' }),
+      })
+      expect(await json<MarkShowWatchedResponse>(firstRes)).toEqual({ count: 3 })
+
+      // Every episode already has an unknown-date watch — a second pass
+      // with the same sentinel, even with additional set, logs nothing.
+      const secondRes = await app.request(`/api/v1/library/shows/${show.slug}/watched`, {
+        method: 'POST',
+        headers: { cookie, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ watchedAt: '1900-01-01T00:00:00.000Z', additional: true }),
+      })
+      expect(await json<MarkShowWatchedResponse>(secondRes)).toEqual({ count: 0 })
+
+      const totalPlays = await db.select().from(plays).where(eq(plays.userId, userId))
+      expect(totalPlays).toHaveLength(3)
+    })
+
+    it('still logs a normal-dated additional watch for an episode that already has an unknown-date watch', async () => {
+      const cookie = await createUserAndCookie()
+      const userId = await meId(cookie)
+      const show = await insertShowWithSeasons()
+      stubTmdbSeasons()
+
+      const firstRes = await app.request(`/api/v1/library/shows/${show.slug}/watched`, {
+        method: 'POST',
+        headers: { cookie, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ watchedAt: '1900-01-01T00:00:00.000Z' }),
       })
       expect(await json<MarkShowWatchedResponse>(firstRes)).toEqual({ count: 3 })
 

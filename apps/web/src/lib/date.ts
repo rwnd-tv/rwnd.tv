@@ -1,10 +1,8 @@
-/**
- * Trakt's own "I don't remember when" sentinel — used app-wide for a play
- * with no known watch date (see HistoryPage.tsx's UNKNOWN_DATE_KEY and
- * apps/api/src/routes/library.ts's hasUnknownWatchDate). Named here rather
- * than inlined a third time.
- */
-export const UNKNOWN_WATCHED_AT = '1900-01-01T00:00:00.000Z'
+// Moved to packages/shared/src/constants.ts so the api can compare against
+// the exact same value (rejecting a second unknown-date watch for an
+// episode that already has one) — re-exported here so existing imports
+// from this file don't all need updating.
+export { UNKNOWN_WATCHED_AT } from '@rwnd/shared'
 
 /**
  * Signals "log each episode at its own release date" from the bulk

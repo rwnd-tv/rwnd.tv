@@ -146,6 +146,13 @@ export const seasonEpisodeSchema = z.object({
    * the boolean (see SeasonDetailPage.tsx). */
   watchedCount: z.number().int(),
   lastWatchedAt: z.string().datetime().nullable(),
+  /** Whether one of this episode's logged plays is dated exactly
+   * UNKNOWN_WATCHED_AT (packages/shared/src/constants.ts) — lets the
+   * "log an additional watch" dialog (WatchDateDialog.tsx via
+   * SeasonDetailPage.tsx's EpisodeCard) hide the "Unknown date" option
+   * once one already exists, since a second one would be indistinguishable
+   * from the first. */
+  hasUnknownWatch: z.boolean(),
 })
 export type SeasonEpisode = z.infer<typeof seasonEpisodeSchema>
 

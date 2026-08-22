@@ -1,6 +1,7 @@
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi'
 import { and, desc, eq, lt } from 'drizzle-orm'
 import {
+  UNKNOWN_WATCHED_AT,
   createPlayRequestSchema,
   listPlaysQuerySchema,
   listPlaysResponseSchema,
@@ -83,7 +84,10 @@ playRoutes.openapi(
     request: { body: { content: { 'application/json': { schema: createPlayRequestSchema } } } },
     responses: {
       201: { description: 'Play logged', content: { 'application/json': { schema: playSchema } } },
-      400: { description: 'watchedAt is in the future, or the episode has not aired yet' },
+      400: {
+        description:
+          'watchedAt is in the future, the episode has not aired yet, or it already has an unknown-date watch logged',
+      },
     },
   }),
   async (c) => {
@@ -137,6 +141,31 @@ playRoutes.openapi(
     // what watchedAt is requested.
     if (episode.firstAired === null || new Date(episode.firstAired) > new Date()) {
       return c.json({ error: 'This episode has not aired yet' }, 400)
+    }
+
+    // Two unknown-date watches for the same episode are indistinguishable
+    // from each other (same rounding-error-prone sentinel timestamp, see
+    // the tie-break fix this same file's DELETE route needed), so a
+    // second one adds nothing — reject rather than silently create a
+    // duplicate the user can't tell apart from the first. Only applies
+    // going forward through this route; doesn't touch existing data (a
+    // Trakt import can legitimately leave a show with several genuinely
+    // separate unknown-date plays already).
+    if (watchedAt.toISOString() === UNKNOWN_WATCHED_AT) {
+      const [existingUnknown] = await db
+        .select({ id: plays.id })
+        .from(plays)
+        .where(
+          and(
+            eq(plays.userId, user.id),
+            eq(plays.episodeId, episode.id),
+            eq(plays.watchedAt, new Date(UNKNOWN_WATCHED_AT)),
+          ),
+        )
+        .limit(1)
+      if (existingUnknown) {
+        return c.json({ error: 'This episode already has an unknown-date watch logged' }, 400)
+      }
     }
 
     const [play] = await db

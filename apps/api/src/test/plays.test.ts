@@ -195,6 +195,73 @@ describe('plays', () => {
       expect(res.status).toBe(400)
     })
 
+    it('rejects a second unknown-date watch for an episode that already has one', async () => {
+      const cookie = await createUserAndCookie()
+      const body = JSON.stringify({
+        episode: {
+          source: 'tmdb',
+          showExternalId: String(BREAKING_BAD_SHOW_TMDB_ID),
+          seasonNumber: 1,
+          episodeNumber: 1,
+        },
+        watchedAt: '1900-01-01T00:00:00.000Z',
+      })
+
+      const firstRes = await app.request('/api/v1/plays', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', cookie },
+        body,
+      })
+      expect(firstRes.status).toBe(201)
+
+      const secondRes = await app.request('/api/v1/plays', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', cookie },
+        body,
+      })
+      expect(secondRes.status).toBe(400)
+
+      const list = await app.request('/api/v1/plays', { headers: { cookie } })
+      expect((await json<ListPlaysResponse>(list)).plays).toHaveLength(1)
+    })
+
+    it('still allows a normal-dated rewatch of an episode that already has an unknown-date watch', async () => {
+      const cookie = await createUserAndCookie()
+
+      const unknownRes = await app.request('/api/v1/plays', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', cookie },
+        body: JSON.stringify({
+          episode: {
+            source: 'tmdb',
+            showExternalId: String(BREAKING_BAD_SHOW_TMDB_ID),
+            seasonNumber: 1,
+            episodeNumber: 1,
+          },
+          watchedAt: '1900-01-01T00:00:00.000Z',
+        }),
+      })
+      expect(unknownRes.status).toBe(201)
+
+      const knownRes = await app.request('/api/v1/plays', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', cookie },
+        body: JSON.stringify({
+          episode: {
+            source: 'tmdb',
+            showExternalId: String(BREAKING_BAD_SHOW_TMDB_ID),
+            seasonNumber: 1,
+            episodeNumber: 1,
+          },
+          watchedAt: '2020-01-01T00:00:00.000Z',
+        }),
+      })
+      expect(knownRes.status).toBe(201)
+
+      const list = await app.request('/api/v1/plays', { headers: { cookie } })
+      expect((await json<ListPlaysResponse>(list)).plays).toHaveLength(2)
+    })
+
     it("does not let a different user delete someone else's play", async () => {
       const cookieA = await createUserAndCookie()
       const created = await app.request('/api/v1/plays', {

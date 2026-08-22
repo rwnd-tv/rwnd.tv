@@ -309,6 +309,7 @@ function EpisodeCard({
           firstAired: episode.firstAired,
         }}
         locale={locale}
+        disableUnknown={episode.hasUnknownWatch}
         onConfirm={(watchedAt) => {
           markWatched.mutate(watchedAt)
           setLogAdditionalWatchOpen(false)

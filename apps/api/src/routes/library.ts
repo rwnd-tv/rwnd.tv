@@ -1,6 +1,7 @@
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi'
 import { and, asc, desc, eq, gt, inArray, sql } from 'drizzle-orm'
 import {
+  UNKNOWN_WATCHED_AT,
   droppedStatusSchema,
   episodeWatchedStatusSchema,
   episodeWatchesSchema,
@@ -30,8 +31,13 @@ import { resolveSeasonEpisodes, resolveShowEpisodes, type ResolvedEpisode } from
  * current watched state, which is what the "log an additional watch"
  * button (ShowDetailPage.tsx/SeasonDetailPage.tsx) needs for a rewatch.
  * Either way, the new plays land at the same `watchedAt`, or (when
- * `useReleaseDate` is set) each at its own episode's release date.
- * Returns how many plays were actually logged.
+ * `useReleaseDate` is set) each at its own episode's release date. When
+ * `watchedAt` is exactly the "unknown date" sentinel (UNKNOWN_WATCHED_AT),
+ * an episode that already has an unknown-date watch is excluded too —
+ * regardless of `additional` — since a second one would be indistinguishable
+ * from the first and add nothing (see plays.ts's POST /plays, which
+ * enforces the same rule for the single-episode flow). Returns how many
+ * plays were actually logged.
  */
 async function logMissingWatches(
   db: Database,
@@ -53,10 +59,31 @@ async function logMissingWatches(
         ).map((row) => row.episodeId),
       )
 
+  const alreadyHasUnknownWatch =
+    body.watchedAt === UNKNOWN_WATCHED_AT
+      ? new Set(
+          (
+            await db
+              .select({ episodeId: plays.episodeId })
+              .from(plays)
+              .where(
+                and(
+                  eq(plays.userId, userId),
+                  inArray(plays.episodeId, episodeIds),
+                  eq(plays.watchedAt, new Date(UNKNOWN_WATCHED_AT)),
+                ),
+              )
+          ).map((row) => row.episodeId),
+        )
+      : new Set<string>()
+
   const now = new Date()
   const targets = resolvedEpisodes.filter(
     (e): e is ResolvedEpisode & { firstAired: string } =>
-      !alreadyWatched.has(e.id) && e.firstAired !== null && new Date(e.firstAired) <= now,
+      !alreadyWatched.has(e.id) &&
+      !alreadyHasUnknownWatch.has(e.id) &&
+      e.firstAired !== null &&
+      new Date(e.firstAired) <= now,
   )
 
   const values = targets.map((e) => ({
@@ -451,6 +478,10 @@ libraryRoutes.openapi(
         episodeNumber: episodes.episodeNumber,
         watchedCount: sql<number>`count(${plays.id})`.mapWith(Number),
         lastWatchedAt: sql<string | null>`max(${plays.watchedAt})`,
+        // Same "extract the year" check the show route's hasUnknownWatchDate
+        // uses above — cheaper than an exact-timestamp comparison and just
+        // as correct, since nothing else is ever dated in 1900.
+        hasUnknownWatch: sql<boolean>`coalesce(bool_or(extract(year from ${plays.watchedAt}) = 1900), false)`,
       })
       .from(episodes)
       .leftJoin(plays, and(eq(plays.episodeId, episodes.id), eq(plays.userId, user.id)))
@@ -494,6 +525,7 @@ libraryRoutes.openapi(
             lastWatchedAt: watch?.lastWatchedAt
               ? new Date(watch.lastWatchedAt).toISOString()
               : null,
+            hasUnknownWatch: watch?.hasUnknownWatch ?? false,
           }
         }),
     })

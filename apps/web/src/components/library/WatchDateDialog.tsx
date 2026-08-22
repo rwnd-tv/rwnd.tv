@@ -38,6 +38,17 @@ export function WatchDateDialog({
    * ISO string; ignored when `episode.firstAired` is actually set, since
    * that already shows its own real-dated "Release date" option below. */
   allowReleaseDate = false,
+  /** Hides "Unknown date" — for the per-episode "log an additional watch"
+   * dialog once that episode already has one logged (see
+   * SeasonEpisode.hasUnknownWatch's doc comment,
+   * packages/shared/src/schemas/library.ts): a second unknown-date watch
+   * would be indistinguishable from the first, and the API rejects it
+   * anyway (apps/api/src/routes/plays.ts), so there's nothing to offer
+   * here. Bulk (whole show/season) dialogs don't have one single
+   * episode's state to check, so they leave this at the default false —
+   * the API silently skips whichever episodes in scope already have one,
+   * same as it already does for unaired/already-watched episodes. */
+  disableUnknown = false,
   onConfirm,
   onCancel,
 }: {
@@ -47,6 +58,7 @@ export function WatchDateDialog({
   locale: string
   allowNowWatching?: boolean
   allowReleaseDate?: boolean
+  disableUnknown?: boolean
   onConfirm: (watchedAtIso: string) => void
   onCancel: () => void
 }) {
@@ -148,7 +160,9 @@ export function WatchDateDialog({
       ? [{ value: 'nowWatching' as const, label: t('showDetail.watchDialog.nowWatching') }]
       : []),
     ...(releaseDateLabel ? [{ value: 'releaseDate' as const, label: releaseDateLabel }] : []),
-    { value: 'unknown', label: t('showDetail.watchDialog.unknown') },
+    ...(disableUnknown
+      ? []
+      : [{ value: 'unknown' as const, label: t('showDetail.watchDialog.unknown') }]),
     { value: 'other', label: t('showDetail.watchDialog.otherDate') },
   ]
 

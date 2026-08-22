@@ -779,3 +779,45 @@ currently-dropped shows, since a row can have both
       `dev.rwnd.tv`: episode 24 of _A Certain Scientific Railgun S_
       (watched 3 times) shows a "3" badge, every other watched episode
       on that season still shows the tick.
+
+- [x] **Selective removal in the per-episode unwatch dialog** (2026-08-22 12:45 added)\
+      `UnwatchConfirmDialog.tsx` listed every logged watch but removing
+      always cleared all of them via one `onConfirm`. Done (2026-08-22):
+      a tick box per watch, ticked by default; title/button copy switches
+      to new `titleSelected`/`removeSelected` keys once at least one
+      watch is unticked, back to `titleMultiple`/`removeAll` once every
+      watch is ticked again; remove button disabled at zero ticked. The
+      per-episode DELETE route (`apps/api/src/routes/library.ts`) now
+      takes a `{ ids }` body (`removeEpisodeWatchesRequestSchema`) scoped
+      to the episode/user regardless of what's sent, rather than always
+      clearing everything; the GET route now returns each watch's own
+      `id` alongside `watchedAt` (`episodeWatchesSchema`) so the ids
+      exist to select by.\
+      Regression found during verification (James, same day): two
+      watches sharing an identical timestamp — realistic here because of
+      Trakt's `1900-01-01` "unknown date" sentinel, which several
+      rewatches can genuinely share — were seen both getting removed
+      when only one was ticked, not reproducible on demand. Root cause
+      was two compounding bugs: (1) `ORDER BY watchedAt DESC` alone gives
+      Postgres no guarantee of a stable order between tied rows across
+      separate queries, and (2) the dialog's "tick everything" reset
+      effect re-ran on any change to the fetched watch list, not just on
+      open — so a background refetch returning the tied pair in a
+      different order looked like "new data" and silently wiped the
+      user's unticking back to "everything selected." Fixed by
+      tie-breaking both `ORDER BY` clauses on `id` (deterministic
+      regardless of ties) and by only applying the reset once per open
+      (a ref guard) rather than on every `watches` reference change.
+      Verified live by deliberately creating two `1900-01-01` watches on
+      one real episode: three repeated fetches returned the identical
+      order, and unticking one of the two identical-looking rows removed
+      precisely that one by id, leaving its twin. Added two regression
+      tests for the tie case specifically (order stability across
+      repeated fetches, and selective removal of one of two
+      identical-timestamp watches).\
+      Follow-up (James, same day): the dialog listed an unknown-date
+      watch as the literal "01/01/1900, 00:00" instead of reading like
+      one. Done: reused the existing `UNKNOWN_WATCHED_AT` sentinel
+      constant and `history.unknownDate` ("Unknown date") copy — same
+      convention `HistoryPage.tsx` already uses for grouping these —
+      rather than inventing new wording.

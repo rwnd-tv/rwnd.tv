@@ -183,19 +183,42 @@ export const episodeWatchedStatusSchema = z.object({
 export type EpisodeWatchedStatus = z.infer<typeof episodeWatchedStatusSchema>
 
 /**
- * Every one of the current user's individual watch timestamps for one
- * episode, newest first — backs the "are you sure you want to remove
- * this/these watch(es)?" confirmation shown before un-watching
- * (UnwatchConfirmDialog.tsx) clears all of them. Deliberately not part of
- * seasonDetailSchema/seasonEpisodeSchema above — most episodes have at
- * most one play, so fetching every episode's full watch list on every
- * season page load would be wasted work for the common case; this is
+ * Every one of the current user's individual watches for one episode,
+ * newest first — backs the "are you sure you want to remove this/these
+ * watch(es)?" confirmation shown before un-watching (UnwatchConfirmDialog.tsx),
+ * which lets the user tick individual watches rather than only ever
+ * clearing all of them. `id` is each play's own id, needed to name which
+ * ones to remove in removeEpisodeWatchesRequestSchema below — a plain list
+ * of timestamps isn't enough to address one watch unambiguously (two plays
+ * could share an identical `watchedAt`, e.g. from a bulk import). Deliberately
+ * not part of seasonDetailSchema/seasonEpisodeSchema above — most episodes
+ * have at most one play, so fetching every episode's full watch list on
+ * every season page load would be wasted work for the common case; this is
  * fetched on demand only when the confirmation dialog opens.
  */
 export const episodeWatchesSchema = z.object({
-  watchedAt: z.array(z.string().datetime()),
+  watches: z.array(
+    z.object({
+      id: z.string().uuid(),
+      watchedAt: z.string().datetime(),
+    }),
+  ),
 })
 export type EpisodeWatches = z.infer<typeof episodeWatchesSchema>
+
+/**
+ * Request body for DELETE
+ * /library/shows/{slug}/seasons/{seasonNumber}/episodes/{episodeNumber}/plays
+ * (UnwatchConfirmDialog.tsx) — the play ids to remove, from the ids
+ * episodeWatchesSchema above returned. Always sent explicitly, even when
+ * every watch is ticked ("remove all" is just every id, not a separate
+ * omit-the-body mode) — one request shape, no special-cased branch to keep
+ * in sync with the ticking UI.
+ */
+export const removeEpisodeWatchesRequestSchema = z.object({
+  ids: z.array(z.string().uuid()).min(1),
+})
+export type RemoveEpisodeWatchesRequest = z.infer<typeof removeEpisodeWatchesRequestSchema>
 
 /**
  * Response shape for the manual drop/undrop toggle

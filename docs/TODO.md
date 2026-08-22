@@ -44,25 +44,6 @@ Format:
       scoping: what an episode page shows beyond what the season grid
       already does (overview, still image, watched toggle).
 
-## Season pages
-
-- [ ] **Selective removal in the per-episode unwatch dialog** (2026-08-22 12:45 added)\
-      `UnwatchConfirmDialog.tsx` currently lists every logged watch
-      (`watchedAt.map` at line 53) but removing always clears all of
-      them via one `onConfirm`. Add a tick box next to each watch,
-      ticked by default, and only remove the ticked ones. Title/button
-      copy needs to react to selection: `unwatchDialog.titleMultiple` /
-      `removeAll` copy only when every watch is ticked, otherwise
-      switch to new "Remove selected watches" copy
-      (`unwatchDialog.titleSelected` / `removeSelected` or similar new
-      keys). The remove button should be `disabled` when zero watches
-      are ticked. `onConfirm` will need to change from `() => void` to
-      passing the selected watch ids/timestamps through to the caller
-      (`SeasonDetailPage.tsx`'s `unwatch` mutation) — check what the
-      unwatch API/`library.ts` route currently accepts (probably
-      "remove all" only today) and whether it needs a
-      selective-removal variant.
-
 ## Dashboard
 
 - [ ] **"On Deck" row** (2026-08-21 23:00 added)\

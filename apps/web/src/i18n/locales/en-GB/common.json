@@ -141,8 +141,10 @@
     "unwatchDialog": {
       "titleSingle": "Are you sure you want to remove this watch?",
       "titleMultiple": "Are you sure you want to remove all these watches?",
+      "titleSelected": "Are you sure you want to remove the selected watches?",
       "remove": "Remove",
-      "removeAll": "Remove all watches"
+      "removeAll": "Remove all watches",
+      "removeSelected": "Remove selected watches"
     }
   },
   "movies": {

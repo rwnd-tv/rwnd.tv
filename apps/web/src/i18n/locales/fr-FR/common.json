@@ -141,8 +141,10 @@
     "unwatchDialog": {
       "titleSingle": "Voulez-vous vraiment supprimer ce visionnage ?",
       "titleMultiple": "Voulez-vous vraiment supprimer tous ces visionnages ?",
+      "titleSelected": "Voulez-vous vraiment supprimer les visionnages sélectionnés ?",
       "remove": "Supprimer",
-      "removeAll": "Supprimer tous les visionnages"
+      "removeAll": "Supprimer tous les visionnages",
+      "removeSelected": "Supprimer les visionnages sélectionnés"
     }
   },
   "movies": {

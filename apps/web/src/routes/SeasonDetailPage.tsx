@@ -105,7 +105,7 @@ function EpisodeCard({
   // episodes have at most one play, so there's no reason to fetch every
   // episode's full watch list up front just to back a dialog most clicks
   // never open.
-  const { data: watches } = useQuery({
+  const { data: watchesData } = useQuery({
     queryKey: ['show', slug, 'season', seasonNumber, 'episode', episode.episodeNumber, 'watches'],
     queryFn: () => api.library.episodeWatches(slug, seasonNumber, episode.episodeNumber),
     enabled: unwatchConfirmOpen,
@@ -139,12 +139,12 @@ function EpisodeCard({
   }
 
   // Unwatching doesn't need a date dialog the way marking watched does
-  // (see markWatched below) — but it does clear *every* logged play for
-  // the episode at once, so it's gated behind UnwatchConfirmDialog rather
-  // than firing immediately on click.
+  // (see markWatched below) — but it can clear more than one logged play
+  // at once, so it's gated behind UnwatchConfirmDialog (which the user can
+  // use to tick just some of them) rather than firing immediately on click.
   const unwatch = useMutation({
-    mutationFn: (): Promise<EpisodeWatchedStatus> =>
-      api.library.unwatchEpisode(slug, seasonNumber, episode.episodeNumber),
+    mutationFn: (ids: string[]): Promise<EpisodeWatchedStatus> =>
+      api.library.unwatchEpisode(slug, seasonNumber, episode.episodeNumber, ids),
     onSuccess: (status) => {
       onMutationSuccess(status)
       setUnwatchConfirmOpen(false)
@@ -257,9 +257,9 @@ function EpisodeCard({
       <UnwatchConfirmDialog
         open={unwatchConfirmOpen}
         watchedCountHint={episode.watchedCount}
-        watchedAt={watches?.watchedAt}
+        watches={watchesData?.watches}
         locale={locale}
-        onConfirm={() => unwatch.mutate()}
+        onConfirm={(ids) => unwatch.mutate(ids)}
         onCancel={() => setUnwatchConfirmOpen(false)}
       />
     </li>

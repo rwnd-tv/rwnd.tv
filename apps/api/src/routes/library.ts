@@ -8,6 +8,7 @@ import {
   listLibraryShowsResponseSchema,
   markShowWatchedRequestSchema,
   markShowWatchedResponseSchema,
+  removeEpisodeWatchesRequestSchema,
   removeShowWatchesResponseSchema,
   seasonDetailSchema,
   showDetailSchema,
@@ -491,17 +492,18 @@ libraryRoutes.openapi(
 )
 
 /**
- * Every one of the current user's watch timestamps for one episode, newest
- * first — backs the "are you sure?" confirmation shown before the DELETE
- * route below clears all of them (UnwatchConfirmDialog.tsx). Fetched on
- * demand only when that confirmation dialog opens, not part of the season
- * list response above — see episodeWatchesSchema's doc comment.
+ * Every one of the current user's individual watches for one episode,
+ * newest first — backs the "are you sure?" confirmation shown before the
+ * DELETE route below, which lets the user tick which of these to remove
+ * (UnwatchConfirmDialog.tsx). Fetched on demand only when that
+ * confirmation dialog opens, not part of the season list response above —
+ * see episodeWatchesSchema's doc comment.
  */
 libraryRoutes.openapi(
   createRoute({
     method: 'get',
     path: '/library/shows/{slug}/seasons/{seasonNumber}/episodes/{episodeNumber}/plays',
-    summary: "List the current user's watch timestamps for one episode",
+    summary: "List the current user's individual watches for one episode",
     middleware: [requireAuth] as const,
     request: {
       params: z.object({
@@ -512,7 +514,7 @@ libraryRoutes.openapi(
     },
     responses: {
       200: {
-        description: 'Watch timestamps, newest first',
+        description: 'Watches, newest first',
         content: { 'application/json': { schema: episodeWatchesSchema } },
       },
       404: { description: 'Show not found' },
@@ -544,30 +546,43 @@ libraryRoutes.openapi(
         ),
       )
       .limit(1)
-    if (!episodeRow) return c.json({ watchedAt: [] })
+    if (!episodeRow) return c.json({ watches: [] })
 
+    // Tie-broken by id, not just watchedAt — two rewatches can share the
+    // exact same timestamp (e.g. Trakt's 1900-01-01 "unknown date"
+    // sentinel is common across several plays), and ORDER BY watchedAt
+    // alone gives Postgres no guarantee of returning ties in the same
+    // relative order on a later call. UnwatchConfirmDialog.tsx relies on
+    // this list being stable across repeated fetches of the same data —
+    // an unstable order looks like "the list changed" to it.
     const rows = await db
-      .select({ watchedAt: plays.watchedAt })
+      .select({ id: plays.id, watchedAt: plays.watchedAt })
       .from(plays)
       .where(and(eq(plays.userId, userId), eq(plays.episodeId, episodeRow.id)))
-      .orderBy(desc(plays.watchedAt))
+      .orderBy(desc(plays.watchedAt), asc(plays.id))
 
-    return c.json({ watchedAt: rows.map((row) => row.watchedAt.toISOString()) })
+    return c.json({
+      watches: rows.map((row) => ({ id: row.id, watchedAt: row.watchedAt.toISOString() })),
+    })
   },
 )
 
 /**
  * Un-watch an episode (apps/web/src/routes/SeasonDetailPage.tsx) — clears
- * every one of the current user's logged plays against it, not just the
- * most recent one. Mirrors the Plex-style boolean watched/unwatched toggle
- * this page is modelled on; individual watch events for a rewatched
- * episode stay manageable on the History page instead of here.
+ * the current user's logged plays named in the request body, not
+ * necessarily every one of them (UnwatchConfirmDialog.tsx lets the user
+ * tick individual watches; "remove all" is just every id ticked, not a
+ * separate mode). `ids` is scoped to this episode/user in the WHERE clause
+ * below regardless of what the caller sends — a stray id for a different
+ * episode or another user's play can't be deleted through this route.
+ * Individual watch events for a rewatched episode otherwise stay
+ * manageable on the History page instead of here.
  */
 libraryRoutes.openapi(
   createRoute({
     method: 'delete',
     path: '/library/shows/{slug}/seasons/{seasonNumber}/episodes/{episodeNumber}/plays',
-    summary: "Clear the current user's watch history for one episode",
+    summary: "Remove some or all of the current user's watches for one episode",
     middleware: [requireAuth] as const,
     request: {
       params: z.object({
@@ -575,6 +590,7 @@ libraryRoutes.openapi(
         seasonNumber: z.coerce.number().int().min(0),
         episodeNumber: z.coerce.number().int().min(1),
       }),
+      body: { content: { 'application/json': { schema: removeEpisodeWatchesRequestSchema } } },
     },
     responses: {
       200: {
@@ -586,6 +602,7 @@ libraryRoutes.openapi(
   }),
   async (c) => {
     const { slug, seasonNumber, episodeNumber } = c.req.valid('param')
+    const { ids } = c.req.valid('json')
     const userId = c.get('user')!.id
     const db = c.get('db')
 
@@ -614,10 +631,24 @@ libraryRoutes.openapi(
     if (episodeRow) {
       await db
         .delete(plays)
-        .where(and(eq(plays.userId, userId), eq(plays.episodeId, episodeRow.id)))
+        .where(
+          and(eq(plays.userId, userId), eq(plays.episodeId, episodeRow.id), inArray(plays.id, ids)),
+        )
     }
 
-    return c.json({ watched: false, watchedCount: 0, lastWatchedAt: null })
+    const remaining = episodeRow
+      ? await db
+          .select({ watchedAt: plays.watchedAt })
+          .from(plays)
+          .where(and(eq(plays.userId, userId), eq(plays.episodeId, episodeRow.id)))
+          .orderBy(desc(plays.watchedAt), asc(plays.id))
+      : []
+
+    return c.json({
+      watched: remaining.length > 0,
+      watchedCount: remaining.length,
+      lastWatchedAt: remaining[0] ? remaining[0].watchedAt.toISOString() : null,
+    })
   },
 )
 

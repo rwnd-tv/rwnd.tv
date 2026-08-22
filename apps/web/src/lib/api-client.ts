@@ -24,6 +24,7 @@ import {
   type MarkShowWatchedResponse,
   type Play,
   type RegisterRequest,
+  type RemoveEpisodeWatchesRequest,
   type RemoveShowWatchesResponse,
   type RestoreBackupResponse,
   type SearchResponse,
@@ -68,7 +69,8 @@ const post = <T>(path: string, body?: unknown) =>
   request<T>(path, { method: 'POST', body: body ? JSON.stringify(body) : undefined })
 const patch = <T>(path: string, body: unknown) =>
   request<T>(path, { method: 'PATCH', body: JSON.stringify(body) })
-const del = <T>(path: string) => request<T>(path, { method: 'DELETE' })
+const del = <T>(path: string, body?: unknown) =>
+  request<T>(path, { method: 'DELETE', body: body ? JSON.stringify(body) : undefined })
 
 export const api = {
   account: {
@@ -130,9 +132,10 @@ export const api = {
       del<RemoveShowWatchesResponse>(
         `/library/shows/${encodeURIComponent(slug)}/seasons/${seasonNumber}/watched`,
       ),
-    unwatchEpisode: (slug: string, seasonNumber: number, episodeNumber: number) =>
+    unwatchEpisode: (slug: string, seasonNumber: number, episodeNumber: number, ids: string[]) =>
       del<EpisodeWatchedStatus>(
         `/library/shows/${encodeURIComponent(slug)}/seasons/${seasonNumber}/episodes/${episodeNumber}/plays`,
+        { ids } satisfies RemoveEpisodeWatchesRequest,
       ),
     episodeWatches: (slug: string, seasonNumber: number, episodeNumber: number) =>
       get<EpisodeWatches>(

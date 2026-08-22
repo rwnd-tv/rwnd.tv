@@ -1,5 +1,5 @@
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi'
-import { and, asc, desc, eq, gt, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, gt, inArray, sql } from 'drizzle-orm'
 import {
   droppedStatusSchema,
   episodeWatchedStatusSchema,
@@ -8,6 +8,7 @@ import {
   listLibraryShowsResponseSchema,
   markShowWatchedRequestSchema,
   markShowWatchedResponseSchema,
+  removeShowWatchesResponseSchema,
   seasonDetailSchema,
   showDetailSchema,
 } from '@rwnd/shared'
@@ -760,6 +761,61 @@ libraryRoutes.openapi(
     }
 
     return c.json({ count: episodeIds.length }, 201)
+  },
+)
+
+/**
+ * Clicking the "Watched" button again once it's already showing every
+ * non-special episode watched (see ShowDetailPage.tsx) opens a "remove all
+ * watches?" confirmation instead of the watch-date dialog — this is what it
+ * calls. Removes every play the current user has logged against a
+ * non-special episode of the show. Only ever touches locally-known episode
+ * rows (a play can't reference an episode that doesn't have one), so unlike
+ * the POST route above there's nothing to resolve from the provider.
+ */
+libraryRoutes.openapi(
+  createRoute({
+    method: 'delete',
+    path: '/library/shows/{slug}/watched',
+    summary: "Remove every one of the current user's watches for a show (specials excluded)",
+    middleware: [requireAuth] as const,
+    request: { params: z.object({ slug: z.string() }) },
+    responses: {
+      200: {
+        description: 'Watches removed',
+        content: { 'application/json': { schema: removeShowWatchesResponseSchema } },
+      },
+      404: { description: 'Show not found' },
+    },
+  }),
+  async (c) => {
+    const { slug } = c.req.valid('param')
+    const userId = c.get('user')!.id
+    const db = c.get('db')
+
+    const [show] = await db
+      .select({ id: shows.id })
+      .from(shows)
+      .where(eq(shows.slug, slug))
+      .limit(1)
+    if (!show) return c.json({ error: 'Show not found' }, 404)
+
+    const episodeRows = await db
+      .select({ id: episodes.id })
+      .from(episodes)
+      .where(and(eq(episodes.showId, show.id), gt(episodes.seasonNumber, 0)))
+    const episodeIds = episodeRows.map((row) => row.id)
+
+    let count = 0
+    if (episodeIds.length > 0) {
+      const removed = await db
+        .delete(plays)
+        .where(and(eq(plays.userId, userId), inArray(plays.episodeId, episodeIds)))
+        .returning({ id: plays.id })
+      count = removed.length
+    }
+
+    return c.json({ count })
   },
 )
 

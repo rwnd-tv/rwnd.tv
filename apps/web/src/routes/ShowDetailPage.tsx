@@ -10,6 +10,7 @@ import { PosterGrid } from '../components/library/PosterGrid.js'
 import { ProgressBar } from '../components/library/ProgressBar.js'
 import { WatchDateDialog } from '../components/library/WatchDateDialog.js'
 import { Button } from '../components/ui/Button.js'
+import { Dialog } from '../components/ui/Dialog.js'
 import { Spinner } from '../components/ui/Spinner.js'
 
 /** Same tick used on episode tiles (SeasonDetailPage.tsx's CheckIcon) —
@@ -59,6 +60,7 @@ export function ShowDetailPage() {
   const locale = user?.locale ?? 'en-GB'
   const queryClient = useQueryClient()
   const [watchDialogOpen, setWatchDialogOpen] = useState(false)
+  const [removeWatchesConfirmOpen, setRemoveWatchesConfirmOpen] = useState(false)
 
   const {
     data: show,
@@ -108,6 +110,18 @@ export function ShowDetailPage() {
     },
   })
 
+  // The other half of the "Watched" button: once it's showing every
+  // non-special episode watched (purple, see `fullyWatched` below),
+  // clicking it opens this confirmation instead of the watch-date dialog.
+  const removeWatches = useMutation({
+    mutationFn: () => api.library.removeShowWatches(slug!),
+    onSuccess: () => {
+      setRemoveWatchesConfirmOpen(false)
+      void invalidateWatchData(queryClient)
+      void queryClient.invalidateQueries({ queryKey: ['show', slug] })
+    },
+  })
+
   if (isLoading) return <Spinner label={t('common.loading')} />
 
   if (error) {
@@ -120,6 +134,16 @@ export function ShowDetailPage() {
     )
   }
   if (!show) return null
+
+  // Purple/primary once every non-special episode has been watched — both
+  // counts already exclude specials (see showDetailSchema's doc comment in
+  // packages/shared/src/schemas/library.ts). `totalEpisodes` is null for a
+  // show with no cached season data yet and 0 for one with only specials;
+  // neither should read as "fully watched".
+  const fullyWatched =
+    show.totalEpisodes !== null &&
+    show.totalEpisodes > 0 &&
+    show.watchedEpisodes === show.totalEpisodes
 
   return (
     <div className="flex flex-col gap-8">
@@ -204,11 +228,15 @@ export function ShowDetailPage() {
 
           <div className="flex gap-2">
             <Button
-              variant="secondary"
+              variant={fullyWatched ? 'primary' : 'secondary'}
               type="button"
-              disabled={!show.tmdbId}
-              title={show.tmdbId ? undefined : t('showDetail.watchedButtonDisabled')}
-              onClick={() => setWatchDialogOpen(true)}
+              disabled={!fullyWatched && !show.tmdbId}
+              title={
+                !fullyWatched && !show.tmdbId ? t('showDetail.watchedButtonDisabled') : undefined
+              }
+              onClick={() =>
+                fullyWatched ? setRemoveWatchesConfirmOpen(true) : setWatchDialogOpen(true)
+              }
             >
               <CheckIcon />
               {t('showDetail.watchedButton')}
@@ -247,6 +275,30 @@ export function ShowDetailPage() {
         onConfirm={(watchedAt) => markWatched.mutate(watchedAt)}
         onCancel={() => setWatchDialogOpen(false)}
       />
+
+      <Dialog
+        open={removeWatchesConfirmOpen}
+        onClose={() => setRemoveWatchesConfirmOpen(false)}
+        title={t('showDetail.removeAllWatchesTitle')}
+      >
+        <div className="mt-6 flex justify-end gap-2">
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => setRemoveWatchesConfirmOpen(false)}
+          >
+            {t('showDetail.watchDialog.cancel')}
+          </Button>
+          <Button
+            type="button"
+            variant="danger"
+            isLoading={removeWatches.isPending}
+            onClick={() => removeWatches.mutate()}
+          >
+            {t('showDetail.removeAllWatchesConfirm')}
+          </Button>
+        </div>
+      </Dialog>
 
       {show.seasons.length > 0 && (
         <div className="flex flex-col gap-3">

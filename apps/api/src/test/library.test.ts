@@ -5,6 +5,7 @@ import type {
   ListLibraryMoviesResponse,
   ListLibraryShowsResponse,
   MarkShowWatchedResponse,
+  RemoveShowWatchesResponse,
   ShowDetail,
   User,
 } from '@rwnd/shared'
@@ -688,6 +689,88 @@ describe('library', () => {
         method: 'POST',
         headers: { cookie, 'Content-Type': 'application/json' },
         body: JSON.stringify({ watchedAt: '2026-01-01T00:00:00.000Z' }),
+      })
+      expect(res.status).toBe(404)
+    })
+  })
+
+  describe('DELETE /library/shows/{slug}/watched', () => {
+    it('removes every watch for non-special episodes, leaving specials and other users untouched', async () => {
+      const cookieA = await createUserAndCookie('remover@example.com')
+      const userIdA = await meId(cookieA)
+      await createLocalUser(db, 'other-watcher@example.com', 'correct-horse-battery-staple')
+      const loginB = await app.request('/api/v1/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: 'other-watcher@example.com',
+          password: 'correct-horse-battery-staple',
+        }),
+      })
+      const cookieB = extractCookie(loginB)!
+      const userIdB = await meId(cookieB)
+
+      const [show] = await db
+        .insert(shows)
+        .values({ title: 'Remove Watches', slug: 'remove-watches' })
+        .returning()
+      if (!show) throw new Error('failed to insert show')
+      const [special, ep1, ep2] = await db
+        .insert(episodes)
+        .values([
+          { showId: show.id, seasonNumber: 0, episodeNumber: 1 },
+          { showId: show.id, seasonNumber: 1, episodeNumber: 1 },
+          { showId: show.id, seasonNumber: 1, episodeNumber: 2 },
+        ])
+        .returning()
+      if (!special || !ep1 || !ep2) throw new Error('failed to insert episodes')
+
+      await db.insert(plays).values([
+        { userId: userIdA, episodeId: special.id, watchedAt: new Date('2026-01-01') },
+        { userId: userIdA, episodeId: ep1.id, watchedAt: new Date('2026-01-02') },
+        // A rewatch — two plays against the same episode, both must go.
+        { userId: userIdA, episodeId: ep1.id, watchedAt: new Date('2026-01-03') },
+        { userId: userIdA, episodeId: ep2.id, watchedAt: new Date('2026-01-04') },
+        // Another user's watch of the same episode must survive.
+        { userId: userIdB, episodeId: ep1.id, watchedAt: new Date('2026-01-05') },
+      ])
+
+      const res = await app.request(`/api/v1/library/shows/${show.slug}/watched`, {
+        method: 'DELETE',
+        headers: { cookie: cookieA },
+      })
+      expect(res.status).toBe(200)
+      expect(await json<RemoveShowWatchesResponse>(res)).toEqual({ count: 3 })
+
+      const remaining = await db
+        .select({ userId: plays.userId, episodeId: plays.episodeId })
+        .from(plays)
+      expect(remaining).toHaveLength(2)
+      expect(remaining).toContainEqual({ userId: userIdA, episodeId: special.id })
+      expect(remaining).toContainEqual({ userId: userIdB, episodeId: ep1.id })
+    })
+
+    it('is a harmless no-op for a show with nothing watched', async () => {
+      const cookie = await createUserAndCookie()
+      const [show] = await db
+        .insert(shows)
+        .values({ title: 'Nothing Watched', slug: 'nothing-watched' })
+        .returning()
+      if (!show) throw new Error('failed to insert show')
+
+      const res = await app.request(`/api/v1/library/shows/${show.slug}/watched`, {
+        method: 'DELETE',
+        headers: { cookie },
+      })
+      expect(res.status).toBe(200)
+      expect(await json<RemoveShowWatchesResponse>(res)).toEqual({ count: 0 })
+    })
+
+    it('404s for a show that does not exist', async () => {
+      const cookie = await createUserAndCookie()
+      const res = await app.request('/api/v1/library/shows/no-such-show/watched', {
+        method: 'DELETE',
+        headers: { cookie },
       })
       expect(res.status).toBe(404)
     })

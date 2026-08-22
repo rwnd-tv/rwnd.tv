@@ -23,6 +23,7 @@ import {
   type MarkShowWatchedResponse,
   type Play,
   type RegisterRequest,
+  type RemoveShowWatchesResponse,
   type RestoreBackupResponse,
   type SearchResponse,
   type SeasonDetail,
@@ -117,6 +118,8 @@ export const api = {
       post<MarkShowWatchedResponse>(`/library/shows/${encodeURIComponent(slug)}/watched`, {
         watchedAt,
       }),
+    removeShowWatches: (slug: string) =>
+      del<RemoveShowWatchesResponse>(`/library/shows/${encodeURIComponent(slug)}/watched`),
     season: (slug: string, seasonNumber: number) =>
       get<SeasonDetail>(`/library/shows/${encodeURIComponent(slug)}/seasons/${seasonNumber}`),
     unwatchEpisode: (slug: string, seasonNumber: number, episodeNumber: number) =>

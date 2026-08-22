@@ -112,6 +112,8 @@
     "droppedFact": "Abandonnée",
     "watchedButton": "Vu",
     "watchedButtonDisabled": "Cette série n'a pas de correspondance TMDB, les épisodes ne peuvent pas être résolus",
+    "removeAllWatchesTitle": "Voulez-vous vraiment supprimer tous les visionnages ?",
+    "removeAllWatchesConfirm": "Supprimer tous les visionnages",
     "drop": "Abandonner",
     "undrop": "Annuler l'abandon",
     "seasonNotFound": "Cette saison est introuvable.",

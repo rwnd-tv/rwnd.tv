@@ -214,6 +214,20 @@ export const markShowWatchedResponseSchema = z.object({
 })
 export type MarkShowWatchedResponse = z.infer<typeof markShowWatchedResponseSchema>
 
+/**
+ * Backs the show page's "Watched" button when it's already showing every
+ * non-special episode watched (see ShowDetailPage.tsx) — clicking it in
+ * that state opens a confirmation instead of the watch-date dialog, and
+ * this is what DELETE /library/shows/{slug}/watched removes: every play
+ * the current user has logged against a non-special episode of the show.
+ * Only ever touches locally-known episode rows — unlike the POST route
+ * above, nothing here needs resolving from the provider.
+ */
+export const removeShowWatchesResponseSchema = z.object({
+  count: z.number().int(),
+})
+export type RemoveShowWatchesResponse = z.infer<typeof removeShowWatchesResponseSchema>
+
 export const libraryMovieSchema = z.object({
   id: z.string().uuid(),
   title: z.string(),

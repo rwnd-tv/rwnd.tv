@@ -112,6 +112,8 @@
     "droppedFact": "Dropped",
     "watchedButton": "Watched",
     "watchedButtonDisabled": "This show has no TMDB match, so episodes can't be resolved",
+    "removeAllWatchesTitle": "Are you sure you want to remove all watches?",
+    "removeAllWatchesConfirm": "Remove all watches",
     "drop": "Drop",
     "undrop": "Undrop",
     "seasonNotFound": "This season couldn't be found.",

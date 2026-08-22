@@ -38,10 +38,6 @@ Format:
 
 ## Settings page
 
-- [ ] **Backups section above Clear database** (2026-08-21 23:00 added)\
-      In `DatabasePanel.tsx`, reorder so the Backups section renders
-      before the Clear database checkboxes/button, not after.
-
 - [ ] **Confirmation dialog on Delete backup** (2026-08-21 23:00 added)\
       Delete currently fires immediately (matches `TokensPanel.tsx`'s
       Revoke button precedent) — James wants a confirm dialog before it

@@ -641,3 +641,20 @@ currently-dropped shows, since a row can have both
       match the border-div pattern `DatabasePanel.tsx`'s own Backups
       section already used for its internal separator. Verified live on
       `dev.rwnd.tv`: all four panels render the rule under their title.
+
+- [x] **Backups section above Clear database** (2026-08-21 23:00 added)\
+      In `DatabasePanel.tsx`, reorder so the Backups section renders
+      before the Clear database checkboxes/button, not after. Done
+      (2026-08-22): swapped the two blocks and moved the
+      `mt-8 border-t border-[var(--color-border)] pt-6` top-separator
+      styling from Backups (which had it as the second block) onto the
+      Clear-database block (now second) — only applied when
+      `backupsConfigured` is true, so a self-hoster without backups
+      configured still sees Clear database with no stray top border, same
+      as before. The panel's own description paragraph ("Permanently
+      delete your own tracked data...") moved down with the
+      checkboxes/button it actually describes, rather than staying
+      pinned under the panel title. Verified live on `dev.rwnd.tv`:
+      Backups (with its create button and existing backup list) now
+      renders first, Clear database second with a clean separator between
+      them.

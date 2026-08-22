@@ -113,36 +113,9 @@ export function DatabasePanel() {
     <Card>
       <h2 className="text-lg font-semibold">{t('settings.database.title')}</h2>
       <div className="mt-1 mb-4 border-t border-[var(--color-border)]" />
-      <p className="mb-4 text-sm text-[var(--color-fg-muted)]">
-        {t('settings.database.description')}
-      </p>
-
-      <div className="flex flex-col gap-3">
-        {categories.map(({ key, label }) => (
-          <label key={key} className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={selected[key]}
-              onChange={(e) => setSelected((prev) => ({ ...prev, [key]: e.target.checked }))}
-            />
-            {label}
-            <span className="text-[var(--color-fg-muted)]">{countLabel(key)}</span>
-          </label>
-        ))}
-        <div>
-          <Button
-            type="button"
-            variant="danger"
-            disabled={!anySelected}
-            onClick={() => setConfirmOpen(true)}
-          >
-            {t('settings.database.clearButton')}
-          </Button>
-        </div>
-      </div>
 
       {backupsConfigured && (
-        <div className="mt-8 border-t border-[var(--color-border)] pt-6">
+        <div>
           <h3 className="mb-1 text-base font-semibold">{t('settings.database.backup.title')}</h3>
           <p className="mb-4 text-sm text-[var(--color-fg-muted)]">
             {t('settings.database.backup.description')}
@@ -206,6 +179,36 @@ export function DatabasePanel() {
           )}
         </div>
       )}
+
+      <div className={backupsConfigured ? 'mt-8 border-t border-[var(--color-border)] pt-6' : ''}>
+        <p className="mb-4 text-sm text-[var(--color-fg-muted)]">
+          {t('settings.database.description')}
+        </p>
+
+        <div className="flex flex-col gap-3">
+          {categories.map(({ key, label }) => (
+            <label key={key} className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={selected[key]}
+                onChange={(e) => setSelected((prev) => ({ ...prev, [key]: e.target.checked }))}
+              />
+              {label}
+              <span className="text-[var(--color-fg-muted)]">{countLabel(key)}</span>
+            </label>
+          ))}
+          <div>
+            <Button
+              type="button"
+              variant="danger"
+              disabled={!anySelected}
+              onClick={() => setConfirmOpen(true)}
+            >
+              {t('settings.database.clearButton')}
+            </Button>
+          </div>
+        </div>
+      </div>
 
       <Dialog
         open={confirmOpen}

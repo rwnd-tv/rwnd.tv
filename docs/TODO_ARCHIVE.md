@@ -734,6 +734,47 @@ currently-dropped shows, since a row can have both
       existing genres/voteAverage backfill clauses), so existing shows
       pick it up on their next pass rather than staying null forever.
 
+- [x] **Episode pages** (2026-08-21 23:00 added, scoped 2026-08-22)\
+      No dedicated page per episode yet — only the season grid
+      (`SeasonDetailPage.tsx`) and its inline watch toggle. Needed
+      scoping: what an episode page shows beyond what the season grid
+      already does. Scoped with James: full-size still image, full
+      overview text, air date, runtime, the watched-toggle/log-
+      additional-watch actions, plus this episode's own watch-history
+      list; reachable by clicking an episode tile's thumbnail or title
+      on the season grid. Done (2026-08-22): new
+      `EpisodeDetailPage.tsx` at
+      `/shows/:slug/season/:seasonNumber/episode/:episodeNumber`,
+      sourced entirely from data the season query already returns
+      (`seasonEpisodeSchema`) plus the existing on-demand
+      `episodeWatches` endpoint (previously only fetched for the
+      unwatch-confirmation dialog, here shown unconditionally as a
+      read-only list) — no new backend endpoint needed. The
+      watch-toggle/additional-watch/unwatch mutation logic that
+      `EpisodeCard` (`SeasonDetailPage.tsx`) already had was pulled
+      into a shared hook (`use-episode-watch-actions.ts`) rather than
+      duplicated, since it's now used by two real call sites and the
+      aired/unknown-watch guard rules need to stay identical between
+      them. `EpisodeCard`'s thumbnail and title became a `<Link>` to
+      the new page; the overlaid watched-toggle/"+" buttons keep
+      working independently since they paint after (and on top of) the
+      link within the same relative container. Verified live on
+      `dev.rwnd.tv`: navigated in via both the thumbnail and title,
+      logged then selectively removed an additional watch (reverting
+      to the original single watch), confirmed the unwatched-episode
+      state (no "+" button, "Not watched yet." history) and that the
+      overlaid grid buttons still open their dialogs rather than
+      navigating.\
+      Follow-up (James, same day): full width (was the narrower reading
+      column) and previous/next episode chevron buttons matching the
+      season page's own previous/next season nav — same top-right
+      corner, `secondary` variant, disabled at either end of the
+      current season's episode list (doesn't cross into an adjacent
+      season, same scope as the season page's own nav not crossing
+      shows). Verified live: full-width layout renders correctly,
+      clicking through updates the page, and both chevrons disable
+      correctly at the season's first/last episode.
+
 ## Season pages
 
 - [x] **Subheading with year, TMDB score, and TMDB link** (2026-08-22 12:00 added)\

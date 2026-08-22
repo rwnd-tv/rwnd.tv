@@ -36,14 +36,6 @@ Format:
       leading-article rules are a bigger job than this feature needed; left
       as a known simplification.
 
-## TV Show pages
-
-- [ ] **Episode pages** (2026-08-21 23:00 added)\
-      No dedicated page per episode yet — only the season grid
-      (`SeasonDetailPage.tsx`) and its inline watch toggle. Needs
-      scoping: what an episode page shows beyond what the season grid
-      already does (overview, still image, watched toggle).
-
 ## Dashboard
 
 - [ ] **"On Deck" row** (2026-08-21 23:00 added)\
@@ -64,11 +56,11 @@ Format:
 - [ ] **Blur/hide spoiler content for unwatched episodes** (2026-08-22 10:45 added)\
       Thumbnails/stills, overview text, and any other spoiler-ish detail
       (title? air date?) for an episode the user hasn't logged a watch
-      for yet should be blurred or hidden by default — mainly
-      `SeasonDetailPage.tsx`'s episode grid today, and any future episode
-      page (see the "Episode pages" item above — these two should be
-      scoped together). Needs a reveal interaction (click/tap to unblur
-      one episode) rather than being permanently hidden. Must be a
+      for yet should be blurred or hidden by default — both
+      `SeasonDetailPage.tsx`'s episode grid and the per-episode page
+      (`EpisodeDetailPage.tsx`, added since this item was written). Needs
+      a reveal interaction (click/tap to unblur one episode) rather than
+      being permanently hidden. Must be a
       per-user toggle on `SettingsPage.tsx` (new panel or folded into an
       existing one) — default state and exact scope of "spoiler-ish"
       still to be decided with James.

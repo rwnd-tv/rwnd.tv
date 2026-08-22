@@ -147,6 +147,14 @@
       "remove": "Supprimer",
       "removeAll": "Supprimer tous les visionnages",
       "removeSelected": "Supprimer les visionnages sélectionnés"
+    },
+    "episodeDetail": {
+      "notFound": "Cet épisode est introuvable.",
+      "runtime": "{{minutes}} min",
+      "watchHistoryTitle": "Historique des visionnages",
+      "watchHistoryEmpty": "Pas encore regardé.",
+      "previousEpisode": "Épisode précédent",
+      "nextEpisode": "Épisode suivant"
     }
   },
   "movies": {

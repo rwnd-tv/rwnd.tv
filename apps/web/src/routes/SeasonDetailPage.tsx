@@ -2,11 +2,12 @@ import { type ReactNode, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useNavigate, useParams } from 'react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import type { EpisodeWatchedStatus, SeasonDetail, SeasonEpisode } from '@rwnd/shared'
+import type { SeasonEpisode } from '@rwnd/shared'
 import { api, ApiError } from '../lib/api-client.js'
 import { invalidateWatchData } from '../lib/query-client.js'
 import { markWatchedRequestBody } from '../lib/date.js'
 import { useAuth } from '../lib/auth-context.js'
+import { useEpisodeWatchActions } from '../lib/use-episode-watch-actions.js'
 import { PosterGrid } from '../components/library/PosterGrid.js'
 import { ProgressBar } from '../components/library/ProgressBar.js'
 import { WatchDateDialog } from '../components/library/WatchDateDialog.js'
@@ -120,97 +121,22 @@ function EpisodeCard({
   const { t } = useTranslation()
   const { user } = useAuth()
   const locale = user?.locale ?? 'en-GB'
-  const queryClient = useQueryClient()
-  const [dialogOpen, setDialogOpen] = useState(false)
-  const [logAdditionalWatchOpen, setLogAdditionalWatchOpen] = useState(false)
-  const [unwatchConfirmOpen, setUnwatchConfirmOpen] = useState(false)
-
-  // Fetched only while the confirmation dialog is actually open — most
-  // episodes have at most one play, so there's no reason to fetch every
-  // episode's full watch list up front just to back a dialog most clicks
-  // never open.
-  const { data: watchesData } = useQuery({
-    queryKey: ['show', slug, 'season', seasonNumber, 'episode', episode.episodeNumber, 'watches'],
-    queryFn: () => api.library.episodeWatches(slug, seasonNumber, episode.episodeNumber),
-    enabled: unwatchConfirmOpen,
-  })
-
-  function patchEpisode(status: EpisodeWatchedStatus) {
-    // Same cache-patch technique ShowDetailPage's drop/undrop toggle uses —
-    // both mutation paths already return the episode's new status, so a
-    // full season refetch would be redundant.
-    queryClient.setQueryData(
-      ['show', slug, 'season', seasonNumber],
-      (prev: SeasonDetail | undefined) =>
-        prev
-          ? {
-              ...prev,
-              episodes: prev.episodes.map((e) =>
-                e.episodeNumber === episode.episodeNumber ? { ...e, ...status } : e,
-              ),
-            }
-          : prev,
-    )
-  }
-
-  function onMutationSuccess(status: EpisodeWatchedStatus) {
-    patchEpisode(status)
-    void invalidateWatchData(queryClient)
-    // Not covered by invalidateWatchData — the parent show's own progress
-    // bar and Seasons grid (ShowDetailPage.tsx) would otherwise go stale
-    // after a toggle here.
-    void queryClient.invalidateQueries({ queryKey: ['show', slug] })
-  }
-
-  // Unwatching doesn't need a date dialog the way marking watched does
-  // (see markWatched below) — but it can clear more than one logged play
-  // at once, so it's gated behind UnwatchConfirmDialog (which the user can
-  // use to tick just some of them) rather than firing immediately on click.
-  const unwatch = useMutation({
-    mutationFn: (ids: string[]): Promise<EpisodeWatchedStatus> =>
-      api.library.unwatchEpisode(slug, seasonNumber, episode.episodeNumber, ids),
-    onSuccess: (status) => {
-      onMutationSuccess(status)
-      setUnwatchConfirmOpen(false)
-    },
-  })
-
-  const markWatched = useMutation({
-    mutationFn: async (watchedAt: string): Promise<EpisodeWatchedStatus> => {
-      // POST /plays already resolves/creates the local episode row and
-      // returns the logged play — no dedicated "mark watched" endpoint
-      // needed (see the plan's backend section).
-      const play = await api.plays.create({
-        episode: {
-          source: 'tmdb',
-          showExternalId: tmdbId!,
-          seasonNumber,
-          episodeNumber: episode.episodeNumber,
-        },
-        watchedAt,
-      })
-      return {
-        watched: true,
-        watchedCount: episode.watchedCount + 1,
-        lastWatchedAt: play.watchedAt,
-      }
-    },
-    onSuccess: onMutationSuccess,
-  })
+  const {
+    dialogOpen,
+    setDialogOpen,
+    logAdditionalWatchOpen,
+    setLogAdditionalWatchOpen,
+    unwatchConfirmOpen,
+    setUnwatchConfirmOpen,
+    watchesData,
+    markWatched,
+    unwatch,
+    notAiredYet,
+    toggleDisabled,
+  } = useEpisodeWatchActions(slug, seasonNumber, episode, tmdbId)
 
   const episodeLabel = t('import.progress.episode', { number: episode.episodeNumber })
   const toggleLabel = t(episode.watched ? 'showDetail.markUnwatched' : 'showDetail.markWatched')
-  // An unaired episode (no known firstAired, or one still in the future)
-  // can't have been watched yet — same rule the bulk "Watched" button's
-  // logMissingWatches enforces server-side (apps/api/src/routes/library.ts),
-  // now enforced here too so the toggle never opens a dialog whose only
-  // possible outcome is the POST /plays 400 this would otherwise hit.
-  const notAiredYet = episode.firstAired === null || new Date(episode.firstAired) > new Date()
-  // Can only mark watched when the show has a TMDB id on record (POST
-  // /plays needs it) and the episode has actually aired — unwatching needs
-  // neither, so only guarded here.
-  const toggleDisabled =
-    unwatch.isPending || markWatched.isPending || (!episode.watched && (!tmdbId || notAiredYet))
   const toggleTitle =
     !episode.watched && notAiredYet ? t('showDetail.episodeNotAiredYet') : toggleLabel
 
@@ -220,24 +146,30 @@ function EpisodeCard({
         className="group relative aspect-video w-full overflow-hidden rounded-lg bg-[var(--color-surface)]"
         title={episode.overview ?? undefined}
       >
-        {episode.stillPath ? (
-          <img
-            src={episode.stillPath}
-            alt=""
-            loading="lazy"
-            decoding="async"
-            width={300}
-            height={169}
-            className="h-full w-full object-cover"
-          />
-        ) : (
-          <div
-            aria-hidden="true"
-            className="flex h-full items-center justify-center text-xl font-semibold text-[var(--color-fg-muted)]"
-          >
-            {episode.episodeNumber}
-          </div>
-        )}
+        <Link
+          to={`/shows/${slug}/season/${seasonNumber}/episode/${episode.episodeNumber}`}
+          className="absolute inset-0"
+          aria-label={episode.title ?? episodeLabel}
+        >
+          {episode.stillPath ? (
+            <img
+              src={episode.stillPath}
+              alt=""
+              loading="lazy"
+              decoding="async"
+              width={300}
+              height={169}
+              className="h-full w-full object-cover"
+            />
+          ) : (
+            <div
+              aria-hidden="true"
+              className="flex h-full items-center justify-center text-xl font-semibold text-[var(--color-fg-muted)]"
+            >
+              {episode.episodeNumber}
+            </div>
+          )}
+        </Link>
         {episode.watched && (
           <button
             type="button"
@@ -273,8 +205,14 @@ function EpisodeCard({
         </button>
       </div>
       <div>
-        <h3 className="truncate text-sm font-medium" title={episode.title ?? episodeLabel}>
-          {episode.title ?? episodeLabel}
+        <h3 className="truncate text-sm font-medium">
+          <Link
+            to={`/shows/${slug}/season/${seasonNumber}/episode/${episode.episodeNumber}`}
+            title={episode.title ?? episodeLabel}
+            className="hover:underline"
+          >
+            {episode.title ?? episodeLabel}
+          </Link>
         </h3>
         <p className="text-xs text-[var(--color-fg-muted)]">{episodeLabel}</p>
         {episode.watchedCount > 1 && (

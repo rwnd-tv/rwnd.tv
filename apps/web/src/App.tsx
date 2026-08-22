@@ -10,6 +10,7 @@ import { HistoryPage } from './routes/HistoryPage.js'
 import { ShowsPage } from './routes/ShowsPage.js'
 import { ShowDetailPage } from './routes/ShowDetailPage.js'
 import { SeasonDetailPage } from './routes/SeasonDetailPage.js'
+import { EpisodeDetailPage } from './routes/EpisodeDetailPage.js'
 import { MoviesPage } from './routes/MoviesPage.js'
 import { ImportPage } from './routes/ImportPage.js'
 import { SettingsPage } from './routes/SettingsPage.js'
@@ -40,6 +41,11 @@ const router = createBrowserRouter([
           {
             path: '/shows/:slug/season/:seasonNumber',
             element: <SeasonDetailPage />,
+            handle: fullWidthHandle,
+          },
+          {
+            path: '/shows/:slug/season/:seasonNumber/episode/:episodeNumber',
+            element: <EpisodeDetailPage />,
             handle: fullWidthHandle,
           },
           { path: '/movies', element: <MoviesPage />, handle: fullWidthHandle },

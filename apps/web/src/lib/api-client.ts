@@ -122,6 +122,15 @@ export const api = {
       del<RemoveShowWatchesResponse>(`/library/shows/${encodeURIComponent(slug)}/watched`),
     season: (slug: string, seasonNumber: number) =>
       get<SeasonDetail>(`/library/shows/${encodeURIComponent(slug)}/seasons/${seasonNumber}`),
+    markSeasonWatched: (slug: string, seasonNumber: number, watchedAt: string) =>
+      post<MarkShowWatchedResponse>(
+        `/library/shows/${encodeURIComponent(slug)}/seasons/${seasonNumber}/watched`,
+        { watchedAt },
+      ),
+    removeSeasonWatches: (slug: string, seasonNumber: number) =>
+      del<RemoveShowWatchesResponse>(
+        `/library/shows/${encodeURIComponent(slug)}/seasons/${seasonNumber}/watched`,
+      ),
     unwatchEpisode: (slug: string, seasonNumber: number, episodeNumber: number) =>
       del<EpisodeWatchedStatus>(
         `/library/shows/${encodeURIComponent(slug)}/seasons/${seasonNumber}/episodes/${episodeNumber}/plays`,

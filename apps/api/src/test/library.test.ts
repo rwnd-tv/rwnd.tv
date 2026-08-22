@@ -776,6 +776,170 @@ describe('library', () => {
     })
   })
 
+  describe('POST /library/shows/{slug}/seasons/{seasonNumber}/watched', () => {
+    function jsonResponse(body: unknown): Response {
+      return new Response(JSON.stringify(body), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    }
+
+    async function insertShowWithSeason0And1() {
+      const [show] = await db
+        .insert(shows)
+        .values({ title: 'Season Watch Show', slug: 'season-watch-show' })
+        .returning()
+      if (!show) throw new Error('failed to insert show')
+      await db
+        .insert(externalIds)
+        .values({ entityType: 'show', entityId: show.id, source: 'tmdb', externalId: '60001' })
+      await db.insert(seasons).values([
+        { showId: show.id, seasonNumber: 0, episodeCount: 1 },
+        { showId: show.id, seasonNumber: 1, episodeCount: 2 },
+      ])
+      return show
+    }
+
+    it('logs a new watch for every episode of the season, resolving them from the provider', async () => {
+      const cookie = await createUserAndCookie()
+      const userId = await meId(cookie)
+      const show = await insertShowWithSeason0And1()
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (input: string | URL) => {
+          const url = new URL(input)
+          if (url.pathname === '/3/tv/60001/season/1') {
+            return jsonResponse({
+              episodes: [
+                { name: 'Ep 1', season_number: 1, episode_number: 1, air_date: '2020-01-01' },
+                { name: 'Ep 2', season_number: 1, episode_number: 2, air_date: '2020-01-08' },
+              ],
+            })
+          }
+          throw new Error(`Unexpected TMDB fetch in test: ${url}`)
+        }),
+      )
+
+      const res = await app.request(`/api/v1/library/shows/${show.slug}/seasons/1/watched`, {
+        method: 'POST',
+        headers: { cookie, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ watchedAt: '2026-06-01T12:00:00.000Z' }),
+      })
+      expect(res.status).toBe(201)
+      expect(await json<MarkShowWatchedResponse>(res)).toEqual({ count: 2 })
+
+      const playRows = await db
+        .select({ seasonNumber: episodes.seasonNumber })
+        .from(plays)
+        .innerJoin(episodes, eq(plays.episodeId, episodes.id))
+        .where(eq(plays.userId, userId))
+      expect(playRows).toHaveLength(2)
+      expect(playRows.every((row) => row.seasonNumber === 1)).toBe(true)
+    })
+
+    it('works for specials (season 0), unlike the show-level route', async () => {
+      const cookie = await createUserAndCookie()
+      const show = await insertShowWithSeason0And1()
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (input: string | URL) => {
+          const url = new URL(input)
+          if (url.pathname === '/3/tv/60001/season/0') {
+            return jsonResponse({
+              episodes: [
+                { name: 'Special', season_number: 0, episode_number: 1, air_date: '2020-01-01' },
+              ],
+            })
+          }
+          throw new Error(`Unexpected TMDB fetch in test: ${url}`)
+        }),
+      )
+
+      const res = await app.request(`/api/v1/library/shows/${show.slug}/seasons/0/watched`, {
+        method: 'POST',
+        headers: { cookie, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ watchedAt: '2026-01-01T00:00:00.000Z' }),
+      })
+      expect(res.status).toBe(201)
+      expect(await json<MarkShowWatchedResponse>(res)).toEqual({ count: 1 })
+    })
+
+    it('404s for a show that does not exist', async () => {
+      const cookie = await createUserAndCookie()
+      const res = await app.request('/api/v1/library/shows/no-such-show/seasons/1/watched', {
+        method: 'POST',
+        headers: { cookie, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ watchedAt: '2026-01-01T00:00:00.000Z' }),
+      })
+      expect(res.status).toBe(404)
+    })
+  })
+
+  describe('DELETE /library/shows/{slug}/seasons/{seasonNumber}/watched', () => {
+    it("removes only this season's watches, leaving other seasons and users untouched", async () => {
+      const cookieA = await createUserAndCookie('season-remover@example.com')
+      const userIdA = await meId(cookieA)
+      const [show] = await db
+        .insert(shows)
+        .values({ title: 'Season Remove Watches', slug: 'season-remove-watches' })
+        .returning()
+      if (!show) throw new Error('failed to insert show')
+      const [s1e1, s1e2, s2e1] = await db
+        .insert(episodes)
+        .values([
+          { showId: show.id, seasonNumber: 1, episodeNumber: 1 },
+          { showId: show.id, seasonNumber: 1, episodeNumber: 2 },
+          { showId: show.id, seasonNumber: 2, episodeNumber: 1 },
+        ])
+        .returning()
+      if (!s1e1 || !s1e2 || !s2e1) throw new Error('failed to insert episodes')
+
+      await db.insert(plays).values([
+        { userId: userIdA, episodeId: s1e1.id, watchedAt: new Date('2026-01-01') },
+        // A rewatch — two plays against the same episode, both must go.
+        { userId: userIdA, episodeId: s1e1.id, watchedAt: new Date('2026-01-02') },
+        { userId: userIdA, episodeId: s1e2.id, watchedAt: new Date('2026-01-03') },
+        // A different season's watch must survive.
+        { userId: userIdA, episodeId: s2e1.id, watchedAt: new Date('2026-01-04') },
+      ])
+
+      const res = await app.request(`/api/v1/library/shows/${show.slug}/seasons/1/watched`, {
+        method: 'DELETE',
+        headers: { cookie: cookieA },
+      })
+      expect(res.status).toBe(200)
+      expect(await json<RemoveShowWatchesResponse>(res)).toEqual({ count: 3 })
+
+      const remaining = await db.select({ episodeId: plays.episodeId }).from(plays)
+      expect(remaining).toEqual([{ episodeId: s2e1.id }])
+    })
+
+    it('is a harmless no-op for a season with nothing watched', async () => {
+      const cookie = await createUserAndCookie()
+      const [show] = await db
+        .insert(shows)
+        .values({ title: 'Season Nothing Watched', slug: 'season-nothing-watched' })
+        .returning()
+      if (!show) throw new Error('failed to insert show')
+
+      const res = await app.request(`/api/v1/library/shows/${show.slug}/seasons/1/watched`, {
+        method: 'DELETE',
+        headers: { cookie },
+      })
+      expect(res.status).toBe(200)
+      expect(await json<RemoveShowWatchesResponse>(res)).toEqual({ count: 0 })
+    })
+
+    it('404s for a show that does not exist', async () => {
+      const cookie = await createUserAndCookie()
+      const res = await app.request('/api/v1/library/shows/no-such-show/seasons/1/watched', {
+        method: 'DELETE',
+        headers: { cookie },
+      })
+      expect(res.status).toBe(404)
+    })
+  })
+
   describe('GET /library/movies', () => {
     it('counts rewatches and reports the last watch, absent from an unwatched movie', async () => {
       const cookie = await createUserAndCookie()

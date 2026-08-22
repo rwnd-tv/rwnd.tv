@@ -15,7 +15,7 @@ import {
 import { droppedShows, episodes, externalIds, movies, plays, seasons, shows } from '@rwnd/db'
 import type { AppEnv } from '../types.js'
 import { requireAuth } from '../middleware/auth.js'
-import { resolveShowEpisodes } from '../lib/media.js'
+import { resolveSeasonEpisodes, resolveShowEpisodes } from '../lib/media.js'
 
 export const libraryRoutes = new OpenAPIHono<AppEnv>()
 
@@ -558,6 +558,134 @@ libraryRoutes.openapi(
     }
 
     return c.json({ watched: false, watchedCount: 0, lastWatchedAt: null })
+  },
+)
+
+/**
+ * The season page's "Watched" button (apps/web/src/routes/SeasonDetailPage.tsx)
+ * — the season-scoped equivalent of the show page's own "Watched" button
+ * above. Logs one new play at `watchedAt` for every episode of this one
+ * season (specials included, unlike the show-level route — a season *is*
+ * the unit here, so there's no "exclude specials" question), unconditionally,
+ * so it also works as "log a rewatch of this season".
+ */
+libraryRoutes.openapi(
+  createRoute({
+    method: 'post',
+    path: '/library/shows/{slug}/seasons/{seasonNumber}/watched',
+    summary: 'Log a new watch for every episode of one season',
+    middleware: [requireAuth] as const,
+    request: {
+      params: z.object({ slug: z.string(), seasonNumber: z.coerce.number().int().min(0) }),
+      body: { content: { 'application/json': { schema: markShowWatchedRequestSchema } } },
+    },
+    responses: {
+      201: {
+        description: 'Watches logged',
+        content: { 'application/json': { schema: markShowWatchedResponseSchema } },
+      },
+      404: { description: 'Show not found' },
+    },
+  }),
+  async (c) => {
+    const { slug, seasonNumber } = c.req.valid('param')
+    const { watchedAt } = c.req.valid('json')
+    const user = c.get('user')!
+    const db = c.get('db')
+    const provider = c.get('metadataProvider')
+
+    const [show] = await db.select().from(shows).where(eq(shows.slug, slug)).limit(1)
+    if (!show) return c.json({ error: 'Show not found' }, 404)
+
+    const [tmdbExternalId] = await db
+      .select({ externalId: externalIds.externalId })
+      .from(externalIds)
+      .where(
+        and(
+          eq(externalIds.entityType, 'show'),
+          eq(externalIds.entityId, show.id),
+          eq(externalIds.source, 'tmdb'),
+        ),
+      )
+      .limit(1)
+    if (!tmdbExternalId) return c.json({ error: 'Show not found' }, 404)
+
+    const episodeIds = await resolveSeasonEpisodes(
+      db,
+      provider,
+      tmdbExternalId.externalId,
+      seasonNumber,
+      user.locale,
+    )
+
+    if (episodeIds.length > 0) {
+      const watchedAtDate = new Date(watchedAt)
+      await db.insert(plays).values(
+        episodeIds.map((episodeId) => ({
+          userId: user.id,
+          episodeId,
+          watchedAt: watchedAtDate,
+          source: 'manual' as const,
+        })),
+      )
+    }
+
+    return c.json({ count: episodeIds.length }, 201)
+  },
+)
+
+/**
+ * Clicking the season page's "Watched" button again once it's already
+ * showing every episode of the season watched opens a "remove all
+ * watches?" confirmation instead — the season-scoped equivalent of the
+ * show page's own remove-all-watches route above. Only ever touches
+ * locally-known episode rows, same reasoning as that route.
+ */
+libraryRoutes.openapi(
+  createRoute({
+    method: 'delete',
+    path: '/library/shows/{slug}/seasons/{seasonNumber}/watched',
+    summary: "Remove every one of the current user's watches for one season",
+    middleware: [requireAuth] as const,
+    request: {
+      params: z.object({ slug: z.string(), seasonNumber: z.coerce.number().int().min(0) }),
+    },
+    responses: {
+      200: {
+        description: 'Watches removed',
+        content: { 'application/json': { schema: removeShowWatchesResponseSchema } },
+      },
+      404: { description: 'Show not found' },
+    },
+  }),
+  async (c) => {
+    const { slug, seasonNumber } = c.req.valid('param')
+    const userId = c.get('user')!.id
+    const db = c.get('db')
+
+    const [show] = await db
+      .select({ id: shows.id })
+      .from(shows)
+      .where(eq(shows.slug, slug))
+      .limit(1)
+    if (!show) return c.json({ error: 'Show not found' }, 404)
+
+    const episodeRows = await db
+      .select({ id: episodes.id })
+      .from(episodes)
+      .where(and(eq(episodes.showId, show.id), eq(episodes.seasonNumber, seasonNumber)))
+    const episodeIds = episodeRows.map((row) => row.id)
+
+    let count = 0
+    if (episodeIds.length > 0) {
+      const removed = await db
+        .delete(plays)
+        .where(and(eq(plays.userId, userId), inArray(plays.episodeId, episodeIds)))
+        .returning({ id: plays.id })
+      count = removed.length
+    }
+
+    return c.json({ count })
   },
 )
 

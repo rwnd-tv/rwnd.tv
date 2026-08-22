@@ -11,6 +11,7 @@ import { ProgressBar } from '../components/library/ProgressBar.js'
 import { WatchDateDialog } from '../components/library/WatchDateDialog.js'
 import { UnwatchConfirmDialog } from '../components/library/UnwatchConfirmDialog.js'
 import { Button } from '../components/ui/Button.js'
+import { Dialog } from '../components/ui/Dialog.js'
 import { Spinner } from '../components/ui/Spinner.js'
 
 function CheckIcon() {
@@ -255,12 +256,17 @@ function EpisodeCard({
 export function SeasonDetailPage() {
   const { t } = useTranslation()
   const navigate = useNavigate()
+  const { user } = useAuth()
+  const locale = user?.locale ?? 'en-GB'
+  const queryClient = useQueryClient()
   const { slug, seasonNumber: seasonNumberParam } = useParams<{
     slug: string
     seasonNumber: string
   }>()
   const seasonNumber = Number(seasonNumberParam)
   const seasonNumberValid = Number.isInteger(seasonNumber)
+  const [watchDialogOpen, setWatchDialogOpen] = useState(false)
+  const [removeWatchesConfirmOpen, setRemoveWatchesConfirmOpen] = useState(false)
 
   // Same queryKey ShowDetailPage.tsx/PageTitleEffect.tsx use — shared React
   // Query cache, so this is free if the user navigated here from the show
@@ -280,6 +286,30 @@ export function SeasonDetailPage() {
     queryKey: ['show', slug, 'season', seasonNumber],
     queryFn: () => api.library.season(slug!, seasonNumber),
     enabled: Boolean(slug) && seasonNumberValid,
+  })
+
+  // The season-scoped equivalent of ShowDetailPage.tsx's "Watched" button
+  // pair — logs a new watch for every episode of this season at once (or,
+  // once it's showing every episode watched, removes them all). Neither
+  // patches a single cached field the way EpisodeCard's per-episode
+  // mutations above do: a whole season/show refetch is needed either way.
+  const markSeasonWatched = useMutation({
+    mutationFn: (watchedAt: string) =>
+      api.library.markSeasonWatched(slug!, seasonNumber, watchedAt),
+    onSuccess: () => {
+      setWatchDialogOpen(false)
+      void invalidateWatchData(queryClient)
+      void queryClient.invalidateQueries({ queryKey: ['show', slug] })
+    },
+  })
+
+  const removeSeasonWatches = useMutation({
+    mutationFn: () => api.library.removeSeasonWatches(slug!, seasonNumber),
+    onSuccess: () => {
+      setRemoveWatchesConfirmOpen(false)
+      void invalidateWatchData(queryClient)
+      void queryClient.invalidateQueries({ queryKey: ['show', slug] })
+    },
   })
 
   if (isLoading) return <Spinner label={t('common.loading')} />
@@ -303,6 +333,10 @@ export function SeasonDetailPage() {
       : t('import.progress.season', { number: season.seasonNumber }))
   const posterPath = season.posterPath ?? show?.posterPath ?? null
   const watchedEpisodes = season.episodes.filter((episode) => episode.watched).length
+  // Purple/primary once every episode of this season has been watched —
+  // same "Watched" button behaviour as ShowDetailPage.tsx, just scoped to
+  // one season (specials included, unlike the show-level button).
+  const fullyWatched = season.episodes.length > 0 && watchedEpisodes === season.episodes.length
 
   // show.seasons is already ordered by seasonNumber ascending (see
   // apps/api/src/routes/library.ts) — adjacent array entries are exactly
@@ -392,8 +426,58 @@ export function SeasonDetailPage() {
               {t('shows.progress', { watched: watchedEpisodes, total: season.episodes.length })}
             </p>
           </div>
+
+          <div>
+            <Button
+              variant={fullyWatched ? 'primary' : 'secondary'}
+              type="button"
+              disabled={!fullyWatched && !show?.tmdbId}
+              title={
+                !fullyWatched && !show?.tmdbId ? t('showDetail.watchedButtonDisabled') : undefined
+              }
+              onClick={() =>
+                fullyWatched ? setRemoveWatchesConfirmOpen(true) : setWatchDialogOpen(true)
+              }
+            >
+              <CheckIcon />
+              {t('showDetail.watchedButton')}
+            </Button>
+          </div>
         </div>
       </div>
+
+      <WatchDateDialog
+        open={watchDialogOpen}
+        episodeLabel={seasonName}
+        episode={{ title: seasonName, runtimeMinutes: null, firstAired: null }}
+        locale={locale}
+        onConfirm={(watchedAt) => markSeasonWatched.mutate(watchedAt)}
+        onCancel={() => setWatchDialogOpen(false)}
+      />
+
+      <Dialog
+        open={removeWatchesConfirmOpen}
+        onClose={() => setRemoveWatchesConfirmOpen(false)}
+        title={t('showDetail.removeAllWatchesTitle')}
+      >
+        <div className="mt-6 flex justify-end gap-2">
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => setRemoveWatchesConfirmOpen(false)}
+          >
+            {t('showDetail.watchDialog.cancel')}
+          </Button>
+          <Button
+            type="button"
+            variant="danger"
+            isLoading={removeSeasonWatches.isPending}
+            onClick={() => removeSeasonWatches.mutate()}
+          >
+            {t('showDetail.removeAllWatchesConfirm')}
+          </Button>
+        </div>
+      </Dialog>
 
       <PosterGrid minTileWidth="16rem">
         {season.episodes.map((episode) => (

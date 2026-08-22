@@ -147,14 +147,53 @@ export async function resolveShow(
 }
 
 /**
+ * Resolves every episode of one season to a local episode id, fetching the
+ * season's full episode list from the provider in one call — the same
+ * "one provider call per season, not per episode" shape as
+ * apps/api/src/import/match.ts's matchEpisode. Shared by
+ * resolveShowEpisodes (every non-special season) and resolveSeasonEpisodes
+ * (one season, specials included) below.
+ */
+async function resolveSeason(
+  db: Database,
+  provider: MetadataProvider,
+  showId: string,
+  showExternalId: string,
+  seasonNumber: number,
+  locale: string,
+): Promise<string[]> {
+  const { episodes: seasonEpisodes } = await provider.getSeason(
+    showExternalId,
+    seasonNumber,
+    locale,
+  )
+  if (seasonEpisodes.length > 0) {
+    await db
+      .insert(episodes)
+      .values(
+        seasonEpisodes.map((e) => ({
+          showId,
+          seasonNumber: e.seasonNumber,
+          episodeNumber: e.episodeNumber,
+          title: e.title,
+          runtimeMinutes: e.runtimeMinutes,
+          firstAired: e.firstAired,
+        })),
+      )
+      .onConflictDoNothing()
+  }
+  const rows = await db
+    .select({ id: episodes.id })
+    .from(episodes)
+    .where(and(eq(episodes.showId, showId), eq(episodes.seasonNumber, seasonNumber)))
+  return rows.map((row) => row.id)
+}
+
+/**
  * Resolves every non-special (season > 0) episode of a show to a local
- * episode id, fetching each season's full episode list from the provider
- * in one call — the same "one provider call per season, not per episode"
- * shape as apps/api/src/import/match.ts's matchEpisode, rather than N
- * individual resolveEpisode() fetches. Used by the "mark whole show
- * watched" action (apps/api/src/routes/library.ts), where every episode
- * needs a local row regardless of whether it's ever been individually
- * logged before.
+ * episode id. Used by the show page's "Watched" button
+ * (apps/api/src/routes/library.ts), where every episode needs a local row
+ * regardless of whether it's ever been individually logged before.
  */
 export async function resolveShowEpisodes(
   db: Database,
@@ -170,35 +209,29 @@ export async function resolveShowEpisodes(
     .where(and(eq(seasons.showId, show.id), gt(seasons.seasonNumber, 0)))
 
   const perSeason = await Promise.all(
-    seasonRows.map(async ({ seasonNumber }) => {
-      const { episodes: seasonEpisodes } = await provider.getSeason(
-        showExternalId,
-        seasonNumber,
-        locale,
-      )
-      if (seasonEpisodes.length > 0) {
-        await db
-          .insert(episodes)
-          .values(
-            seasonEpisodes.map((e) => ({
-              showId: show.id,
-              seasonNumber: e.seasonNumber,
-              episodeNumber: e.episodeNumber,
-              title: e.title,
-              runtimeMinutes: e.runtimeMinutes,
-              firstAired: e.firstAired,
-            })),
-          )
-          .onConflictDoNothing()
-      }
-      return db
-        .select({ id: episodes.id })
-        .from(episodes)
-        .where(and(eq(episodes.showId, show.id), eq(episodes.seasonNumber, seasonNumber)))
-    }),
+    seasonRows.map(({ seasonNumber }) =>
+      resolveSeason(db, provider, show.id, showExternalId, seasonNumber, locale),
+    ),
   )
 
-  return perSeason.flat().map((row) => row.id)
+  return perSeason.flat()
+}
+
+/**
+ * Resolves every episode of one season (specials included — unlike
+ * resolveShowEpisodes, there's no whole-show "exclude specials" reasoning
+ * at this scope) to a local episode id. Used by the season page's
+ * "Watched" button (apps/api/src/routes/library.ts).
+ */
+export async function resolveSeasonEpisodes(
+  db: Database,
+  provider: MetadataProvider,
+  showExternalId: string,
+  seasonNumber: number,
+  locale: string,
+): Promise<string[]> {
+  const show = await resolveShow(db, provider, showExternalId, locale)
+  return resolveSeason(db, provider, show.id, showExternalId, seasonNumber, locale)
 }
 
 export async function resolveEpisode(

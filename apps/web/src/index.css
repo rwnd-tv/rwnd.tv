@@ -64,3 +64,63 @@ body {
   outline: 2px solid var(--color-focus-ring);
   outline-offset: 2px;
 }
+
+/* DualRangeSlider.tsx: two overlapping range inputs sharing one visible
+   track. Each input's own track is hidden and `pointer-events: none`; only
+   its thumb (`pointer-events: auto`) is interactive, so the two handles can
+   be dragged/tabbed to independently despite overlapping the same box. The
+   default `:focus-visible` outline above is suppressed on these inputs
+   (it would ring the whole invisible full-width box) in favour of ringing
+   just the thumb. */
+.dual-range-input {
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent;
+  pointer-events: none;
+  margin: 0;
+}
+
+.dual-range-input:focus-visible {
+  outline: none;
+}
+
+.dual-range-input::-webkit-slider-runnable-track {
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent;
+}
+
+.dual-range-input::-webkit-slider-thumb {
+  appearance: none;
+  -webkit-appearance: none;
+  pointer-events: auto;
+  width: 16px;
+  height: 16px;
+  border-radius: 9999px;
+  background: var(--color-primary);
+  cursor: pointer;
+}
+
+.dual-range-input:focus-visible::-webkit-slider-thumb {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+
+.dual-range-input::-moz-range-track {
+  background: transparent;
+}
+
+.dual-range-input::-moz-range-thumb {
+  pointer-events: auto;
+  width: 16px;
+  height: 16px;
+  border: none;
+  border-radius: 9999px;
+  background: var(--color-primary);
+  cursor: pointer;
+}
+
+.dual-range-input:focus-visible::-moz-range-thumb {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}

@@ -36,16 +36,6 @@ Format:
       leading-article rules are a bigger job than this feature needed; left
       as a known simplification.
 
-- [ ] **Single two-handle range slider for Watched/Rating/Released filters** (2026-08-21 23:00 added)\
-      `WatchedYearFilterPanel.tsx`, `RatingFilterPanel.tsx`, and
-      `ReleaseYearFilterPanel.tsx` each use two independent sliders
-      (After/Before, Min/Max) that can currently be dragged past each
-      other. Preferred fix: a single range slider with two handles.
-      Fallback if that's not practical: keep two sliders, but instead of
-      blocking a drag that would cross the other handle, push that other
-      handle out of the way so After can never end up past Before (and
-      vice versa) without a stuck-at-the-boundary interaction.
-
 ## Settings page
 
 - [ ] **Horizontal rule under each panel's title** (2026-08-21 23:00 added)\

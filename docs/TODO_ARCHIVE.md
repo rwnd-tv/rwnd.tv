@@ -431,6 +431,59 @@ currently-dropped shows, since a row can have both
       `...--filename-slug-check-caf-m-tley-cr-e.json` — no stray
       subdirectory, no crash.
 
+- [x] **Single two-handle range slider for Watched/Rating/Released filters** (2026-08-21 23:00 added)\
+      `WatchedYearFilterPanel.tsx`, `RatingFilterPanel.tsx`, and
+      `ReleaseYearFilterPanel.tsx` each use two independent sliders
+      (After/Before, Min/Max) that can currently be dragged past each
+      other. Preferred fix: a single range slider with two handles.
+      Fallback if that's not practical: keep two sliders, but instead of
+      blocking a drag that would cross the other handle, push that other
+      handle out of the way so After can never end up past Before (and
+      vice versa) without a stuck-at-the-boundary interaction. Done
+      (2026-08-22): built `DualRangeSlider.tsx`
+      (`apps/web/src/components/ui/`), one shared component used by all
+      three panels (also removing the identical clamp-logic duplication
+      they had). Rather than fully custom pointer/keyboard handling, it
+      overlaps two native `<input type="range">` elements on one visible
+      track — CSS in `index.css` (`.dual-range-input`) hides each input's
+      own track and sets `pointer-events: none` on everything but the
+      thumb (`::-webkit-slider-thumb`/`::-moz-range-thumb`), so native
+      keyboard/touch/screen-reader slider semantics keep working for both
+      handles despite the shared track. `z-index` swaps between the two
+      inputs based on which value is further from the midpoint, so
+      whichever handle still has room to move stays grabbable when they
+      meet or overlap. Trade-off: clicking empty track no longer jumps a
+      handle there (neither input's track owns that click), only
+      dragging/keyboard does. Verified live on `dev.rwnd.tv`: dragging
+      each handle, the clamp/push-together behavior at the boundary, the
+      z-index handoff when handles overlap, keyboard arrow-key control
+      with a visible focus ring on the thumb, and that filtering itself
+      still updates the gallery correctly.\
+      One real bug caught by James in that live testing: on the Rating
+      panel (`min={2.8}`, `step={0.1}`), dragging or arrow-keying the Max
+      handle could never actually reach `9.5` — it snapped one step short
+      at `9.4`, even though Reset correctly set it to `9.5`. Root cause is
+      a floating-point quirk in native `<input type="range">`: the browser
+      snaps values by stepping `step` from `min`, and `9.5 - 2.8` isn't an
+      exact multiple of `0.1` in floating point, so its own snapping
+      arithmetic clamped one step short of the true max instead of
+      reaching it — reproducible with a bare native range input, nothing
+      to do with the dual-handle overlay itself. Fixed by moving the two
+      native inputs onto an integer index space (`min={0}`,
+      `max={totalSteps}`, `step={1}`, `totalSteps = round((max-min)/step)`)
+      with `toIndex`/`fromIndex` conversions at the boundary — integer
+      stepping is always exact, so the true max/min are always reachable
+      by drag or keyboard, not just by the initial/reset value.
+      `aria-valuemin`/`aria-valuemax`/`aria-valuenow`/`aria-valuetext`
+      overrides keep screen readers announcing the real value rather than
+      its index. **Lesson: a non-zero, non-`step`-aligned `min` combined
+      with a fractional `step` is enough to make native range inputs
+      silently drop the last step — worth checking for on any future
+      range slider whose domain doesn't start at a round number.**
+      Re-verified live after the fix: dragging Max fully right now reaches
+      `9.5` both by overshooting past the track edge and by landing
+      exactly on it.
+
 ## Mobile / responsive
 
 - [x] **Sidebar bottom items hidden behind the mobile address bar** (2026-08-21)\

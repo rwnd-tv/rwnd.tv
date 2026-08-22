@@ -1,3 +1,4 @@
+import { DualRangeSlider } from '../ui/DualRangeSlider.js'
 import type { UnknownWatchedMode } from '../../lib/library-filter.js'
 import type { AfterBefore } from '../../lib/use-year-range-cookie.js'
 
@@ -69,10 +70,10 @@ function UnknownModeButton({
 }
 
 /**
- * Same shape as ReleaseYearFilterPanel — two native "After"/"Before" range
- * sliders — plus one addition: an include/exclude toggle for shows whose
- * watched date is unknown (Trakt's 1900-01-01 sentinel, see watchedYearOf()
- * in library-filter.ts). That's a categorical condition, not a value the
+ * Same shape as ReleaseYearFilterPanel — a single "After"/"Before"
+ * DualRangeSlider — plus one addition: an include/exclude toggle for shows
+ * whose watched date is unknown (Trakt's 1900-01-01 sentinel, see
+ * watchedYearOf() in library-filter.ts). That's a categorical condition, not a value the
  * range sliders could place inside or outside of, so it's a separate
  * control rather than trying to fold "unknown" into the slider range
  * itself — see ShowsPage.tsx's `watchedYearRange`, which excludes 1900 from
@@ -113,14 +114,6 @@ export function WatchedYearFilterPanel({
   includeLabel: string
   excludeLabel: string
 }) {
-  function setAfter(value: number) {
-    onChange({ after: Math.min(value, range.before), before: range.before })
-  }
-
-  function setBefore(value: number) {
-    onChange({ after: range.after, before: Math.max(value, range.after) })
-  }
-
   function setUnknownMode(mode: Exclude<UnknownWatchedMode, 'neutral'>) {
     onUnknownModeChange(unknownMode === mode ? 'neutral' : mode)
   }
@@ -131,38 +124,15 @@ export function WatchedYearFilterPanel({
         {groupLabel}
       </summary>
       <div className="mt-3 flex w-64 flex-col gap-4">
-        <div className="flex flex-col gap-1">
-          <div className="flex items-center justify-between text-sm">
-            <span>{afterLabel}</span>
-            <span className="text-[var(--color-fg-muted)]">{range.after}</span>
-          </div>
-          <input
-            type="range"
-            aria-label={afterLabel}
-            min={min}
-            max={max}
-            step={1}
-            value={range.after}
-            onChange={(e) => setAfter(Number(e.target.value))}
-            className="w-full accent-[var(--color-primary)]"
-          />
-        </div>
-        <div className="flex flex-col gap-1">
-          <div className="flex items-center justify-between text-sm">
-            <span>{beforeLabel}</span>
-            <span className="text-[var(--color-fg-muted)]">{range.before}</span>
-          </div>
-          <input
-            type="range"
-            aria-label={beforeLabel}
-            min={min}
-            max={max}
-            step={1}
-            value={range.before}
-            onChange={(e) => setBefore(Number(e.target.value))}
-            className="w-full accent-[var(--color-primary)]"
-          />
-        </div>
+        <DualRangeSlider
+          min={min}
+          max={max}
+          step={1}
+          value={{ low: range.after, high: range.before }}
+          onChange={({ low, high }) => onChange({ after: low, before: high })}
+          lowLabel={afterLabel}
+          highLabel={beforeLabel}
+        />
         <div className="flex items-center justify-between gap-2 text-sm">
           <span>{unknownLabel}</span>
           <span className="flex shrink-0 items-center gap-1">

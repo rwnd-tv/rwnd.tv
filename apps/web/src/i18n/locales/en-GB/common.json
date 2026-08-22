@@ -256,11 +256,14 @@
         "skipped_one": "{{count}} item couldn't be included (no matching TMDB entry)",
         "skipped_other": "{{count}} items couldn't be included (no matching TMDB entry)",
         "restore": "Restore",
+        "diff": "Diff",
         "delete": "Delete",
         "confirmRestoreTitle": "Are you sure you want to restore this backup?",
         "confirmRestoreBody": "This replaces your current watch history, ratings, watchlists, and dropped TV shows with \"{{description}}\" ({{date}}). This can't be undone.",
         "confirmDeleteTitle": "Are you sure you want to delete this backup?",
-        "confirmDeleteBody": "This permanently deletes \"{{description}}\" ({{date}}). This can't be undone."
+        "confirmDeleteBody": "This permanently deletes \"{{description}}\" ({{date}}). This can't be undone.",
+        "diffTitle": "Changes since \"{{description}}\"",
+        "diffLine": "{{added}} added, {{removed}} removed"
       }
     },
     "instance": {
@@ -277,6 +280,7 @@
   "common": {
     "loading": "Loading…",
     "cancel": "Cancel",
+    "close": "Close",
     "somethingWentWrong": "Something went wrong. Please try again."
   }
 }

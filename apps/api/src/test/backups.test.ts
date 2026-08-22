@@ -12,7 +12,13 @@ import {
   shows,
   watchlistItems,
 } from '@rwnd/db'
-import type { BackupSummary, ListBackupsResponse, RestoreBackupResponse, User } from '@rwnd/shared'
+import type {
+  BackupSummary,
+  DiffBackupResponse,
+  ListBackupsResponse,
+  RestoreBackupResponse,
+  User,
+} from '@rwnd/shared'
 import { createLocalUser, extractCookie, json, resetDb, testApp, testDb } from './helpers.js'
 import { loadEnv } from '../env.js'
 
@@ -111,6 +117,7 @@ describe('backups', () => {
   it('requires authentication', async () => {
     expect((await app.request('/api/v1/backups')).status).toBe(401)
     expect((await app.request('/api/v1/backups', { method: 'POST' })).status).toBe(401)
+    expect((await app.request('/api/v1/backups/fake-id/diff')).status).toBe(401)
   })
 
   it('round-trips a backup through clear and restore', async () => {
@@ -224,6 +231,47 @@ describe('backups', () => {
     expect(recreatedMovie?.year).toBe(1999)
   })
 
+  it('diffs a backup against the current state, counting entries added and removed since it was taken', async () => {
+    const cookie = await createUserAndCookie('differ@example.com')
+    const userId = await meId(cookie)
+    const { episode, movie } = await seedMetadata(db)
+
+    // At backup time: one movie watch, one rating.
+    await db
+      .insert(plays)
+      .values({ userId, movieId: movie.id, watchedAt: new Date('2026-01-01T00:00:00.000Z') })
+    await db
+      .insert(ratings)
+      .values({ userId, entityType: 'movie', entityId: movie.id, rating: 8, ratedAt: new Date() })
+
+    const createRes = await app.request('/api/v1/backups', {
+      method: 'POST',
+      headers: { cookie, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ description: 'Before more watching' }),
+    })
+    const backup = await json<BackupSummary>(createRes)
+
+    // Since the backup: the movie watch is removed, an episode watch is
+    // added, the rating is untouched.
+    await db.delete(plays).where(eq(plays.movieId, movie.id))
+    await db
+      .insert(plays)
+      .values({ userId, episodeId: episode.id, watchedAt: new Date('2026-01-05T00:00:00.000Z') })
+
+    const diffRes = await app.request(`/api/v1/backups/${backup.id}/diff`, {
+      headers: { cookie },
+    })
+    expect(diffRes.status).toBe(200)
+    expect(await json<DiffBackupResponse>(diffRes)).toEqual({
+      diff: {
+        watchHistory: { added: 1, removed: 1 },
+        ratings: { added: 0, removed: 0 },
+        watchlist: { added: 0, removed: 0 },
+        droppedShows: { added: 0, removed: 0 },
+      },
+    })
+  })
+
   it('falls back to a plain id when the description has nothing sluggable, and truncates a long one', async () => {
     const cookie = await createUserAndCookie('slugs@example.com')
 
@@ -262,6 +310,12 @@ describe('backups', () => {
       { method: 'DELETE', headers: { cookie } },
     )
     expect(deleteRes.status).toBe(400)
+
+    const diffRes = await app.request(
+      `/api/v1/backups/${encodeURIComponent('../../etc/passwd')}/diff`,
+      { headers: { cookie } },
+    )
+    expect(diffRes.status).toBe(400)
   })
 
   it("isolates one user's backups from another's", async () => {
@@ -302,6 +356,11 @@ describe('backups', () => {
       headers: { cookie: cookieB },
     })
     expect(deleteAsB.status).toBe(404)
+
+    const diffAsB = await app.request(`/api/v1/backups/${backup.id}/diff`, {
+      headers: { cookie: cookieB },
+    })
+    expect(diffAsB.status).toBe(404)
 
     // Still there for its actual owner, unaffected by B's attempts.
     const listAsA = await app.request('/api/v1/backups', { headers: { cookie: cookieA } })

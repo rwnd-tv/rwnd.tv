@@ -221,3 +221,25 @@ export const restoreBackupResponseSchema = z.object({
   counts: backupCountsSchema,
 })
 export type RestoreBackupResponse = z.infer<typeof restoreBackupResponseSchema>
+
+/** Entries present now but not in the backup ("added" since the backup was
+ * taken) vs. entries present in the backup but not now ("removed" since).
+ * Counted per category, same four as backupCountsSchema. */
+export const backupDiffCategorySchema = z.object({
+  added: z.number().int(),
+  removed: z.number().int(),
+})
+export type BackupDiffCategory = z.infer<typeof backupDiffCategorySchema>
+
+export const backupDiffSchema = z.object({
+  watchHistory: backupDiffCategorySchema,
+  ratings: backupDiffCategorySchema,
+  watchlist: backupDiffCategorySchema,
+  droppedShows: backupDiffCategorySchema,
+})
+export type BackupDiff = z.infer<typeof backupDiffSchema>
+
+export const diffBackupResponseSchema = z.object({
+  diff: backupDiffSchema,
+})
+export type DiffBackupResponse = z.infer<typeof diffBackupResponseSchema>

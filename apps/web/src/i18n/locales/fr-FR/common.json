@@ -256,11 +256,14 @@
         "skipped_one": "{{count}} élément n'a pas pu être inclus (aucune correspondance TMDB)",
         "skipped_other": "{{count}} éléments n'ont pas pu être inclus (aucune correspondance TMDB)",
         "restore": "Restaurer",
+        "diff": "Comparer",
         "delete": "Supprimer",
         "confirmRestoreTitle": "Voulez-vous vraiment restaurer cette sauvegarde ?",
         "confirmRestoreBody": "Cela remplace votre historique de visionnage, vos notes, vos listes à voir et vos séries abandonnées actuels par « {{description}} » ({{date}}). Cette action est irréversible.",
         "confirmDeleteTitle": "Voulez-vous vraiment supprimer cette sauvegarde ?",
-        "confirmDeleteBody": "Cela supprime définitivement « {{description}} » ({{date}}). Cette action est irréversible."
+        "confirmDeleteBody": "Cela supprime définitivement « {{description}} » ({{date}}). Cette action est irréversible.",
+        "diffTitle": "Changements depuis « {{description}} »",
+        "diffLine": "{{added}} ajoutés, {{removed}} supprimés"
       }
     },
     "instance": {
@@ -277,6 +280,7 @@
   "common": {
     "loading": "Chargement…",
     "cancel": "Annuler",
+    "close": "Fermer",
     "somethingWentWrong": "Une erreur est survenue. Veuillez réessayer."
   }
 }

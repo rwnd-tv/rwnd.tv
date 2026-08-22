@@ -37,6 +37,7 @@ export function DatabasePanel() {
   const [createBackupOpen, setCreateBackupOpen] = useState(false)
   const [restoreTarget, setRestoreTarget] = useState<BackupSummary>()
   const [deleteTarget, setDeleteTarget] = useState<BackupSummary>()
+  const [diffTarget, setDiffTarget] = useState<BackupSummary>()
 
   // Row counts next to each checkbox — undefined (nothing shown yet)
   // until loaded. Covered by the mutation's full-cache invalidation
@@ -113,6 +114,20 @@ export function DatabasePanel() {
     },
   })
 
+  // Fetched on demand, per backup, only while its diff dialog is open —
+  // not upfront for the whole list, since it costs the API a full
+  // rebuild-and-compare of the user's current data (see
+  // apps/api/src/backup/diff.ts) rather than a cheap file read.
+  const {
+    data: diffData,
+    isLoading: diffLoading,
+    isError: diffError,
+  } = useQuery({
+    queryKey: ['backups', diffTarget?.id, 'diff'],
+    queryFn: () => api.backups.diff(diffTarget!.id),
+    enabled: Boolean(diffTarget),
+  })
+
   return (
     <Card>
       <h2 className="text-lg font-semibold">{t('settings.database.title')}</h2>
@@ -161,6 +176,9 @@ export function DatabasePanel() {
                     )}
                   </div>
                   <div className="flex shrink-0 gap-2">
+                    <Button type="button" variant="secondary" onClick={() => setDiffTarget(backup)}>
+                      {t('settings.database.backup.diff')}
+                    </Button>
                     <Button
                       type="button"
                       variant="secondary"
@@ -346,6 +364,35 @@ export function DatabasePanel() {
             </div>
           </>
         )}
+      </Dialog>
+
+      <Dialog
+        open={Boolean(diffTarget)}
+        onClose={() => setDiffTarget(undefined)}
+        title={t('settings.database.backup.diffTitle', { description: diffTarget?.description })}
+      >
+        {diffLoading ? (
+          <Spinner label={t('common.loading')} />
+        ) : diffError ? (
+          <p className="text-sm text-[var(--color-danger)]">{t('common.somethingWentWrong')}</p>
+        ) : diffData ? (
+          <ul className="flex flex-col gap-1 text-sm">
+            {categories.map(({ key, label }) => (
+              <li key={key} className="flex items-center justify-between gap-4">
+                <span>{label}</span>
+                <span className="text-[var(--color-fg-muted)]">
+                  {t('settings.database.backup.diffLine', diffData.diff[key])}
+                </span>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+
+        <div className="mt-6 flex justify-end">
+          <Button type="button" variant="secondary" onClick={() => setDiffTarget(undefined)}>
+            {t('common.close')}
+          </Button>
+        </div>
       </Dialog>
     </Card>
   )

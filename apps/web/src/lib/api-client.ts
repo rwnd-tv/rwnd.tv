@@ -8,6 +8,7 @@ import {
   type CreateBackupRequest,
   type CreateImportJobRequest,
   type CreatePlayRequest,
+  type DiffBackupResponse,
   type DroppedStatus,
   type EpisodeWatchedStatus,
   type EpisodeWatches,
@@ -76,6 +77,7 @@ export const api = {
     create: (body: CreateBackupRequest) => post<BackupSummary>('/backups', body),
     restore: (id: string) =>
       post<RestoreBackupResponse>(`/backups/${encodeURIComponent(id)}/restore`),
+    diff: (id: string) => get<DiffBackupResponse>(`/backups/${encodeURIComponent(id)}/diff`),
     delete: (id: string) => del<void>(`/backups/${encodeURIComponent(id)}`),
   },
   setup: {

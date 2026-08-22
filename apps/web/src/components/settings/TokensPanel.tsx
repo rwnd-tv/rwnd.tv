@@ -41,7 +41,7 @@ export function TokensPanel() {
   return (
     <Card>
       <h2 className="text-lg font-semibold">{t('settings.tokens.title')}</h2>
-      <div className="mt-1 mb-4 border-t border-[var(--color-border)]" />
+      <div className="mb-4 mt-1 border-t border-[var(--color-border)]" />
       <p className="mb-4 text-sm text-[var(--color-fg-muted)]">
         {t('settings.tokens.description')}
       </p>

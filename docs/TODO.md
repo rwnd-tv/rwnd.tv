@@ -105,6 +105,20 @@ Format:
       mechanism — exact UX still to be decided (e.g. a "log another
       watch" action from the show/season/episode page itself).
 
+## Spoiler protection
+
+- [ ] **Blur/hide spoiler content for unwatched episodes** (2026-08-22 10:45 added)\
+      Thumbnails/stills, overview text, and any other spoiler-ish detail
+      (title? air date?) for an episode the user hasn't logged a watch
+      for yet should be blurred or hidden by default — mainly
+      `SeasonDetailPage.tsx`'s episode grid today, and any future episode
+      page (see the "Episode pages" item above — these two should be
+      scoped together). Needs a reveal interaction (click/tap to unblur
+      one episode) rather than being permanently hidden. Must be a
+      per-user toggle on `SettingsPage.tsx` (new panel or folded into an
+      existing one) — default state and exact scope of "spoiler-ish"
+      still to be decided with James.
+
 ## Metadata & matching
 
 - [ ] **Multi-provider metadata (tmdb/imdb/tvdb)** (2026-08-11 22:20)\

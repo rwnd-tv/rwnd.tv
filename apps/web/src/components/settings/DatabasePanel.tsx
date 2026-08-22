@@ -180,6 +180,7 @@ export function DatabasePanel() {
       )}
 
       <div className={backupsConfigured ? 'mt-8 border-t border-[var(--color-border)] pt-6' : ''}>
+        <h3 className="mb-1 text-base font-semibold">{t('settings.database.clearTitle')}</h3>
         <p className="mb-4 text-sm text-[var(--color-fg-muted)]">
           {t('settings.database.description')}
         </p>

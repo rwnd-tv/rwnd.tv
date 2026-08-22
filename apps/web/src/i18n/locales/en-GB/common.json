@@ -238,6 +238,7 @@
     },
     "database": {
       "title": "Database",
+      "clearTitle": "Clear database",
       "description": "Permanently delete your own tracked data. This can't be undone.",
       "watchHistory": "Watch history",
       "ratings": "Ratings",

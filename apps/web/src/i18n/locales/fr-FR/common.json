@@ -238,6 +238,7 @@
     },
     "database": {
       "title": "Base de données",
+      "clearTitle": "Vider la base de données",
       "description": "Supprimez définitivement vos propres données suivies. Cette action est irréversible.",
       "watchHistory": "Historique de visionnage",
       "ratings": "Notes",

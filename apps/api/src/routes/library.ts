@@ -426,11 +426,11 @@ libraryRoutes.openapi(
       .limit(1)
     if (!tmdbExternalId) return c.json({ error: 'Season not found' }, 404)
 
-    const { overview: seasonOverview, episodes: providerEpisodes } = await provider.getSeason(
-      tmdbExternalId.externalId,
-      seasonNumber,
-      user.locale,
-    )
+    const {
+      overview: seasonOverview,
+      voteAverage: seasonVoteAverage,
+      episodes: providerEpisodes,
+    } = await provider.getSeason(tmdbExternalId.externalId, seasonNumber, user.locale)
 
     // Scoped to the current user in the join condition (not a WHERE
     // clause) so an episode with no plays from this user still gets a row
@@ -455,6 +455,12 @@ libraryRoutes.openapi(
       // Live from the provider, not cached locally — same reasoning as the
       // episode list itself (see this route's doc comment above).
       overview: seasonOverview,
+      // Also live from the provider on every request, same reasoning as
+      // `overview` — see showDetailSchema's `voteAverage` doc comment for
+      // the zero-votes convention (season responses carry no vote_count to
+      // disambiguate, so a genuine 0 and "unrated" are indistinguishable —
+      // treated as unrated).
+      voteAverage: seasonVoteAverage,
       posterPath: seasonRow.posterPath,
       airDate: seasonRow.airDate,
       episodes: providerEpisodes

@@ -46,19 +46,6 @@ Format:
 
 ## Season pages
 
-- [ ] **Subheading with year, TMDB score, and TMDB link** (2026-08-22 12:00 added)\
-      `SeasonDetailPage.tsx` should get the same subheading treatment
-      `ShowDetailPage.tsx` already has: the year the season's first
-      episode aired, the TMDB review score badge (`voteAverage`, TMDB
-      logo, linking to `https://www.themoviedb.org/tv/{tmdbId}` when
-      present, matching the pattern around `ShowDetailPage.tsx:181`),
-      and a link out to the TMDB _season_ page specifically (not just
-      the show page) — likely
-      `https://www.themoviedb.org/tv/{tmdbId}/season/{seasonNumber}`.
-      Needs checking whether the season API response already carries a
-      season-level `voteAverage`/air date or whether `library.ts`
-      needs extending.
-
 - [ ] **Episode tile watched badge should show watch count** (2026-08-22 12:30 added)\
       The round watched-toggle badge on each episode tile
       (`SeasonDetailPage.tsx:201-215`, top-right of the thumbnail)

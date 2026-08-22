@@ -733,3 +733,38 @@ currently-dropped shows, since a row can have both
       aired-count computed" refresher clause (same pattern as the
       existing genres/voteAverage backfill clauses), so existing shows
       pick it up on their next pass rather than staying null forever.
+
+## Season pages
+
+- [x] **Subheading with year, TMDB score, and TMDB link** (2026-08-22 12:00 added)\
+      `SeasonDetailPage.tsx` should get the same subheading treatment
+      `ShowDetailPage.tsx` already has: the year the season's first
+      episode aired, the TMDB review score badge, and a link out to
+      the TMDB _season_ page specifically. Done (2026-08-22): year
+      derived client-side from the season's existing `airDate`; the
+      TMDB score needed a new `voteAverage` field threaded through
+      `ProviderSeason`/`TmdbProvider.getSeason()` (TMDB's season
+      response carries its own `vote_average`, separate from the
+      show's) and `seasonDetailSchema`, with a `season.seasonNumber`
+      appended to the show's TMDB URL for the link
+      (`themoviedb.org/tv/{tmdbId}/season/{seasonNumber}`). A season
+      `vote_average` of exactly 0 is treated as unrated rather than a
+      real zero score, same reasoning as the show-level field but
+      more important here since TMDB's season response carries no
+      `vote_count` to disambiguate a genuine 0 from "no votes yet."
+      Verified live on `dev.rwnd.tv`: Ahsoka Season 1 shows "2023 ·
+      TMDB 6.8" linking to `themoviedb.org/tv/114461/season/1`, and
+      its Specials season (TMDB has no votes for it) shows just
+      "2024" with no rating badge or stray separator.\
+      Follow-up (James, same day): asked why a single-season show's
+      season score differs from its show score
+      (`themoviedb.org/tv/296286`) — not a bug. TMDB tracks the show
+      and each season as separate rated entities with independent
+      vote pools, confirmed live (that show's `voteAverage` was 8.96
+      for the show vs. 8.1 for Season 1). Also found TMDB's own
+      website no longer shows the classic `vote_average` at all — it
+      now shows a newer "Content Score"/"Vibes" percentage (94% show
+      vs. 81% Season 1 for that same title), a different metric
+      entirely from the API field this app reads, so the numbers
+      shown on TMDB's site were never going to match rwnd.tv's either
+      way.

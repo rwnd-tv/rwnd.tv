@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { type ReactNode, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useNavigate, useParams } from 'react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -68,6 +68,12 @@ function ChevronRightIcon() {
     </svg>
   )
 }
+
+/** Same TMDB attribution logo used on ShowDetailPage.tsx's rating badge —
+ * duplicated rather than shared, matching this file's existing per-file
+ * icon precedent (see CheckIcon above). */
+const TMDB_LOGO_URL =
+  'https://www.themoviedb.org/assets/2/v4/logos/v2/blue_short-8e7b30f73a4020692ccca9c88bafe5dcb6f8a62a4c6bc55cd9ba82bb2cd95f6c.svg'
 
 /**
  * One episode tile in the season grid (apps/web/src/routes/SeasonDetailPage.tsx),
@@ -333,6 +339,7 @@ export function SeasonDetailPage() {
       ? t('showDetail.specials')
       : t('import.progress.season', { number: season.seasonNumber }))
   const posterPath = season.posterPath ?? show?.posterPath ?? null
+  const seasonYear = season.airDate ? new Date(season.airDate).getFullYear() : null
   const watchedEpisodes = season.episodes.filter((episode) => episode.watched).length
   // Purple/primary once every *aired* episode of this season has been
   // watched — same "Watched" button behaviour as ShowDetailPage.tsx, just
@@ -420,6 +427,37 @@ export function SeasonDetailPage() {
 
         <div className="flex min-w-0 flex-col gap-3">
           <h1 className="text-2xl font-semibold">{seasonName}</h1>
+          <div className="flex flex-wrap items-center gap-x-1.5 text-sm text-[var(--color-fg-muted)]">
+            {(
+              [
+                seasonYear,
+                season.voteAverage !== null ? (
+                  <span className="inline-flex items-center gap-1.5">
+                    {show?.tmdbId ? (
+                      <a
+                        href={`https://www.themoviedb.org/tv/${show.tmdbId}/season/${season.seasonNumber}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title={t('showDetail.viewOnTmdb')}
+                      >
+                        <img src={TMDB_LOGO_URL} alt={t('showDetail.viewOnTmdb')} className="h-3" />
+                      </a>
+                    ) : (
+                      <img src={TMDB_LOGO_URL} alt={t('showDetail.ratingSource')} className="h-3" />
+                    )}
+                    {season.voteAverage.toFixed(1)}
+                  </span>
+                ) : null,
+              ] satisfies (ReactNode | null)[]
+            )
+              .filter((fact) => fact !== null)
+              .map((fact, index) => (
+                <span key={index} className="flex items-center gap-1.5">
+                  {index > 0 && <span aria-hidden="true">·</span>}
+                  {fact}
+                </span>
+              ))}
+          </div>
           {season.overview && <p className="max-w-2xl text-sm">{season.overview}</p>}
 
           <div className="flex max-w-xs flex-col gap-1">

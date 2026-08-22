@@ -31,6 +31,10 @@ export interface MetadataProvider {
 
 export interface ProviderSeason {
   overview: string | null
+  /** Provider's average rating for this one season, 0-10 — null if the
+   * provider doesn't expose one / has no votes yet, same convention as
+   * ProviderShow.voteAverage above. */
+  voteAverage: number | null
   episodes: ProviderEpisode[]
 }
 

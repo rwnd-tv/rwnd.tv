@@ -81,6 +81,11 @@ interface TmdbEpisode {
 interface TmdbSeason {
   overview?: string | null
   episodes: TmdbEpisode[]
+  // TMDB returns vote_average: 0 for a season with no votes yet, same as
+  // the show-level field — but unlike the show endpoint, the season one
+  // carries no vote_count to disambiguate a genuine 0 from "unrated", so
+  // 0 is treated as "no rating" outright (see getSeason() below).
+  vote_average?: number | null
 }
 
 /**
@@ -221,6 +226,7 @@ export class TmdbProvider implements MetadataProvider {
     const s = await this.request<TmdbSeason>(`/tv/${showExternalId}/season/${seasonNumber}`, locale)
     return {
       overview: s.overview ?? null,
+      voteAverage: s.vote_average ? s.vote_average : null,
       episodes: s.episodes.map((e) => ({
         title: e.name ?? null,
         seasonNumber: e.season_number,

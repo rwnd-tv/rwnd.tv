@@ -6,6 +6,7 @@ import type {
   ListLibraryShowsResponse,
   MarkShowWatchedResponse,
   RemoveShowWatchesResponse,
+  SeasonDetail,
   ShowDetail,
   User,
 } from '@rwnd/shared'
@@ -432,6 +433,82 @@ describe('library', () => {
         headers: { cookie: cookieB },
       })
       expect((await json<ShowDetail>(resB)).watchedEpisodes).toBe(1)
+    })
+  })
+
+  describe('GET /library/shows/{slug}/seasons/{seasonNumber}', () => {
+    async function insertShowWithSeason(seasonAirDate: string) {
+      const [show] = await db
+        .insert(shows)
+        .values({ title: 'Rated Show', slug: 'rated-show' })
+        .returning()
+      if (!show) throw new Error('failed to insert show')
+      await db
+        .insert(externalIds)
+        .values({ entityType: 'show', entityId: show.id, source: 'tmdb', externalId: '70001' })
+      await db
+        .insert(seasons)
+        .values({ showId: show.id, seasonNumber: 1, episodeCount: 1, airDate: seasonAirDate })
+      return show
+    }
+
+    it("surfaces the season's own TMDB rating", async () => {
+      const cookie = await createUserAndCookie()
+      const show = await insertShowWithSeason('2020-01-01')
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (input: string | URL) => {
+          const url = new URL(input)
+          if (url.pathname === '/3/tv/70001/season/1') {
+            return new Response(
+              JSON.stringify({
+                overview: 'Season overview.',
+                vote_average: 8.4,
+                episodes: [
+                  { name: 'Ep 1', season_number: 1, episode_number: 1, air_date: '2020-01-01' },
+                ],
+              }),
+              { status: 200 },
+            )
+          }
+          throw new Error(`Unexpected TMDB fetch in test: ${url}`)
+        }),
+      )
+
+      const res = await app.request(`/api/v1/library/shows/${show.slug}/seasons/1`, {
+        headers: { cookie },
+      })
+      expect(res.status).toBe(200)
+      expect((await json<SeasonDetail>(res)).voteAverage).toBe(8.4)
+    })
+
+    it('treats a season vote_average of 0 as unrated, not a real zero score', async () => {
+      const cookie = await createUserAndCookie()
+      const show = await insertShowWithSeason('2020-01-01')
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (input: string | URL) => {
+          const url = new URL(input)
+          if (url.pathname === '/3/tv/70001/season/1') {
+            return new Response(
+              JSON.stringify({
+                overview: null,
+                vote_average: 0,
+                episodes: [
+                  { name: 'Ep 1', season_number: 1, episode_number: 1, air_date: '2020-01-01' },
+                ],
+              }),
+              { status: 200 },
+            )
+          }
+          throw new Error(`Unexpected TMDB fetch in test: ${url}`)
+        }),
+      )
+
+      const res = await app.request(`/api/v1/library/shows/${show.slug}/seasons/1`, {
+        headers: { cookie },
+      })
+      expect((await json<SeasonDetail>(res)).voteAverage).toBeNull()
     })
   })
 

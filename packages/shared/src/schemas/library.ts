@@ -158,6 +158,11 @@ export const seasonDetailSchema = z.object({
   overview: z.string().nullable(),
   posterPath: z.string().nullable(),
   airDate: z.string().nullable(),
+  /** This one season's own TMDB rating, 0-10 — distinct from the show's
+   * overall `voteAverage` (showDetailSchema above). Null until the
+   * provider has one, or genuinely unrated — both render the same way (no
+   * rating shown), same convention as the show-level field. */
+  voteAverage: z.number().nullable(),
   episodes: z.array(seasonEpisodeSchema),
 })
 export type SeasonDetail = z.infer<typeof seasonDetailSchema>

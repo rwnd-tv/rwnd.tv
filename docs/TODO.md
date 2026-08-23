@@ -140,6 +140,18 @@ Format:
       (nothing sends email yet) and a reset-token flow. Not related to
       OIDC/passkeys architecturally — this is a gap in the existing
       `local` credential type, not a new adapter.
+- [ ] **Explore OAuth device-flow login (for a future TV app)** (2026-08-23 16:00 added)\
+      The RFC 8628 device authorization grant — the "enter this code on
+      your phone" / QR flow BBC iPlayer, Disney+, and `gh auth login`
+      all use for devices with no comfortable keyboard. Only relevant
+      once there's an actual rwnd.tv TV app to log into, which doesn't
+      exist yet — this is groundwork, not urgent. Needs a device-
+      authorization endpoint, a short human-typeable code + polling on
+      the device side, and a verification page. Worth designing the
+      approval page carefully — device-code flows have a known phishing
+      pattern where someone's talked into approving a code that isn't
+      theirs, so the page should make clear what's being authorized
+      rather than a bare yes/no.
 
 ## Roadmap
 

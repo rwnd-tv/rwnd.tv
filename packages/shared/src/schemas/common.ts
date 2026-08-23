@@ -1,7 +1,10 @@
 import { z } from 'zod'
 
-/** Locales the UI ships translations for. `en-GB` is authoritative. */
-export const SUPPORTED_LOCALES = ['en-GB', 'fr-FR'] as const
+/** Locales the UI ships translations for. `fr-FR` was dropped
+ * 2026-08-23 — added speculatively in M1 with no verification and never
+ * checked by a French speaker; see docs/TODO.md's "Add en-US locale"
+ * entry for the reasoning on not repeating that. */
+export const SUPPORTED_LOCALES = ['en-GB'] as const
 export const localeSchema = z.enum(SUPPORTED_LOCALES)
 export type Locale = z.infer<typeof localeSchema>
 

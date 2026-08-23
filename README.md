@@ -18,7 +18,7 @@ Early days — milestone 1 (a working vertical slice: sign in, search for someth
 - Search movies and TV episodes via [TMDB](https://www.themoviedb.org/)
 - Log watches manually and browse your history
 - Per-user API tokens (for the webhook ingestion landing in the next milestone)
-- Light/dark/system theming, English and French UI
+- Light/dark/system theming
 
 ## Quick start
 

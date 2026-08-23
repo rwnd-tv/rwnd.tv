@@ -7,8 +7,9 @@
  * covered without standing that up first.
  */
 
-/** Case- and accent-insensitive: "amelie" should match "Amélie", and this
- * matters more than usual here since fr-FR is a first-class locale. */
+/** Case- and accent-insensitive: "amelie" should match "Amélie" — matters
+ * regardless of UI locale, since a title itself (from TMDB) can carry
+ * diacritics the user typing a search query might not bother with. */
 export function foldForSearch(value: string): string {
   return value
     .toLocaleLowerCase()

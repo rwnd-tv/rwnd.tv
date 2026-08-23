@@ -100,34 +100,53 @@ Format:
 
 ## Localization
 
-- [ ] **Add en-US locale** (2026-08-23 23:10 added) — M3\
+- [ ] **Add en-US locale** (2026-08-23 23:10 added, revised 2026-08-23) — M3\
       Came out of the movies-parity work — a "Film" vs "Movie" wording
-      question turned into an audit of `en-GB/common.json` (261 keys):
-      it's already written in near-total American vocabulary end to
-      end ("Movies", "Season", "On Deck", …) — only 4 words in the
-      whole file are genuine UK/US spelling divergences (`Cancelled`,
-      `labelled`, `authorise`). So adding `en-US` as a literal copy
-      would barely differ, and wouldn't be a real second locale.
-      Two things need to land together, not separately. First, rewrite
-      `en-GB/common.json` to actual British vocabulary (movie→film,
-      season→series, TV show→TV programme — ~48 keys, already
-      identified) _before_ forking spelling for `en-US`. Second, fix
-      `parseDateTimeInput` (`apps/web/src/lib/date.ts:54-74`): it
-      collects date/time parts via `Intl.DateTimeFormat`'s
-      `formatToParts` but has no `dayPeriod` handling, so on a 12-hour
-      locale a manually-typed "5:30 PM" silently parses as 05:30 — no
-      error, just the wrong watch time saved. Harmless today since
-      `en-GB`/`fr-FR` are both 24-hour, but this becomes a live, silent
-      data-corruption bug the moment any 12-hour locale exists — a
-      blocker for `en-US`, not a cosmetic gap.\
+      question turned into an audit of `en-GB/common.json`. Confirmed
+      with James (a native British English speaker) which words are
+      actually right: **Season** stays "Season" (modern globally-
+      released shows are called that in British usage too — only
+      older British-produced shows like _Blackadder_ commonly say
+      "Series"), **TV Show** stays "TV Show" ("TV Programme" is
+      understood but old-fashioned), and **Movie → Film** is the one
+      real change ("Film" is the preferred word, though "Movie" is
+      fine informally). That's ~14 keys (`nav.movies`,
+      `search.placeholder`, the `movies.*`/`movieDetail.*` blocks),
+      not the ~48 originally estimated from a generic UK/US style-guide
+      read rather than lived usage — don't repeat that mistake for any
+      future British-English wording call; check with James rather
+      than assuming.\
+      Land the `en-GB` rewrite and the `en-US` fork together in one
+      pass, not staged — no benefit to sequencing them once both are
+      being written correctly, and staging would leave a window where
+      the only English locale says "Film" with no American option.
+      `en-US` ends up close to `en-GB` as it reads today (Movie/Movies
+      throughout) plus the 4 genuine spelling words (`Cancelled`→
+      `Canceled`, `labelled`→`labeled`, `authorise`→`authorize`) —
+      needs wiring into `SUPPORTED_LOCALES`
+      (`packages/shared/src/schemas/common.ts`), `i18n/index.ts`, and
+      the Settings language picker.\
+      Also fix `parseDateTimeInput` (`apps/web/src/lib/date.ts`,
+      see its own doc comment) before shipping en-US: no `dayPeriod`
+      handling means a 12-hour locale silently mis-parses a typed
+      "5:30 PM" as 05:30 — harmless today (en-GB is 24-hour) but a
+      live data-corruption bug the moment en-US exists.\
+      Separately: `fr-FR` was dropped 2026-08-23 (see `docs/ROADMAP.md`)
+      — added speculatively in M1, never checked by a French speaker.
+      Lesson for next time: don't pre-load additional locales
+      speculatively (the EFIGS video-game heuristic doesn't apply —
+      no distinct paying markets to court here); the self-hosted-OSS
+      norm (Jellyfin/Immich/`*arr`-style) is closer — ship what's
+      verified, accept community-contributed translations later. Only
+      add a locale when someone can actually check it.\
       Also worth revisiting alongside this: the browser-language
-      auto-detection (`i18next-browser-languagedetector`, no
-      explicit config) only matches an _exact_ supported code
-      (`navigator` reporting `en-US`/`fr-CA`/etc. falls straight
-      through to the `en-GB` fallback today), and a new account's
-      `locale` always defaults to `en-GB` regardless of what the
-      browser reported — neither registration nor setup seeds it
-      from the detected language.
+      auto-detection (`i18next-browser-languagedetector`, no explicit
+      config) only matches an _exact_ supported code (`navigator`
+      reporting `en-US`/`fr-CA`/etc. falls straight through to the
+      `en-GB` fallback today), and a new account's `locale` always
+      defaults to `en-GB` regardless of what the browser reported —
+      neither registration nor setup seeds it from the detected
+      language.
 
 ## Auth & accounts
 

@@ -31,9 +31,11 @@ export function markWatchedRequestBody(
 
 /**
  * Locale-formatted "date and time" string for a free-text field a user can
- * type directly into (see WatchDateDialog.tsx). Both locales this app
- * supports (en-GB, fr-FR) render day-month-year order with a 24-hour
- * clock, so one implementation covers both without branching.
+ * type directly into (see WatchDateDialog.tsx). `en-GB` — the only locale
+ * this app currently supports — renders day-month-year order with a
+ * 24-hour clock. See parseDateTimeInput's own doc comment for the
+ * 12-hour-locale gap this doesn't yet handle (relevant if a locale like
+ * `en-US` is ever added).
  */
 export function formatDateTimeInput(date: Date, locale: string): string {
   return new Intl.DateTimeFormat(locale, { dateStyle: 'short', timeStyle: 'short' }).format(date)
@@ -50,6 +52,12 @@ const DATE_TIME_PART_TYPES = ['day', 'month', 'year', 'hour', 'minute']
  * or "21.08.2026 17.12" all parse the same way. Returns null on anything
  * that doesn't resolve to a valid date — callers should leave prior state
  * untouched rather than show an error for a first version of this.
+ *
+ * Known gap: DATE_TIME_PART_TYPES below has no `dayPeriod`, so on a
+ * 12-hour locale a typed "5:30 PM" silently parses as 05:30 — no error,
+ * just the wrong time. Harmless today since en-GB (the only locale this
+ * app supports) is 24-hour, but this needs fixing before any 12-hour
+ * locale (e.g. en-US) is added — see docs/TODO.md.
  */
 export function parseDateTimeInput(text: string, locale: string): Date | null {
   const order = new Intl.DateTimeFormat(locale, { dateStyle: 'short', timeStyle: 'short' })

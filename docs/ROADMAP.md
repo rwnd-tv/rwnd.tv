@@ -10,7 +10,7 @@ Prove every layer works end to end, running as a real self-hosted deployment.
 - [x] Search movies and TV episodes via TMDB, log a watch, browse history
 - [x] Docker image + `docker-compose.yml` for self-hosters; CI and a GHCR release pipeline
 - [x] Deployed live at [rwnd.tv](https://rwnd.tv) (public) and dev.rwnd.tv (private, LAN-restricted) — proving the same image serves both a production and a development instance side by side
-- [x] Light/dark/system theming, English and French UI
+- [x] Light/dark/system theming, i18n-ready UI (English shipped; a French translation was added speculatively and dropped 2026-08-23 — see [TODO.md](TODO.md))
 - [x] ADRs and a self-hosting guide
 
 ## M2 — Get your data in
@@ -28,7 +28,7 @@ Prove every layer works end to end, running as a real self-hosted deployment.
 - [ ] Ratings
 - [ ] Calendar of upcoming episodes
 - [ ] OIDC login (the `user_credentials` schema was designed for this from M1 — see [ADR 0003](adr/0003-auth-model.md))
-- [ ] Additional locales beyond English/French
+- [ ] Additional locales beyond English
 
 ## Not yet scheduled
 

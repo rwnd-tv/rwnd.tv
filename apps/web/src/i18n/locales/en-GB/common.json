@@ -151,8 +151,6 @@
     "episodeDetail": {
       "notFound": "This episode couldn't be found.",
       "runtime": "{{minutes}} min",
-      "watchHistoryTitle": "Watch history",
-      "watchHistoryEmpty": "Not watched yet.",
       "previousEpisode": "Previous episode",
       "nextEpisode": "Next episode"
     }

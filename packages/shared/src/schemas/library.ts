@@ -153,6 +153,11 @@ export const seasonEpisodeSchema = z.object({
    * once one already exists, since a second one would be indistinguishable
    * from the first. */
   hasUnknownWatch: z.boolean(),
+  /** This one episode's own TMDB rating, 0-10 — distinct from the season's
+   * and show's own `voteAverage` fields. Null until the provider has one,
+   * or genuinely unrated — both render the same way (no rating shown), same
+   * convention as those other fields. */
+  voteAverage: z.number().nullable(),
 })
 export type SeasonEpisode = z.infer<typeof seasonEpisodeSchema>
 

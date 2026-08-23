@@ -526,6 +526,7 @@ libraryRoutes.openapi(
               ? new Date(watch.lastWatchedAt).toISOString()
               : null,
             hasUnknownWatch: watch?.hasUnknownWatch ?? false,
+            voteAverage: episode.voteAverage,
           }
         }),
     })

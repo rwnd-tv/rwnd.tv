@@ -77,6 +77,9 @@ interface TmdbEpisode {
   air_date?: string | null
   overview?: string | null
   still_path?: string | null
+  // Same "0 means unrated" quirk as the season/show-level fields — see
+  // TmdbSeason's vote_average comment below.
+  vote_average?: number | null
 }
 interface TmdbSeason {
   overview?: string | null
@@ -215,6 +218,7 @@ export class TmdbProvider implements MetadataProvider {
       firstAired: e.air_date ?? null,
       overview: e.overview ?? null,
       stillPath: this.stillUrl(e.still_path),
+      voteAverage: e.vote_average ? e.vote_average : null,
     }
   }
 
@@ -235,6 +239,7 @@ export class TmdbProvider implements MetadataProvider {
         firstAired: e.air_date ?? null,
         overview: e.overview ?? null,
         stillPath: this.stillUrl(e.still_path),
+        voteAverage: e.vote_average ? e.vote_average : null,
       })),
     }
   }

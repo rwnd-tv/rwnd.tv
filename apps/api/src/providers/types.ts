@@ -102,4 +102,8 @@ export interface ProviderEpisode {
   /** Episode thumbnail/still image, already a full URL — null if the
    * provider has none (again, common pre-air). */
   stillPath: string | null
+  /** Provider's average rating for this one episode, 0-10 — null if the
+   * provider doesn't expose one / has no votes yet, same convention as
+   * ProviderShow.voteAverage. */
+  voteAverage: number | null
 }

@@ -1,8 +1,8 @@
+import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useNavigate, useParams } from 'react-router'
 import { useQuery } from '@tanstack/react-query'
 import { api, ApiError } from '../lib/api-client.js'
-import { UNKNOWN_WATCHED_AT, formatDateTimeInput } from '../lib/date.js'
 import { useAuth } from '../lib/auth-context.js'
 import { useEpisodeWatchActions } from '../lib/use-episode-watch-actions.js'
 import { WatchDateDialog } from '../components/library/WatchDateDialog.js'
@@ -84,14 +84,18 @@ function ChevronRightIcon() {
   )
 }
 
+/** Same TMDB attribution logo used on ShowDetailPage.tsx/SeasonDetailPage.tsx's
+ * rating badge — duplicated rather than shared, matching those files'
+ * existing per-file icon precedent (see CheckIcon below). */
+const TMDB_LOGO_URL =
+  'https://www.themoviedb.org/assets/2/v4/logos/v2/blue_short-8e7b30f73a4020692ccca9c88bafe5dcb6f8a62a4c6bc55cd9ba82bb2cd95f6c.svg'
+
 /**
  * One episode's own page — reachable by clicking its thumbnail/title on the
  * season grid (SeasonDetailPage.tsx's EpisodeCard). Sources its data from
- * the same season query that grid already uses (every field this page needs
- * — overview, still image, runtime, watched state — is already on
- * SeasonEpisode) rather than a dedicated endpoint, plus this episode's own
- * watch-history list (already fetched on demand elsewhere for the unwatch
- * dialog, here shown unconditionally).
+ * the same season query that grid already uses — every field this page
+ * needs (overview, still image, runtime, watched state, TMDB rating) is
+ * already on SeasonEpisode — rather than a dedicated endpoint.
  */
 export function EpisodeDetailPage() {
   const { t } = useTranslation()
@@ -124,12 +128,6 @@ export function EpisodeDetailPage() {
   })
 
   const episode = season?.episodes.find((e) => e.episodeNumber === episodeNumber)
-
-  const { data: watchesData } = useQuery({
-    queryKey: ['show', slug, 'season', seasonNumber, 'episode', episodeNumber, 'watches'],
-    queryFn: () => api.library.episodeWatches(slug!, seasonNumber, episodeNumber),
-    enabled: Boolean(slug) && paramsValid && Boolean(episode),
-  })
 
   const watchActions = useEpisodeWatchActions(
     slug ?? '',
@@ -244,19 +242,40 @@ export function EpisodeDetailPage() {
           <h1 className="text-2xl font-semibold">{episode.title ?? episodeLabel}</h1>
           <p className="text-sm text-[var(--color-fg-muted)]">{episodeLabel}</p>
           <div className="flex flex-wrap items-center gap-x-1.5 text-sm text-[var(--color-fg-muted)]">
-            {episode.firstAired && (
-              <span>
-                {new Date(episode.firstAired).toLocaleDateString(locale, { dateStyle: 'medium' })}
-              </span>
-            )}
-            {episode.firstAired && episode.runtimeMinutes !== null && (
-              <span aria-hidden="true">·</span>
-            )}
-            {episode.runtimeMinutes !== null && (
-              <span>
-                {t('showDetail.episodeDetail.runtime', { minutes: episode.runtimeMinutes })}
-              </span>
-            )}
+            {(
+              [
+                episode.firstAired
+                  ? new Date(episode.firstAired).toLocaleDateString(locale, { dateStyle: 'medium' })
+                  : null,
+                episode.runtimeMinutes !== null
+                  ? t('showDetail.episodeDetail.runtime', { minutes: episode.runtimeMinutes })
+                  : null,
+                episode.voteAverage !== null ? (
+                  <span className="inline-flex items-center gap-1.5">
+                    {show?.tmdbId ? (
+                      <a
+                        href={`https://www.themoviedb.org/tv/${show.tmdbId}/season/${seasonNumber}/episode/${episodeNumber}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title={t('showDetail.viewOnTmdb')}
+                      >
+                        <img src={TMDB_LOGO_URL} alt={t('showDetail.viewOnTmdb')} className="h-3" />
+                      </a>
+                    ) : (
+                      <img src={TMDB_LOGO_URL} alt={t('showDetail.ratingSource')} className="h-3" />
+                    )}
+                    {episode.voteAverage.toFixed(1)}
+                  </span>
+                ) : null,
+              ] satisfies (ReactNode | null)[]
+            )
+              .filter((fact) => fact !== null)
+              .map((fact, index) => (
+                <span key={index} className="flex items-center gap-1.5">
+                  {index > 0 && <span aria-hidden="true">·</span>}
+                  {fact}
+                </span>
+              ))}
           </div>
           {episode.overview && <p className="max-w-2xl text-sm">{episode.overview}</p>}
 
@@ -291,27 +310,6 @@ export function EpisodeDetailPage() {
             )}
           </div>
         </div>
-      </div>
-
-      <div className="flex flex-col gap-2">
-        <h2 className="text-lg font-semibold">{t('showDetail.episodeDetail.watchHistoryTitle')}</h2>
-        {watchesData === undefined ? (
-          <Spinner label={t('common.loading')} />
-        ) : watchesData.watches.length === 0 ? (
-          <p className="text-sm text-[var(--color-fg-muted)]">
-            {t('showDetail.episodeDetail.watchHistoryEmpty')}
-          </p>
-        ) : (
-          <ul className="flex flex-col gap-1 text-sm text-[var(--color-fg-muted)]">
-            {watchesData.watches.map((watch) => (
-              <li key={watch.id}>
-                {watch.watchedAt === UNKNOWN_WATCHED_AT
-                  ? t('history.unknownDate')
-                  : formatDateTimeInput(new Date(watch.watchedAt), locale)}
-              </li>
-            ))}
-          </ul>
-        )}
       </div>
 
       <WatchDateDialog

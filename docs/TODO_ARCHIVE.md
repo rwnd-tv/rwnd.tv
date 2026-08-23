@@ -1037,6 +1037,48 @@ currently-dropped shows, since a row can have both
       show appearing in both rows at once with different episode numbers
       in each, confirming they really are independent.
 
+## Movies
+
+- [x] **Bring Movies up to parity with TV Shows, where appropriate — Phase 1** (2026-08-23 15:05 added, done 2026-08-23)\
+      Done: a per-movie page (`/movies/:slug`), gallery tiles now link
+      to it, Watched/"+"/refresh-metadata actions, a TMDB rating badge +
+      link, and Dashboard search + History linking to it instead of
+      logging a watch inline. Design pass settled up front: no Drop
+      action (`dropped_shows` stays a non-polymorphic FK to `shows.id`
+      — Trakt's own drop concept is shows-only) and no spoiler
+      protection/On Deck/Up Next (no episodes to spoil or step
+      through). The Watched/unwatch UI deliberately mirrors
+      `EpisodeCard.tsx`, not the show page's bulk actions — a movie is
+      one thing with N plays, same as an episode, not a
+      show/season/episode tree — so removing a watch opens the existing
+      `UnwatchConfirmDialog` (tick individual plays) rather than a
+      blunt "remove all watches" confirm.\
+      Schema: `movies` gained `slug`/`genres`/`vote_average` (migration
+      `0009`, same four-step backfill shape as the shows slug migration
+      `0004`), landed now rather than deferred to the gallery-filters
+      phase because the detail page itself needed genres/rating for its
+      facts line and TMDB badge. `findStaleMovies` (metadata refresher)
+      got the same "never populated" backfill clauses `findStaleShows`
+      already had, so existing movies didn't sit with empty genres for
+      up to ~5 months waiting on the compliance clock — the exact gap
+      class the shows version was caught having on 2026-08-19.\
+      API: new `POST /library/movies/resolve`, `GET`/`POST refresh`,
+      and `GET`/`DELETE .../plays` routes, modelled directly on their
+      show/episode equivalents. Renamed four schemas that were really
+      media-agnostic already (`episodeWatchesSchema` →
+      `watchesSchema`, etc.) rather than duplicating them, since
+      `UnwatchConfirmDialog` is now genuinely shared between the season
+      and movie pages.\
+      Verified live on dev.rwnd.tv: migration ran clean against the
+      real ~560-movie library with unique backfilled slugs, the
+      backfill clauses picked up genres/ratings via the automatic
+      startup sweep, and every UI flow (watch/rewatch/partial-
+      unwatch/refresh/search/history) checked out against real data.\
+      Gallery filter/sort parity (genre, release-year, rating,
+      watched-year) is deliberately Phase 2, tracked separately in
+      `docs/TODO.md` — pure frontend now, since this phase's migration
+      already added the columns it needs.
+
 ## Landing page & branding
 
 - [x] **Link the header mark/wordmark to the site's base URL** (2026-08-23 14:40 added, done 2026-08-23)\

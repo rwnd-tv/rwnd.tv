@@ -33,21 +33,20 @@ Format:
 
 ## Movies
 
-- [ ] **Bring Movies up to parity with TV Shows, where appropriate** (2026-08-23 15:05 added)\
-      Shows picked up a lot this cycle that Movies never got: a per-show
-      page (Movies has no per-movie page at all — gallery tiles in
-      `MoviesPage.tsx` aren't even links), Watched/Drop buttons, the
-      manual refresh-metadata action, a TMDB rating badge + link, genre
-      and release-year gallery filters plus the extra sort options
-      (deliberately scoped to Shows only when the gallery shipped — see
-      `docs/adr/`), dropped-title greyscale on the gallery, and Dashboard
-      search results linking straight to the detail page instead of
-      logging a watch inline. Spoiler protection and On Deck/Up Next
-      don't translate directly (no episodes to spoil or step through),
-      but most of the rest does. Needs a design pass on what's actually
-      worth carrying over rather than copying wholesale — a movie is one
-      watch, not a show/season/episode tree, so even "Watched" may need
-      to look different rather than identical.
+- [ ] **Movies gallery filter/sort parity (Phase 2)** (2026-08-23 22:15 added)\
+      Phase 1 (per-movie detail page, watched/rewatch/unwatch, manual
+      refresh, TMDB badge, Dashboard search + History linking to it) is
+      done — see `docs/TODO_ARCHIVE.md`. Left: the Shows gallery's
+      filter panel and extra sort options, deliberately scoped to Shows
+      only when that gallery first shipped (see `docs/adr/`). `movies`
+      already has `genres`/`vote_average` (added in Phase 1's migration,
+      since the detail page needed them too), so this is pure frontend —
+      no further schema change. Needs: genre include/exclude, a
+      release-year range, a TMDB rating range + rating sorts, a
+      watched-year range + Unknown toggle (the last two need no schema
+      change at all — `library-filter.ts`'s helpers are already generic
+      over shows/movies). Explicitly out of scope by design: a Drop
+      filter (movies don't get Drop — see the archived Phase 1 entry).
 
 ## Metadata & matching
 

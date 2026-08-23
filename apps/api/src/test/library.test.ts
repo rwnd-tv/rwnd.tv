@@ -1879,8 +1879,14 @@ describe('library', () => {
 
     it("does not count another user's plays", async () => {
       const cookie = await createUserAndCookie()
-      const otherCookie = await createUserAndCookie('other@example.com')
-      const otherUserId = await meId(otherCookie)
+      // Setup only ever creates one admin (registration is closed by
+      // default), so a second user is inserted directly rather than via a
+      // second POST /setup — see plays.test.ts for the same pattern.
+      const otherUserId = await createLocalUser(
+        db,
+        'other@example.com',
+        'correct-horse-battery-staple',
+      )
 
       const [movie] = await db
         .insert(movies)
@@ -1966,8 +1972,13 @@ describe('library', () => {
     it('removes only the named ids, ignoring ids for another movie or user', async () => {
       const cookie = await createUserAndCookie()
       const userId = await meId(cookie)
-      const otherCookie = await createUserAndCookie('other2@example.com')
-      const otherUserId = await meId(otherCookie)
+      // Same "second user inserted directly, not via a second POST /setup"
+      // reasoning as the GET /library/movies/{slug} test above.
+      const otherUserId = await createLocalUser(
+        db,
+        'other2@example.com',
+        'correct-horse-battery-staple',
+      )
 
       const [movie, otherMovie] = await db
         .insert(movies)

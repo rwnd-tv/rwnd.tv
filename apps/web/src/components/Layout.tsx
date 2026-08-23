@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Outlet, useMatches } from 'react-router'
+import { Link, Outlet, useMatches } from 'react-router'
 import { useTranslation } from 'react-i18next'
 import { usePublicSettings } from '../lib/use-public-settings.js'
 import { getCookie, setSessionCookie } from '../lib/cookies.js'
@@ -85,8 +85,12 @@ export function Layout() {
         >
           <MenuIcon />
         </button>
-        <img src="/favicon.svg" alt="" className="h-6 w-6 flex-shrink-0" />
-        <span className="truncate text-lg font-semibold">{t('app.name')}</span>
+        {/* "/" redirects to "/dashboard" (see App.tsx) — Layout only renders
+            behind ProtectedRoute, so this is always the logged-in home. */}
+        <Link to="/" className="flex min-w-0 items-center gap-3">
+          <img src="/favicon.svg" alt="" className="h-6 w-6 flex-shrink-0" />
+          <span className="min-w-0 truncate text-lg font-semibold">{t('app.name')}</span>
+        </Link>
         <EnvironmentBadge label={settings?.environmentLabel} />
       </header>
       <div className="flex flex-1">

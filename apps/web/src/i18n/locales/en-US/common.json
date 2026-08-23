@@ -9,7 +9,7 @@
     "expandSidebar": "Expand sidebar",
     "dashboard": "Dashboard",
     "shows": "TV Shows",
-    "movies": "Films",
+    "movies": "Movies",
     "history": "History",
     "import": "Import",
     "settings": "Settings",
@@ -57,7 +57,7 @@
   },
   "search": {
     "title": "Search",
-    "placeholder": "Search for a film or TV show…",
+    "placeholder": "Search for a movie or TV show…",
     "noResults": "No results yet — try searching for something."
   },
   "shows": {
@@ -95,7 +95,7 @@
         "In Production": "In Production",
         "Pilot": "Pilot",
         "Ended": "Ended",
-        "Canceled": "Cancelled"
+        "Canceled": "Canceled"
       },
       "released": "Released",
       "rating": "Rating",
@@ -184,8 +184,8 @@
     }
   },
   "movies": {
-    "title": "Films",
-    "filterLabel": "Filter films",
+    "title": "Movies",
+    "filterLabel": "Filter movies",
     "filterPlaceholder": "Filter by title…",
     "sortLabel": "Sort by",
     "sortLastWatchedDesc": "Watched (Newest First)",
@@ -199,9 +199,9 @@
     "sortRatingDesc": "Rating (Descending)",
     "sortRatingAsc": "Rating (Ascending)",
     "timesWatched": "Watched {{count}} times",
-    "empty": "Nothing here yet. Films appear once you've logged a watch.",
-    "noMatches": "No films match \"{{query}}\".",
-    "noFilterMatches": "No films match the selected filters.",
+    "empty": "Nothing here yet. Movies appear once you've logged a watch.",
+    "noMatches": "No movies match \"{{query}}\".",
+    "noFilterMatches": "No movies match the selected filters.",
     "filtersButton": "Filters…",
     "filtersPanel": {
       "genres": "Genres",
@@ -219,23 +219,23 @@
     }
   },
   "movieDetail": {
-    "notFound": "This film couldn't be found.",
+    "notFound": "This movie couldn't be found.",
     "runtime": "{{minutes}} min",
     "ratingSource": "TMDB rating",
-    "viewOnTmdb": "View this film on TMDB",
+    "viewOnTmdb": "View this movie on TMDB",
     "watchedButton": "Watched",
-    "watchedButtonDisabled": "This film has no TMDB match, so a watch can't be logged",
+    "watchedButtonDisabled": "This movie has no TMDB match, so a watch can't be logged",
     "watchedButtonTooltip": {
-      "add": "Add a watch for this film",
-      "remove": "Remove a watch from this film"
+      "add": "Add a watch for this movie",
+      "remove": "Remove a watch from this movie"
     },
-    "addWatchTooltip": "Add an extra watch for this film",
+    "addWatchTooltip": "Add an extra watch for this movie",
     "watchedCount_one": "Watched once",
     "watchedCount_other": "Watched {{count}} times",
     "watchedPeriod": "Watched {{range}}",
     "watchedUnknown": "Watched: Unknown",
-    "refreshMetadataTooltip": "Refresh this film's title, poster, and other details from TMDB — use this if something looks wrong or out of date",
-    "refreshMetadataDisabled": "This film has no TMDB match, so there's nothing to refresh",
+    "refreshMetadataTooltip": "Refresh this movie's title, poster, and other details from TMDB — use this if something looks wrong or out of date",
+    "refreshMetadataDisabled": "This movie has no TMDB match, so there's nothing to refresh",
     "refreshMetadataDone": "Refreshed."
   },
   "history": {
@@ -256,7 +256,7 @@
       "connect": "Connect to Trakt",
       "connectedAs": "Connected as {{username}}.",
       "disconnect": "Disconnect",
-      "pairingInstructions": "Enter this code at the link below to authorise rwnd.tv:",
+      "pairingInstructions": "Enter this code at the link below to authorize rwnd.tv:",
       "retryPairing": "Try again",
       "denied": "Pairing was denied on Trakt. You can try again.",
       "expired": "This code expired before it was used. You can try again."
@@ -278,7 +278,7 @@
         "running": "Importing…",
         "completed": "Completed",
         "failed": "Failed",
-        "cancelled": "Cancelled"
+        "cancelled": "Canceled"
       },
       "counts": "{{processed}} items processed ({{imported}} items imported)",
       "elapsed": "Elapsed {{duration}}",
@@ -363,7 +363,7 @@
       "registrationInvite": "Invite only",
       "registrationClosed": "Closed — admin creates accounts",
       "save": "Save changes",
-      "environmentLabel": "This instance is labelled \"{{label}}\", set via the ENVIRONMENT_LABEL environment variable — not editable here."
+      "environmentLabel": "This instance is labeled \"{{label}}\", set via the ENVIRONMENT_LABEL environment variable — not editable here."
     }
   },
   "common": {

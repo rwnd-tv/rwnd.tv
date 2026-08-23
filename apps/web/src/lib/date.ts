@@ -31,17 +31,34 @@ export function markWatchedRequestBody(
 
 /**
  * Locale-formatted "date and time" string for a free-text field a user can
- * type directly into (see WatchDateDialog.tsx). `en-GB` — the only locale
- * this app currently supports — renders day-month-year order with a
- * 24-hour clock. See parseDateTimeInput's own doc comment for the
- * 12-hour-locale gap this doesn't yet handle (relevant if a locale like
- * `en-US` is ever added).
+ * type directly into (see WatchDateDialog.tsx). Renders whatever field
+ * order and 12-/24-hour convention the locale itself uses (day-month-year,
+ * 24-hour for `en-GB`; month-day-year, 12-hour + AM/PM for `en-US`) — see
+ * parseDateTimeInput below for how that's read back.
  */
 export function formatDateTimeInput(date: Date, locale: string): string {
   return new Intl.DateTimeFormat(locale, { dateStyle: 'short', timeStyle: 'short' }).format(date)
 }
 
 const DATE_TIME_PART_TYPES = ['day', 'month', 'year', 'hour', 'minute']
+
+/**
+ * The literal AM/PM strings a 12-hour locale renders (e.g. "AM"/"PM" for
+ * `en-US`) — derived from the locale itself via two reference times rather
+ * than hardcoded, so this isn't tied to English wording. `null` for a
+ * 24-hour locale (formatToParts emits no `dayPeriod` part at all), which
+ * is how parseDateTimeInput below knows not to expect one.
+ */
+function dayPeriodStrings(locale: string): { am: string; pm: string } | null {
+  const formatter = new Intl.DateTimeFormat(locale, { dateStyle: 'short', timeStyle: 'short' })
+  const am = formatter
+    .formatToParts(new Date(2020, 0, 1, 1, 0))
+    .find((part) => part.type === 'dayPeriod')?.value
+  const pm = formatter
+    .formatToParts(new Date(2020, 0, 1, 13, 0))
+    .find((part) => part.type === 'dayPeriod')?.value
+  return am && pm ? { am, pm } : null
+}
 
 /**
  * Best-effort reverse of formatDateTimeInput — reads the locale's own
@@ -53,11 +70,12 @@ const DATE_TIME_PART_TYPES = ['day', 'month', 'year', 'hour', 'minute']
  * that doesn't resolve to a valid date — callers should leave prior state
  * untouched rather than show an error for a first version of this.
  *
- * Known gap: DATE_TIME_PART_TYPES below has no `dayPeriod`, so on a
- * 12-hour locale a typed "5:30 PM" silently parses as 05:30 — no error,
- * just the wrong time. Harmless today since en-GB (the only locale this
- * app supports) is 24-hour, but this needs fixing before any 12-hour
- * locale (e.g. en-US) is added — see docs/TODO.md.
+ * On a 12-hour locale, the numeric `hour` extracted below is 1-12, not
+ * 0-23 (Intl's own `hour` part carries no am/pm information) — resolved
+ * against whichever of dayPeriodStrings' two markers appears in the typed
+ * text. Neither marker present is treated as unparseable (null) rather
+ * than guessing — this is the fix for a real bug: silently assuming AM
+ * meant a typed "5:30 PM" saved as 05:30 with no error.
  */
 export function parseDateTimeInput(text: string, locale: string): Date | null {
   const order = new Intl.DateTimeFormat(locale, { dateStyle: 'short', timeStyle: 'short' })
@@ -76,8 +94,19 @@ export function parseDateTimeInput(text: string, locale: string): Date | null {
     return null
   }
 
+  let hour = values.hour
+  const periods = dayPeriodStrings(locale)
+  if (periods && hour !== undefined) {
+    const lower = text.toLowerCase()
+    const isPM = lower.includes(periods.pm.toLowerCase())
+    const isAM = lower.includes(periods.am.toLowerCase())
+    if (!isPM && !isAM) return null
+    if (isPM && hour !== 12) hour += 12
+    if (isAM && hour === 12) hour = 0
+  }
+
   const year = values.year < 100 ? 2000 + values.year : values.year
-  const date = new Date(year, values.month - 1, values.day, values.hour ?? 0, values.minute ?? 0)
+  const date = new Date(year, values.month - 1, values.day, hour ?? 0, values.minute ?? 0)
   return Number.isNaN(date.getTime()) ? null : date
 }
 

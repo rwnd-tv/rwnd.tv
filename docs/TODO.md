@@ -31,23 +31,6 @@ Format:
       leading-article rules are a bigger job than this feature needed; left
       as a known simplification.
 
-## Movies
-
-- [ ] **Movies gallery filter/sort parity (Phase 2)** (2026-08-23 22:15 added)\
-      Phase 1 (per-movie detail page, watched/rewatch/unwatch, manual
-      refresh, TMDB badge, Dashboard search + History linking to it) is
-      done — see `docs/TODO_ARCHIVE.md`. Left: the Shows gallery's
-      filter panel and extra sort options, deliberately scoped to Shows
-      only when that gallery first shipped (see `docs/adr/`). `movies`
-      already has `genres`/`vote_average` (added in Phase 1's migration,
-      since the detail page needed them too), so this is pure frontend —
-      no further schema change. Needs: genre include/exclude, a
-      release-year range, a TMDB rating range + rating sorts, a
-      watched-year range + Unknown toggle (the last two need no schema
-      change at all — `library-filter.ts`'s helpers are already generic
-      over shows/movies). Explicitly out of scope by design: a Drop
-      filter (movies don't get Drop — see the archived Phase 1 entry).
-
 ## Metadata & matching
 
 - [ ] **Multi-provider metadata (tmdb/imdb/tvdb)** (2026-08-11 22:20) — M2\

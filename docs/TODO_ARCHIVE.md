@@ -1079,6 +1079,33 @@ currently-dropped shows, since a row can have both
       `docs/TODO.md` — pure frontend now, since this phase's migration
       already added the columns it needs.
 
+- [x] **Movies gallery filter/sort parity — Phase 2** (2026-08-23 22:15 added, done 2026-08-23)\
+      Done: the Movies gallery now has the same filter panel and
+      directional sort options the Shows gallery already had — genre
+      include/exclude, a release-year range, a TMDB rating range +
+      rating sorts, and a watched-year range + Unknown toggle. Pure
+      frontend plus a small `GET /library/movies` response widening
+      (`genres`/`voteAverage`, mirroring `slug`'s addition in Phase 1) —
+      `library-filter.ts`'s helpers were already generic over both
+      media types via structural typing, confirmed by reading the file
+      in full before starting. No Status filter (movies have no status
+      column — that's a series concept) and no Dropped filter (Phase 1
+      gave movies no Drop action at all, so nothing to filter by).\
+      Converted all four existing sorts (`lastWatched`/`title`/`year`/
+      `timesWatched`) to directional pairs to match Shows' convention
+      and added a Rating sort, landing on Shows' same ten-option shape
+      (progress swapped for times-watched, since a movie has no
+      episode-progress fraction). Incidentally fixed the sort-label
+      casing inconsistency between `shows.*` and `movies.*` an earlier
+      locale audit flagged — `movies.*` now copies Shows' Title Case +
+      parenthetical wording instead of its own sentence-case one.\
+      Verified live on dev.rwnd.tv: every filter section renders with
+      real data (17 genres, a 1941-2026 release range, a 3.8-10.0
+      rating range, a 2014-2026 watched range), a genre include
+      narrowed the grid to exactly the matching titles, and the new
+      rating sort ordered highly-rated titles (The Godfather, Spirited
+      Away, The Dark Knight) first.
+
 ## Landing page & branding
 
 - [x] **Link the header mark/wordmark to the site's base URL** (2026-08-23 14:40 added, done 2026-08-23)\

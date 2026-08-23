@@ -1778,7 +1778,13 @@ describe('library', () => {
       const [watched, unwatched] = await db
         .insert(movies)
         .values([
-          { title: 'The Matrix', slug: 'the-matrix-1999', year: 1999 },
+          {
+            title: 'The Matrix',
+            slug: 'the-matrix-1999',
+            year: 1999,
+            genres: ['Action', 'Science Fiction'],
+            voteAverage: 8.2,
+          },
           { title: 'Never Watched', slug: 'never-watched' },
         ])
         .returning()
@@ -1792,7 +1798,13 @@ describe('library', () => {
       const res = await app.request('/api/v1/library/movies', { headers: { cookie } })
       const { movies: library } = await json<ListLibraryMoviesResponse>(res)
       expect(library).toHaveLength(1)
-      expect(library[0]).toMatchObject({ id: watched.id, slug: 'the-matrix-1999', playCount: 2 })
+      expect(library[0]).toMatchObject({
+        id: watched.id,
+        slug: 'the-matrix-1999',
+        genres: ['Action', 'Science Fiction'],
+        voteAverage: 8.2,
+        playCount: 2,
+      })
       expect(new Date(library[0]!.lastWatchedAt).toISOString()).toBe(
         new Date('2026-02-01').toISOString(),
       )

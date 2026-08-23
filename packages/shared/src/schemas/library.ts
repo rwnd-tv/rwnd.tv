@@ -379,6 +379,15 @@ export const libraryMovieSchema = z.object({
   title: z.string(),
   year: z.number().int().nullable(),
   posterPath: z.string().nullable(),
+  /** TMDB genre names verbatim. Backs the gallery's genre filter panel —
+   * see libraryShowSchema's `genres` for the same convention. */
+  genres: z.array(z.string()),
+  /** TMDB's average rating, 0-10. Null until the metadata refresher has
+   * cached this movie, or genuinely null for a movie TMDB has no votes
+   * for yet — both render the same way (no rating shown). Backs the
+   * gallery's rating filter/sort — see libraryShowSchema's `voteAverage`
+   * for the same convention. */
+  voteAverage: z.number().nullable(),
   /** Counts rewatches. */
   playCount: z.number().int(),
   lastWatchedAt: z.string().datetime(),

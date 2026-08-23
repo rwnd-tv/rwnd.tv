@@ -1454,6 +1454,8 @@ libraryRoutes.openapi(
         title: movies.title,
         year: movies.year,
         posterPath: movies.posterPath,
+        genres: movies.genres,
+        voteAverage: movies.voteAverage,
         playCount: sql<number>`count(${plays.id})`.mapWith(Number).as('play_count'),
         lastWatchedAt: sql`max(${plays.watchedAt})`
           .mapWith((v: string) => new Date(v))
@@ -1472,6 +1474,8 @@ libraryRoutes.openapi(
         title: row.title,
         year: row.year,
         posterPath: row.posterPath,
+        genres: row.genres,
+        voteAverage: row.voteAverage,
         playCount: row.playCount,
         lastWatchedAt: row.lastWatchedAt.toISOString(),
       })),

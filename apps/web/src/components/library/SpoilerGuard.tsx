@@ -59,7 +59,17 @@ export function SpoilerGuard({
   if (!hidden) return <>{children}</>
   return (
     <div className={`relative ${className}`}>
-      <div className={revealed ? '' : `${blurClassName} select-none`} aria-hidden={!revealed}>
+      {/* Always h-full/w-full (not just when `className` asks for it) so
+      children relying on their parent's height — e.g. a `flex h-full
+      items-center justify-center` fallback like EpisodeDetailPage.tsx's
+      missing-still placeholder — actually get one: without it, `h-full` on
+      the fallback resolves against this div's own auto (content-sized)
+      height and silently no-ops, collapsing it to the text's height
+      instead of centering within the real box. */}
+      <div
+        className={`h-full w-full ${revealed ? '' : `${blurClassName} select-none`}`}
+        aria-hidden={!revealed}
+      >
         {children}
       </div>
       {!revealed && (

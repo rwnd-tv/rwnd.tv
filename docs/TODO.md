@@ -125,26 +125,26 @@ Format:
       whole file are genuine UK/US spelling divergences (`Cancelled`,
       `labelled`, `authorise`). So adding `en-US` as a literal copy
       would barely differ, and wouldn't be a real second locale.
-      Two things need to land together, not separately:
-      1. Rewrite `en-GB/common.json` to actual British vocabulary
-         (movie→film, season→series, TV show→TV programme — ~48 keys,
-         already identified) *before* forking spelling for `en-US`.
-      2. Fix `parseDateTimeInput` (`apps/web/src/lib/date.ts:54-74`):
-         it collects date/time parts via `Intl.DateTimeFormat`'s
-         `formatToParts` but has no `dayPeriod` handling, so on a
-         12-hour locale a manually-typed "5:30 PM" silently parses as
-         05:30 — no error, just the wrong watch time saved. Harmless
-         today since `en-GB`/`fr-FR` are both 24-hour, but this becomes
-         a live, silent data-corruption bug the moment any 12-hour
-         locale exists — a blocker for `en-US`, not a cosmetic gap.\
-         Also worth revisiting alongside this: the browser-language
-         auto-detection (`i18next-browser-languagedetector`, no
-         explicit config) only matches an *exact* supported code
-         (`navigator` reporting `en-US`/`fr-CA`/etc. falls straight
-         through to the `en-GB` fallback today), and a new account's
-         `locale` always defaults to `en-GB` regardless of what the
-         browser reported — neither registration nor setup seeds it
-         from the detected language.
+      Two things need to land together, not separately. First, rewrite
+      `en-GB/common.json` to actual British vocabulary (movie→film,
+      season→series, TV show→TV programme — ~48 keys, already
+      identified) _before_ forking spelling for `en-US`. Second, fix
+      `parseDateTimeInput` (`apps/web/src/lib/date.ts:54-74`): it
+      collects date/time parts via `Intl.DateTimeFormat`'s
+      `formatToParts` but has no `dayPeriod` handling, so on a 12-hour
+      locale a manually-typed "5:30 PM" silently parses as 05:30 — no
+      error, just the wrong watch time saved. Harmless today since
+      `en-GB`/`fr-FR` are both 24-hour, but this becomes a live, silent
+      data-corruption bug the moment any 12-hour locale exists — a
+      blocker for `en-US`, not a cosmetic gap.\
+      Also worth revisiting alongside this: the browser-language
+      auto-detection (`i18next-browser-languagedetector`, no
+      explicit config) only matches an _exact_ supported code
+      (`navigator` reporting `en-US`/`fr-CA`/etc. falls straight
+      through to the `en-GB` fallback today), and a new account's
+      `locale` always defaults to `en-GB` regardless of what the
+      browser reported — neither registration nor setup seeds it
+      from the detected language.
 
 ## Auth & accounts
 

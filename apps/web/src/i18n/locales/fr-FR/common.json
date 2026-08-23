@@ -46,12 +46,17 @@
     "onDeck": {
       "title": "À suivre",
       "episodeLabel": "S{{season}} E{{episode}}"
+    },
+    "upNext": {
+      "title": "À venir",
+      "episodeLabel": "S{{season}} E{{episode}} · {{date}}"
     }
   },
   "spoiler": {
     "reveal": "Révéler le spoiler"
   },
   "search": {
+    "title": "Recherche",
     "placeholder": "Rechercher un film ou une série…",
     "noResults": "Aucun résultat pour l'instant — essayez une recherche.",
     "logWatch": "Ajouter",

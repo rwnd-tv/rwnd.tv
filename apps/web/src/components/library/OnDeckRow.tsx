@@ -13,10 +13,11 @@ import { PosterTile } from './PosterTile.js'
  * showing an empty section: unlike the TV Shows/Movies gallery, there's no
  * "you don't have anything yet" empty state worth having here, since a
  * user with no recent activity just doesn't get this row. Its own heading
- * doubles as the Dashboard's page title (James: drop the generic
- * "Dashboard" h1 and promote this one instead) — DashboardPage.tsx has no
- * h1 of its own, so the page is titleless on the rare load with nothing
- * on deck, same tradeoff as the row itself disappearing.
+ * doubles as a Dashboard page title (James: drop the generic "Dashboard"
+ * h1 and promote this one instead) — DashboardPage.tsx has no h1 of its
+ * own, so the page is titleless if both this and UpNextRow.tsx are empty
+ * (each row's `<h1>`, not just this one — see that component's own doc
+ * comment for why the Dashboard ends up with two).
  *
  * A single flex row with `overflow-x-auto` (not PosterGrid.tsx's wrapping
  * grid) is deliberate — this is meant to read as one continuous "keep

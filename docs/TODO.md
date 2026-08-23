@@ -36,15 +36,6 @@ Format:
       leading-article rules are a bigger job than this feature needed; left
       as a known simplification.
 
-## Dashboard
-
-- [ ] **"Up Next" row** (2026-08-21 23:00 added)\
-      Next _airing_ episode of any incomplete show the user has an
-      existing watch for and hasn't dropped. Same one-row cap and
-      mobile-layout caveat as On Deck above. Needs air-date data the
-      season/episode fetch already carries (`firstAired`) — the first
-      airing after "now" with no logged watch.
-
 ## Metadata & matching
 
 - [ ] **Multi-provider metadata (tmdb/imdb/tvdb)** (2026-08-11 22:20)\

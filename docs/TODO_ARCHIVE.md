@@ -981,3 +981,38 @@ currently-dropped shows, since a row can have both
       a live season's actual watched/aired state, the card linking
       straight to that exact episode, and the row scrolling (not
       wrapping or breaking) at a 390px-wide viewport.
+
+- [x] **"Up Next" row** (2026-08-21 23:00 added, done 2026-08-23)\
+      Done: a new `GET /library/up-next` route and `UpNextRow.tsx`,
+      mirroring On Deck above but for the next _upcoming_ (unaired)
+      episode instead of the next unwatched-but-aired one — same
+      candidate shows (recently-watched, non-dropped), same
+      horizontal-scroll row, same `PosterTile.tsx` card, linking to that
+      episode's own page. Factored the two routes' shared "which shows
+      qualify" query out into `getRecentlyWatchedCandidates()` rather
+      than duplicating it, since On Deck and Up Next start from exactly
+      the same set. Added `findNextAiringEpisode()` alongside
+      `findNextUnwatchedEpisode()` in `media.ts` — same forward
+      season-by-season scan from the viewer's furthest-watched season,
+      just hunting for the first `firstAired > now` instead of the first
+      aired-and-unwatched one; no watched-status check needed there,
+      since an unaired episode can't have a logged watch (`POST /plays`
+      already rejects that).\
+      Settled three things with James up front rather than guessing: same
+      30-day recency window as On Deck (not "any watch ever", simpler and
+      consistent); the two rows are fully independent, so a show can
+      appear in both at once (behind on aired episodes _and_ have
+      something upcoming) rather than Up Next hiding shows On Deck
+      already covers; and the card caption shows the air date too
+      ("S2 E5 · 3 Sep"), unlike On Deck's plain "S2 E5", since knowing
+      _when_ is the whole point of this row. Widened the shared
+      `NextEpisode` return type with `firstAired` for this (On Deck
+      doesn't use it, but both functions return the same shape).
+      Up Next's heading is an `<h2>`, not On Deck's `<h1>` — see
+      OnDeckRow.tsx's own doc comment on why promoting whichever row
+      happens to be non-empty isn't worth the coupling.\
+      Verified live on dev.rwnd.tv: correct next-airing episode/date
+      against a live season, the card linking straight to that episode
+      (shown correctly as not-yet-aired, "Mark watched" disabled), and a
+      show appearing in both rows at once with different episode numbers
+      in each, confirming they really are independent.

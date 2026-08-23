@@ -46,12 +46,17 @@
     "onDeck": {
       "title": "On Deck",
       "episodeLabel": "S{{season}} E{{episode}}"
+    },
+    "upNext": {
+      "title": "Up Next",
+      "episodeLabel": "S{{season}} E{{episode}} · {{date}}"
     }
   },
   "spoiler": {
     "reveal": "Reveal spoiler"
   },
   "search": {
+    "title": "Search",
     "placeholder": "Search for a movie or TV show…",
     "noResults": "No results yet — try searching for something.",
     "logWatch": "Add watch",

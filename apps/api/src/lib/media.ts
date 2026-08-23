@@ -249,6 +249,7 @@ export async function resolveSeasonEpisodes(
 export interface NextEpisode {
   seasonNumber: number
   episodeNumber: number
+  firstAired: string
 }
 
 /**
@@ -305,8 +306,54 @@ export async function findNextUnwatchedEpisode(
     const next = resolved
       .slice()
       .sort((a, b) => a.episodeNumber - b.episodeNumber)
-      .find((e) => e.firstAired !== null && new Date(e.firstAired) <= now && !watchedIds.has(e.id))
-    if (next) return { seasonNumber, episodeNumber: next.episodeNumber }
+      .find(
+        (e): e is ResolvedEpisode & { firstAired: string } =>
+          e.firstAired !== null && new Date(e.firstAired) <= now && !watchedIds.has(e.id),
+      )
+    if (next)
+      return { seasonNumber, episodeNumber: next.episodeNumber, firstAired: next.firstAired }
+  }
+  return null
+}
+
+/**
+ * The next *upcoming* (not yet aired) episode of a show a user is
+ * following, from `startSeasonNumber` onward — or null if nothing's
+ * scheduled yet. Powers the Dashboard's Up Next row
+ * (apps/api/src/routes/library.ts). No watched-status check needed here,
+ * unlike findNextUnwatchedEpisode above: an episode that hasn't aired yet
+ * can't have a logged watch (POST /plays rejects one — see plays.ts),
+ * so every unaired episode already qualifies.
+ */
+export async function findNextAiringEpisode(
+  db: Database,
+  provider: MetadataProvider,
+  showId: string,
+  showExternalId: string,
+  startSeasonNumber: number,
+  locale: string,
+): Promise<NextEpisode | null> {
+  const seasonRows = await db
+    .select({ seasonNumber: seasons.seasonNumber })
+    .from(seasons)
+    .where(and(eq(seasons.showId, showId), gte(seasons.seasonNumber, startSeasonNumber)))
+    .orderBy(seasons.seasonNumber)
+
+  const now = new Date()
+
+  for (const { seasonNumber } of seasonRows) {
+    const resolved = await resolveSeason(db, provider, showId, showExternalId, seasonNumber, locale)
+    if (resolved.length === 0) continue
+
+    const next = resolved
+      .slice()
+      .sort((a, b) => a.episodeNumber - b.episodeNumber)
+      .find(
+        (e): e is ResolvedEpisode & { firstAired: string } =>
+          e.firstAired !== null && new Date(e.firstAired) > now,
+      )
+    if (next)
+      return { seasonNumber, episodeNumber: next.episodeNumber, firstAired: next.firstAired }
   }
   return null
 }

@@ -73,6 +73,29 @@ export const onDeckResponseSchema = z.object({
 export type OnDeckResponse = z.infer<typeof onDeckResponseSchema>
 
 /**
+ * Backs the Dashboard's Up Next row (apps/web/src/routes/DashboardPage.tsx)
+ * — one card per show the user's following whose next episode hasn't aired
+ * yet, independent of onDeckItemSchema above (a show can have both an
+ * unwatched-aired episode and an upcoming one at once). `firstAired` is
+ * shown on the card itself, unlike On Deck's — the point of this row is
+ * knowing *when* something's coming, not just that it is.
+ */
+export const upNextItemSchema = z.object({
+  slug: z.string(),
+  title: z.string(),
+  posterPath: z.string().nullable(),
+  seasonNumber: z.number().int(),
+  episodeNumber: z.number().int(),
+  firstAired: z.string(),
+})
+export type UpNextItem = z.infer<typeof upNextItemSchema>
+
+export const upNextResponseSchema = z.object({
+  shows: z.array(upNextItemSchema),
+})
+export type UpNextResponse = z.infer<typeof upNextResponseSchema>
+
+/**
  * Backs the per-show page (apps/web/src/routes/ShowDetailPage.tsx), linked
  * to from the shows gallery and from History. `watchedEpisodes`/
  * `totalEpisodes` here follow the exact same season-0-excluded convention

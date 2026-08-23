@@ -5,6 +5,7 @@ import { api } from '../lib/api-client.js'
 import { useDebouncedValue } from '../lib/use-debounced-value.js'
 import { SearchResultCard } from '../components/SearchResultCard.js'
 import { OnDeckRow } from '../components/library/OnDeckRow.js'
+import { UpNextRow } from '../components/library/UpNextRow.js'
 import { Field } from '../components/ui/Field.js'
 import { Spinner } from '../components/ui/Spinner.js'
 
@@ -22,27 +23,31 @@ export function DashboardPage() {
   return (
     <div className="flex flex-col gap-6">
       <OnDeckRow />
-      <Field
-        label={t('search.placeholder')}
-        hideLabel
-        placeholder={t('search.placeholder')}
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-      />
-      {isFetching && <Spinner label={t('common.loading')} />}
-      {isError && (
-        <p role="alert" className="text-[var(--color-danger)]">
-          {t('common.somethingWentWrong')}
-        </p>
-      )}
-      {!isFetching && !isError && debouncedQuery && data?.results.length === 0 && (
-        <p className="text-[var(--color-fg-muted)]">{t('search.noResults')}</p>
-      )}
-      <ul className="flex flex-col gap-3">
-        {data?.results.map((result) => (
-          <SearchResultCard key={`${result.type}-${result.externalId}`} result={result} />
-        ))}
-      </ul>
+      <UpNextRow />
+      <div className="flex flex-col gap-3">
+        <h1 className="text-2xl font-semibold">{t('search.title')}</h1>
+        <Field
+          label={t('search.placeholder')}
+          hideLabel
+          placeholder={t('search.placeholder')}
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+        />
+        {isFetching && <Spinner label={t('common.loading')} />}
+        {isError && (
+          <p role="alert" className="text-[var(--color-danger)]">
+            {t('common.somethingWentWrong')}
+          </p>
+        )}
+        {!isFetching && !isError && debouncedQuery && data?.results.length === 0 && (
+          <p className="text-[var(--color-fg-muted)]">{t('search.noResults')}</p>
+        )}
+        <ul className="flex flex-col gap-3">
+          {data?.results.map((result) => (
+            <SearchResultCard key={`${result.type}-${result.externalId}`} result={result} />
+          ))}
+        </ul>
+      </div>
     </div>
   )
 }

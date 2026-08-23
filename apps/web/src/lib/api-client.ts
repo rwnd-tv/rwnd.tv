@@ -36,6 +36,7 @@ import {
   type TraktDevicePairing,
   type UpdateInstanceSettingsRequest,
   type UpdateProfileRequest,
+  type UpNextResponse,
   type User,
 } from '@rwnd/shared'
 
@@ -114,6 +115,7 @@ export const api = {
     // Whole-library responses, not paginated — see packages/shared/src/schemas/library.ts.
     shows: () => get<ListLibraryShowsResponse>('/library/shows'),
     onDeck: () => get<OnDeckResponse>('/library/on-deck'),
+    upNext: () => get<UpNextResponse>('/library/up-next'),
     show: (slug: string) => get<ShowDetail>(`/library/shows/${encodeURIComponent(slug)}`),
     dropShow: (slug: string) =>
       post<DroppedStatus>(`/library/shows/${encodeURIComponent(slug)}/dropped`),

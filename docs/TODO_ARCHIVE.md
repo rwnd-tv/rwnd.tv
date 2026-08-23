@@ -1119,3 +1119,80 @@ currently-dropped shows, since a row can have both
       Verified live on dev.rwnd.tv: clicking the mark/wordmark from
       another page (History) lands on the Dashboard, header layout
       otherwise unchanged.
+
+## Localization
+
+- [x] **Drop fr-FR** (2026-08-23 done)\
+      Done: removed the `fr-FR` locale entirely — `SUPPORTED_LOCALES`,
+      `i18n/index.ts`'s registered resources, and the
+      `apps/web/src/i18n/locales/fr-FR/` directory. Traced its origin
+      first: no ADR, no `docs/vision.md` rationale, nothing in the M1
+      commit message either — a past session added it unilaterally,
+      almost certainly just to prove the i18n plumbing worked with more
+      than one locale, not because anyone asked for it or could check
+      it. James confirmed he didn't choose it, and it had never been
+      verified by a French speaker. Rather than carry an unverified
+      translation indefinitely, dropped it until there's someone who
+      can actually check a French locale. No DB migration needed — dev's
+      only user/instance-settings row was already `en-GB`, and the
+      `locale` column has no DB-level enum constraint. Reworded two
+      comments that had cited `fr-FR` as their reasoning rather than
+      removing the behaviour they described: `foldForSearch`'s
+      accent-insensitivity is still useful for any title with
+      diacritics regardless of UI locale, and `parseDateTimeInput`'s
+      day-month-year assumption still holds for `en-GB` alone.
+      Verified live on dev.rwnd.tv: Settings' language picker showed
+      only `en-GB`, no console errors, everything still rendered
+      correctly.
+
+- [x] **Add en-US locale, rewrite en-GB's Movie → Film wording** (2026-08-23 23:10 added, done 2026-08-23)\
+      Done: `en-US` shipped alongside a rewrite of `en-GB`'s Movie
+      wording to Film. Came out of the movies-parity work — a casual
+      "Film" vs "Movie" question turned into a full audit of
+      `en-GB/common.json`, which surfaced that the file was already
+      written in near-total American vocabulary throughout, so a naive
+      `en-US` copy would barely have differed. Confirmed the actual
+      word choices with James (a native British English speaker) word
+      by word, rather than assuming from a generic UK/US style guide —
+      that guide had already gotten one word wrong (see below).
+      Verdict: **Season** stays "Season" (modern globally-released
+      shows are called that in British usage too — only older
+      British-produced shows like _Blackadder_ commonly say "Series"),
+      **TV Show** stays "TV Show" ("TV Programme" is understood but
+      old-fashioned), and **Movie → Film** was the one real change
+      ("Film" is the preferred word, though "Movie" is fine
+      informally) — ~15 keys (`nav.movies`, `search.placeholder`, the
+      `movies.*`/`movieDetail.*` blocks), not the ~48 originally
+      estimated.\
+      `en-GB` and `en-US` landed in the same commit rather than staged
+      — no benefit to sequencing once both are written correctly, and
+      staging would have left a window where the only English locale
+      said "Film" with no American option. `en-US` is a near-copy of
+      `en-GB` as it read before this rewrite (Movie/Movies throughout)
+      plus the 4 genuine spelling words (`Cancelled`→`Canceled`,
+      `labelled`→`labeled`, `authorise`→`authorize`), wired into
+      `SUPPORTED_LOCALES` (`packages/shared/src/schemas/common.ts`),
+      `i18n/index.ts`, and the Settings language picker (already
+      generic over `SUPPORTED_LOCALES`, no changes needed there).\
+      Also fixed `parseDateTimeInput`'s 12-hour-clock bug before
+      shipping a 12-hour locale: it had no `dayPeriod` handling, so a
+      typed "5:30 PM" silently parsed as 05:30 with no error. Now
+      derives the locale's own AM/PM strings via two reference times
+      (not hardcoded English text) and resolves the typed hour against
+      whichever marker appears in the text — returns null (rather than
+      guessing) if neither is found. Verified with a standalone script
+      that the fix round-trips correctly across all 24 hours for both
+      `en-GB` and `en-US`, and correctly rejects ambiguous input.\
+      Verified live on dev.rwnd.tv: switching the account language
+      between `en-GB` and `en-US` actually re-renders the UI (Films ↔
+      Movies, sidebar and page heading both), no console errors either
+      way. Along the way, confirmed a form-automation gotcha isn't an
+      app bug: setting a `<select>`'s value via a testing tool's direct
+      DOM write doesn't fire the event React's controlled input relies
+      on, so the change silently doesn't persist — a genuine
+      keyboard-driven interaction works correctly. Not a rwnd.tv issue,
+      but worth remembering next time a Settings toggle "doesn't save"
+      under automation.\
+      Remaining, split into its own TODO: seeding a new account's
+      locale from the browser's detected language instead of always
+      `en-GB` — see `docs/TODO.md`.

@@ -1036,3 +1036,17 @@ currently-dropped shows, since a row can have both
       (shown correctly as not-yet-aired, "Mark watched" disabled), and a
       show appearing in both rows at once with different episode numbers
       in each, confirming they really are independent.
+
+## Landing page & branding
+
+- [x] **Link the header mark/wordmark to the site's base URL** (2026-08-23 14:40 added, done 2026-08-23)\
+      Done: `Layout.tsx`'s mark + wordmark are now wrapped in a React
+      Router `Link to="/"` rather than plain elements. Settled the open
+      question in the original TODO in favour of an in-app route, not a
+      real anchor to the instance origin — `Layout` only renders behind
+      `ProtectedRoute`, so a logged-in viewer clicking it always wants
+      `/`, which `App.tsx` already redirects to `/dashboard`; no need to
+      hardcode `https://rwnd.tv`/`https://dev.rwnd.tv` per environment.
+      Verified live on dev.rwnd.tv: clicking the mark/wordmark from
+      another page (History) lands on the Dashboard, header layout
+      otherwise unchanged.

@@ -94,15 +94,6 @@ Format:
 
 ## Landing page & branding
 
-- [ ] **Link the header mark/wordmark to the site's base URL** (2026-08-23 14:40 added)\
-      `Layout.tsx`'s top bar renders the mark (`/favicon.svg`) and
-      wordmark (`app.name`) as plain elements — clicking them does
-      nothing right now. Should link to the instance's own base URL
-      (`https://rwnd.tv` in prod, `https://dev.rwnd.tv` on dev) — worth
-      deciding at build time whether that's a real anchor to the current
-      origin or an in-app route, since `/` already redirects to
-      `/dashboard`.
-
 - [ ] **Build a real landing page for logged-out visitors** (2026-08-23 14:40 added)\
       `LoginPage.tsx` today is just a bare login card — no explanation of
       what rwnd.tv is, no artwork, no link to the GitHub repo, and the

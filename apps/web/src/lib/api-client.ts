@@ -22,6 +22,7 @@ import {
   type LoginRequest,
   type MarkShowWatchedRequest,
   type MarkShowWatchedResponse,
+  type OnDeckResponse,
   type Play,
   type RegisterRequest,
   type RemoveEpisodeWatchesRequest,
@@ -112,6 +113,7 @@ export const api = {
   library: {
     // Whole-library responses, not paginated — see packages/shared/src/schemas/library.ts.
     shows: () => get<ListLibraryShowsResponse>('/library/shows'),
+    onDeck: () => get<OnDeckResponse>('/library/on-deck'),
     show: (slug: string) => get<ShowDetail>(`/library/shows/${encodeURIComponent(slug)}`),
     dropShow: (slug: string) =>
       post<DroppedStatus>(`/library/shows/${encodeURIComponent(slug)}/dropped`),

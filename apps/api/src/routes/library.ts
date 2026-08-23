@@ -9,6 +9,7 @@ import {
   listLibraryShowsResponseSchema,
   markShowWatchedRequestSchema,
   markShowWatchedResponseSchema,
+  onDeckResponseSchema,
   removeEpisodeWatchesRequestSchema,
   removeShowWatchesResponseSchema,
   seasonDetailSchema,
@@ -18,7 +19,12 @@ import type { Database } from '@rwnd/db'
 import { droppedShows, episodes, externalIds, movies, plays, seasons, shows } from '@rwnd/db'
 import type { AppEnv } from '../types.js'
 import { requireAuth } from '../middleware/auth.js'
-import { resolveSeasonEpisodes, resolveShowEpisodes, type ResolvedEpisode } from '../lib/media.js'
+import {
+  findNextUnwatchedEpisode,
+  resolveSeasonEpisodes,
+  resolveShowEpisodes,
+  type ResolvedEpisode,
+} from '../lib/media.js'
 
 /**
  * Shared by the show- and season-level "Watched" button routes below.
@@ -231,6 +237,137 @@ libraryRoutes.openapi(
         lastWatchedAt: row.lastWatchedAt.toISOString(),
       })),
     })
+  },
+)
+
+/** How far back a play counts toward "recently watched" for the On Deck
+ * row below — TBD in the sense that this is a first guess, not something
+ * James asked for by number; easy to retune later. */
+const ON_DECK_WINDOW_DAYS = 30
+
+/**
+ * Backs the Dashboard's On Deck row (apps/web/src/routes/DashboardPage.tsx)
+ * — one card per show the user watched in the last `ON_DECK_WINDOW_DAYS`
+ * days and hasn't finished, each pointing at the next episode they haven't
+ * seen yet. Two passes: a single query finds every recently-watched,
+ * non-dropped show plus where the user last got to (specials excluded from
+ * "got to", same convention as the show page's own progress), then
+ * findNextUnwatchedEpisode resolves each candidate's next episode from the
+ * provider — that part can't be done in SQL, since an unwatched episode has
+ * no local row to query until someone actually resolves it (see
+ * resolveEpisode's doc comment).
+ */
+libraryRoutes.openapi(
+  createRoute({
+    method: 'get',
+    path: '/library/on-deck',
+    summary: "The current user's On Deck row",
+    middleware: [requireAuth] as const,
+    responses: {
+      200: {
+        description: 'On Deck shows',
+        content: { 'application/json': { schema: onDeckResponseSchema } },
+      },
+    },
+  }),
+  async (c) => {
+    const user = c.get('user')!
+    const db = c.get('db')
+    const provider = c.get('metadataProvider')
+
+    const cutoff = new Date(Date.now() - ON_DECK_WINDOW_DAYS * 24 * 60 * 60 * 1000)
+
+    // A play dated exactly 1900-01-01 is Trakt's "I don't remember when"
+    // backfill sentinel (see showDetailSchema's doc comment), not real
+    // recent activity — excluded from both aggregates the same way the
+    // show page's own watchedRange query excludes it.
+    const recentWatch = db.$with('recent_watch').as(
+      db
+        .select({
+          showId: episodes.showId,
+          lastWatchedAt:
+            sql`max(${plays.watchedAt}) FILTER (WHERE extract(year from ${plays.watchedAt}) <> 1900)`
+              .mapWith((v: string) => new Date(v))
+              .as('last_watched_at'),
+          maxWatchedSeason: sql<
+            number | null
+          >`max(case when ${episodes.seasonNumber} > 0 then ${episodes.seasonNumber} end)`.as(
+            'max_watched_season',
+          ),
+        })
+        .from(plays)
+        .innerJoin(episodes, eq(plays.episodeId, episodes.id))
+        .where(eq(plays.userId, user.id))
+        .groupBy(episodes.showId),
+    )
+
+    const rows = await db
+      .with(recentWatch)
+      .select({
+        id: shows.id,
+        slug: shows.slug,
+        title: shows.title,
+        posterPath: shows.posterPath,
+        tmdbId: externalIds.externalId,
+        maxWatchedSeason: recentWatch.maxWatchedSeason,
+        // Null when this user has no droppedShows row at all for this show
+        // — same join shape as /library/shows above.
+        traktDropped: droppedShows.traktDropped,
+        manualDropped: droppedShows.manualDropped,
+      })
+      .from(recentWatch)
+      .innerJoin(shows, eq(shows.id, recentWatch.showId))
+      // A show with no tmdb external id can't be resolved against the
+      // provider at all (see docs/TODO.md's multi-provider item) — no
+      // candidate worth returning here either way.
+      .innerJoin(
+        externalIds,
+        and(
+          eq(externalIds.entityType, 'show'),
+          eq(externalIds.entityId, shows.id),
+          eq(externalIds.source, 'tmdb'),
+        ),
+      )
+      .leftJoin(
+        droppedShows,
+        and(eq(droppedShows.showId, shows.id), eq(droppedShows.userId, user.id)),
+      )
+      // A bare Date doesn't survive being bound as a parameter against a
+      // raw-sql-derived CTE column the way it does against a real typed
+      // column (postgres.js has no type hint to serialize it by) — needs
+      // `.toISOString()` plus an explicit cast, same gotcha as the
+      // dropped-show CASE expression in library.ts's toggleDropped route.
+      .where(sql`${recentWatch.lastWatchedAt} > ${cutoff.toISOString()}::timestamptz`)
+      .orderBy(desc(recentWatch.lastWatchedAt))
+
+    const candidates = rows.filter((row) => !(row.manualDropped ?? row.traktDropped ?? false))
+
+    const shownShows = []
+    for (const candidate of candidates) {
+      const next = await findNextUnwatchedEpisode(
+        db,
+        provider,
+        user.id,
+        candidate.id,
+        candidate.tmdbId,
+        // No non-special watch yet (e.g. only specials watched recently) —
+        // start from season 1 rather than treating season 0 as the
+        // furthest point reached.
+        candidate.maxWatchedSeason ?? 1,
+        user.locale,
+      )
+      if (next) {
+        shownShows.push({
+          slug: candidate.slug,
+          title: candidate.title,
+          posterPath: candidate.posterPath,
+          seasonNumber: next.seasonNumber,
+          episodeNumber: next.episodeNumber,
+        })
+      }
+    }
+
+    return c.json({ shows: shownShows })
   },
 )
 

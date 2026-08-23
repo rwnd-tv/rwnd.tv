@@ -35,7 +35,7 @@ const router = createBrowserRouter([
           // redirect (LoginPage, RegisterPage, SetupPage) independently
           // hardcodes '/dashboard' too.
           { path: '/', element: <Navigate to="/dashboard" replace /> },
-          { path: '/dashboard', element: <DashboardPage /> },
+          { path: '/dashboard', element: <DashboardPage />, handle: fullWidthHandle },
           { path: '/shows', element: <ShowsPage />, handle: fullWidthHandle },
           { path: '/shows/:slug', element: <ShowDetailPage />, handle: fullWidthHandle },
           {

@@ -43,7 +43,10 @@
     "closed": "Les inscriptions ne sont pas ouvertes sur cette instance."
   },
   "dashboard": {
-    "title": "Tableau de bord"
+    "onDeck": {
+      "title": "À suivre",
+      "episodeLabel": "S{{season}} E{{episode}}"
+    }
   },
   "spoiler": {
     "reveal": "Révéler le spoiler"

@@ -1,6 +1,6 @@
-import { and, eq, gt } from 'drizzle-orm'
+import { and, eq, gt, gte, inArray } from 'drizzle-orm'
 import type { Database } from '@rwnd/db'
-import { episodes, externalIds, movies, seasons, shows } from '@rwnd/db'
+import { episodes, externalIds, movies, plays, seasons, shows } from '@rwnd/db'
 import type { MetadataProvider } from '../providers/types.js'
 import { generateUniqueShowSlug } from './slug.js'
 
@@ -147,10 +147,11 @@ export async function resolveShow(
 }
 
 /** One episode resolved to a local row, with just the fields the "Watched"
- * button's release-date mode needs on top of the id itself (see
- * resolveShowEpisodes/resolveSeasonEpisodes below). */
+ * button's release-date mode and findNextUnwatchedEpisode below need on top
+ * of the id itself (see resolveShowEpisodes/resolveSeasonEpisodes below). */
 export interface ResolvedEpisode {
   id: string
+  episodeNumber: number
   firstAired: string | null
 }
 
@@ -159,10 +160,10 @@ export interface ResolvedEpisode {
  * season's full episode list from the provider in one call — the same
  * "one provider call per season, not per episode" shape as
  * apps/api/src/import/match.ts's matchEpisode. Shared by
- * resolveShowEpisodes (every non-special season) and resolveSeasonEpisodes
- * (one season, specials included) below.
+ * resolveShowEpisodes (every non-special season), resolveSeasonEpisodes
+ * (one season, specials included), and findNextUnwatchedEpisode below.
  */
-async function resolveSeason(
+export async function resolveSeason(
   db: Database,
   provider: MetadataProvider,
   showId: string,
@@ -191,7 +192,11 @@ async function resolveSeason(
       .onConflictDoNothing()
   }
   return db
-    .select({ id: episodes.id, firstAired: episodes.firstAired })
+    .select({
+      id: episodes.id,
+      episodeNumber: episodes.episodeNumber,
+      firstAired: episodes.firstAired,
+    })
     .from(episodes)
     .where(and(eq(episodes.showId, showId), eq(episodes.seasonNumber, seasonNumber)))
 }
@@ -239,6 +244,71 @@ export async function resolveSeasonEpisodes(
 ): Promise<ResolvedEpisode[]> {
   const show = await resolveShow(db, provider, showExternalId, locale)
   return resolveSeason(db, provider, show.id, showExternalId, seasonNumber, locale)
+}
+
+export interface NextEpisode {
+  seasonNumber: number
+  episodeNumber: number
+}
+
+/**
+ * The next episode a user should watch for a show they're partway
+ * through — the earliest aired-but-unwatched episode from
+ * `startSeasonNumber` onward (specials excluded, same convention
+ * resolveShowEpisodes uses), or null if there isn't one (nothing new has
+ * aired since they caught up). Powers the Dashboard's On Deck row
+ * (apps/api/src/routes/library.ts). Scans forward season-by-season and
+ * stops at the first hit, rather than resolving the whole show up front
+ * like resolveShowEpisodes does for the "Watched" button — passing in the
+ * caller's actual furthest-watched season means a many-season show only
+ * costs a provider call per season near their real progress, not every
+ * season from the start.
+ */
+export async function findNextUnwatchedEpisode(
+  db: Database,
+  provider: MetadataProvider,
+  userId: string,
+  showId: string,
+  showExternalId: string,
+  startSeasonNumber: number,
+  locale: string,
+): Promise<NextEpisode | null> {
+  const seasonRows = await db
+    .select({ seasonNumber: seasons.seasonNumber })
+    .from(seasons)
+    .where(and(eq(seasons.showId, showId), gte(seasons.seasonNumber, startSeasonNumber)))
+    .orderBy(seasons.seasonNumber)
+
+  const now = new Date()
+
+  for (const { seasonNumber } of seasonRows) {
+    const resolved = await resolveSeason(db, provider, showId, showExternalId, seasonNumber, locale)
+    if (resolved.length === 0) continue
+
+    const watchedIds = new Set(
+      (
+        await db
+          .select({ episodeId: plays.episodeId })
+          .from(plays)
+          .where(
+            and(
+              eq(plays.userId, userId),
+              inArray(
+                plays.episodeId,
+                resolved.map((e) => e.id),
+              ),
+            ),
+          )
+      ).map((row) => row.episodeId),
+    )
+
+    const next = resolved
+      .slice()
+      .sort((a, b) => a.episodeNumber - b.episodeNumber)
+      .find((e) => e.firstAired !== null && new Date(e.firstAired) <= now && !watchedIds.has(e.id))
+    if (next) return { seasonNumber, episodeNumber: next.episodeNumber }
+  }
+  return null
 }
 
 export async function resolveEpisode(

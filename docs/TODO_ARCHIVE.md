@@ -938,3 +938,46 @@ currently-dropped shows, since a row can have both
       blur + reveal on an unwatched season/episode, the setting toggle
       turning all of it off/on immediately, and watched episodes/fully-
       watched show+season never blurred in the first place.
+
+## Dashboard
+
+- [x] **"On Deck" row** (2026-08-21 23:00 added, done 2026-08-23)\
+      Done: a new `GET /library/on-deck` route and a matching
+      `OnDeckRow.tsx` component above the Dashboard's search box — one
+      card per show with a real-dated play in the last 30 days (the
+      1900 "unknown date" sentinel doesn't count) that isn't dropped and
+      has an aired-but-unwatched episode next, each card linking straight
+      to that episode's own page rather than the show page, so clicking
+      it doubles as "continue". Decided with James up front: horizontal
+      scroll rather than a hard cap when more shows qualify than fit (a
+      Netflix-style row, and what makes the "mobile-specific treatment"
+      the original TODO worried about unnecessary — the row just scrolls
+      sideways instead of needing a separate narrow layout); poster +
+      "S{{season}} E{{episode}}" caption, reusing `PosterTile.tsx` rather
+      than a bespoke card (needed a new optional `className` prop on it
+      so the row's fixed-width flex tiles could override the grid-sized
+      default).\
+      "Next episode" can't be computed in SQL — an unwatched episode has
+      no local row at all until something resolves it (see
+      `resolveEpisode`'s doc comment in `apps/api/src/lib/media.ts`), so
+      the route runs one query to find recently-watched/non-dropped
+      candidates plus each one's furthest-watched season (specials
+      excluded), then a new `findNextUnwatchedEpisode()` walks forward
+      season-by-season from _that_ season (not season 1) calling the
+      provider until it finds an aired-and-unwatched episode or runs out
+      of seasons — starting from actual progress rather than the
+      beginning is what keeps a many-season show cheap to check. Widened
+      the existing `ResolvedEpisode`/`resolveSeason` (exported, was
+      module-private) to carry `episodeNumber` rather than duplicating
+      that query shape.\
+      Hit the same "bare `Date` into a drizzle `sql`-derived column"
+      gotcha documented elsewhere in this file (per-user show state
+      section) — comparing a CTE column built from a raw `sql` aggregate
+      against a plain `Date` via `gt()` threw `ERR_INVALID_ARG_TYPE` at
+      runtime (passed typecheck fine, only failed against real Postgres);
+      fixed with `.toISOString()` plus an explicit `::timestamptz` cast
+      in a raw `sql` comparison instead of the query-builder helper.
+      Verified live on dev.rwnd.tv: correct next-episode numbers against
+      a live season's actual watched/aired state, the card linking
+      straight to that exact episode, and the row scrolling (not
+      wrapping or breaking) at a 390px-wide viewport.

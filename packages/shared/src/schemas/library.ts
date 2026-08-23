@@ -53,6 +53,26 @@ export const listLibraryShowsResponseSchema = z.object({
 export type ListLibraryShowsResponse = z.infer<typeof listLibraryShowsResponseSchema>
 
 /**
+ * Backs the Dashboard's On Deck row (apps/web/src/routes/DashboardPage.tsx)
+ * — one card per show the user watched recently and hasn't finished, each
+ * linking straight to the next episode they haven't seen yet rather than
+ * the show page, so the card doubles as a "continue" action.
+ */
+export const onDeckItemSchema = z.object({
+  slug: z.string(),
+  title: z.string(),
+  posterPath: z.string().nullable(),
+  seasonNumber: z.number().int(),
+  episodeNumber: z.number().int(),
+})
+export type OnDeckItem = z.infer<typeof onDeckItemSchema>
+
+export const onDeckResponseSchema = z.object({
+  shows: z.array(onDeckItemSchema),
+})
+export type OnDeckResponse = z.infer<typeof onDeckResponseSchema>
+
+/**
  * Backs the per-show page (apps/web/src/routes/ShowDetailPage.tsx), linked
  * to from the shows gallery and from History. `watchedEpisodes`/
  * `totalEpisodes` here follow the exact same season-0-excluded convention

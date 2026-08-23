@@ -43,7 +43,10 @@
     "closed": "Registration is not currently open on this instance."
   },
   "dashboard": {
-    "title": "Dashboard"
+    "onDeck": {
+      "title": "On Deck",
+      "episodeLabel": "S{{season}} E{{episode}}"
+    }
   },
   "spoiler": {
     "reveal": "Reveal spoiler"

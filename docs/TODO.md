@@ -38,12 +38,6 @@ Format:
 
 ## Dashboard
 
-- [ ] **"On Deck" row** (2026-08-21 23:00 added)\
-      Next unwatched episode of any incomplete show with a watch logged
-      in the last ~30 days (exact window TBD) and not dropped. One row,
-      capped at a single row's worth of cards — needs a mobile-specific
-      treatment since a single row of poster cards won't fit well narrow.
-
 - [ ] **"Up Next" row** (2026-08-21 23:00 added)\
       Next _airing_ episode of any incomplete show the user has an
       existing watch for and hasn't dropped. Same one-row cap and

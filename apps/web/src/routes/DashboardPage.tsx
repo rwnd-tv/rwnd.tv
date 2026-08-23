@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { api } from '../lib/api-client.js'
 import { useDebouncedValue } from '../lib/use-debounced-value.js'
 import { SearchResultCard } from '../components/SearchResultCard.js'
+import { OnDeckRow } from '../components/library/OnDeckRow.js'
 import { Field } from '../components/ui/Field.js'
 import { Spinner } from '../components/ui/Spinner.js'
 
@@ -20,7 +21,7 @@ export function DashboardPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-2xl font-semibold">{t('dashboard.title')}</h1>
+      <OnDeckRow />
       <Field
         label={t('search.placeholder')}
         hideLabel

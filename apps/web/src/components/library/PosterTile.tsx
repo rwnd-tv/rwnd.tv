@@ -15,6 +15,7 @@ export function PosterTile({
   posterPath,
   to,
   grayscale,
+  className = '',
   children,
 }: {
   title: string
@@ -27,6 +28,11 @@ export function PosterTile({
    * shows, gallery-only (the show's own detail page renders its poster
    * separately, not through this component, so dropping never affects it). */
   grayscale?: boolean
+  /** Extra classes on the outer `<li>` — PosterGrid.tsx's own grid columns
+   * size regular gallery tiles, so this is normally unused there; a
+   * horizontally-scrolling row (DashboardPage.tsx's On Deck) needs a fixed
+   * tile width instead, since nothing else constrains it. */
+  className?: string
   /** Secondary content under the title — a progress bar, a play count, etc. */
   children?: ReactNode
 }) {
@@ -67,7 +73,7 @@ export function PosterTile({
   )
 
   return (
-    <li className="flex flex-col gap-2">
+    <li className={`flex flex-col gap-2 ${className}`}>
       {to ? (
         <Link to={to} className="flex flex-col gap-2 rounded-lg">
           {poster}

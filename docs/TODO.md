@@ -115,6 +115,37 @@ Format:
       generally make the repo read as more current and inviting to
       someone landing on it cold.
 
+## Localization
+
+- [ ] **Add en-US locale** (2026-08-23 23:10 added) — M3\
+      Came out of the movies-parity work — a "Film" vs "Movie" wording
+      question turned into an audit of `en-GB/common.json` (261 keys):
+      it's already written in near-total American vocabulary end to
+      end ("Movies", "Season", "On Deck", …) — only 4 words in the
+      whole file are genuine UK/US spelling divergences (`Cancelled`,
+      `labelled`, `authorise`). So adding `en-US` as a literal copy
+      would barely differ, and wouldn't be a real second locale.
+      Two things need to land together, not separately:
+      1. Rewrite `en-GB/common.json` to actual British vocabulary
+         (movie→film, season→series, TV show→TV programme — ~48 keys,
+         already identified) *before* forking spelling for `en-US`.
+      2. Fix `parseDateTimeInput` (`apps/web/src/lib/date.ts:54-74`):
+         it collects date/time parts via `Intl.DateTimeFormat`'s
+         `formatToParts` but has no `dayPeriod` handling, so on a
+         12-hour locale a manually-typed "5:30 PM" silently parses as
+         05:30 — no error, just the wrong watch time saved. Harmless
+         today since `en-GB`/`fr-FR` are both 24-hour, but this becomes
+         a live, silent data-corruption bug the moment any 12-hour
+         locale exists — a blocker for `en-US`, not a cosmetic gap.\
+         Also worth revisiting alongside this: the browser-language
+         auto-detection (`i18next-browser-languagedetector`, no
+         explicit config) only matches an *exact* supported code
+         (`navigator` reporting `en-US`/`fr-CA`/etc. falls straight
+         through to the `en-GB` fallback today), and a new account's
+         `locale` always defaults to `en-GB` regardless of what the
+         browser reported — neither registration nor setup seeds it
+         from the detected language.
+
 ## Auth & accounts
 
 - [ ] **Passkey (WebAuthn) support** (2026-08-23 15:45 added)\
@@ -146,10 +177,10 @@ Format:
 ## Roadmap
 
 Every open item from [ROADMAP.md](ROADMAP.md) that doesn't already have a
-more specific TODO elsewhere in this file (multi-provider metadata and
-ratings/watchlist above both double as their M2/M3 entries). Kept brief —
-ROADMAP.md is the source of truth for scope; this is just so a TODO
-listing is complete.
+more specific TODO elsewhere in this file (multi-provider metadata,
+ratings/watchlist, and additional locales above all double as their
+M2/M3 entries). Kept brief — ROADMAP.md is the source of truth for
+scope; this is just so a TODO listing is complete.
 
 - [ ] **Plex/Tautulli webhook ingestion** (2026-08-23 15:30 added) — M2\
       Watches log themselves as you watch, authenticated via the
@@ -165,8 +196,6 @@ listing is complete.
 - [ ] **OIDC login** (2026-08-23 15:34 added) — M3\
       The `user_credentials` schema was designed for this from M1 — see
       [ADR 0003](adr/0003-auth-model.md).
-- [ ] **Additional locales beyond English/French** (2026-08-23 15:35 added) — M3\
-      UI is only translated to `en-GB`/`fr-FR` right now.
 - [ ] **Wikidata/TVDB metadata provider alongside TMDB** (2026-08-23 15:36 added) — Not yet scheduled\
       The second provider itself, not the infrastructure to support
       one — that's the "Multi-provider metadata" M2 item above, and

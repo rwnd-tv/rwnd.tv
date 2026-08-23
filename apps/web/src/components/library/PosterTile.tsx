@@ -14,6 +14,7 @@ export function PosterTile({
   year,
   posterPath,
   to,
+  grayscale,
   children,
 }: {
   title: string
@@ -22,12 +23,18 @@ export function PosterTile({
   /** When set, the poster + title link to a detail page (e.g. ShowDetailPage) —
    * omit it for tiles that don't have one yet (MoviesPage's movies). */
   to?: string
+  /** Dims the artwork to greyscale — ShowsPage.tsx uses this for dropped
+   * shows, gallery-only (the show's own detail page renders its poster
+   * separately, not through this component, so dropping never affects it). */
+  grayscale?: boolean
   /** Secondary content under the title — a progress bar, a play count, etc. */
   children?: ReactNode
 }) {
   const poster = (
     <>
-      <div className="aspect-[2/3] w-full overflow-hidden rounded-lg bg-[var(--color-surface)]">
+      <div
+        className={`aspect-[2/3] w-full overflow-hidden rounded-lg bg-[var(--color-surface)] ${grayscale ? 'grayscale' : ''}`}
+      >
         {posterPath ? (
           <img
             src={posterPath}

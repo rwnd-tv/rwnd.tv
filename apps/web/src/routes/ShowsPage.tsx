@@ -367,6 +367,7 @@ export function ShowsPage() {
                   year={show.year}
                   posterPath={show.posterPath}
                   to={`/shows/${show.slug}`}
+                  grayscale={show.dropped}
                 >
                   {show.dropped && (
                     <p className="text-xs font-medium text-[var(--color-danger)]">

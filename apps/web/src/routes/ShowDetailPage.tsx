@@ -7,6 +7,7 @@ import { api, ApiError } from '../lib/api-client.js'
 import { invalidateWatchData } from '../lib/query-client.js'
 import { markWatchedRequestBody } from '../lib/date.js'
 import { useAuth } from '../lib/auth-context.js'
+import { EpisodeCard } from '../components/library/EpisodeCard.js'
 import { PosterGrid } from '../components/library/PosterGrid.js'
 import { ProgressBar } from '../components/library/ProgressBar.js'
 import { SpoilerGuard } from '../components/library/SpoilerGuard.js'
@@ -113,6 +114,25 @@ export function ShowDetailPage() {
     queryKey: ['show', slug],
     queryFn: () => api.library.show(slug!),
     enabled: Boolean(slug),
+  })
+
+  // A show with exactly one season skips the season-picker grid below and
+  // shows that season's own episodes right here instead — picking a season
+  // to then see one card in it isn't worth the extra click. Same queryKey
+  // SeasonDetailPage.tsx uses for this season, so navigating there and back
+  // shares one cache entry rather than fetching twice. Declared before the
+  // `!show` early return below (hooks can't be conditional) — `enabled`
+  // just stays false until `show` itself has loaded.
+  const singleSeasonNumber =
+    show && show.seasons.length === 1 ? show.seasons[0]!.seasonNumber : undefined
+  const {
+    data: singleSeason,
+    isLoading: singleSeasonLoading,
+    error: singleSeasonError,
+  } = useQuery({
+    queryKey: ['show', slug, 'season', singleSeasonNumber],
+    queryFn: () => api.library.season(slug!, singleSeasonNumber!),
+    enabled: Boolean(slug) && singleSeasonNumber !== undefined,
   })
 
   // Toggles between the two endpoints based on current cache state rather
@@ -442,7 +462,35 @@ export function ShowDetailPage() {
         </div>
       </Dialog>
 
-      {show.seasons.length > 0 && (
+      {show.seasons.length === 1 && (
+        <div className="flex flex-col gap-3">
+          <h2 className="text-lg font-semibold">
+            {show.seasons[0]!.name ??
+              (show.seasons[0]!.seasonNumber === 0
+                ? t('showDetail.specials')
+                : t('import.progress.season', { number: show.seasons[0]!.seasonNumber }))}
+          </h2>
+          {singleSeasonLoading ? (
+            <Spinner label={t('common.loading')} />
+          ) : singleSeasonError || !singleSeason ? (
+            <p className="text-[var(--color-fg-muted)]">{t('common.somethingWentWrong')}</p>
+          ) : (
+            <PosterGrid minTileWidth="16rem">
+              {singleSeason.episodes.map((episode) => (
+                <EpisodeCard
+                  key={episode.episodeNumber}
+                  episode={episode}
+                  slug={slug!}
+                  seasonNumber={singleSeason.seasonNumber}
+                  tmdbId={show.tmdbId}
+                />
+              ))}
+            </PosterGrid>
+          )}
+        </div>
+      )}
+
+      {show.seasons.length > 1 && (
         <div className="flex flex-col gap-3">
           <h2 className="text-lg font-semibold">{t('showDetail.seasonsTitle')}</h2>
           <PosterGrid>

@@ -186,12 +186,20 @@ export function EpisodeDetailPage() {
   return (
     <div className="flex flex-col gap-8">
       <div className="flex items-start justify-between gap-4">
-        <Link
-          to={`/shows/${slug}/season/${seasonNumber}`}
-          className="w-fit text-sm text-[var(--color-fg-muted)] hover:underline"
-        >
-          ← {seasonName}
-        </Link>
+        <div className="flex w-fit items-center gap-1.5 text-sm text-[var(--color-fg-muted)]">
+          <span aria-hidden="true">←</span>
+          {show && (
+            <>
+              <Link to={`/shows/${slug}`} className="hover:underline">
+                {show.title}
+              </Link>
+              <span aria-hidden="true">·</span>
+            </>
+          )}
+          <Link to={`/shows/${slug}/season/${seasonNumber}`} className="hover:underline">
+            {seasonName}
+          </Link>
+        </div>
         <div className="flex shrink-0 gap-2">
           <Button
             type="button"

@@ -12,6 +12,8 @@ import {
   onDeckResponseSchema,
   removeEpisodeWatchesRequestSchema,
   removeShowWatchesResponseSchema,
+  resolveShowRequestSchema,
+  resolveShowResponseSchema,
   seasonDetailSchema,
   showDetailSchema,
   upNextResponseSchema,
@@ -23,6 +25,7 @@ import { requireAuth } from '../middleware/auth.js'
 import {
   findNextAiringEpisode,
   findNextUnwatchedEpisode,
+  resolveShow,
   resolveSeasonEpisodes,
   resolveShowEpisodes,
   type ResolvedEpisode,
@@ -240,6 +243,40 @@ libraryRoutes.openapi(
         lastWatchedAt: row.lastWatchedAt.toISOString(),
       })),
     })
+  },
+)
+
+/**
+ * Backs the Dashboard search's show results (SearchResultCard.tsx) —
+ * resolving a TMDB search hit to a local show is normally a side effect of
+ * logging a watch (resolveShow, called from inside resolveEpisode etc.),
+ * but a show result now links straight to its own page instead of logging
+ * anything, so it needs a way to get (or create) that page's slug first.
+ * Idempotent: resolveShow itself already no-ops into a lookup if the show
+ * was resolved before, by anyone.
+ */
+libraryRoutes.openapi(
+  createRoute({
+    method: 'post',
+    path: '/library/shows/resolve',
+    summary: 'Resolve a show search result to its local page slug',
+    middleware: [requireAuth] as const,
+    request: { body: { content: { 'application/json': { schema: resolveShowRequestSchema } } } },
+    responses: {
+      200: {
+        description: 'Resolved',
+        content: { 'application/json': { schema: resolveShowResponseSchema } },
+      },
+    },
+  }),
+  async (c) => {
+    const body = c.req.valid('json')
+    const db = c.get('db')
+    const provider = c.get('metadataProvider')
+    const user = c.get('user')!
+
+    const show = await resolveShow(db, provider, body.externalId, user.locale)
+    return c.json({ slug: show.slug })
   },
 )
 

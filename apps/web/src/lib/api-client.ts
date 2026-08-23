@@ -27,6 +27,8 @@ import {
   type RegisterRequest,
   type RemoveEpisodeWatchesRequest,
   type RemoveShowWatchesResponse,
+  type ResolveShowRequest,
+  type ResolveShowResponse,
   type RestoreBackupResponse,
   type SearchResponse,
   type SeasonDetail,
@@ -114,6 +116,8 @@ export const api = {
   library: {
     // Whole-library responses, not paginated — see packages/shared/src/schemas/library.ts.
     shows: () => get<ListLibraryShowsResponse>('/library/shows'),
+    resolveShow: (body: ResolveShowRequest) =>
+      post<ResolveShowResponse>('/library/shows/resolve', body),
     onDeck: () => get<OnDeckResponse>('/library/on-deck'),
     upNext: () => get<UpNextResponse>('/library/up-next'),
     show: (slug: string) => get<ShowDetail>(`/library/shows/${encodeURIComponent(slug)}`),

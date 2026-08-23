@@ -8,6 +8,24 @@ import { z } from 'zod'
  * would just add round trips for no benefit.
  */
 
+/**
+ * Backs the Dashboard search's show results (SearchResultCard.tsx) —
+ * clicking a show resolves it to a local `shows` row (creating one on
+ * first touch, same as any other watch/drop/refresh action) and returns
+ * its slug so the page can navigate straight to `/shows/{slug}`, where the
+ * normal Watched button takes over. No play/watch is logged by this alone.
+ */
+export const resolveShowRequestSchema = z.object({
+  source: z.literal('tmdb'),
+  externalId: z.string(),
+})
+export type ResolveShowRequest = z.infer<typeof resolveShowRequestSchema>
+
+export const resolveShowResponseSchema = z.object({
+  slug: z.string(),
+})
+export type ResolveShowResponse = z.infer<typeof resolveShowResponseSchema>
+
 export const libraryShowSchema = z.object({
   id: z.string().uuid(),
   /** URL-friendly identifier (e.g. "battlestar-galactica-1978") — links to

@@ -257,9 +257,13 @@ export function EpisodeDetailPage() {
                         href={`https://www.themoviedb.org/tv/${show.tmdbId}/season/${seasonNumber}/episode/${episodeNumber}`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        title={t('showDetail.viewOnTmdb')}
+                        title={t('showDetail.viewOnTmdb.episode')}
                       >
-                        <img src={TMDB_LOGO_URL} alt={t('showDetail.viewOnTmdb')} className="h-3" />
+                        <img
+                          src={TMDB_LOGO_URL}
+                          alt={t('showDetail.viewOnTmdb.episode')}
+                          className="h-3"
+                        />
                       </a>
                     ) : (
                       <img src={TMDB_LOGO_URL} alt={t('showDetail.ratingSource')} className="h-3" />
@@ -301,8 +305,8 @@ export function EpisodeDetailPage() {
                 type="button"
                 className="px-2.5 py-2.5"
                 disabled={watchActions.unwatch.isPending || watchActions.markWatched.isPending}
-                title={t('showDetail.logAdditionalWatch')}
-                aria-label={t('showDetail.logAdditionalWatch')}
+                title={t('showDetail.addWatchTooltip.episode')}
+                aria-label={t('showDetail.addWatchTooltip.episode')}
                 onClick={() => watchActions.setLogAdditionalWatchOpen(true)}
               >
                 <PlusIcon />

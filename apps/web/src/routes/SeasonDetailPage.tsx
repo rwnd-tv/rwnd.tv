@@ -174,8 +174,8 @@ function EpisodeCard({
           <button
             type="button"
             disabled={unwatch.isPending || markWatched.isPending || !tmdbId}
-            title={t('showDetail.logAdditionalWatch')}
-            aria-label={t('showDetail.logAdditionalWatch')}
+            title={t('showDetail.addWatchTooltip.episode')}
+            aria-label={t('showDetail.addWatchTooltip.episode')}
             onClick={() => setLogAdditionalWatchOpen(true)}
             className="absolute right-11 top-2 flex h-7 w-7 items-center justify-center rounded-full border border-white/70 bg-black/40 text-white/90 opacity-0 transition-opacity hover:bg-black/60 focus-visible:opacity-100 disabled:cursor-not-allowed disabled:opacity-60 group-hover:opacity-100"
           >
@@ -452,9 +452,13 @@ export function SeasonDetailPage() {
                         href={`https://www.themoviedb.org/tv/${show.tmdbId}/season/${season.seasonNumber}`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        title={t('showDetail.viewOnTmdb')}
+                        title={t('showDetail.viewOnTmdb.season')}
                       >
-                        <img src={TMDB_LOGO_URL} alt={t('showDetail.viewOnTmdb')} className="h-3" />
+                        <img
+                          src={TMDB_LOGO_URL}
+                          alt={t('showDetail.viewOnTmdb.season')}
+                          className="h-3"
+                        />
                       </a>
                     ) : (
                       <img src={TMDB_LOGO_URL} alt={t('showDetail.ratingSource')} className="h-3" />
@@ -495,7 +499,13 @@ export function SeasonDetailPage() {
               type="button"
               disabled={!fullyWatched && !show?.tmdbId}
               title={
-                !fullyWatched && !show?.tmdbId ? t('showDetail.watchedButtonDisabled') : undefined
+                !fullyWatched && !show?.tmdbId
+                  ? t('showDetail.watchedButtonDisabled')
+                  : t(
+                      fullyWatched
+                        ? 'showDetail.watchedButtonTooltip.removeSeason'
+                        : 'showDetail.watchedButtonTooltip.addSeason',
+                    )
               }
               onClick={() =>
                 fullyWatched ? setRemoveWatchesConfirmOpen(true) : setWatchDialogOpen(true)
@@ -510,8 +520,8 @@ export function SeasonDetailPage() {
                 type="button"
                 className="px-2.5 py-2.5"
                 disabled={markSeasonWatched.isPending || !show?.tmdbId}
-                title={t('showDetail.logAdditionalWatch')}
-                aria-label={t('showDetail.logAdditionalWatch')}
+                title={t('showDetail.addWatchTooltip.season')}
+                aria-label={t('showDetail.addWatchTooltip.season')}
                 onClick={() => setLogAdditionalWatchOpen(true)}
               >
                 <PlusIcon />

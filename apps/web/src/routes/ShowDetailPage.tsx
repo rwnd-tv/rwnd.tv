@@ -216,9 +216,13 @@ export function ShowDetailPage() {
                         href={`https://www.themoviedb.org/tv/${show.tmdbId}`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        title={t('showDetail.viewOnTmdb')}
+                        title={t('showDetail.viewOnTmdb.show')}
                       >
-                        <img src={TMDB_LOGO_URL} alt={t('showDetail.viewOnTmdb')} className="h-3" />
+                        <img
+                          src={TMDB_LOGO_URL}
+                          alt={t('showDetail.viewOnTmdb.show')}
+                          className="h-3"
+                        />
                       </a>
                     ) : (
                       <img src={TMDB_LOGO_URL} alt={t('showDetail.ratingSource')} className="h-3" />
@@ -265,7 +269,13 @@ export function ShowDetailPage() {
               type="button"
               disabled={!fullyWatched && !show.tmdbId}
               title={
-                !fullyWatched && !show.tmdbId ? t('showDetail.watchedButtonDisabled') : undefined
+                !fullyWatched && !show.tmdbId
+                  ? t('showDetail.watchedButtonDisabled')
+                  : t(
+                      fullyWatched
+                        ? 'showDetail.watchedButtonTooltip.removeShow'
+                        : 'showDetail.watchedButtonTooltip.addShow',
+                    )
               }
               onClick={() =>
                 fullyWatched ? setRemoveWatchesConfirmOpen(true) : setWatchDialogOpen(true)
@@ -280,8 +290,8 @@ export function ShowDetailPage() {
                 type="button"
                 className="px-2.5 py-2.5"
                 disabled={markWatched.isPending || !show.tmdbId}
-                title={t('showDetail.logAdditionalWatch')}
-                aria-label={t('showDetail.logAdditionalWatch')}
+                title={t('showDetail.addWatchTooltip.show')}
+                aria-label={t('showDetail.addWatchTooltip.show')}
                 onClick={() => setLogAdditionalWatchOpen(true)}
               >
                 <PlusIcon />
@@ -291,6 +301,7 @@ export function ShowDetailPage() {
               variant="secondary"
               type="button"
               disabled={toggleDropped.isPending}
+              title={t(show.dropped ? 'showDetail.undropTooltip' : 'showDetail.dropTooltip')}
               onClick={() => toggleDropped.mutate()}
             >
               {t(show.dropped ? 'showDetail.undrop' : 'showDetail.drop')}

@@ -48,8 +48,8 @@
   "search": {
     "placeholder": "Rechercher un film ou une série…",
     "noResults": "Aucun résultat pour l'instant — essayez une recherche.",
-    "logWatch": "Enregistrer",
-    "logged": "Enregistré !"
+    "logWatch": "Ajouter",
+    "logged": "Ajouté !"
   },
   "shows": {
     "title": "Séries",
@@ -108,16 +108,32 @@
     "watchedPeriod": "Vu {{range}}",
     "watchedUnknown": "Vu : Inconnu",
     "ratingSource": "Note TMDB",
-    "viewOnTmdb": "Voir sur TMDB",
+    "viewOnTmdb": {
+      "show": "Voir cette série sur TMDB",
+      "season": "Voir cette saison sur TMDB",
+      "episode": "Voir cet épisode sur TMDB"
+    },
     "droppedFact": "Abandonnée",
     "watchedButton": "Vu",
     "watchedButtonDisabled": "Cette série n'a pas de correspondance TMDB, les épisodes ne peuvent pas être résolus",
+    "watchedButtonTooltip": {
+      "addShow": "Ajouter un visionnage pour chaque épisode non vu de cette série",
+      "removeShow": "Supprimer tous les visionnages de tous les épisodes de cette série",
+      "addSeason": "Ajouter un visionnage pour chaque épisode non vu de cette saison",
+      "removeSeason": "Supprimer tous les visionnages de tous les épisodes de cette saison"
+    },
     "episodeNotAiredYet": "Cet épisode n'est pas encore diffusé",
-    "logAdditionalWatch": "Enregistrer un autre visionnage",
+    "addWatchTooltip": {
+      "episode": "Ajouter un visionnage supplémentaire pour cet épisode",
+      "show": "Ajouter un visionnage supplémentaire à chaque épisode de cette série",
+      "season": "Ajouter un visionnage supplémentaire à chaque épisode de cette saison"
+    },
     "removeAllWatchesTitle": "Voulez-vous vraiment supprimer tous les visionnages ?",
     "removeAllWatchesConfirm": "Supprimer tous les visionnages",
     "drop": "Abandonner",
+    "dropTooltip": "Masquer cette série de la page Séries par défaut — vous pouvez toujours la retrouver avec le filtre Abandonnée",
     "undrop": "Annuler l'abandon",
+    "undropTooltip": "Afficher à nouveau cette série sur la page Séries",
     "seasonNotFound": "Cette saison est introuvable.",
     "previousSeason": "Saison précédente",
     "nextSeason": "Saison suivante",
@@ -137,7 +153,7 @@
       "otherDateDateLabel": "Date",
       "otherDateTimeLabel": "Heure",
       "otherDateTextLabel": "Date et heure",
-      "confirm": "Enregistrer le visionnage",
+      "confirm": "Ajouter le visionnage",
       "cancel": "Annuler"
     },
     "unwatchDialog": {

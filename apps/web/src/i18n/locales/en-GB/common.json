@@ -48,8 +48,8 @@
   "search": {
     "placeholder": "Search for a movie or TV show…",
     "noResults": "No results yet — try searching for something.",
-    "logWatch": "Log watch",
-    "logged": "Logged!"
+    "logWatch": "Add watch",
+    "logged": "Added!"
   },
   "shows": {
     "title": "TV Shows",
@@ -108,16 +108,32 @@
     "watchedPeriod": "Watched {{range}}",
     "watchedUnknown": "Watched: Unknown",
     "ratingSource": "TMDB rating",
-    "viewOnTmdb": "View on TMDB",
+    "viewOnTmdb": {
+      "show": "View this TV show on TMDB",
+      "season": "View this season on TMDB",
+      "episode": "View this episode on TMDB"
+    },
     "droppedFact": "Dropped",
     "watchedButton": "Watched",
     "watchedButtonDisabled": "This show has no TMDB match, so episodes can't be resolved",
+    "watchedButtonTooltip": {
+      "addShow": "Add a watch for every unwatched episode of this TV show",
+      "removeShow": "Remove every watch from every episode of this TV show",
+      "addSeason": "Add a watch for every unwatched episode of this season",
+      "removeSeason": "Remove every watch from every episode of this season"
+    },
     "episodeNotAiredYet": "This episode hasn't aired yet",
-    "logAdditionalWatch": "Log an additional watch",
+    "addWatchTooltip": {
+      "episode": "Add an extra watch for this episode",
+      "show": "Add an extra watch to every episode of this TV show",
+      "season": "Add an extra watch to every episode of this season"
+    },
     "removeAllWatchesTitle": "Are you sure you want to remove all watches?",
     "removeAllWatchesConfirm": "Remove all watches",
     "drop": "Drop",
+    "dropTooltip": "Hide this TV show from the TV Shows page by default — you can still find it using the Dropped filter",
     "undrop": "Undrop",
+    "undropTooltip": "Show this TV show on the TV Shows page again",
     "seasonNotFound": "This season couldn't be found.",
     "previousSeason": "Previous season",
     "nextSeason": "Next season",
@@ -137,7 +153,7 @@
       "otherDateDateLabel": "Date",
       "otherDateTimeLabel": "Time",
       "otherDateTextLabel": "Date and time",
-      "confirm": "Log watch",
+      "confirm": "Add watch",
       "cancel": "Cancel"
     },
     "unwatchDialog": {

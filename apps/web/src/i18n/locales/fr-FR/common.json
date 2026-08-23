@@ -45,7 +45,7 @@
   "dashboard": {
     "onDeck": {
       "title": "À suivre",
-      "episodeLabel": "S{{season}} E{{episode}}"
+      "episodeLabel": "S{{season}} E{{episode}} · {{date}}"
     },
     "upNext": {
       "title": "À venir",

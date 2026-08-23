@@ -45,7 +45,7 @@
   "dashboard": {
     "onDeck": {
       "title": "On Deck",
-      "episodeLabel": "S{{season}} E{{episode}}"
+      "episodeLabel": "S{{season}} E{{episode}} · {{date}}"
     },
     "upNext": {
       "title": "Up Next",

@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../../lib/api-client.js'
+import { useAuth } from '../../lib/auth-context.js'
 import { PosterTile } from './PosterTile.js'
 
 /**
@@ -28,6 +29,8 @@ import { PosterTile } from './PosterTile.js'
  */
 export function OnDeckRow() {
   const { t } = useTranslation()
+  const { user } = useAuth()
+  const locale = user?.locale ?? 'en-GB'
   const { data, isLoading } = useQuery({
     queryKey: ['library', 'on-deck'],
     queryFn: () => api.library.onDeck(),
@@ -52,6 +55,10 @@ export function OnDeckRow() {
               {t('dashboard.onDeck.episodeLabel', {
                 season: show.seasonNumber,
                 episode: show.episodeNumber,
+                date: new Date(show.firstAired).toLocaleDateString(locale, {
+                  day: 'numeric',
+                  month: 'short',
+                }),
               })}
             </p>
           </PosterTile>

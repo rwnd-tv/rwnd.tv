@@ -74,7 +74,9 @@ export type ListLibraryShowsResponse = z.infer<typeof listLibraryShowsResponseSc
  * Backs the Dashboard's On Deck row (apps/web/src/routes/DashboardPage.tsx)
  * — one card per show the user watched recently and hasn't finished, each
  * linking straight to the next episode they haven't seen yet rather than
- * the show page, so the card doubles as a "continue" action.
+ * the show page, so the card doubles as a "continue" action. `firstAired`
+ * is shown on the card (how long it's been sitting there unwatched), same
+ * as upNextItemSchema's own reason for carrying it.
  */
 export const onDeckItemSchema = z.object({
   slug: z.string(),
@@ -82,6 +84,7 @@ export const onDeckItemSchema = z.object({
   posterPath: z.string().nullable(),
   seasonNumber: z.number().int(),
   episodeNumber: z.number().int(),
+  firstAired: z.string(),
 })
 export type OnDeckItem = z.infer<typeof onDeckItemSchema>
 

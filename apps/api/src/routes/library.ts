@@ -432,14 +432,9 @@ libraryRoutes.openapi(
     // Oldest next-episode air date first — the longer something's been
     // sitting there aired-but-unwatched, the further behind you are on it,
     // which reads as more urgent than a show you're only one day behind on.
-    // onDeckItemSchema doesn't expose firstAired itself (unlike Up Next,
-    // where the date is the point of the card), so it's dropped in the
-    // final map rather than returned.
     shownShows.sort((a, b) => a.firstAired.localeCompare(b.firstAired))
 
-    return c.json({
-      shows: shownShows.map(({ firstAired: _firstAired, ...show }) => show),
-    })
+    return c.json({ shows: shownShows })
   },
 )
 

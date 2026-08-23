@@ -117,6 +117,7 @@ export const api = {
     onDeck: () => get<OnDeckResponse>('/library/on-deck'),
     upNext: () => get<UpNextResponse>('/library/up-next'),
     show: (slug: string) => get<ShowDetail>(`/library/shows/${encodeURIComponent(slug)}`),
+    refreshShow: (slug: string) => post<void>(`/library/shows/${encodeURIComponent(slug)}/refresh`),
     dropShow: (slug: string) =>
       post<DroppedStatus>(`/library/shows/${encodeURIComponent(slug)}/dropped`),
     undropShow: (slug: string) =>

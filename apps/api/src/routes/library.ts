@@ -27,6 +27,7 @@ import {
   resolveShowEpisodes,
   type ResolvedEpisode,
 } from '../lib/media.js'
+import { refreshOneShow } from '../metadata/refresh.js'
 
 /**
  * Shared by the show- and season-level "Watched" button routes below.
@@ -629,6 +630,62 @@ libraryRoutes.openapi(
         watchedEpisodes: watchedMap.get(season.seasonNumber) ?? 0,
       })),
     })
+  },
+)
+
+/**
+ * Manual "refresh metadata" button (ShowDetailPage.tsx) — re-fetches this
+ * one show from the provider right now, for the case TMDB itself has
+ * something wrong (a bad poster, a stale status/episode count on a show
+ * the automatic sweep won't re-check for months) rather than waiting on
+ * apps/api/src/metadata/refresh.ts's own schedule. Reuses that module's
+ * refreshOneShow — same fetch-and-upsert as the background sweep, not a
+ * separate/lesser code path. No response body: the caller already has a
+ * GET /library/shows/{slug} query to invalidate and refetch instead of
+ * this route re-serializing the same show a second way.
+ */
+libraryRoutes.openapi(
+  createRoute({
+    method: 'post',
+    path: '/library/shows/{slug}/refresh',
+    summary: "Refresh a show's cached metadata from the provider now",
+    middleware: [requireAuth] as const,
+    request: { params: z.object({ slug: z.string() }) },
+    responses: {
+      204: { description: 'Refreshed' },
+      404: { description: 'Show not found' },
+    },
+  }),
+  async (c) => {
+    const { slug } = c.req.valid('param')
+    const user = c.get('user')!
+    const db = c.get('db')
+    const provider = c.get('metadataProvider')
+
+    const [show] = await db.select().from(shows).where(eq(shows.slug, slug)).limit(1)
+    if (!show) return c.json({ error: 'Show not found' }, 404)
+
+    const [tmdbExternalId] = await db
+      .select({ externalId: externalIds.externalId })
+      .from(externalIds)
+      .where(
+        and(
+          eq(externalIds.entityType, 'show'),
+          eq(externalIds.entityId, show.id),
+          eq(externalIds.source, 'tmdb'),
+        ),
+      )
+      .limit(1)
+    if (!tmdbExternalId) return c.json({ error: 'Show not found' }, 404)
+
+    await refreshOneShow(
+      db,
+      provider,
+      { id: show.id, tmdbExternalId: tmdbExternalId.externalId },
+      user.locale,
+    )
+
+    return c.body(null, 204)
   },
 )
 

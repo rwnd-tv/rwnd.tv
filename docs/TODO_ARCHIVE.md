@@ -484,6 +484,26 @@ currently-dropped shows, since a row can have both
       `9.5` both by overshooting past the track edge and by landing
       exactly on it.
 
+- [x] **Manual "refresh metadata" button** (2026-08-19 15:25, done 2026-08-23)\
+      Done: a small icon-only button (circular-arrow icon, next to Drop)
+      on `ShowDetailPage.tsx`, calling a new
+      `POST /library/shows/{slug}/refresh`. Reuses
+      `apps/api/src/metadata/refresh.ts`'s existing `refreshOneShow()`
+      (exported for this, previously module-private) rather than writing
+      a second fetch-and-upsert path — a manual refresh gets exactly the
+      same result the background sweep would eventually give it, not a
+      lesser/different one. Disabled (with an explanatory tooltip) when
+      the show has no TMDB id, same condition the Watched/+ buttons
+      already check; on success, invalidates the show-detail and gallery
+      queries (a refresh can touch almost any cached field — title,
+      poster, genres, season counts — so a real refetch is simpler than
+      trying to patch in just what changed) and shows a brief
+      "Refreshed." confirmation, since a refresh that finds nothing
+      different would otherwise look like it silently did nothing.
+      Verified live on dev.rwnd.tv: clicking it against a real show
+      returned 204, the confirmation appeared, and the page's cached data
+      re-fetched without errors in the server log.
+
 ## Mobile / responsive
 
 - [x] **Sidebar bottom items hidden behind the mobile address bar** (2026-08-21)\

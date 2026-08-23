@@ -59,7 +59,7 @@ async function currentLocale(db: Database): Promise<string> {
   return row?.defaultLocale ?? 'en-GB'
 }
 
-interface RefreshCandidate {
+export interface RefreshCandidate {
   id: string
   tmdbExternalId: string | null
 }
@@ -144,7 +144,14 @@ async function findStaleMovies(db: Database): Promise<RefreshCandidate[]> {
   return rows
 }
 
-async function refreshOneShow(
+/**
+ * Exported for the manual "refresh metadata" button
+ * (apps/api/src/routes/library.ts's POST /library/shows/{slug}/refresh) —
+ * same fetch-and-upsert logic the background sweep above uses per show, so
+ * a user fixing a show TMDB itself has wrong doesn't get different/lesser
+ * results than waiting for the next automatic pass.
+ */
+export async function refreshOneShow(
   db: Database,
   provider: MetadataProvider,
   candidate: RefreshCandidate,

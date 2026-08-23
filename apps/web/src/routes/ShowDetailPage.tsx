@@ -55,6 +55,26 @@ function PlusIcon() {
   )
 }
 
+/** Icon for the icon-only "refresh metadata" button below. */
+function RefreshIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width={16}
+      height={16}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2.5}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M21 12a9 9 0 1 1-3-6.7" />
+      <path d="M21 3v6h-6" />
+    </svg>
+  )
+}
+
 /** TMDB's own CDN-hosted logo asset — same "short" mark already used for
  * the required attribution footer in README.md, reused here rather than a
  * bare "★" so the rating is attributed to its source the way a Trakt-style
@@ -112,6 +132,20 @@ export function ShowDetailPage() {
       // The gallery's own cached list needs the same update, but isn't
       // held here — invalidate rather than patch, same reasoning as
       // invalidateWatchData in lib/query-client.ts.
+      void queryClient.invalidateQueries({ queryKey: ['library'] })
+    },
+  })
+
+  // Manual "refresh metadata" button — for when TMDB itself has something
+  // wrong (a bad poster, a stale status/episode count) rather than waiting
+  // on the background sweep's own schedule (apps/api/src/metadata/refresh.ts).
+  // No response body to patch in, unlike toggleDropped above — a refresh can
+  // touch almost any cached field (title, poster, genres, season counts...),
+  // so a real refetch is simpler and more correct than guessing what changed.
+  const refreshMetadata = useMutation({
+    mutationFn: () => api.library.refreshShow(slug!),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['show', slug] })
       void queryClient.invalidateQueries({ queryKey: ['library'] })
     },
   })
@@ -320,7 +354,31 @@ export function ShowDetailPage() {
             >
               {t(show.dropped ? 'showDetail.undrop' : 'showDetail.drop')}
             </Button>
+            <Button
+              variant="secondary"
+              type="button"
+              className="px-2.5 py-2.5"
+              disabled={refreshMetadata.isPending || !show.tmdbId}
+              title={
+                show.tmdbId
+                  ? t('showDetail.refreshMetadataTooltip')
+                  : t('showDetail.refreshMetadataDisabled')
+              }
+              aria-label={t('showDetail.refreshMetadataTooltip')}
+              onClick={() => refreshMetadata.mutate()}
+            >
+              <RefreshIcon />
+            </Button>
           </div>
+
+          {refreshMetadata.isSuccess && (
+            <p className="text-xs text-[var(--color-fg-muted)]">
+              {t('showDetail.refreshMetadataDone')}
+            </p>
+          )}
+          {refreshMetadata.isError && (
+            <p className="text-xs text-[var(--color-danger)]">{t('common.somethingWentWrong')}</p>
+          )}
 
           {show.firstWatchedAt && show.lastWatchedAt ? (
             <p className="text-xs text-[var(--color-fg-muted)]">

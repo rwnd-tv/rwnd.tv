@@ -19,12 +19,6 @@ Format:
 
 ## TV Shows / Movies gallery follow-ups
 
-- [ ] **Manual "refresh metadata" button** (2026-08-19 15:25)\
-      The gallery's metadata refresher (see [ADR 0005](adr/0005-metadata-refresh.md))
-      auto-refreshes airing shows and sweeps everything every ~5 months for
-      TMDB compliance, but there's no per-show manual trigger yet for the
-      case TMDB itself has something wrong. Needs a button plus a small
-      `POST /library/shows/{id}/refresh`-style endpoint.
 - [ ] **Virtualize the gallery grid if libraries grow** (2026-08-19 15:25)\
       Shipped without `content-visibility`/windowing — real libraries are
       ~500 shows/movies, comfortably fine for the DOM. Revisit if a

@@ -45,6 +45,9 @@
   "dashboard": {
     "title": "Dashboard"
   },
+  "spoiler": {
+    "reveal": "Reveal spoiler"
+  },
   "search": {
     "placeholder": "Search for a movie or TV show…",
     "noResults": "No results yet — try searching for something.",
@@ -256,6 +259,8 @@
       "themeSystem": "Match system",
       "themeLight": "Light",
       "themeDark": "Dark",
+      "spoilerProtection": "Hide spoilers for unwatched episodes",
+      "spoilerProtectionDescription": "Blurs episode stills, titles, and overviews you haven't watched yet, and show/season descriptions until fully watched. Click any blurred item to reveal it just for that view.",
       "save": "Save changes",
       "saved": "Saved."
     },

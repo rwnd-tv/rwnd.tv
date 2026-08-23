@@ -894,3 +894,47 @@ currently-dropped shows, since a row can have both
       (confirmed via computed styles and a zoomed screenshot), logging
       a watch through it incremented that one episode's count without
       touching its existing watch, then reverted.
+
+## Spoiler protection
+
+- [x] **Blur/hide spoiler content for unwatched episodes** (2026-08-22 10:45 added, done 2026-08-23)\
+      Done: a new per-user `spoilerProtectionEnabled` column (on by
+      default, toggle in `ProfileForm.tsx`'s Profile panel) gates a new
+      `SpoilerGuard.tsx` component — blurs a spoiler-ish block behind a
+      click-to-reveal overlay, never persisting the reveal (new state
+      each mount, so navigating away and back re-hides everything).
+      Scope ended up wider than the original title: episode stills,
+      titles, and overviews on both `SeasonDetailPage.tsx`'s season grid
+      and `EpisodeDetailPage.tsx`, _and_ (added at James's request) the
+      TV show and season description paragraphs on `ShowDetailPage.tsx`/
+      `SeasonDetailPage.tsx`, blurred until fully watched (reusing each
+      page's existing `fullyWatched` value). Episode titles are swapped
+      for the generic "Episode N" label rather than blurred, but share the
+      same reveal condition as the still/overview rather than being
+      independent — clicking reveal shows the real title too (James:
+      titles were originally watched-only, tied to nothing you clicked,
+      but that meant revealing the still still left a generic title next
+      to it, which read as broken). The season grid's still image doesn't
+      use `SpoilerGuard` directly — its reveal button would nest inside
+      the tile's existing `<Link>`, invalid HTML — so it hand-rolls the
+      same blur/button pattern as a Link sibling instead, matching the
+      existing plus/toggle-button precedent in that file. That reveal
+      button started as a full-cover overlay (blocking the Link
+      underneath), but James found that meant two clicks to open an
+      unwatched episode's page — one to reveal, one to actually navigate
+      — so it's now a small top-left corner icon instead (same size/style
+      as the toggle/plus buttons it shares the tile with), leaving the
+      rest of the tile free to navigate in one click without revealing
+      anything. On `EpisodeDetailPage.tsx`, the still, title, and overview
+      all share one reveal action (revealing any un-blurs/un-swaps all
+      three) since they're presented as one episode-content block.
+      Decided with James up
+      front via a quick round of questions: on by default; still, title,
+      and overview all count as spoiler-ish (air date doesn't); a reveal
+      only lasts for that page view; and (to avoid overclaiming — the
+      Dashboard On Deck/Up Next rows don't exist yet) the show/season
+      description blur only describes what it does today, not
+      not-yet-built Dashboard behaviour. Verified live on dev.rwnd.tv:
+      blur + reveal on an unwatched season/episode, the setting toggle
+      turning all of it off/on immediately, and watched episodes/fully-
+      watched show+season never blurred in the first place.

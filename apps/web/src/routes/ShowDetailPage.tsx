@@ -9,6 +9,7 @@ import { markWatchedRequestBody } from '../lib/date.js'
 import { useAuth } from '../lib/auth-context.js'
 import { PosterGrid } from '../components/library/PosterGrid.js'
 import { ProgressBar } from '../components/library/ProgressBar.js'
+import { SpoilerGuard } from '../components/library/SpoilerGuard.js'
 import { WatchDateDialog } from '../components/library/WatchDateDialog.js'
 import { Button } from '../components/ui/Button.js'
 import { Dialog } from '../components/ui/Dialog.js'
@@ -82,6 +83,7 @@ export function ShowDetailPage() {
   const [watchDialogOpen, setWatchDialogOpen] = useState(false)
   const [logAdditionalWatchOpen, setLogAdditionalWatchOpen] = useState(false)
   const [removeWatchesConfirmOpen, setRemoveWatchesConfirmOpen] = useState(false)
+  const [overviewRevealed, setOverviewRevealed] = useState(false)
 
   const {
     data: show,
@@ -240,7 +242,19 @@ export function ShowDetailPage() {
                 </span>
               ))}
           </div>
-          {show.overview && <p className="max-w-2xl text-sm">{show.overview}</p>}
+          {show.overview && (
+            <SpoilerGuard
+              hidden={Boolean(user?.spoilerProtectionEnabled) && !fullyWatched}
+              revealed={overviewRevealed}
+              onReveal={() => setOverviewRevealed(true)}
+              revealLabel={t('spoiler.reveal')}
+              blurClassName="blur-sm"
+              className="max-w-2xl"
+              overlayClassName="rounded-md border border-[var(--color-border)] bg-[var(--color-surface)]/90 text-[var(--color-fg)] hover:bg-[var(--color-surface)]"
+            >
+              <p className="text-sm">{show.overview}</p>
+            </SpoilerGuard>
+          )}
 
           {show.totalEpisodes !== null ? (
             <div className="flex max-w-xs flex-col gap-1">

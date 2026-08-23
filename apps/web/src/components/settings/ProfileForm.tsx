@@ -15,9 +15,12 @@ export function ProfileForm() {
   const [displayName, setDisplayName] = useState(user?.displayName ?? '')
   const [locale, setLocale] = useState(user?.locale ?? 'en-GB')
   const [theme, setTheme] = useState<Theme>(user?.theme ?? 'system')
+  const [spoilerProtectionEnabled, setSpoilerProtectionEnabled] = useState(
+    user?.spoilerProtectionEnabled ?? true,
+  )
 
   const updateProfile = useMutation({
-    mutationFn: () => api.auth.updateMe({ displayName, locale, theme }),
+    mutationFn: () => api.auth.updateMe({ displayName, locale, theme, spoilerProtectionEnabled }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['auth', 'me'] }),
   })
 
@@ -73,6 +76,20 @@ export function ProfileForm() {
             ))}
           </div>
         </fieldset>
+
+        <div className="flex flex-col gap-1">
+          <label className="flex items-center gap-2 text-sm font-medium">
+            <input
+              type="checkbox"
+              checked={spoilerProtectionEnabled}
+              onChange={(e) => setSpoilerProtectionEnabled(e.target.checked)}
+            />
+            {t('settings.profile.spoilerProtection')}
+          </label>
+          <p className="text-xs text-[var(--color-fg-muted)]">
+            {t('settings.profile.spoilerProtectionDescription')}
+          </p>
+        </div>
 
         <div className="flex items-center gap-3">
           <Button type="submit" isLoading={updateProfile.isPending}>

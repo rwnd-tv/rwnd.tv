@@ -51,20 +51,6 @@ Format:
       season/episode fetch already carries (`firstAired`) — the first
       airing after "now" with no logged watch.
 
-## Spoiler protection
-
-- [ ] **Blur/hide spoiler content for unwatched episodes** (2026-08-22 10:45 added)\
-      Thumbnails/stills, overview text, and any other spoiler-ish detail
-      (title? air date?) for an episode the user hasn't logged a watch
-      for yet should be blurred or hidden by default — both
-      `SeasonDetailPage.tsx`'s episode grid and the per-episode page
-      (`EpisodeDetailPage.tsx`, added since this item was written). Needs
-      a reveal interaction (click/tap to unblur one episode) rather than
-      being permanently hidden. Must be a
-      per-user toggle on `SettingsPage.tsx` (new panel or folded into an
-      existing one) — default state and exact scope of "spoiler-ish"
-      still to be decided with James.
-
 ## Metadata & matching
 
 - [ ] **Multi-provider metadata (tmdb/imdb/tvdb)** (2026-08-11 22:20)\

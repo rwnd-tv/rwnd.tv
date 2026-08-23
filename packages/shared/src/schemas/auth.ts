@@ -37,6 +37,7 @@ export const userSchema = z.object({
   locale: localeSchema,
   timezone: z.string(),
   theme: themeSchema,
+  spoilerProtectionEnabled: z.boolean(),
   role: userRoleSchema,
   createdAt: z.string().datetime(),
 })
@@ -47,5 +48,6 @@ export const updateProfileRequestSchema = z.object({
   locale: localeSchema.optional(),
   timezone: z.string().optional(),
   theme: themeSchema.optional(),
+  spoilerProtectionEnabled: z.boolean().optional(),
 })
 export type UpdateProfileRequest = z.infer<typeof updateProfileRequestSchema>

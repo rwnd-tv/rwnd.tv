@@ -1,10 +1,11 @@
-import type { ReactNode } from 'react'
+import { type ReactNode, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useNavigate, useParams } from 'react-router'
 import { useQuery } from '@tanstack/react-query'
 import { api, ApiError } from '../lib/api-client.js'
 import { useAuth } from '../lib/auth-context.js'
 import { useEpisodeWatchActions } from '../lib/use-episode-watch-actions.js'
+import { SpoilerGuard } from '../components/library/SpoilerGuard.js'
 import { WatchDateDialog } from '../components/library/WatchDateDialog.js'
 import { UnwatchConfirmDialog } from '../components/library/UnwatchConfirmDialog.js'
 import { Button } from '../components/ui/Button.js'
@@ -110,6 +111,7 @@ export function EpisodeDetailPage() {
   const seasonNumber = Number(seasonNumberParam)
   const episodeNumber = Number(episodeNumberParam)
   const paramsValid = Number.isInteger(seasonNumber) && Number.isInteger(episodeNumber)
+  const [spoilersRevealed, setSpoilersRevealed] = useState(false)
 
   const { data: show } = useQuery({
     queryKey: ['show', slug],
@@ -159,6 +161,12 @@ export function EpisodeDetailPage() {
       ? t('showDetail.specials')
       : t('import.progress.season', { number: season.seasonNumber }))
   const episodeLabel = t('import.progress.episode', { number: episode.episodeNumber })
+  // Same generic-label swap as SeasonDetailPage.tsx's EpisodeCard, and same
+  // condition as the still/overview below — revealing either of those also
+  // reveals the title, since `spoilersRevealed` is shared across all three.
+  const spoilerHidden = Boolean(user?.spoilerProtectionEnabled) && !episode.watched
+  const titleHidden = spoilerHidden && !spoilersRevealed
+  const displayTitle = titleHidden ? episodeLabel : (episode.title ?? episodeLabel)
   const toggleLabel = t(episode.watched ? 'showDetail.markUnwatched' : 'showDetail.markWatched')
   const toggleTitle =
     !episode.watched && watchActions.notAiredYet ? t('showDetail.episodeNotAiredYet') : toggleLabel
@@ -220,26 +228,35 @@ export function EpisodeDetailPage() {
 
       <div className="flex flex-col gap-6 sm:flex-row">
         <div className="aspect-video w-full flex-shrink-0 overflow-hidden rounded-lg bg-[var(--color-surface)] sm:w-96">
-          {episode.stillPath ? (
-            <img
-              src={episode.stillPath}
-              alt=""
-              width={780}
-              height={439}
-              className="h-full w-full object-cover"
-            />
-          ) : (
-            <div
-              aria-hidden="true"
-              className="flex h-full items-center justify-center text-4xl font-semibold text-[var(--color-fg-muted)]"
-            >
-              {episode.episodeNumber}
-            </div>
-          )}
+          <SpoilerGuard
+            hidden={spoilerHidden}
+            revealed={spoilersRevealed}
+            onReveal={() => setSpoilersRevealed(true)}
+            revealLabel={t('spoiler.reveal')}
+            className="h-full w-full"
+            overlayClassName="rounded-lg bg-black/50 text-white/90 hover:bg-black/60"
+          >
+            {episode.stillPath ? (
+              <img
+                src={episode.stillPath}
+                alt=""
+                width={780}
+                height={439}
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              <div
+                aria-hidden="true"
+                className="flex h-full items-center justify-center text-4xl font-semibold text-[var(--color-fg-muted)]"
+              >
+                {episode.episodeNumber}
+              </div>
+            )}
+          </SpoilerGuard>
         </div>
 
         <div className="flex min-w-0 flex-col gap-3">
-          <h1 className="text-2xl font-semibold">{episode.title ?? episodeLabel}</h1>
+          <h1 className="text-2xl font-semibold">{displayTitle}</h1>
           <p className="text-sm text-[var(--color-fg-muted)]">{episodeLabel}</p>
           <div className="flex flex-wrap items-center gap-x-1.5 text-sm text-[var(--color-fg-muted)]">
             {(
@@ -281,7 +298,19 @@ export function EpisodeDetailPage() {
                 </span>
               ))}
           </div>
-          {episode.overview && <p className="max-w-2xl text-sm">{episode.overview}</p>}
+          {episode.overview && (
+            <SpoilerGuard
+              hidden={spoilerHidden}
+              revealed={spoilersRevealed}
+              onReveal={() => setSpoilersRevealed(true)}
+              revealLabel={t('spoiler.reveal')}
+              blurClassName="blur-sm"
+              className="max-w-2xl"
+              overlayClassName="rounded-md border border-[var(--color-border)] bg-[var(--color-surface)]/90 text-[var(--color-fg)] hover:bg-[var(--color-surface)]"
+            >
+              <p className="text-sm">{episode.overview}</p>
+            </SpoilerGuard>
+          )}
 
           <div className="flex gap-2">
             <Button

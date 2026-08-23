@@ -45,6 +45,9 @@
   "dashboard": {
     "title": "Tableau de bord"
   },
+  "spoiler": {
+    "reveal": "Révéler le spoiler"
+  },
   "search": {
     "placeholder": "Rechercher un film ou une série…",
     "noResults": "Aucun résultat pour l'instant — essayez une recherche.",
@@ -256,6 +259,8 @@
       "themeSystem": "Suivre le système",
       "themeLight": "Clair",
       "themeDark": "Sombre",
+      "spoilerProtection": "Masquer les spoilers des épisodes non vus",
+      "spoilerProtectionDescription": "Floute les vignettes, titres et résumés des épisodes non vus, ainsi que les descriptions des séries/saisons tant qu'elles ne sont pas entièrement vues. Cliquez sur un élément flouté pour le révéler le temps de cette visite.",
       "save": "Enregistrer",
       "saved": "Enregistré."
     },

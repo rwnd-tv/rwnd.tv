@@ -10,11 +10,34 @@ import { useAuth } from '../lib/auth-context.js'
 import { useEpisodeWatchActions } from '../lib/use-episode-watch-actions.js'
 import { PosterGrid } from '../components/library/PosterGrid.js'
 import { ProgressBar } from '../components/library/ProgressBar.js'
+import { SpoilerGuard } from '../components/library/SpoilerGuard.js'
 import { WatchDateDialog } from '../components/library/WatchDateDialog.js'
 import { UnwatchConfirmDialog } from '../components/library/UnwatchConfirmDialog.js'
 import { Button } from '../components/ui/Button.js'
 import { Dialog } from '../components/ui/Dialog.js'
 import { Spinner } from '../components/ui/Spinner.js'
+
+/** Duplicated from CheckIcon/PlusIcon's own precedent below, not imported
+ * from SpoilerGuard.tsx — EpisodeCard can't use that component directly
+ * (see its own doc comment for why) but still wants the same eye glyph. */
+function EyeIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width={14}
+      height={14}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  )
+}
 
 function CheckIcon() {
   return (
@@ -106,6 +129,22 @@ const TMDB_LOGO_URL =
  * `useMutation`, the same "one card, one mutation" shape SearchResultCard.tsx
  * already uses — each tile gets independent pending state instead of one
  * mutation shared/racing across the grid.
+ *
+ * Unwatched-episode spoiler protection (SpoilerGuard.tsx's blur, elsewhere)
+ * isn't reused here for the still: SpoilerGuard's reveal control is a
+ * `<button>`, and this tile's whole image area is already a `<Link>` — an
+ * interactive element nested inside another isn't valid HTML. Instead the
+ * blur/reveal button live as siblings of the Link (same pattern the
+ * existing plus/toggle buttons already use). Unlike SpoilerGuard's own
+ * full-cover overlay, the reveal button here is a small corner icon,
+ * hover-revealed same as the plus button (like the toggle/plus buttons it
+ * shares the tile with) rather than covering the whole image — a
+ * full-cover overlay would force a "reveal, then click again" click
+ * through the Link underneath just to open the episode page, which James
+ * found came up often enough to be annoying. The title is
+ * swapped for the generic label under the same `stillHidden` condition as
+ * the image, so clicking reveal shows both together — it has no reveal
+ * control of its own, but isn't independent of the still's either.
  */
 function EpisodeCard({
   episode,
@@ -121,6 +160,7 @@ function EpisodeCard({
   const { t } = useTranslation()
   const { user } = useAuth()
   const locale = user?.locale ?? 'en-GB'
+  const [stillRevealed, setStillRevealed] = useState(false)
   const {
     dialogOpen,
     setDialogOpen,
@@ -136,6 +176,9 @@ function EpisodeCard({
   } = useEpisodeWatchActions(slug, seasonNumber, episode, tmdbId)
 
   const episodeLabel = t('import.progress.episode', { number: episode.episodeNumber })
+  const spoilerHidden = Boolean(user?.spoilerProtectionEnabled) && !episode.watched
+  const stillHidden = spoilerHidden && !stillRevealed
+  const displayTitle = stillHidden ? episodeLabel : (episode.title ?? episodeLabel)
   const toggleLabel = t(episode.watched ? 'showDetail.markUnwatched' : 'showDetail.markWatched')
   const toggleTitle =
     !episode.watched && notAiredYet ? t('showDetail.episodeNotAiredYet') : toggleLabel
@@ -144,32 +187,49 @@ function EpisodeCard({
     <li className="flex flex-col gap-2">
       <div
         className="group relative aspect-video w-full overflow-hidden rounded-lg bg-[var(--color-surface)]"
-        title={episode.overview ?? undefined}
+        title={spoilerHidden ? undefined : (episode.overview ?? undefined)}
       >
         <Link
           to={`/shows/${slug}/season/${seasonNumber}/episode/${episode.episodeNumber}`}
           className="absolute inset-0"
-          aria-label={episode.title ?? episodeLabel}
+          aria-label={displayTitle}
         >
-          {episode.stillPath ? (
-            <img
-              src={episode.stillPath}
-              alt=""
-              loading="lazy"
-              decoding="async"
-              width={300}
-              height={169}
-              className="h-full w-full object-cover"
-            />
-          ) : (
-            <div
-              aria-hidden="true"
-              className="flex h-full items-center justify-center text-xl font-semibold text-[var(--color-fg-muted)]"
-            >
-              {episode.episodeNumber}
-            </div>
-          )}
+          <div className={stillHidden ? 'h-full w-full select-none blur-md' : 'h-full w-full'}>
+            {episode.stillPath ? (
+              <img
+                src={episode.stillPath}
+                alt=""
+                loading="lazy"
+                decoding="async"
+                width={300}
+                height={169}
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              <div
+                aria-hidden="true"
+                className="flex h-full items-center justify-center text-xl font-semibold text-[var(--color-fg-muted)]"
+              >
+                {episode.episodeNumber}
+              </div>
+            )}
+          </div>
         </Link>
+        {stillHidden && (
+          <button
+            type="button"
+            title={t('spoiler.reveal')}
+            aria-label={t('spoiler.reveal')}
+            onClick={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              setStillRevealed(true)
+            }}
+            className="absolute left-2 top-2 flex h-7 w-7 items-center justify-center rounded-full border border-white/70 bg-black/40 text-white/90 opacity-0 transition-opacity hover:bg-black/60 focus-visible:opacity-100 group-hover:opacity-100"
+          >
+            <EyeIcon />
+          </button>
+        )}
         {episode.watched && (
           <button
             type="button"
@@ -208,10 +268,10 @@ function EpisodeCard({
         <h3 className="truncate text-sm font-medium">
           <Link
             to={`/shows/${slug}/season/${seasonNumber}/episode/${episode.episodeNumber}`}
-            title={episode.title ?? episodeLabel}
+            title={displayTitle}
             className="hover:underline"
           >
-            {episode.title ?? episodeLabel}
+            {displayTitle}
           </Link>
         </h3>
         <p className="text-xs text-[var(--color-fg-muted)]">{episodeLabel}</p>
@@ -282,6 +342,7 @@ export function SeasonDetailPage() {
   const [watchDialogOpen, setWatchDialogOpen] = useState(false)
   const [logAdditionalWatchOpen, setLogAdditionalWatchOpen] = useState(false)
   const [removeWatchesConfirmOpen, setRemoveWatchesConfirmOpen] = useState(false)
+  const [overviewRevealed, setOverviewRevealed] = useState(false)
 
   // Same queryKey ShowDetailPage.tsx/PageTitleEffect.tsx use — shared React
   // Query cache, so this is free if the user navigated here from the show
@@ -476,7 +537,19 @@ export function SeasonDetailPage() {
                 </span>
               ))}
           </div>
-          {season.overview && <p className="max-w-2xl text-sm">{season.overview}</p>}
+          {season.overview && (
+            <SpoilerGuard
+              hidden={Boolean(user?.spoilerProtectionEnabled) && !fullyWatched}
+              revealed={overviewRevealed}
+              onReveal={() => setOverviewRevealed(true)}
+              revealLabel={t('spoiler.reveal')}
+              blurClassName="blur-sm"
+              className="max-w-2xl"
+              overlayClassName="rounded-md border border-[var(--color-border)] bg-[var(--color-surface)]/90 text-[var(--color-fg)] hover:bg-[var(--color-surface)]"
+            >
+              <p className="text-sm">{season.overview}</p>
+            </SpoilerGuard>
+          )}
 
           <div className="flex max-w-xs flex-col gap-1">
             <ProgressBar

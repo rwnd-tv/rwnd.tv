@@ -59,6 +59,10 @@ export const users = pgTable('users', {
   locale: text('locale').notNull().default('en-GB'),
   timezone: text('timezone').notNull().default('UTC'),
   theme: themeEnum('theme').notNull().default('system'),
+  /** Blurs unwatched episode stills/titles/overviews and not-fully-watched
+   * show/season descriptions until the viewer explicitly reveals them (or
+   * watches them) — see SpoilerGuard.tsx. On by default. */
+  spoilerProtectionEnabled: boolean('spoiler_protection_enabled').notNull().default(true),
   role: userRoleEnum('role').notNull().default('user'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 })

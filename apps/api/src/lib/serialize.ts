@@ -9,6 +9,7 @@ export function serializeUser(user: UserRecord): User {
     locale: user.locale as User['locale'],
     timezone: user.timezone,
     theme: user.theme,
+    spoilerProtectionEnabled: user.spoilerProtectionEnabled,
     role: user.role,
     createdAt: user.createdAt.toISOString(),
   }

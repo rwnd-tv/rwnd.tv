@@ -25,6 +25,11 @@ import { z } from 'zod'
  * silently dropped.
  */
 
+// Deliberately no `slug` field, unlike backupShowSchema below — restore
+// always regenerates a movie's slug via generateUniqueMovieSlug() rather
+// than trusting a stored one (same as it would for a show), so carrying it
+// here would earn nothing while forcing a BACKUP_FORMAT_VERSION bump that
+// breaks every existing backup file for no gain.
 export const backupMovieSchema = z.object({
   tmdbId: z.string(),
   title: z.string(),

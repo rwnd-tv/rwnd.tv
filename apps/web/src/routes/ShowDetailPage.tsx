@@ -6,6 +6,7 @@ import type { ShowDetail } from '@rwnd/shared'
 import { api, ApiError } from '../lib/api-client.js'
 import { invalidateWatchData } from '../lib/query-client.js'
 import { markWatchedRequestBody } from '../lib/date.js'
+import { TMDB_LOGO_URL } from '../lib/tmdb.js'
 import { useAuth } from '../lib/auth-context.js'
 import { EpisodeCard } from '../components/library/EpisodeCard.js'
 import { PosterGrid } from '../components/library/PosterGrid.js'
@@ -75,16 +76,6 @@ function RefreshIcon() {
     </svg>
   )
 }
-
-/** TMDB's own CDN-hosted logo asset — same "short" mark already used for
- * the required attribution footer in README.md, reused here rather than a
- * bare "★" so the rating is attributed to its source the way a Trakt-style
- * rating chip credits IMDb/RT/Metacritic. Not bundled as a local asset:
- * TMDB's attribution terms require using their logo unmodified, and
- * linking their own hosted copy is the simplest way not to accidentally
- * violate that (no local crop/recolor/re-export to get out of sync with). */
-const TMDB_LOGO_URL =
-  'https://www.themoviedb.org/assets/2/v4/logos/v2/blue_short-8e7b30f73a4020692ccca9c88bafe5dcb6f8a62a4c6bc55cd9ba82bb2cd95f6c.svg'
 
 /** "2012" when the first and last watch land in the same year, otherwise
  * "2012 - 2014" — matches what was asked for over always showing a range,

@@ -58,9 +58,7 @@
   "search": {
     "title": "Recherche",
     "placeholder": "Rechercher un film ou une série…",
-    "noResults": "Aucun résultat pour l'instant — essayez une recherche.",
-    "logWatch": "Ajouter",
-    "logged": "Ajouté !"
+    "noResults": "Aucun résultat pour l'instant — essayez une recherche."
   },
   "shows": {
     "title": "Séries",
@@ -197,6 +195,26 @@
     "timesWatched": "Vu {{count}} fois",
     "empty": "Rien pour l'instant. Les films apparaissent dès que vous enregistrez un visionnage.",
     "noMatches": "Aucun film ne correspond à « {{query}} »."
+  },
+  "movieDetail": {
+    "notFound": "Ce film est introuvable.",
+    "runtime": "{{minutes}} min",
+    "ratingSource": "Note TMDB",
+    "viewOnTmdb": "Voir ce film sur TMDB",
+    "watchedButton": "Vu",
+    "watchedButtonDisabled": "Ce film n'a pas de correspondance TMDB, un visionnage ne peut pas être enregistré",
+    "watchedButtonTooltip": {
+      "add": "Ajouter un visionnage pour ce film",
+      "remove": "Supprimer un visionnage de ce film"
+    },
+    "addWatchTooltip": "Ajouter un visionnage supplémentaire pour ce film",
+    "watchedCount_one": "Vu une fois",
+    "watchedCount_other": "Vu {{count}} fois",
+    "watchedPeriod": "Vu {{range}}",
+    "watchedUnknown": "Vu : Inconnu",
+    "refreshMetadataTooltip": "Actualiser le titre, l'affiche et les autres informations de ce film depuis TMDB — à utiliser si quelque chose semble faux ou obsolète",
+    "refreshMetadataDisabled": "Ce film n'a pas de correspondance TMDB, il n'y a donc rien à actualiser",
+    "refreshMetadataDone": "Actualisé."
   },
   "history": {
     "title": "Historique",

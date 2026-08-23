@@ -58,9 +58,7 @@
   "search": {
     "title": "Search",
     "placeholder": "Search for a movie or TV show…",
-    "noResults": "No results yet — try searching for something.",
-    "logWatch": "Add watch",
-    "logged": "Added!"
+    "noResults": "No results yet — try searching for something."
   },
   "shows": {
     "title": "TV Shows",
@@ -197,6 +195,26 @@
     "timesWatched": "Watched {{count}} times",
     "empty": "Nothing here yet. Movies appear once you've logged a watch.",
     "noMatches": "No movies match \"{{query}}\"."
+  },
+  "movieDetail": {
+    "notFound": "This movie couldn't be found.",
+    "runtime": "{{minutes}} min",
+    "ratingSource": "TMDB rating",
+    "viewOnTmdb": "View this movie on TMDB",
+    "watchedButton": "Watched",
+    "watchedButtonDisabled": "This movie has no TMDB match, so a watch can't be logged",
+    "watchedButtonTooltip": {
+      "add": "Add a watch for this movie",
+      "remove": "Remove a watch from this movie"
+    },
+    "addWatchTooltip": "Add an extra watch for this movie",
+    "watchedCount_one": "Watched once",
+    "watchedCount_other": "Watched {{count}} times",
+    "watchedPeriod": "Watched {{range}}",
+    "watchedUnknown": "Watched: Unknown",
+    "refreshMetadataTooltip": "Refresh this movie's title, poster, and other details from TMDB — use this if something looks wrong or out of date",
+    "refreshMetadataDisabled": "This movie has no TMDB match, so there's nothing to refresh",
+    "refreshMetadataDone": "Refreshed."
   },
   "history": {
     "title": "History",

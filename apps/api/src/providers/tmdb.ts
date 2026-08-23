@@ -45,6 +45,9 @@ interface TmdbMovie {
   runtime?: number | null
   overview?: string | null
   poster_path?: string | null
+  genres?: TmdbGenre[]
+  vote_average?: number | null
+  vote_count?: number
 }
 interface TmdbShow {
   id: number
@@ -173,6 +176,11 @@ export class TmdbProvider implements MetadataProvider {
       runtimeMinutes: m.runtime ?? null,
       overview: m.overview ?? null,
       posterPath: this.posterUrl(m.poster_path),
+      genres: (m.genres ?? []).map((g) => g.name),
+      // TMDB returns vote_average: 0 for a movie with zero votes, not null —
+      // treated as "no rating" here rather than a real 0/10, same as
+      // getShow() does for the same quirk.
+      voteAverage: m.vote_count ? (m.vote_average ?? null) : null,
     }
   }
 

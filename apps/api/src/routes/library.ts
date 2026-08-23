@@ -3,17 +3,18 @@ import { and, asc, desc, eq, gt, inArray, sql } from 'drizzle-orm'
 import {
   UNKNOWN_WATCHED_AT,
   droppedStatusSchema,
-  episodeWatchedStatusSchema,
-  episodeWatchesSchema,
+  watchedStatusSchema,
+  watchesSchema,
   listLibraryMoviesResponseSchema,
   listLibraryShowsResponseSchema,
   markShowWatchedRequestSchema,
   markShowWatchedResponseSchema,
+  movieDetailSchema,
   onDeckResponseSchema,
-  removeEpisodeWatchesRequestSchema,
+  removeWatchesRequestSchema,
   removeShowWatchesResponseSchema,
-  resolveShowRequestSchema,
-  resolveShowResponseSchema,
+  resolveMediaRequestSchema,
+  resolveMediaResponseSchema,
   seasonDetailSchema,
   showDetailSchema,
   upNextResponseSchema,
@@ -25,12 +26,13 @@ import { requireAuth } from '../middleware/auth.js'
 import {
   findNextAiringEpisode,
   findNextUnwatchedEpisode,
+  resolveMovie,
   resolveShow,
   resolveSeasonEpisodes,
   resolveShowEpisodes,
   type ResolvedEpisode,
 } from '../lib/media.js'
-import { refreshOneShow } from '../metadata/refresh.js'
+import { refreshOneMovie, refreshOneShow } from '../metadata/refresh.js'
 
 /**
  * Shared by the show- and season-level "Watched" button routes below.
@@ -261,11 +263,11 @@ libraryRoutes.openapi(
     path: '/library/shows/resolve',
     summary: 'Resolve a show search result to its local page slug',
     middleware: [requireAuth] as const,
-    request: { body: { content: { 'application/json': { schema: resolveShowRequestSchema } } } },
+    request: { body: { content: { 'application/json': { schema: resolveMediaRequestSchema } } } },
     responses: {
       200: {
         description: 'Resolved',
-        content: { 'application/json': { schema: resolveShowResponseSchema } },
+        content: { 'application/json': { schema: resolveMediaResponseSchema } },
       },
     },
   }),
@@ -277,6 +279,37 @@ libraryRoutes.openapi(
 
     const show = await resolveShow(db, provider, body.externalId, user.locale)
     return c.json({ slug: show.slug })
+  },
+)
+
+/**
+ * Movie counterpart of POST /library/shows/resolve above — same reasoning:
+ * backs the Dashboard search's movie results, which now link straight to
+ * their own page (SearchResultCard.tsx) instead of logging a watch inline.
+ * Idempotent, same as resolveShow.
+ */
+libraryRoutes.openapi(
+  createRoute({
+    method: 'post',
+    path: '/library/movies/resolve',
+    summary: 'Resolve a movie search result to its local page slug',
+    middleware: [requireAuth] as const,
+    request: { body: { content: { 'application/json': { schema: resolveMediaRequestSchema } } } },
+    responses: {
+      200: {
+        description: 'Resolved',
+        content: { 'application/json': { schema: resolveMediaResponseSchema } },
+      },
+    },
+  }),
+  async (c) => {
+    const body = c.req.valid('json')
+    const db = c.get('db')
+    const provider = c.get('metadataProvider')
+    const user = c.get('user')!
+
+    const movie = await resolveMovie(db, provider, body.externalId, user.locale)
+    return c.json({ slug: movie.slug })
   },
 )
 
@@ -859,7 +892,7 @@ libraryRoutes.openapi(
  * DELETE route below, which lets the user tick which of these to remove
  * (UnwatchConfirmDialog.tsx). Fetched on demand only when that
  * confirmation dialog opens, not part of the season list response above —
- * see episodeWatchesSchema's doc comment.
+ * see watchesSchema's doc comment.
  */
 libraryRoutes.openapi(
   createRoute({
@@ -877,7 +910,7 @@ libraryRoutes.openapi(
     responses: {
       200: {
         description: 'Watches, newest first',
-        content: { 'application/json': { schema: episodeWatchesSchema } },
+        content: { 'application/json': { schema: watchesSchema } },
       },
       404: { description: 'Show not found' },
     },
@@ -952,12 +985,12 @@ libraryRoutes.openapi(
         seasonNumber: z.coerce.number().int().min(0),
         episodeNumber: z.coerce.number().int().min(1),
       }),
-      body: { content: { 'application/json': { schema: removeEpisodeWatchesRequestSchema } } },
+      body: { content: { 'application/json': { schema: removeWatchesRequestSchema } } },
     },
     responses: {
       200: {
         description: 'Episode watch status',
-        content: { 'application/json': { schema: episodeWatchedStatusSchema } },
+        content: { 'application/json': { schema: watchedStatusSchema } },
       },
       404: { description: 'Show not found' },
     },
@@ -1417,6 +1450,7 @@ libraryRoutes.openapi(
     const rows = await db
       .select({
         id: movies.id,
+        slug: movies.slug,
         title: movies.title,
         year: movies.year,
         posterPath: movies.posterPath,
@@ -1434,12 +1468,250 @@ libraryRoutes.openapi(
     return c.json({
       movies: rows.map((row) => ({
         id: row.id,
+        slug: row.slug,
         title: row.title,
         year: row.year,
         posterPath: row.posterPath,
         playCount: row.playCount,
         lastWatchedAt: row.lastWatchedAt.toISOString(),
       })),
+    })
+  },
+)
+
+/**
+ * Backs the per-movie page (apps/web/src/routes/MovieDetailPage.tsx),
+ * linked to from the movies gallery, Dashboard search, and History. Same
+ * "not scoped to this user's watches" reasoning as GET /library/shows/
+ * {slug} above — the movie itself is shared metadata, any authenticated
+ * user can look up any movie that exists locally, only the watch fields
+ * below are scoped to the current user.
+ */
+libraryRoutes.openapi(
+  createRoute({
+    method: 'get',
+    path: '/library/movies/{slug}',
+    summary: "Get a movie, with the current user's watch status",
+    middleware: [requireAuth] as const,
+    request: { params: z.object({ slug: z.string() }) },
+    responses: {
+      200: {
+        description: 'Movie detail',
+        content: { 'application/json': { schema: movieDetailSchema } },
+      },
+      404: { description: 'Movie not found' },
+    },
+  }),
+  async (c) => {
+    const { slug } = c.req.valid('param')
+    const userId = c.get('user')!.id
+    const db = c.get('db')
+
+    const [movie] = await db.select().from(movies).where(eq(movies.slug, slug)).limit(1)
+    if (!movie) return c.json({ error: 'Movie not found' }, 404)
+
+    // Backs the TMDB rating badge's link to the movie's TMDB page — same
+    // convention as the show route's tmdbExternalId lookup above.
+    const [tmdbExternalId] = await db
+      .select({ externalId: externalIds.externalId })
+      .from(externalIds)
+      .where(
+        and(
+          eq(externalIds.entityType, 'movie'),
+          eq(externalIds.entityId, movie.id),
+          eq(externalIds.source, 'tmdb'),
+        ),
+      )
+      .limit(1)
+
+    // Same 1900-01-01 Trakt-sentinel exclusion as the show route's
+    // watchedRange query above — see that query's doc comment.
+    const [watchedRange] = await db
+      .select({
+        watchedCount: sql<number>`count(*)`.mapWith(Number),
+        firstWatchedAt: sql<
+          string | null
+        >`min(${plays.watchedAt}) FILTER (WHERE extract(year from ${plays.watchedAt}) <> 1900)`,
+        lastWatchedAt: sql<
+          string | null
+        >`max(${plays.watchedAt}) FILTER (WHERE extract(year from ${plays.watchedAt}) <> 1900)`,
+        hasUnknownWatchDate: sql<boolean>`coalesce(bool_or(extract(year from ${plays.watchedAt}) = 1900), false)`,
+      })
+      .from(plays)
+      .where(and(eq(plays.userId, userId), eq(plays.movieId, movie.id)))
+
+    return c.json({
+      id: movie.id,
+      slug: movie.slug,
+      title: movie.title,
+      year: movie.year,
+      runtimeMinutes: movie.runtimeMinutes,
+      overview: movie.overview,
+      posterPath: movie.posterPath,
+      genres: movie.genres,
+      voteAverage: movie.voteAverage,
+      tmdbId: tmdbExternalId?.externalId ?? null,
+      watched: (watchedRange?.watchedCount ?? 0) > 0,
+      watchedCount: watchedRange?.watchedCount ?? 0,
+      firstWatchedAt: watchedRange?.firstWatchedAt
+        ? new Date(watchedRange.firstWatchedAt).toISOString()
+        : null,
+      lastWatchedAt: watchedRange?.lastWatchedAt
+        ? new Date(watchedRange.lastWatchedAt).toISOString()
+        : null,
+      hasUnknownWatchDate: watchedRange?.hasUnknownWatchDate ?? false,
+    })
+  },
+)
+
+/**
+ * Manual "refresh metadata" button (MovieDetailPage.tsx) — movie
+ * counterpart of POST /library/shows/{slug}/refresh above. Same reasoning
+ * and same "no response body, refetch the detail route instead" shape.
+ */
+libraryRoutes.openapi(
+  createRoute({
+    method: 'post',
+    path: '/library/movies/{slug}/refresh',
+    summary: "Refresh a movie's cached metadata from the provider now",
+    middleware: [requireAuth] as const,
+    request: { params: z.object({ slug: z.string() }) },
+    responses: {
+      204: { description: 'Refreshed' },
+      404: { description: 'Movie not found' },
+    },
+  }),
+  async (c) => {
+    const { slug } = c.req.valid('param')
+    const user = c.get('user')!
+    const db = c.get('db')
+    const provider = c.get('metadataProvider')
+
+    const [movie] = await db.select().from(movies).where(eq(movies.slug, slug)).limit(1)
+    if (!movie) return c.json({ error: 'Movie not found' }, 404)
+
+    const [tmdbExternalId] = await db
+      .select({ externalId: externalIds.externalId })
+      .from(externalIds)
+      .where(
+        and(
+          eq(externalIds.entityType, 'movie'),
+          eq(externalIds.entityId, movie.id),
+          eq(externalIds.source, 'tmdb'),
+        ),
+      )
+      .limit(1)
+    if (!tmdbExternalId) return c.json({ error: 'Movie not found' }, 404)
+
+    await refreshOneMovie(
+      db,
+      provider,
+      { id: movie.id, tmdbExternalId: tmdbExternalId.externalId },
+      user.locale,
+    )
+    return c.body(null, 204)
+  },
+)
+
+/**
+ * Every one of the current user's individual watches for one movie, newest
+ * first — movie counterpart of the episode plays-list route above. Same
+ * "fetched on demand only when the unwatch confirmation dialog opens"
+ * reasoning — see watchesSchema's doc comment.
+ */
+libraryRoutes.openapi(
+  createRoute({
+    method: 'get',
+    path: '/library/movies/{slug}/plays',
+    summary: "List the current user's individual watches for one movie",
+    middleware: [requireAuth] as const,
+    request: { params: z.object({ slug: z.string() }) },
+    responses: {
+      200: {
+        description: 'Watches, newest first',
+        content: { 'application/json': { schema: watchesSchema } },
+      },
+      404: { description: 'Movie not found' },
+    },
+  }),
+  async (c) => {
+    const { slug } = c.req.valid('param')
+    const userId = c.get('user')!.id
+    const db = c.get('db')
+
+    const [movie] = await db
+      .select({ id: movies.id })
+      .from(movies)
+      .where(eq(movies.slug, slug))
+      .limit(1)
+    if (!movie) return c.json({ error: 'Movie not found' }, 404)
+
+    // Same tie-break-by-id reasoning as the episode plays-list route above
+    // — UnwatchConfirmDialog.tsx relies on this list being stable across
+    // repeated fetches of the same data.
+    const rows = await db
+      .select({ id: plays.id, watchedAt: plays.watchedAt })
+      .from(plays)
+      .where(and(eq(plays.userId, userId), eq(plays.movieId, movie.id)))
+      .orderBy(desc(plays.watchedAt), asc(plays.id))
+
+    return c.json({
+      watches: rows.map((row) => ({ id: row.id, watchedAt: row.watchedAt.toISOString() })),
+    })
+  },
+)
+
+/**
+ * Un-watch a movie (MovieDetailPage.tsx) — movie counterpart of the episode
+ * plays DELETE route above. Same "scoped to this movie/user regardless of
+ * what the caller sends" safety and same UnwatchConfirmDialog.tsx ticking
+ * behaviour.
+ */
+libraryRoutes.openapi(
+  createRoute({
+    method: 'delete',
+    path: '/library/movies/{slug}/plays',
+    summary: "Remove some or all of the current user's watches for one movie",
+    middleware: [requireAuth] as const,
+    request: {
+      params: z.object({ slug: z.string() }),
+      body: { content: { 'application/json': { schema: removeWatchesRequestSchema } } },
+    },
+    responses: {
+      200: {
+        description: 'Movie watch status',
+        content: { 'application/json': { schema: watchedStatusSchema } },
+      },
+      404: { description: 'Movie not found' },
+    },
+  }),
+  async (c) => {
+    const { slug } = c.req.valid('param')
+    const { ids } = c.req.valid('json')
+    const userId = c.get('user')!.id
+    const db = c.get('db')
+
+    const [movie] = await db
+      .select({ id: movies.id })
+      .from(movies)
+      .where(eq(movies.slug, slug))
+      .limit(1)
+    if (!movie) return c.json({ error: 'Movie not found' }, 404)
+
+    await db
+      .delete(plays)
+      .where(and(eq(plays.userId, userId), eq(plays.movieId, movie.id), inArray(plays.id, ids)))
+
+    const remaining = await db
+      .select({ watchedAt: plays.watchedAt })
+      .from(plays)
+      .where(and(eq(plays.userId, userId), eq(plays.movieId, movie.id)))
+      .orderBy(desc(plays.watchedAt), asc(plays.id))
+
+    return c.json({
+      watched: remaining.length > 0,
+      watchedCount: remaining.length,
+      lastWatchedAt: remaining[0] ? remaining[0].watchedAt.toISOString() : null,
     })
   },
 )

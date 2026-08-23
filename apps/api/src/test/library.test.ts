@@ -2,15 +2,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { and, eq } from 'drizzle-orm'
 import { droppedShows, episodes, externalIds, movies, plays, seasons, shows } from '@rwnd/db'
 import type {
-  EpisodeWatchedStatus,
-  EpisodeWatches,
   ListLibraryMoviesResponse,
   ListLibraryShowsResponse,
   MarkShowWatchedResponse,
+  MovieDetail,
   RemoveShowWatchesResponse,
   SeasonDetail,
   ShowDetail,
   User,
+  WatchedStatus,
+  Watches,
 } from '@rwnd/shared'
 import { createLocalUser, extractCookie, json, resetDb, testApp, testDb } from './helpers.js'
 
@@ -619,7 +620,7 @@ describe('library', () => {
         { headers: { cookie } },
       )
       expect(res.status).toBe(200)
-      const body = await json<EpisodeWatches>(res)
+      const body = await json<Watches>(res)
       expect(body.watches).toHaveLength(2)
       expect(body.watches[0]?.watchedAt).toBe('2021-01-01T00:00:00.000Z')
       expect(body.watches[1]?.watchedAt).toBe('2020-01-01T00:00:00.000Z')
@@ -658,8 +659,8 @@ describe('library', () => {
         `/api/v1/library/shows/${show.slug}/seasons/1/episodes/1/plays`,
         { headers: { cookie } },
       )
-      expect((await json<EpisodeWatches>(res1)).watches.map((w) => w.id)).toEqual(expectedOrder)
-      expect((await json<EpisodeWatches>(res2)).watches.map((w) => w.id)).toEqual(expectedOrder)
+      expect((await json<Watches>(res1)).watches.map((w) => w.id)).toEqual(expectedOrder)
+      expect((await json<Watches>(res2)).watches.map((w) => w.id)).toEqual(expectedOrder)
     })
 
     it('removing one of two watches that share an identical watchedAt leaves only the other', async () => {
@@ -685,7 +686,7 @@ describe('library', () => {
           body: JSON.stringify({ ids: [p1.id] }),
         },
       )
-      expect(await json<EpisodeWatchedStatus>(res)).toEqual({
+      expect(await json<WatchedStatus>(res)).toEqual({
         watched: true,
         watchedCount: 1,
         lastWatchedAt: tiedAt.toISOString(),
@@ -708,7 +709,7 @@ describe('library', () => {
         `/api/v1/library/shows/${show.slug}/seasons/1/episodes/1/plays`,
         { headers: { cookie } },
       )
-      expect(await json<EpisodeWatches>(res)).toEqual({ watches: [] })
+      expect(await json<Watches>(res)).toEqual({ watches: [] })
     })
 
     it('removes only the ticked watches, leaving the rest and reporting the real remaining count', async () => {
@@ -734,7 +735,7 @@ describe('library', () => {
         },
       )
       expect(res.status).toBe(200)
-      expect(await json<EpisodeWatchedStatus>(res)).toEqual({
+      expect(await json<WatchedStatus>(res)).toEqual({
         watched: true,
         watchedCount: 1,
         lastWatchedAt: '2021-01-01T00:00:00.000Z',
@@ -763,7 +764,7 @@ describe('library', () => {
           body: JSON.stringify({ ids: [play1.id] }),
         },
       )
-      expect(await json<EpisodeWatchedStatus>(res)).toEqual({
+      expect(await json<WatchedStatus>(res)).toEqual({
         watched: false,
         watchedCount: 0,
         lastWatchedAt: null,
@@ -814,7 +815,7 @@ describe('library', () => {
           body: JSON.stringify({ ids: [playA.id, playB.id, playOtherEpisode.id] }),
         },
       )
-      expect(await json<EpisodeWatchedStatus>(res)).toEqual({
+      expect(await json<WatchedStatus>(res)).toEqual({
         watched: false,
         watchedCount: 0,
         lastWatchedAt: null,
@@ -1776,7 +1777,10 @@ describe('library', () => {
 
       const [watched, unwatched] = await db
         .insert(movies)
-        .values([{ title: 'The Matrix', year: 1999 }, { title: 'Never Watched' }])
+        .values([
+          { title: 'The Matrix', slug: 'the-matrix-1999', year: 1999 },
+          { title: 'Never Watched', slug: 'never-watched' },
+        ])
         .returning()
       if (!watched || !unwatched) throw new Error('failed to insert movies')
 
@@ -1788,10 +1792,453 @@ describe('library', () => {
       const res = await app.request('/api/v1/library/movies', { headers: { cookie } })
       const { movies: library } = await json<ListLibraryMoviesResponse>(res)
       expect(library).toHaveLength(1)
-      expect(library[0]).toMatchObject({ id: watched.id, playCount: 2 })
+      expect(library[0]).toMatchObject({ id: watched.id, slug: 'the-matrix-1999', playCount: 2 })
       expect(new Date(library[0]!.lastWatchedAt).toISOString()).toBe(
         new Date('2026-02-01').toISOString(),
       )
+    })
+  })
+
+  describe('GET /library/movies/{slug}', () => {
+    it('returns 404 for an unknown slug', async () => {
+      const cookie = await createUserAndCookie()
+      const res = await app.request('/api/v1/library/movies/no-such-movie', { headers: { cookie } })
+      expect(res.status).toBe(404)
+    })
+
+    it("returns metadata and the current user's watch status", async () => {
+      const cookie = await createUserAndCookie()
+      const userId = await meId(cookie)
+
+      const [movie] = await db
+        .insert(movies)
+        .values({
+          title: 'The Matrix',
+          slug: 'the-matrix-1999',
+          year: 1999,
+          runtimeMinutes: 136,
+          overview: 'A hacker discovers reality is a simulation.',
+          genres: ['Action', 'Science Fiction'],
+          voteAverage: 8.2,
+        })
+        .returning()
+      if (!movie) throw new Error('failed to insert movie')
+      await db.insert(externalIds).values({
+        entityType: 'movie',
+        entityId: movie.id,
+        source: 'tmdb',
+        externalId: '603',
+      })
+      await db.insert(plays).values([
+        { userId, movieId: movie.id, watchedAt: new Date('2026-01-01') },
+        { userId, movieId: movie.id, watchedAt: new Date('2026-02-01') },
+      ])
+
+      const res = await app.request('/api/v1/library/movies/the-matrix-1999', {
+        headers: { cookie },
+      })
+      const body = await json<MovieDetail>(res)
+      expect(body).toMatchObject({
+        slug: 'the-matrix-1999',
+        title: 'The Matrix',
+        year: 1999,
+        runtimeMinutes: 136,
+        genres: ['Action', 'Science Fiction'],
+        voteAverage: 8.2,
+        tmdbId: '603',
+        watched: true,
+        watchedCount: 2,
+        hasUnknownWatchDate: false,
+      })
+      expect(new Date(body.lastWatchedAt!).toISOString()).toBe(new Date('2026-02-01').toISOString())
+    })
+
+    it('reports an unknown-date-only watch as watched with no first/lastWatchedAt (1900 sentinel regression)', async () => {
+      const cookie = await createUserAndCookie()
+      const userId = await meId(cookie)
+
+      const [movie] = await db
+        .insert(movies)
+        .values({ title: 'Old Import', slug: 'old-import' })
+        .returning()
+      if (!movie) throw new Error('failed to insert movie')
+      await db
+        .insert(plays)
+        .values({ userId, movieId: movie.id, watchedAt: new Date('1900-01-01') })
+
+      const res = await app.request('/api/v1/library/movies/old-import', { headers: { cookie } })
+      const body = await json<MovieDetail>(res)
+      expect(body).toMatchObject({
+        watched: true,
+        watchedCount: 1,
+        firstWatchedAt: null,
+        lastWatchedAt: null,
+        hasUnknownWatchDate: true,
+      })
+    })
+
+    it("does not count another user's plays", async () => {
+      const cookie = await createUserAndCookie()
+      const otherCookie = await createUserAndCookie('other@example.com')
+      const otherUserId = await meId(otherCookie)
+
+      const [movie] = await db
+        .insert(movies)
+        .values({ title: 'Someone Else Watched This', slug: 'someone-else-watched-this' })
+        .returning()
+      if (!movie) throw new Error('failed to insert movie')
+      await db
+        .insert(plays)
+        .values({ userId: otherUserId, movieId: movie.id, watchedAt: new Date() })
+
+      const res = await app.request('/api/v1/library/movies/someone-else-watched-this', {
+        headers: { cookie },
+      })
+      const body = await json<MovieDetail>(res)
+      expect(body).toMatchObject({ watched: false, watchedCount: 0, lastWatchedAt: null })
+    })
+  })
+
+  describe('GET /library/movies/{slug}/plays', () => {
+    it('returns 404 for an unknown slug', async () => {
+      const cookie = await createUserAndCookie()
+      const res = await app.request('/api/v1/library/movies/no-such-movie/plays', {
+        headers: { cookie },
+      })
+      expect(res.status).toBe(404)
+    })
+
+    it('returns an empty list for a movie with no plays', async () => {
+      const cookie = await createUserAndCookie()
+      const [movie] = await db
+        .insert(movies)
+        .values({ title: 'Untouched', slug: 'untouched' })
+        .returning()
+      if (!movie) throw new Error('failed to insert movie')
+
+      const res = await app.request('/api/v1/library/movies/untouched/plays', {
+        headers: { cookie },
+      })
+      expect(await json<Watches>(res)).toEqual({ watches: [] })
+    })
+
+    it('lists watches newest first, in a stable order across repeated fetches (regression)', async () => {
+      const cookie = await createUserAndCookie()
+      const userId = await meId(cookie)
+      const [movie] = await db
+        .insert(movies)
+        .values({ title: 'Rewatched', slug: 'rewatched' })
+        .returning()
+      if (!movie) throw new Error('failed to insert movie')
+
+      // Same timestamp on both — ties must still return in a stable order
+      // across repeated fetches (UnwatchConfirmDialog.tsx depends on this).
+      const tied = new Date('1900-01-01')
+      await db.insert(plays).values([
+        { userId, movieId: movie.id, watchedAt: tied },
+        { userId, movieId: movie.id, watchedAt: tied },
+      ])
+
+      const res1 = await app.request('/api/v1/library/movies/rewatched/plays', {
+        headers: { cookie },
+      })
+      const res2 = await app.request('/api/v1/library/movies/rewatched/plays', {
+        headers: { cookie },
+      })
+      const order1 = (await json<Watches>(res1)).watches.map((w) => w.id)
+      const order2 = (await json<Watches>(res2)).watches.map((w) => w.id)
+      expect(order1).toHaveLength(2)
+      expect(order1).toEqual(order2)
+    })
+  })
+
+  describe('DELETE /library/movies/{slug}/plays', () => {
+    it('returns 404 for an unknown slug', async () => {
+      const cookie = await createUserAndCookie()
+      const res = await app.request('/api/v1/library/movies/no-such-movie/plays', {
+        method: 'DELETE',
+        headers: { cookie, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: ['00000000-0000-0000-0000-000000000000'] }),
+      })
+      expect(res.status).toBe(404)
+    })
+
+    it('removes only the named ids, ignoring ids for another movie or user', async () => {
+      const cookie = await createUserAndCookie()
+      const userId = await meId(cookie)
+      const otherCookie = await createUserAndCookie('other2@example.com')
+      const otherUserId = await meId(otherCookie)
+
+      const [movie, otherMovie] = await db
+        .insert(movies)
+        .values([
+          { title: 'Target', slug: 'target' },
+          { title: 'Other', slug: 'other-movie' },
+        ])
+        .returning()
+      if (!movie || !otherMovie) throw new Error('failed to insert movies')
+
+      const [keep, remove] = await db
+        .insert(plays)
+        .values([
+          { userId, movieId: movie.id, watchedAt: new Date('2026-01-01') },
+          { userId, movieId: movie.id, watchedAt: new Date('2026-02-01') },
+        ])
+        .returning()
+      if (!keep || !remove) throw new Error('failed to insert plays')
+      const [otherUsersPlay] = await db
+        .insert(plays)
+        .values({ userId: otherUserId, movieId: movie.id, watchedAt: new Date('2026-03-01') })
+        .returning()
+      if (!otherUsersPlay) throw new Error('failed to insert play')
+      const [otherMoviePlay] = await db
+        .insert(plays)
+        .values({ userId, movieId: otherMovie.id, watchedAt: new Date('2026-04-01') })
+        .returning()
+      if (!otherMoviePlay) throw new Error('failed to insert play')
+
+      const res = await app.request('/api/v1/library/movies/target/plays', {
+        method: 'DELETE',
+        headers: { cookie, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: [remove.id, otherUsersPlay.id, otherMoviePlay.id] }),
+      })
+      const body = await json<WatchedStatus>(res)
+      expect(body).toMatchObject({ watched: true, watchedCount: 1 })
+      expect(new Date(body.lastWatchedAt!).toISOString()).toBe(new Date('2026-01-01').toISOString())
+    })
+
+    it('removing every watch leaves the movie unwatched', async () => {
+      const cookie = await createUserAndCookie()
+      const userId = await meId(cookie)
+      const [movie] = await db
+        .insert(movies)
+        .values({ title: 'Solo Watch', slug: 'solo-watch' })
+        .returning()
+      if (!movie) throw new Error('failed to insert movie')
+      const [play] = await db
+        .insert(plays)
+        .values({ userId, movieId: movie.id, watchedAt: new Date() })
+        .returning()
+      if (!play) throw new Error('failed to insert play')
+
+      const res = await app.request('/api/v1/library/movies/solo-watch/plays', {
+        method: 'DELETE',
+        headers: { cookie, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: [play.id] }),
+      })
+      expect(await json<WatchedStatus>(res)).toEqual({
+        watched: false,
+        watchedCount: 0,
+        lastWatchedAt: null,
+      })
+    })
+  })
+
+  describe('POST /library/movies/{slug}/refresh', () => {
+    it('returns 404 for an unknown slug', async () => {
+      const cookie = await createUserAndCookie()
+      const res = await app.request('/api/v1/library/movies/no-such-movie/refresh', {
+        method: 'POST',
+        headers: { cookie },
+      })
+      expect(res.status).toBe(404)
+    })
+
+    it('returns 404 when the movie has no tmdb external id', async () => {
+      const cookie = await createUserAndCookie()
+      await db.insert(movies).values({ title: 'No Match', slug: 'no-match' })
+      const res = await app.request('/api/v1/library/movies/no-match/refresh', {
+        method: 'POST',
+        headers: { cookie },
+      })
+      expect(res.status).toBe(404)
+    })
+
+    it('refetches genres/rating from the provider but leaves the slug unchanged even when the title changes (regression)', async () => {
+      const cookie = await createUserAndCookie()
+      const [movie] = await db
+        .insert(movies)
+        .values({ title: 'Old Title', slug: 'old-title-slug' })
+        .returning()
+      if (!movie) throw new Error('failed to insert movie')
+      await db.insert(externalIds).values({
+        entityType: 'movie',
+        entityId: movie.id,
+        source: 'tmdb',
+        externalId: '603',
+      })
+
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (input: string | URL) => {
+          const url = new URL(input)
+          if (url.pathname === '/3/movie/603') {
+            return new Response(
+              JSON.stringify({
+                id: 603,
+                title: 'New Title',
+                release_date: '1999-03-31',
+                runtime: 136,
+                overview: 'Updated overview.',
+                poster_path: '/poster.jpg',
+                genres: [{ id: 28, name: 'Action' }],
+                vote_average: 8.7,
+                vote_count: 100,
+              }),
+              { status: 200 },
+            )
+          }
+          throw new Error(`Unexpected TMDB fetch in test: ${url}`)
+        }),
+      )
+
+      const res = await app.request('/api/v1/library/movies/old-title-slug/refresh', {
+        method: 'POST',
+        headers: { cookie },
+      })
+      expect(res.status).toBe(204)
+
+      const [updated] = await db.select().from(movies).where(eq(movies.id, movie.id))
+      expect(updated).toMatchObject({
+        title: 'New Title',
+        slug: 'old-title-slug',
+        genres: ['Action'],
+        voteAverage: 8.7,
+      })
+    })
+  })
+
+  describe('POST /library/movies/resolve', () => {
+    it('creates a movie and external id, returning its slug', async () => {
+      const cookie = await createUserAndCookie()
+
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (input: string | URL) => {
+          const url = new URL(input)
+          if (url.pathname === '/3/movie/27205') {
+            return new Response(
+              JSON.stringify({
+                id: 27205,
+                title: 'Inception',
+                release_date: '2010-07-16',
+                runtime: 148,
+                overview: 'A thief who steals corporate secrets.',
+                poster_path: '/poster.jpg',
+                genres: [{ id: 878, name: 'Science Fiction' }],
+                vote_average: 8.4,
+                vote_count: 100,
+              }),
+              { status: 200 },
+            )
+          }
+          throw new Error(`Unexpected TMDB fetch in test: ${url}`)
+        }),
+      )
+
+      const res = await app.request('/api/v1/library/movies/resolve', {
+        method: 'POST',
+        headers: { cookie, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ source: 'tmdb', externalId: '27205' }),
+      })
+      expect(res.status).toBe(200)
+      const { slug } = await json<{ slug: string }>(res)
+      expect(slug).toBe('inception-2010')
+
+      const [external] = await db
+        .select()
+        .from(externalIds)
+        .where(and(eq(externalIds.entityType, 'movie'), eq(externalIds.externalId, '27205')))
+      expect(external).toBeTruthy()
+    })
+
+    it('is idempotent — resolving the same external id twice returns the same slug and creates no second row', async () => {
+      const cookie = await createUserAndCookie()
+
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (input: string | URL) => {
+          const url = new URL(input)
+          if (url.pathname === '/3/movie/27205') {
+            return new Response(
+              JSON.stringify({
+                id: 27205,
+                title: 'Inception',
+                release_date: '2010-07-16',
+                runtime: 148,
+                overview: null,
+                poster_path: null,
+                genres: [],
+                vote_average: 0,
+                vote_count: 0,
+              }),
+              { status: 200 },
+            )
+          }
+          throw new Error(`Unexpected TMDB fetch in test: ${url}`)
+        }),
+      )
+
+      const first = await app.request('/api/v1/library/movies/resolve', {
+        method: 'POST',
+        headers: { cookie, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ source: 'tmdb', externalId: '27205' }),
+      })
+      const second = await app.request('/api/v1/library/movies/resolve', {
+        method: 'POST',
+        headers: { cookie, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ source: 'tmdb', externalId: '27205' }),
+      })
+      const { slug: slug1 } = await json<{ slug: string }>(first)
+      const { slug: slug2 } = await json<{ slug: string }>(second)
+      expect(slug1).toBe(slug2)
+
+      const rows = await db.select().from(movies).where(eq(movies.slug, slug1))
+      expect(rows).toHaveLength(1)
+    })
+
+    it('gives two same-title-and-year movies distinct slugs', async () => {
+      const cookie = await createUserAndCookie()
+
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (input: string | URL) => {
+          const url = new URL(input)
+          if (url.pathname === '/3/movie/111' || url.pathname === '/3/movie/222') {
+            const id = url.pathname === '/3/movie/111' ? 111 : 222
+            return new Response(
+              JSON.stringify({
+                id,
+                title: 'Same Name',
+                release_date: '2020-01-01',
+                runtime: 100,
+                overview: null,
+                poster_path: null,
+                genres: [],
+                vote_average: 0,
+                vote_count: 0,
+              }),
+              { status: 200 },
+            )
+          }
+          throw new Error(`Unexpected TMDB fetch in test: ${url}`)
+        }),
+      )
+
+      const first = await app.request('/api/v1/library/movies/resolve', {
+        method: 'POST',
+        headers: { cookie, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ source: 'tmdb', externalId: '111' }),
+      })
+      const second = await app.request('/api/v1/library/movies/resolve', {
+        method: 'POST',
+        headers: { cookie, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ source: 'tmdb', externalId: '222' }),
+      })
+      const { slug: slug1 } = await json<{ slug: string }>(first)
+      const { slug: slug2 } = await json<{ slug: string }>(second)
+      expect(slug1).toBe('same-name-2020')
+      expect(slug2).toBe('same-name-2020-2')
     })
   })
 })

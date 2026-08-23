@@ -162,10 +162,29 @@ export const invites = pgTable('invites', {
 export const movies = pgTable('movies', {
   id: uuid('id').primaryKey().defaultRandom(),
   title: text('title').notNull(),
+  // URL-friendly identifier (e.g. "the-matrix-1999"), generated once from
+  // title+year when the movie is first resolved (see
+  // generateUniqueMovieSlug() in apps/api/src/lib/slug.ts) and never
+  // recomputed afterwards, so a movie keeps the same URL even if a later
+  // metadata refresh changes its title. Unique per-instance only, same as
+  // shows.slug below. Existing rows were backfilled by migration 0009,
+  // whose SQL must stay in sync with slugify().
+  slug: text('slug').notNull().unique(),
   year: integer('year'),
   runtimeMinutes: integer('runtime_minutes'),
   overview: text('overview'),
   posterPath: text('poster_path'),
+  // TMDB's genre names verbatim — same fixed-vocabulary reasoning as
+  // shows.genres below (a plain string array, no normalised genres table).
+  // Backs the movie detail page's fact line today; a movies-gallery genre
+  // filter panel is a deliberate follow-up, not built yet.
+  genres: text('genres').array().notNull().default([]),
+  // TMDB's raw vote_average (0-10, one decimal place in their UI). Null
+  // until the metadata refresher has cached this movie, or genuinely null
+  // for a movie TMDB has no votes for yet — same convention as
+  // shows.voteAverage below. Not the user's own rating of the movie —
+  // that's the separate `ratings` table.
+  voteAverage: real('vote_average'),
   // Never older than the provider's max cache lifetime (6 months for TMDB).
   metadataRefreshedAt: timestamp('metadata_refreshed_at', { withTimezone: true })
     .notNull()

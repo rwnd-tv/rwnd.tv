@@ -2,7 +2,7 @@ import { and, eq, gt, gte, inArray } from 'drizzle-orm'
 import type { Database } from '@rwnd/db'
 import { episodes, externalIds, movies, plays, seasons, shows } from '@rwnd/db'
 import type { MetadataProvider } from '../providers/types.js'
-import { generateUniqueShowSlug } from './slug.js'
+import { generateUniqueMovieSlug, generateUniqueShowSlug } from './slug.js'
 
 /** TMDB frequently has no episode title yet for very recent/unaired episodes. */
 export function episodeDisplayTitle(
@@ -25,7 +25,7 @@ export async function resolveMovie(
   provider: MetadataProvider,
   externalId: string,
   locale: string,
-): Promise<{ id: string; title: string; posterPath: string | null }> {
+): Promise<{ id: string; slug: string; title: string; posterPath: string | null }> {
   const [existing] = await db
     .select({ id: externalIds.entityId })
     .from(externalIds)
@@ -40,18 +40,23 @@ export async function resolveMovie(
 
   if (existing) {
     const [movie] = await db.select().from(movies).where(eq(movies.id, existing.id)).limit(1)
-    if (movie) return { id: movie.id, title: movie.title, posterPath: movie.posterPath }
+    if (movie)
+      return { id: movie.id, slug: movie.slug, title: movie.title, posterPath: movie.posterPath }
   }
 
   const fetched = await provider.getMovie(externalId, locale)
+  const slug = await generateUniqueMovieSlug(db, fetched.title, fetched.year)
   const [movie] = await db
     .insert(movies)
     .values({
       title: fetched.title,
+      slug,
       year: fetched.year,
       runtimeMinutes: fetched.runtimeMinutes,
       overview: fetched.overview,
       posterPath: fetched.posterPath,
+      genres: fetched.genres,
+      voteAverage: fetched.voteAverage,
     })
     .returning()
   if (!movie) throw new Error('Failed to insert movie')
@@ -66,7 +71,7 @@ export async function resolveMovie(
     })
     .onConflictDoNothing()
 
-  return { id: movie.id, title: movie.title, posterPath: movie.posterPath }
+  return { id: movie.id, slug: movie.slug, title: movie.title, posterPath: movie.posterPath }
 }
 
 /**

@@ -7,9 +7,10 @@ import { api } from '../lib/api-client.js'
 
 /** Static top-level sections — each maps its exact path to the same i18n
  * key the sidebar uses for that page (Sidebar.tsx), so the breadcrumb
- * always agrees with the nav label. Dynamic pages (currently just
- * ShowDetailPage) aren't listed here — they're handled separately below,
- * since their trailing segment depends on loaded data, not just the path. */
+ * always agrees with the nav label. Dynamic pages (ShowDetailPage,
+ * SeasonDetailPage, MovieDetailPage) aren't listed here — they're handled
+ * separately below, since their trailing segment depends on loaded data,
+ * not just the path. */
 const SECTION_KEYS: Record<string, string> = {
   '/dashboard': 'nav.dashboard',
   '/shows': 'nav.shows',
@@ -34,8 +35,9 @@ export function PageTitleEffect() {
   const { data: settings } = usePublicSettings()
   const showMatch = useMatch('/shows/:slug')
   const seasonMatch = useMatch('/shows/:slug/season/:seasonNumber')
-  // Either match supplies a slug — a season page needs the show's title
-  // too, same as the show page itself.
+  const movieMatch = useMatch('/movies/:slug')
+  // Either show match supplies a slug — a season page needs the show's
+  // title too, same as the show page itself.
   const slug = showMatch?.params.slug ?? seasonMatch?.params.slug
 
   // Same queryKey as ShowDetailPage.tsx — React Query dedupes/shares the
@@ -54,6 +56,14 @@ export function PageTitleEffect() {
     queryKey: ['show', slug, 'season', seasonNumber],
     queryFn: () => api.library.season(slug!, seasonNumber),
     enabled: Boolean(seasonMatch) && Number.isInteger(seasonNumber),
+  })
+
+  // Same queryKey as MovieDetailPage.tsx.
+  const movieSlug = movieMatch?.params.slug
+  const { data: movie } = useQuery({
+    queryKey: ['movie', movieSlug],
+    queryFn: () => api.library.movie(movieSlug!),
+    enabled: Boolean(movieSlug),
   })
 
   useEffect(() => {
@@ -77,10 +87,23 @@ export function PageTitleEffect() {
               : t('import.progress.season', { number: season.seasonNumber })),
         )
       }
+    } else if (movieMatch) {
+      segments.push(t('nav.movies'))
+      if (movie) segments.push(movie.year ? `${movie.title} (${movie.year})` : movie.title)
     }
 
     document.title = segments.join(' > ')
-  }, [location.pathname, settings?.environmentLabel, showMatch, seasonMatch, show, season, t])
+  }, [
+    location.pathname,
+    settings?.environmentLabel,
+    showMatch,
+    seasonMatch,
+    movieMatch,
+    show,
+    season,
+    movie,
+    t,
+  ])
 
   return null
 }

@@ -12,7 +12,7 @@ import {
   watchlistItems,
 } from '@rwnd/db'
 import type { BackupCounts, BackupFile } from '@rwnd/shared'
-import { generateUniqueShowSlug } from '../lib/slug.js'
+import { generateUniqueMovieSlug, generateUniqueShowSlug } from '../lib/slug.js'
 
 /** Postgres caps a single statement at 65535 bound parameters — chunking
  * keeps every insert well under that regardless of row width, and matches
@@ -79,15 +79,18 @@ export async function restoreBackupFile(
     const movieIdByTmdbId = new Map(existingMovies.map((row) => [row.tmdbId, row.id]))
     const showIdByTmdbId = new Map(existingShows.map((row) => [row.tmdbId, row.id]))
 
-    // Sequential, not parallel — generateUniqueShowSlug()'s uniqueness
-    // check reads the `shows` table's current state, so two inserts
-    // racing inside the same transaction could both compute the same slug.
+    // Sequential, not parallel — generateUniqueMovieSlug()/
+    // generateUniqueShowSlug()'s uniqueness check reads the current table
+    // state, so two inserts racing inside the same transaction could both
+    // compute the same slug. Applies to movies too now that they have one.
     for (const movie of file.movies) {
       if (movieIdByTmdbId.has(movie.tmdbId)) continue
+      const slug = await generateUniqueMovieSlug(tx, movie.title, movie.year)
       const [inserted] = await tx
         .insert(movies)
         .values({
           title: movie.title,
+          slug,
           year: movie.year,
           runtimeMinutes: movie.runtimeMinutes,
           overview: movie.overview,

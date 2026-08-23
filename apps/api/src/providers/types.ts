@@ -54,6 +54,14 @@ export interface ProviderMovie {
   runtimeMinutes: number | null
   overview: string | null
   posterPath: string | null
+  /** Provider's genre names verbatim (e.g. 'Drama', 'Animation'). Same
+   * fixed-vocabulary reasoning as ProviderShow.genres — see
+   * packages/db/src/schema.ts's `movies.genres` column. */
+  genres: string[]
+  /** Provider's average rating (TMDB: 0-10, one decimal place in their UI),
+   * or null if the provider doesn't expose one / has no votes yet. Same
+   * convention as ProviderShow.voteAverage. */
+  voteAverage: number | null
 }
 
 export interface ProviderShow {

@@ -10,8 +10,6 @@ import {
   type CreatePlayRequest,
   type DiffBackupResponse,
   type DroppedStatus,
-  type EpisodeWatchedStatus,
-  type EpisodeWatches,
   type ImportJob,
   type InstanceSettings,
   type ListBackupsResponse,
@@ -22,13 +20,14 @@ import {
   type LoginRequest,
   type MarkShowWatchedRequest,
   type MarkShowWatchedResponse,
+  type MovieDetail,
   type OnDeckResponse,
   type Play,
   type RegisterRequest,
-  type RemoveEpisodeWatchesRequest,
   type RemoveShowWatchesResponse,
-  type ResolveShowRequest,
-  type ResolveShowResponse,
+  type RemoveWatchesRequest,
+  type ResolveMediaRequest,
+  type ResolveMediaResponse,
   type RestoreBackupResponse,
   type SearchResponse,
   type SeasonDetail,
@@ -40,6 +39,8 @@ import {
   type UpdateProfileRequest,
   type UpNextResponse,
   type User,
+  type WatchedStatus,
+  type Watches,
 } from '@rwnd/shared'
 
 export class ApiError extends Error {
@@ -116,8 +117,8 @@ export const api = {
   library: {
     // Whole-library responses, not paginated — see packages/shared/src/schemas/library.ts.
     shows: () => get<ListLibraryShowsResponse>('/library/shows'),
-    resolveShow: (body: ResolveShowRequest) =>
-      post<ResolveShowResponse>('/library/shows/resolve', body),
+    resolveShow: (body: ResolveMediaRequest) =>
+      post<ResolveMediaResponse>('/library/shows/resolve', body),
     onDeck: () => get<OnDeckResponse>('/library/on-deck'),
     upNext: () => get<UpNextResponse>('/library/up-next'),
     show: (slug: string) => get<ShowDetail>(`/library/shows/${encodeURIComponent(slug)}`),
@@ -142,15 +143,26 @@ export const api = {
         `/library/shows/${encodeURIComponent(slug)}/seasons/${seasonNumber}/watched`,
       ),
     unwatchEpisode: (slug: string, seasonNumber: number, episodeNumber: number, ids: string[]) =>
-      del<EpisodeWatchedStatus>(
+      del<WatchedStatus>(
         `/library/shows/${encodeURIComponent(slug)}/seasons/${seasonNumber}/episodes/${episodeNumber}/plays`,
-        { ids } satisfies RemoveEpisodeWatchesRequest,
+        { ids } satisfies RemoveWatchesRequest,
       ),
     episodeWatches: (slug: string, seasonNumber: number, episodeNumber: number) =>
-      get<EpisodeWatches>(
+      get<Watches>(
         `/library/shows/${encodeURIComponent(slug)}/seasons/${seasonNumber}/episodes/${episodeNumber}/plays`,
       ),
     movies: () => get<ListLibraryMoviesResponse>('/library/movies'),
+    resolveMovie: (body: ResolveMediaRequest) =>
+      post<ResolveMediaResponse>('/library/movies/resolve', body),
+    movie: (slug: string) => get<MovieDetail>(`/library/movies/${encodeURIComponent(slug)}`),
+    refreshMovie: (slug: string) =>
+      post<void>(`/library/movies/${encodeURIComponent(slug)}/refresh`),
+    movieWatches: (slug: string) =>
+      get<Watches>(`/library/movies/${encodeURIComponent(slug)}/plays`),
+    unwatchMovie: (slug: string, ids: string[]) =>
+      del<WatchedStatus>(`/library/movies/${encodeURIComponent(slug)}/plays`, {
+        ids,
+      } satisfies RemoveWatchesRequest),
   },
   settings: {
     get: () => get<InstanceSettings>('/settings'),

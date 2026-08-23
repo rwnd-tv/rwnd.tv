@@ -45,6 +45,18 @@ function playTitle(play: Play, t: (key: string, opts?: Record<string, unknown>) 
   return `${play.media.showTitle ?? ''} · ${label} · ${play.media.title}`
 }
 
+/** Where this entry links to, or null for one with no detail page to send
+ * the user to — a play whose media row predates `showSlug`/`movieSlug`
+ * existing (schemas/plays.ts), or a future non-slug source. Movie
+ * counterpart of the episode branch's showSlug link, added once
+ * MovieDetailPage.tsx existed to link to. */
+function playHref(play: Play): string | null {
+  if (play.media.type === 'episode') {
+    return play.media.showSlug ? `/shows/${play.media.showSlug}` : null
+  }
+  return play.media.movieSlug ? `/movies/${play.media.movieSlug}` : null
+}
+
 export function HistoryPage() {
   const { t } = useTranslation()
   const { user } = useAuth()
@@ -86,52 +98,55 @@ export function HistoryPage() {
                 {day === UNKNOWN_DATE_KEY ? t('history.unknownDate') : day}
               </h2>
               <ul className="flex flex-col gap-2">
-                {plays.map((play) => (
-                  <li
-                    key={play.id}
-                    className="flex items-center justify-between gap-4 rounded-lg border border-[var(--color-border)] p-3"
-                  >
-                    <div className="flex min-w-0 items-center gap-3">
-                      {play.media.type === 'episode' && play.media.showSlug ? (
-                        <Link
-                          to={`/shows/${play.media.showSlug}`}
-                          className="flex min-w-0 items-center gap-3 hover:underline"
-                        >
-                          {play.media.posterPath && (
-                            <img
-                              src={play.media.posterPath}
-                              alt=""
-                              width={40}
-                              height={60}
-                              className="h-[60px] w-10 shrink-0 rounded object-cover"
-                            />
-                          )}
-                          <span className="truncate">{playTitle(play, t)}</span>
-                        </Link>
-                      ) : (
-                        <>
-                          {play.media.posterPath && (
-                            <img
-                              src={play.media.posterPath}
-                              alt=""
-                              width={40}
-                              height={60}
-                              className="h-[60px] w-10 shrink-0 rounded object-cover"
-                            />
-                          )}
-                          <span className="truncate">{playTitle(play, t)}</span>
-                        </>
-                      )}
-                    </div>
-                    <Button
-                      variant="ghost"
-                      onClick={() => removePlay.mutate(play.id)}
-                      aria-label={`${t('history.remove')}: ${playTitle(play, t)}`}
+                {plays.map((play) => {
+                  const href = playHref(play)
+                  return (
+                    <li
+                      key={play.id}
+                      className="flex items-center justify-between gap-4 rounded-lg border border-[var(--color-border)] p-3"
                     >
-                      {t('history.remove')}
-                    </Button>
-                  </li>
-                ))}
+                      <div className="flex min-w-0 items-center gap-3">
+                        {href ? (
+                          <Link
+                            to={href}
+                            className="flex min-w-0 items-center gap-3 hover:underline"
+                          >
+                            {play.media.posterPath && (
+                              <img
+                                src={play.media.posterPath}
+                                alt=""
+                                width={40}
+                                height={60}
+                                className="h-[60px] w-10 shrink-0 rounded object-cover"
+                              />
+                            )}
+                            <span className="truncate">{playTitle(play, t)}</span>
+                          </Link>
+                        ) : (
+                          <>
+                            {play.media.posterPath && (
+                              <img
+                                src={play.media.posterPath}
+                                alt=""
+                                width={40}
+                                height={60}
+                                className="h-[60px] w-10 shrink-0 rounded object-cover"
+                              />
+                            )}
+                            <span className="truncate">{playTitle(play, t)}</span>
+                          </>
+                        )}
+                      </div>
+                      <Button
+                        variant="ghost"
+                        onClick={() => removePlay.mutate(play.id)}
+                        aria-label={`${t('history.remove')}: ${playTitle(play, t)}`}
+                      >
+                        {t('history.remove')}
+                      </Button>
+                    </li>
+                  )
+                })}
               </ul>
             </section>
           ))}

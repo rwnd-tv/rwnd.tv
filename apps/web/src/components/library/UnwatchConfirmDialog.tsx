@@ -1,26 +1,27 @@
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import type { EpisodeWatches } from '@rwnd/shared'
+import type { Watches } from '@rwnd/shared'
 import { UNKNOWN_WATCHED_AT, formatDateTimeInput } from '../../lib/date.js'
 import { Dialog } from '../ui/Dialog.js'
 import { Button } from '../ui/Button.js'
 import { Spinner } from '../ui/Spinner.js'
 
 /**
- * "Are you sure?" shown before clearing some or all of an episode's watch
- * history (see SeasonDetailPage.tsx — clicking the checkmark on an
- * already-watched episode opens this instead of unwatching immediately,
- * since it can clear more than one logged play at once). Each watch has
- * its own tick box, ticked by default, so the user can remove just some of
- * them rather than only ever clearing everything. `watches` is the actual
- * list, fetched on demand only while this dialog is open (see
- * api.library.episodeWatches) — the singular/plural copy is based on its
- * length once loaded, not on the season list's cached `watchedCount`,
- * which can disagree with the live count (e.g. right after a Trakt import
- * added a rewatch the season query hasn't refetched yet) — showing "this
- * watch" next to a list of three would be a worse bug than a one-tick-late
- * title. `watchedCountHint` is used only for the instant-open title,
- * before the real list has loaded.
+ * "Are you sure?" shown before clearing some or all of an episode's or
+ * movie's watch history (see SeasonDetailPage.tsx/MovieDetailPage.tsx —
+ * clicking the checkmark on an already-watched episode/movie opens this
+ * instead of unwatching immediately, since it can clear more than one
+ * logged play at once). Each watch has its own tick box, ticked by
+ * default, so the user can remove just some of them rather than only ever
+ * clearing everything. `watches` is the actual list, fetched on demand
+ * only while this dialog is open (see api.library.episodeWatches/
+ * movieWatches) — the singular/plural copy is based on its length once
+ * loaded, not the caller's own cached `watchedCount`, which can disagree
+ * with the live count (e.g. right after a Trakt import added a rewatch the
+ * caller's query hasn't refetched yet) — showing "this watch" next to a
+ * list of three would be a worse bug than a one-tick-late title.
+ * `watchedCountHint` is used only for the instant-open title, before the
+ * real list has loaded.
  */
 export function UnwatchConfirmDialog({
   open,
@@ -32,7 +33,7 @@ export function UnwatchConfirmDialog({
 }: {
   open: boolean
   watchedCountHint: number
-  watches: EpisodeWatches['watches'] | undefined
+  watches: Watches['watches'] | undefined
   locale: string
   onConfirm: (ids: string[]) => void
   onCancel: () => void

@@ -21,8 +21,10 @@ export function PosterTile({
   title: string
   year: number | null
   posterPath: string | null
-  /** When set, the poster + title link to a detail page (e.g. ShowDetailPage) —
-   * omit it for tiles that don't have one yet (MoviesPage's movies). */
+  /** When set, the poster + title link to a detail page (ShowDetailPage,
+   * MovieDetailPage) — omit it for a tile with no detail page to link to
+   * (currently none; every gallery tile links somewhere as of the movie
+   * detail page shipping). */
   to?: string
   /** Dims the artwork to greyscale — ShowsPage.tsx uses this for dropped
    * shows, gallery-only (the show's own detail page renders its poster

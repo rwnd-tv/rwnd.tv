@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { eq } from 'drizzle-orm'
-import { externalIds, seasons, shows } from '@rwnd/db'
+import { externalIds, movies, seasons, shows } from '@rwnd/db'
 import { createMetadataProvider } from '../providers/index.js'
 import { loadEnv } from '../env.js'
 import { runMetadataRefresh } from '../metadata/refresh.js'
@@ -102,6 +102,58 @@ async function insertShow(opts: {
     })
   }
   return show
+}
+
+function tmdbMovieResponse(overrides: { id: number; genres?: string[]; voteAverage?: number }) {
+  return JSON.stringify({
+    id: overrides.id,
+    title: `Movie ${overrides.id}`,
+    release_date: '2020-01-01',
+    runtime: 100,
+    overview: 'An overview.',
+    poster_path: '/poster.jpg',
+    genres: (overrides.genres ?? []).map((name, i) => ({ id: i, name })),
+    // Same "vote_count > 0 whenever a rating is supplied" convention as
+    // tmdbShowResponse above — TmdbProvider.getMovie treats a zero
+    // vote_count as "no rating" regardless of vote_average.
+    vote_average: overrides.voteAverage,
+    vote_count: overrides.voteAverage === undefined ? 0 : 100,
+  })
+}
+
+async function insertMovie(opts: {
+  tmdbId?: number
+  metadataRefreshedAt: Date
+  /** Defaults to empty, same as a real row before its first fetch — tests
+   * that assert "should NOT be refetched" need to set this explicitly, or
+   * they're really just re-testing the empty-genres backfill clause. */
+  genres?: string[]
+  /** Defaults to null, same as a real row before its first fetch — same
+   * "should NOT be refetched" caveat as `genres` above. */
+  voteAverage?: number | null
+}) {
+  const [movie] = await db
+    .insert(movies)
+    .values({
+      title: 'Some Movie',
+      // Each call needs a distinct slug (movies.slug is unique) — same
+      // convention as insertShow's slug above.
+      slug: `some-movie-${opts.tmdbId ?? crypto.randomUUID()}`,
+      metadataRefreshedAt: opts.metadataRefreshedAt,
+      genres: opts.genres ?? [],
+      voteAverage: opts.voteAverage ?? null,
+    })
+    .returning()
+  if (!movie) throw new Error('failed to insert movie')
+  if (opts.tmdbId !== undefined) {
+    await db.insert(externalIds).values({
+      entityType: 'movie',
+      entityId: movie.id,
+      source: 'tmdb',
+      externalId: String(opts.tmdbId),
+    })
+  }
+  return movie
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -402,5 +454,93 @@ describe('metadata refresh', () => {
     expect(result.showsRefreshed).toBe(1) // the 404'd show doesn't count...
     const okSeasons = await db.select().from(seasons).where(eq(seasons.showId, ok.id))
     expect(okSeasons).toHaveLength(1) // ...but the other show still went through
+  })
+
+  // Same backfill-gap regression class as the shows genres test above,
+  // applied to movies — findStaleMovies needs its own "never populated"
+  // clauses or every movie that predates the genres/voteAverage columns
+  // would sit unrefreshed for up to ~5 months.
+  it('refetches a recently-refreshed movie if it has no genres yet', async () => {
+    const movie = await insertMovie({ tmdbId: 20, metadataRefreshedAt: new Date() })
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(tmdbMovieResponse({ id: 20, genres: ['Action'] }), { status: 200 }),
+      ),
+    )
+
+    const result = await runMetadataRefresh(db, provider)
+    expect(result.moviesRefreshed).toBe(1)
+    const [updated] = await db.select().from(movies).where(eq(movies.id, movie.id))
+    expect(updated?.genres).toEqual(['Action'])
+  })
+
+  it('refetches a recently-refreshed movie if it has no rating yet', async () => {
+    const movie = await insertMovie({
+      tmdbId: 21,
+      metadataRefreshedAt: new Date(),
+      genres: ['Drama'], // already has genres — only the rating clause should catch this
+    })
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(tmdbMovieResponse({ id: 21, genres: ['Drama'], voteAverage: 7.5 }), {
+            status: 200,
+          }),
+      ),
+    )
+
+    const result = await runMetadataRefresh(db, provider)
+    expect(result.moviesRefreshed).toBe(1)
+    const [updated] = await db.select().from(movies).where(eq(movies.id, movie.id))
+    expect(updated?.voteAverage).toBe(7.5)
+  })
+
+  it('does not refetch a fully-populated movie that was recently refreshed', async () => {
+    await insertMovie({
+      tmdbId: 22,
+      metadataRefreshedAt: new Date(),
+      genres: ['Comedy'],
+      voteAverage: 6.9,
+    })
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await runMetadataRefresh(db, provider)
+    expect(result.moviesRefreshed).toBe(0)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('refetches a fully-populated movie once it crosses the TMDB compliance age', async () => {
+    await insertMovie({
+      tmdbId: 23,
+      metadataRefreshedAt: new Date(Date.now() - 200 * DAY_MS), // past the ~5 month compliance cutoff
+      genres: ['Horror'],
+      voteAverage: 5.5,
+    })
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(tmdbMovieResponse({ id: 23, genres: ['Horror'], voteAverage: 5.5 }), {
+            status: 200,
+          }),
+      ),
+    )
+
+    const result = await runMetadataRefresh(db, provider)
+    expect(result.moviesRefreshed).toBe(1)
+  })
+
+  it('skips a movie with no known TMDB id without crashing the sweep', async () => {
+    await insertMovie({ metadataRefreshedAt: new Date() }) // no tmdbId at all
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await runMetadataRefresh(db, provider)
+    expect(result.moviesRefreshed).toBe(0)
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 })

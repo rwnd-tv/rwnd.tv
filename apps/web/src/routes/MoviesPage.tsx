@@ -96,6 +96,7 @@ export function MoviesPage() {
                   title={movie.title}
                   year={movie.year}
                   posterPath={movie.posterPath}
+                  to={`/movies/${movie.slug}`}
                 >
                   {movie.playCount > 1 && (
                     <p className="text-xs text-[var(--color-fg-muted)]">

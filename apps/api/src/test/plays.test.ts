@@ -105,12 +105,39 @@ describe('plays', () => {
         type: 'movie',
         title: 'The Matrix',
         posterPath: expect.stringContaining('/matrix.jpg'),
+        movieSlug: 'the-matrix-1999',
       })
 
       const list = await app.request('/api/v1/plays', { headers: { cookie } })
       const { plays: history } = await json<ListPlaysResponse>(list)
       expect(history).toHaveLength(1)
       expect(history[0]?.id).toBe(play.id)
+      expect(history[0]?.media).toMatchObject({ movieSlug: 'the-matrix-1999' })
+    })
+
+    it('rejects a second unknown-date watch for a movie that already has one', async () => {
+      const cookie = await createUserAndCookie()
+      const body = JSON.stringify({
+        movie: { source: 'tmdb', externalId: '603' },
+        watchedAt: '1900-01-01T00:00:00.000Z',
+      })
+
+      const firstRes = await app.request('/api/v1/plays', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', cookie },
+        body,
+      })
+      expect(firstRes.status).toBe(201)
+
+      const secondRes = await app.request('/api/v1/plays', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', cookie },
+        body,
+      })
+      expect(secondRes.status).toBe(400)
+
+      const list = await app.request('/api/v1/plays', { headers: { cookie } })
+      expect((await json<ListPlaysResponse>(list)).plays).toHaveLength(1)
     })
 
     it('logs an episode watch with a showSlug that links to the show page', async () => {

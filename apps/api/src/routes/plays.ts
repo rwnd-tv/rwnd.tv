@@ -1,5 +1,5 @@
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi'
-import { and, desc, eq, lt } from 'drizzle-orm'
+import { type SQL, and, desc, eq, lt } from 'drizzle-orm'
 import {
   UNKNOWN_WATCHED_AT,
   createPlayRequestSchema,
@@ -7,12 +7,43 @@ import {
   listPlaysResponseSchema,
   playSchema,
 } from '@rwnd/shared'
+import type { Database } from '@rwnd/db'
 import { episodes, movies, plays, shows } from '@rwnd/db'
 import type { AppEnv } from '../types.js'
 import { requireAuth } from '../middleware/auth.js'
 import { episodeDisplayTitle, resolveEpisode, resolveMovie } from '../lib/media.js'
 
 export const playRoutes = new OpenAPIHono<AppEnv>()
+
+/**
+ * Two unknown-date watches of the same movie/episode are indistinguishable
+ * from each other (same rounding-error-prone sentinel timestamp, see the
+ * tie-break fix DELETE /library/shows/.../plays needed in
+ * apps/api/src/routes/library.ts), so a second one adds nothing — reject
+ * rather than silently create a duplicate the user can't tell apart from
+ * the first. Shared by both the movie and episode branches of POST /plays
+ * below. Only applies going forward through this route; doesn't touch
+ * existing data (a Trakt import can legitimately leave a title with
+ * several genuinely separate unknown-date plays already).
+ */
+async function hasExistingUnknownDateWatch(
+  db: Database,
+  userId: string,
+  mediaCondition: SQL,
+): Promise<boolean> {
+  const [existing] = await db
+    .select({ id: plays.id })
+    .from(plays)
+    .where(
+      and(
+        eq(plays.userId, userId),
+        mediaCondition,
+        eq(plays.watchedAt, new Date(UNKNOWN_WATCHED_AT)),
+      ),
+    )
+    .limit(1)
+  return Boolean(existing)
+}
 
 playRoutes.openapi(
   createRoute({
@@ -55,7 +86,12 @@ playRoutes.openapi(
         source: row.play.source,
         createdAt: row.play.createdAt.toISOString(),
         media: row.movie
-          ? { type: 'movie' as const, title: row.movie.title, posterPath: row.movie.posterPath }
+          ? {
+              type: 'movie' as const,
+              title: row.movie.title,
+              posterPath: row.movie.posterPath,
+              movieSlug: row.movie.slug,
+            }
           : {
               type: 'episode' as const,
               title: episodeDisplayTitle(
@@ -86,7 +122,7 @@ playRoutes.openapi(
       201: { description: 'Play logged', content: { 'application/json': { schema: playSchema } } },
       400: {
         description:
-          'watchedAt is in the future, the episode has not aired yet, or it already has an unknown-date watch logged',
+          'watchedAt is in the future, the episode has not aired yet, or the movie/episode already has an unknown-date watch logged',
       },
     },
   }),
@@ -108,6 +144,19 @@ playRoutes.openapi(
 
     if (body.movie) {
       const movie = await resolveMovie(db, provider, body.movie.externalId, user.locale)
+
+      // Same duplicate-unknown-date guard the episode branch below enforces
+      // — see hasExistingUnknownDateWatch's doc comment. The movie page's
+      // "+" (log an additional watch) button offers the same "Unknown
+      // date" option WatchDateDialog offers everywhere, so it needs the
+      // same protection an episode already has.
+      if (
+        watchedAt.toISOString() === UNKNOWN_WATCHED_AT &&
+        (await hasExistingUnknownDateWatch(db, user.id, eq(plays.movieId, movie.id)))
+      ) {
+        return c.json({ error: 'This movie already has an unknown-date watch logged' }, 400)
+      }
+
       const [play] = await db
         .insert(plays)
         .values({ userId: user.id, movieId: movie.id, watchedAt, source: 'manual' })
@@ -119,7 +168,12 @@ playRoutes.openapi(
           watchedAt: play.watchedAt.toISOString(),
           source: play.source,
           createdAt: play.createdAt.toISOString(),
-          media: { type: 'movie' as const, title: movie.title, posterPath: movie.posterPath },
+          media: {
+            type: 'movie' as const,
+            title: movie.title,
+            posterPath: movie.posterPath,
+            movieSlug: movie.slug,
+          },
         },
         201,
       )
@@ -143,29 +197,12 @@ playRoutes.openapi(
       return c.json({ error: 'This episode has not aired yet' }, 400)
     }
 
-    // Two unknown-date watches for the same episode are indistinguishable
-    // from each other (same rounding-error-prone sentinel timestamp, see
-    // the tie-break fix this same file's DELETE route needed), so a
-    // second one adds nothing — reject rather than silently create a
-    // duplicate the user can't tell apart from the first. Only applies
-    // going forward through this route; doesn't touch existing data (a
-    // Trakt import can legitimately leave a show with several genuinely
-    // separate unknown-date plays already).
-    if (watchedAt.toISOString() === UNKNOWN_WATCHED_AT) {
-      const [existingUnknown] = await db
-        .select({ id: plays.id })
-        .from(plays)
-        .where(
-          and(
-            eq(plays.userId, user.id),
-            eq(plays.episodeId, episode.id),
-            eq(plays.watchedAt, new Date(UNKNOWN_WATCHED_AT)),
-          ),
-        )
-        .limit(1)
-      if (existingUnknown) {
-        return c.json({ error: 'This episode already has an unknown-date watch logged' }, 400)
-      }
+    // See hasExistingUnknownDateWatch's doc comment above.
+    if (
+      watchedAt.toISOString() === UNKNOWN_WATCHED_AT &&
+      (await hasExistingUnknownDateWatch(db, user.id, eq(plays.episodeId, episode.id)))
+    ) {
+      return c.json({ error: 'This episode already has an unknown-date watch logged' }, 400)
     }
 
     const [play] = await db

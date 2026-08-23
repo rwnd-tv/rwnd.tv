@@ -140,7 +140,28 @@ async function findStaleMovies(db: Database): Promise<RefreshCandidate[]> {
       externalIds,
       sql`${externalIds.entityType} = 'movie' AND ${externalIds.entityId} = ${movies.id} AND ${externalIds.source} = 'tmdb'`,
     )
-    .where(lt(movies.metadataRefreshedAt, complianceCutoff))
+    .where(
+      or(
+        // Never had genres fetched — same "never populated" reasoning as
+        // findStaleShows' own genres clause above, and the same accepted
+        // tradeoff: a genuinely genre-less movie matches forever and gets a
+        // harmless extra refetch each sweep. Without this, every movie that
+        // predates the genres column would wait out the compliance clock
+        // below (~5 months) before the detail page has anything to show —
+        // exactly the gap the shows version was caught having on
+        // 2026-08-19.
+        sql`cardinality(${movies.genres}) = 0`,
+        // Never had a rating fetched — same reasoning/tradeoff.
+        isNull(movies.voteAverage),
+        // Everyone else, on the compliance clock. No `slug` clause is
+        // needed here — unlike genres/voteAverage, a movie's slug is
+        // backfilled once by migration 0009 and never refetched (see
+        // refreshOneMovie below), so there's nothing for a sweep to catch.
+        // No airing-status clause either — movies have no `status` and
+        // never gain new episodes.
+        lt(movies.metadataRefreshedAt, complianceCutoff),
+      ),
+    )
   return rows
 }
 
@@ -231,7 +252,16 @@ export async function refreshOneShow(
   return true
 }
 
-async function refreshOneMovie(
+/**
+ * Exported for the manual "refresh metadata" button
+ * (apps/api/src/routes/library.ts's POST /library/movies/{slug}/refresh) —
+ * same fetch-and-upsert logic the background sweep above uses per movie, so
+ * a user fixing a movie TMDB itself has wrong doesn't get different/lesser
+ * results than waiting for the next automatic pass. Deliberately does NOT
+ * set `slug` — a title change must not change the movie's URL, same as
+ * refreshOneShow above never touches `shows.slug`.
+ */
+export async function refreshOneMovie(
   db: Database,
   provider: MetadataProvider,
   candidate: RefreshCandidate,
@@ -247,6 +277,8 @@ async function refreshOneMovie(
       runtimeMinutes: fetched.runtimeMinutes,
       overview: fetched.overview,
       posterPath: fetched.posterPath,
+      genres: fetched.genres,
+      voteAverage: fetched.voteAverage,
       metadataRefreshedAt: new Date(),
     })
     .where(eq(movies.id, candidate.id))

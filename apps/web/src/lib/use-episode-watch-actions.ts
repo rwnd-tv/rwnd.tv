@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import type { EpisodeWatchedStatus, SeasonDetail, SeasonEpisode } from '@rwnd/shared'
+import type { SeasonDetail, SeasonEpisode, WatchedStatus } from '@rwnd/shared'
 import { api } from './api-client.js'
 import { invalidateWatchData } from './query-client.js'
 
@@ -38,7 +38,7 @@ export function useEpisodeWatchActions(
     enabled: unwatchConfirmOpen && Boolean(episode),
   })
 
-  function patchEpisode(status: EpisodeWatchedStatus) {
+  function patchEpisode(status: WatchedStatus) {
     // Same cache-patch technique ShowDetailPage's drop/undrop toggle uses —
     // both mutation paths already return the episode's new status, so a
     // full season refetch would be redundant.
@@ -56,7 +56,7 @@ export function useEpisodeWatchActions(
     )
   }
 
-  function onMutationSuccess(status: EpisodeWatchedStatus) {
+  function onMutationSuccess(status: WatchedStatus) {
     patchEpisode(status)
     void invalidateWatchData(queryClient)
     // Not covered by invalidateWatchData — the parent show's own progress
@@ -70,7 +70,7 @@ export function useEpisodeWatchActions(
   // at once, so it's gated behind UnwatchConfirmDialog (which the user can
   // use to tick just some of them) rather than firing immediately on click.
   const unwatch = useMutation({
-    mutationFn: (ids: string[]): Promise<EpisodeWatchedStatus> =>
+    mutationFn: (ids: string[]): Promise<WatchedStatus> =>
       api.library.unwatchEpisode(slug, seasonNumber, episode!.episodeNumber, ids),
     onSuccess: (status) => {
       onMutationSuccess(status)
@@ -79,7 +79,7 @@ export function useEpisodeWatchActions(
   })
 
   const markWatched = useMutation({
-    mutationFn: async (watchedAt: string): Promise<EpisodeWatchedStatus> => {
+    mutationFn: async (watchedAt: string): Promise<WatchedStatus> => {
       // POST /plays already resolves/creates the local episode row and
       // returns the logged play — no dedicated "mark watched" endpoint
       // needed (see the plan's backend section).

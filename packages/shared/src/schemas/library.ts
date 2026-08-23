@@ -9,22 +9,27 @@ import { z } from 'zod'
  */
 
 /**
- * Backs the Dashboard search's show results (SearchResultCard.tsx) —
- * clicking a show resolves it to a local `shows` row (creating one on
- * first touch, same as any other watch/drop/refresh action) and returns
- * its slug so the page can navigate straight to `/shows/{slug}`, where the
- * normal Watched button takes over. No play/watch is logged by this alone.
+ * Backs the Dashboard search's show/movie results (SearchResultCard.tsx) —
+ * clicking a result resolves it to a local `shows`/`movies` row (creating
+ * one on first touch, same as any other watch/drop/refresh action) and
+ * returns its slug so the page can navigate straight to `/shows/{slug}` or
+ * `/movies/{slug}`, where the normal Watched button takes over. No
+ * play/watch is logged by this alone. One shared shape for both media
+ * types — `resolveShowRequestSchema`/`resolveMovieRequestSchema` would be
+ * identical structs, and the show/movie-specific routes
+ * (POST /library/shows/resolve, POST /library/movies/resolve) already tell
+ * them apart by path.
  */
-export const resolveShowRequestSchema = z.object({
+export const resolveMediaRequestSchema = z.object({
   source: z.literal('tmdb'),
   externalId: z.string(),
 })
-export type ResolveShowRequest = z.infer<typeof resolveShowRequestSchema>
+export type ResolveMediaRequest = z.infer<typeof resolveMediaRequestSchema>
 
-export const resolveShowResponseSchema = z.object({
+export const resolveMediaResponseSchema = z.object({
   slug: z.string(),
 })
-export type ResolveShowResponse = z.infer<typeof resolveShowResponseSchema>
+export type ResolveMediaResponse = z.infer<typeof resolveMediaResponseSchema>
 
 export const libraryShowSchema = z.object({
   id: z.string().uuid(),
@@ -244,35 +249,38 @@ export const seasonDetailSchema = z.object({
 export type SeasonDetail = z.infer<typeof seasonDetailSchema>
 
 /**
- * Response shape for the per-episode watched toggle
- * (POST /plays to mark watched, DELETE
- * /library/shows/{slug}/seasons/{seasonNumber}/episodes/{episodeNumber}/plays
- * to un-watch — see SeasonDetailPage.tsx). Same "just the changed fields"
- * reasoning as droppedStatusSchema below — the frontend patches this into
- * its already-cached season list rather than refetching the whole season.
+ * Response shape for the per-episode/per-movie watched toggle (POST /plays
+ * to mark watched, DELETE .../plays to un-watch — see SeasonDetailPage.tsx
+ * and MovieDetailPage.tsx). Same "just the changed fields" reasoning as
+ * droppedStatusSchema below — the frontend patches this into its
+ * already-cached season list / movie detail rather than refetching the
+ * whole thing. One shared shape: an episode's watched toggle and a movie's
+ * are the exact same three fields, just addressed by a different route.
  */
-export const episodeWatchedStatusSchema = z.object({
+export const watchedStatusSchema = z.object({
   watched: z.boolean(),
   watchedCount: z.number().int(),
   lastWatchedAt: z.string().datetime().nullable(),
 })
-export type EpisodeWatchedStatus = z.infer<typeof episodeWatchedStatusSchema>
+export type WatchedStatus = z.infer<typeof watchedStatusSchema>
 
 /**
- * Every one of the current user's individual watches for one episode,
- * newest first — backs the "are you sure you want to remove this/these
- * watch(es)?" confirmation shown before un-watching (UnwatchConfirmDialog.tsx),
- * which lets the user tick individual watches rather than only ever
- * clearing all of them. `id` is each play's own id, needed to name which
- * ones to remove in removeEpisodeWatchesRequestSchema below — a plain list
- * of timestamps isn't enough to address one watch unambiguously (two plays
- * could share an identical `watchedAt`, e.g. from a bulk import). Deliberately
- * not part of seasonDetailSchema/seasonEpisodeSchema above — most episodes
- * have at most one play, so fetching every episode's full watch list on
- * every season page load would be wasted work for the common case; this is
- * fetched on demand only when the confirmation dialog opens.
+ * Every one of the current user's individual watches for one episode or
+ * movie, newest first — backs the "are you sure you want to remove this/
+ * these watch(es)?" confirmation shown before un-watching
+ * (UnwatchConfirmDialog.tsx), which lets the user tick individual watches
+ * rather than only ever clearing all of them. `id` is each play's own id,
+ * needed to name which ones to remove in removeWatchesRequestSchema below
+ * — a plain list of timestamps isn't enough to address one watch
+ * unambiguously (two plays could share an identical `watchedAt`, e.g. from
+ * a bulk import). Deliberately not part of seasonDetailSchema/
+ * seasonEpisodeSchema above — most episodes have at most one play, so
+ * fetching every episode's full watch list on every season page load would
+ * be wasted work for the common case; this is fetched on demand only when
+ * the confirmation dialog opens. Shared with movies (MovieDetailPage.tsx)
+ * for the same reason.
  */
-export const episodeWatchesSchema = z.object({
+export const watchesSchema = z.object({
   watches: z.array(
     z.object({
       id: z.string().uuid(),
@@ -280,21 +288,20 @@ export const episodeWatchesSchema = z.object({
     }),
   ),
 })
-export type EpisodeWatches = z.infer<typeof episodeWatchesSchema>
+export type Watches = z.infer<typeof watchesSchema>
 
 /**
- * Request body for DELETE
- * /library/shows/{slug}/seasons/{seasonNumber}/episodes/{episodeNumber}/plays
- * (UnwatchConfirmDialog.tsx) — the play ids to remove, from the ids
- * episodeWatchesSchema above returned. Always sent explicitly, even when
- * every watch is ticked ("remove all" is just every id, not a separate
+ * Request body for DELETE .../plays (episode or movie —
+ * UnwatchConfirmDialog.tsx) — the play ids to remove, from the ids
+ * watchesSchema above returned. Always sent explicitly, even when every
+ * watch is ticked ("remove all" is just every id, not a separate
  * omit-the-body mode) — one request shape, no special-cased branch to keep
  * in sync with the ticking UI.
  */
-export const removeEpisodeWatchesRequestSchema = z.object({
+export const removeWatchesRequestSchema = z.object({
   ids: z.array(z.string().uuid()).min(1),
 })
-export type RemoveEpisodeWatchesRequest = z.infer<typeof removeEpisodeWatchesRequestSchema>
+export type RemoveWatchesRequest = z.infer<typeof removeWatchesRequestSchema>
 
 /**
  * Response shape for the manual drop/undrop toggle
@@ -365,6 +372,10 @@ export type RemoveShowWatchesResponse = z.infer<typeof removeShowWatchesResponse
 
 export const libraryMovieSchema = z.object({
   id: z.string().uuid(),
+  /** URL-friendly identifier (e.g. "the-matrix-1999") — links to the
+   * movie's page (apps/web/src/routes/MovieDetailPage.tsx) use this, not
+   * `id`. Same convention as libraryShowSchema's `slug` above. */
+  slug: z.string(),
   title: z.string(),
   year: z.number().int().nullable(),
   posterPath: z.string().nullable(),
@@ -378,3 +389,43 @@ export const listLibraryMoviesResponseSchema = z.object({
   movies: z.array(libraryMovieSchema),
 })
 export type ListLibraryMoviesResponse = z.infer<typeof listLibraryMoviesResponseSchema>
+
+/**
+ * Backs the per-movie page (apps/web/src/routes/MovieDetailPage.tsx),
+ * linked to from the movies gallery, Dashboard search, and History. A
+ * movie has no season/episode tree, so this is much flatter than
+ * showDetailSchema above — `watched`/`watchedCount` play the role
+ * `watchedEpisodes`/`totalEpisodes` do for a show, since a movie is one
+ * thing with N plays rather than a fraction of episodes.
+ */
+export const movieDetailSchema = z.object({
+  id: z.string().uuid(),
+  slug: z.string(),
+  title: z.string(),
+  year: z.number().int().nullable(),
+  runtimeMinutes: z.number().int().nullable(),
+  overview: z.string().nullable(),
+  posterPath: z.string().nullable(),
+  genres: z.array(z.string()),
+  /** TMDB's average rating, 0-10 — see libraryShowSchema's `voteAverage`
+   * for the null-handling convention. */
+  voteAverage: z.number().nullable(),
+  /** TMDB's own numeric id for this movie, for linking to its TMDB page —
+   * see showDetailSchema's `tmdbId` for the same convention. */
+  tmdbId: z.string().nullable(),
+  watched: z.boolean(),
+  /** How many times the current user has logged a play of this movie —
+   * see seasonEpisodeSchema's `watchedCount` for the same reasoning. */
+  watchedCount: z.number().int(),
+  /** Both null if the user hasn't watched this movie *with a known date* —
+   * see showDetailSchema's `firstWatchedAt`/`lastWatchedAt` for the
+   * 1900-01-01 Trakt-sentinel exclusion this follows exactly. */
+  firstWatchedAt: z.string().datetime().nullable(),
+  lastWatchedAt: z.string().datetime().nullable(),
+  /** True if this movie has at least one play dated exactly 1900-01-01 —
+   * same meaning as showDetailSchema's field of the same name. Doubles as
+   * the "log an additional watch" dialog's `disableUnknown` input, the
+   * role seasonEpisodeSchema's `hasUnknownWatch` plays for an episode. */
+  hasUnknownWatchDate: z.boolean(),
+})
+export type MovieDetail = z.infer<typeof movieDetailSchema>

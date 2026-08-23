@@ -13,14 +13,17 @@ import {
   watchlistItems,
 } from '@rwnd/db'
 import type {
+  BackupFile,
   BackupSummary,
   DiffBackupResponse,
   ListBackupsResponse,
   RestoreBackupResponse,
   User,
 } from '@rwnd/shared'
+import { BACKUP_FORMAT_VERSION } from '@rwnd/shared'
 import { createLocalUser, extractCookie, json, resetDb, testApp, testDb } from './helpers.js'
 import { loadEnv } from '../env.js'
+import { restoreBackupFile } from '../backup/restore.js'
 
 const db = testDb()
 const app = testApp()
@@ -64,7 +67,10 @@ async function seedMetadata(db: ReturnType<typeof testDb>) {
     .returning()
   if (!episode) throw new Error('failed to insert episode')
 
-  const [movie] = await db.insert(movies).values({ title: 'The Matrix', year: 1999 }).returning()
+  const [movie] = await db
+    .insert(movies)
+    .values({ title: 'The Matrix', slug: 'the-matrix-1999', year: 1999 })
+    .returning()
   if (!movie) throw new Error('failed to insert movie')
   await db.insert(externalIds).values({
     entityType: 'movie',
@@ -229,6 +235,68 @@ describe('backups', () => {
     expect(recreatedShow?.year).toBe(2008)
     const [recreatedMovie] = await db.select().from(movies).where(eq(movies.title, 'The Matrix'))
     expect(recreatedMovie?.year).toBe(1999)
+  })
+
+  it('gives two same-title-and-year movies in one backup file distinct slugs on restore', async () => {
+    const cookie = await createUserAndCookie('collision@example.com')
+    const userId = await meId(cookie)
+
+    // Built directly rather than via seedMetadata/POST /backups — the
+    // point of this test is restore's own slug-collision handling
+    // (generateUniqueMovieSlug), which needs two movies that share a
+    // title *and* year but have distinct TMDB ids, referenced by a real
+    // watch each so restore doesn't skip either as unreferenced.
+    const file: BackupFile = {
+      formatVersion: BACKUP_FORMAT_VERSION,
+      createdAt: new Date().toISOString(),
+      description: 'Same-title collision fixture',
+      counts: { watchHistory: 2, ratings: 0, watchlist: 0, droppedShows: 0 },
+      skipped: 0,
+      movies: [
+        {
+          tmdbId: '111',
+          title: 'Same Name',
+          year: 2020,
+          runtimeMinutes: 100,
+          overview: null,
+          posterPath: null,
+        },
+        {
+          tmdbId: '222',
+          title: 'Same Name',
+          year: 2020,
+          runtimeMinutes: 100,
+          overview: null,
+          posterPath: null,
+        },
+      ],
+      shows: [],
+      watchHistory: [
+        {
+          movie: '111',
+          watchedAt: new Date('2026-01-01T00:00:00.000Z').toISOString(),
+          source: 'manual',
+          sourceRef: null,
+        },
+        {
+          movie: '222',
+          watchedAt: new Date('2026-01-02T00:00:00.000Z').toISOString(),
+          source: 'manual',
+          sourceRef: null,
+        },
+      ],
+      ratings: [],
+      watchlist: [],
+      droppedShows: [],
+    }
+
+    const counts = await restoreBackupFile(db, userId, file)
+    expect(counts.watchHistory).toBe(2)
+
+    const rows = await db.select().from(movies).where(eq(movies.title, 'Same Name'))
+    expect(rows).toHaveLength(2)
+    const slugs = rows.map((r) => r.slug).sort()
+    expect(slugs).toEqual(['same-name-2020', 'same-name-2020-2'])
   })
 
   it('diffs a backup against the current state, counting entries added and removed since it was taken', async () => {

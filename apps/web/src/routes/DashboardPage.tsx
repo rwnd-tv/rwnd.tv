@@ -23,9 +23,6 @@ export function DashboardPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <OnDeckRow />
-      <UpNextRow />
-      <HistoryRow />
       <div className="flex flex-col gap-3">
         <h1 className="text-2xl font-semibold">{t('search.title')}</h1>
         <Field
@@ -50,6 +47,9 @@ export function DashboardPage() {
           ))}
         </ul>
       </div>
+      <OnDeckRow />
+      <UpNextRow />
+      <HistoryRow />
     </div>
   )
 }

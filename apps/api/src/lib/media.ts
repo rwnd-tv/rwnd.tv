@@ -271,6 +271,15 @@ export interface NextEpisode {
  * caller's actual furthest-watched season means a many-season show only
  * costs a provider call per season near their real progress, not every
  * season from the start.
+ *
+ * `minEpisodeNumberInStartSeason` excludes an earlier, aired-but-unwatched
+ * episode the viewer skipped over — a "gap" — from counting as the next
+ * one, within `startSeasonNumber` only (every later season is already
+ * guaranteed to be "after" it, since `startSeasonNumber` is by construction
+ * the highest season with any watch at all — see
+ * apps/api/src/routes/library.ts's `maxWatchedSeason`). Pass null to
+ * disable this and fall back to the plain "earliest unwatched" behaviour —
+ * the user's own `onDeckFillGaps` preference (packages/db/src/schema.ts).
  */
 export async function findNextUnwatchedEpisode(
   db: Database,
@@ -280,6 +289,7 @@ export async function findNextUnwatchedEpisode(
   showExternalId: string,
   startSeasonNumber: number,
   locale: string,
+  minEpisodeNumberInStartSeason: number | null,
 ): Promise<NextEpisode | null> {
   const seasonRows = await db
     .select({ seasonNumber: seasons.seasonNumber })
@@ -310,12 +320,18 @@ export async function findNextUnwatchedEpisode(
       ).map((row) => row.episodeId),
     )
 
+    const minEpisodeNumber =
+      seasonNumber === startSeasonNumber ? (minEpisodeNumberInStartSeason ?? 0) : 0
+
     const next = resolved
       .slice()
       .sort((a, b) => a.episodeNumber - b.episodeNumber)
       .find(
         (e): e is ResolvedEpisode & { firstAired: string } =>
-          e.firstAired !== null && new Date(e.firstAired) <= now && !watchedIds.has(e.id),
+          e.firstAired !== null &&
+          new Date(e.firstAired) <= now &&
+          !watchedIds.has(e.id) &&
+          e.episodeNumber > minEpisodeNumber,
       )
     if (next)
       return { seasonNumber, episodeNumber: next.episodeNumber, firstAired: next.firstAired }

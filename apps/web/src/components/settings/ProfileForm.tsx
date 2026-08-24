@@ -18,9 +18,11 @@ export function ProfileForm() {
   const [spoilerProtectionEnabled, setSpoilerProtectionEnabled] = useState(
     user?.spoilerProtectionEnabled ?? true,
   )
+  const [onDeckFillGaps, setOnDeckFillGaps] = useState(user?.onDeckFillGaps ?? false)
 
   const updateProfile = useMutation({
-    mutationFn: () => api.auth.updateMe({ displayName, locale, theme, spoilerProtectionEnabled }),
+    mutationFn: () =>
+      api.auth.updateMe({ displayName, locale, theme, spoilerProtectionEnabled, onDeckFillGaps }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['auth', 'me'] }),
   })
 
@@ -88,6 +90,20 @@ export function ProfileForm() {
           </label>
           <p className="text-xs text-[var(--color-fg-muted)]">
             {t('settings.profile.spoilerProtectionDescription')}
+          </p>
+        </div>
+
+        <div className="flex flex-col gap-1">
+          <label className="flex items-center gap-2 text-sm font-medium">
+            <input
+              type="checkbox"
+              checked={onDeckFillGaps}
+              onChange={(e) => setOnDeckFillGaps(e.target.checked)}
+            />
+            {t('settings.profile.onDeckFillGaps')}
+          </label>
+          <p className="text-xs text-[var(--color-fg-muted)]">
+            {t('settings.profile.onDeckFillGapsDescription')}
           </p>
         </div>
 

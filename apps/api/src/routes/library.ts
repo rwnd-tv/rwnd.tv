@@ -348,6 +348,12 @@ interface RecentlyWatchedCandidate {
    * wherever the viewer actually got to", not from season 1). Null if every
    * recent watch was a special. */
   maxWatchedSeason: number | null
+  /** Highest episode number watched within `maxWatchedSeason` — "the latest
+   * episode watched, in air order". Only On Deck uses this (Up Next only
+   * cares about unaired episodes, which can't have a gap-vs-not distinction
+   * — see findNextAiringEpisode). Null exactly when maxWatchedSeason is
+   * null. */
+  maxWatchedEpisodeInMaxSeason: number | null
 }
 
 /**
@@ -390,14 +396,33 @@ async function getRecentlyWatchedCandidates(
       .groupBy(episodes.showId),
   )
 
+  // Per (show, season), the highest episode number this user has watched —
+  // joined below against recentWatch.maxWatchedSeason to get "the latest
+  // episode watched, in air order" without a nested aggregate (Postgres
+  // doesn't allow one aggregate's result to feed another within the same
+  // GROUP BY).
+  const watchedEpisodesBySeason = db.$with('watched_episodes_by_season').as(
+    db
+      .select({
+        showId: episodes.showId,
+        seasonNumber: episodes.seasonNumber,
+        maxWatchedEpisode: sql<number>`max(${episodes.episodeNumber})`.as('max_watched_episode'),
+      })
+      .from(plays)
+      .innerJoin(episodes, eq(plays.episodeId, episodes.id))
+      .where(eq(plays.userId, userId))
+      .groupBy(episodes.showId, episodes.seasonNumber),
+  )
+
   const rows = await db
-    .with(recentWatch)
+    .with(recentWatch, watchedEpisodesBySeason)
     .select({
       id: shows.id,
       slug: shows.slug,
       title: shows.title,
       posterPath: shows.posterPath,
       maxWatchedSeason: recentWatch.maxWatchedSeason,
+      maxWatchedEpisodeInMaxSeason: watchedEpisodesBySeason.maxWatchedEpisode,
       // Null when this user has no droppedShows row at all for this show —
       // same join shape as /library/shows above.
       traktDropped: droppedShows.traktDropped,
@@ -406,6 +431,17 @@ async function getRecentlyWatchedCandidates(
     .from(recentWatch)
     .innerJoin(shows, eq(shows.id, recentWatch.showId))
     .leftJoin(droppedShows, and(eq(droppedShows.showId, shows.id), eq(droppedShows.userId, userId)))
+    // Left, not inner — recentWatch.maxWatchedSeason is null whenever every
+    // recent watch was a special, and NULL never equality-matches NULL in
+    // SQL, so this naturally yields no row (maxWatchedEpisodeInMaxSeason
+    // stays null) exactly when there's nothing meaningful to report.
+    .leftJoin(
+      watchedEpisodesBySeason,
+      and(
+        eq(watchedEpisodesBySeason.showId, recentWatch.showId),
+        eq(watchedEpisodesBySeason.seasonNumber, recentWatch.maxWatchedSeason),
+      ),
+    )
     // A bare Date doesn't survive being bound as a parameter against a
     // raw-sql-derived CTE column the way it does against a real typed
     // column (postgres.js has no type hint to serialize it by) — needs
@@ -433,6 +469,7 @@ async function getRecentlyWatchedCandidates(
         title: row.title,
         posterPath: row.posterPath,
         maxWatchedSeason: row.maxWatchedSeason,
+        maxWatchedEpisodeInMaxSeason: row.maxWatchedEpisodeInMaxSeason,
         provider: target.provider,
         providerExternalId: target.externalId,
       },
@@ -484,6 +521,11 @@ libraryRoutes.openapi(
         // furthest point reached.
         candidate.maxWatchedSeason ?? 1,
         user.locale,
+        // Off by default (see users.onDeckFillGaps's doc comment): an
+        // aired-but-unwatched episode earlier than the latest one this user
+        // has watched doesn't count as "next" unless they've opted into
+        // gap-filling.
+        user.onDeckFillGaps ? null : candidate.maxWatchedEpisodeInMaxSeason,
       )
       if (next) {
         shownShows.push({

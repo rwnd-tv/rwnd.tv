@@ -1,0 +1,1 @@
+ALTER TABLE "users" ADD COLUMN "on_deck_fill_gaps" boolean DEFAULT false NOT NULL;

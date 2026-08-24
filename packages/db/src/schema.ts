@@ -63,6 +63,13 @@ export const users = pgTable('users', {
    * show/season descriptions until the viewer explicitly reveals them (or
    * watches them) — see SpoilerGuard.tsx. On by default. */
   spoilerProtectionEnabled: boolean('spoiler_protection_enabled').notNull().default(true),
+  /** Off by default: the Dashboard's On Deck row normally only surfaces the
+   * episode right after the latest one a viewer has watched for a show
+   * (apps/api/src/lib/media.ts's findNextUnwatchedEpisode). On, it also
+   * surfaces an earlier aired-but-unwatched episode the viewer skipped
+   * over — for someone who deliberately "fills gaps" in a show rather than
+   * watching it strictly in order. */
+  onDeckFillGaps: boolean('on_deck_fill_gaps').notNull().default(false),
   role: userRoleEnum('role').notNull().default('user'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 })

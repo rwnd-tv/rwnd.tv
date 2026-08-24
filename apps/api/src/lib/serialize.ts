@@ -10,6 +10,7 @@ export function serializeUser(user: UserRecord): User {
     timezone: user.timezone,
     theme: user.theme,
     spoilerProtectionEnabled: user.spoilerProtectionEnabled,
+    onDeckFillGaps: user.onDeckFillGaps,
     role: user.role,
     createdAt: user.createdAt.toISOString(),
   }

@@ -324,6 +324,8 @@
       "themeDark": "Dark",
       "spoilerProtection": "Hide spoilers for unwatched episodes",
       "spoilerProtectionDescription": "Blurs episode stills, titles, and overviews you haven't watched yet, and show/season descriptions until fully watched. Click any blurred item to reveal it just for that view.",
+      "onDeckFillGaps": "Fill gaps in Continue Watching",
+      "onDeckFillGapsDescription": "Continue Watching normally only shows the episode right after the latest one you've watched. Turn this on to also surface an earlier episode you skipped.",
       "save": "Save changes",
       "saved": "Saved."
     },

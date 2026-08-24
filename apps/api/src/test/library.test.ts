@@ -1,11 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { and, eq } from 'drizzle-orm'
-import { droppedShows, episodes, externalIds, movies, plays, seasons, shows } from '@rwnd/db'
+import { droppedShows, episodes, externalIds, movies, plays, seasons, shows, users } from '@rwnd/db'
 import type {
   ListLibraryMoviesResponse,
   ListLibraryShowsResponse,
   MarkShowWatchedResponse,
   MovieDetail,
+  OnDeckResponse,
   RemoveShowWatchesResponse,
   SeasonDetail,
   ShowDetail,
@@ -502,6 +503,151 @@ describe('library', () => {
         headers: { cookie: cookieB },
       })
       expect((await json<ShowDetail>(resB)).watchedEpisodes).toBe(1)
+    })
+  })
+
+  describe('GET /library/on-deck', () => {
+    function jsonResponse(body: unknown): Response {
+      return new Response(JSON.stringify(body), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    }
+
+    /** Season 1: episodes 1-3, all aired. Season 2: episode 1, aired. */
+    function stubTmdbSeasons() {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (input: string | URL) => {
+          const url = new URL(input)
+          if (url.pathname === '/3/tv/60001/season/1') {
+            return jsonResponse({
+              episodes: [
+                { name: 'Ep 1', season_number: 1, episode_number: 1, air_date: '2020-01-01' },
+                { name: 'Ep 2', season_number: 1, episode_number: 2, air_date: '2020-01-08' },
+                { name: 'Ep 3', season_number: 1, episode_number: 3, air_date: '2020-01-15' },
+              ],
+            })
+          }
+          if (url.pathname === '/3/tv/60001/season/2') {
+            return jsonResponse({
+              episodes: [
+                { name: 'Ep 1', season_number: 2, episode_number: 1, air_date: '2021-01-01' },
+              ],
+            })
+          }
+          throw new Error(`Unexpected TMDB fetch in test: ${url}`)
+        }),
+      )
+    }
+
+    async function insertShowWithSeasons(seasonNumbers: number[]) {
+      const [show] = await db
+        .insert(shows)
+        .values({ title: 'Gap Show', slug: 'gap-show' })
+        .returning()
+      if (!show) throw new Error('failed to insert show')
+      await db
+        .insert(externalIds)
+        .values({ entityType: 'show', entityId: show.id, source: 'tmdb', externalId: '60001' })
+      await db.insert(seasons).values(
+        seasonNumbers.map((seasonNumber) => ({
+          showId: show.id,
+          seasonNumber,
+          episodeCount: seasonNumber === 1 ? 3 : 1,
+        })),
+      )
+      return show
+    }
+
+    async function watchEpisode(userId: string, showId: string, season: number, episode: number) {
+      const [inserted] = await db
+        .insert(episodes)
+        .values({ showId, seasonNumber: season, episodeNumber: episode })
+        .onConflictDoNothing()
+        .returning({ id: episodes.id })
+      const row =
+        inserted ??
+        (
+          await db
+            .select({ id: episodes.id })
+            .from(episodes)
+            .where(
+              and(
+                eq(episodes.showId, showId),
+                eq(episodes.seasonNumber, season),
+                eq(episodes.episodeNumber, episode),
+              ),
+            )
+        )[0]
+      if (!row) throw new Error('failed to insert episode')
+      await db.insert(plays).values({ userId, episodeId: row.id, watchedAt: new Date() })
+    }
+
+    it('excludes a gap episode by default — skips over it, finding the next real episode instead', async () => {
+      const cookie = await createUserAndCookie()
+      const userId = await meId(cookie)
+      const show = await insertShowWithSeasons([1, 2])
+      stubTmdbSeasons()
+
+      // Watched episode 1 and 3 of season 1, skipping episode 2 — then
+      // season 2 episode 1 is the true "next" one, not the skipped gap.
+      await watchEpisode(userId, show.id, 1, 1)
+      await watchEpisode(userId, show.id, 1, 3)
+
+      const res = await app.request('/api/v1/library/on-deck', { headers: { cookie } })
+      expect(res.status).toBe(200)
+      const body = await json<OnDeckResponse>(res)
+      expect(body.shows).toHaveLength(1)
+      expect(body.shows[0]).toMatchObject({ slug: 'gap-show', seasonNumber: 2, episodeNumber: 1 })
+    })
+
+    it('excludes the show entirely when the only unwatched episode is a gap and nothing comes after it', async () => {
+      const cookie = await createUserAndCookie()
+      const userId = await meId(cookie)
+      const show = await insertShowWithSeasons([1])
+      stubTmdbSeasons()
+
+      // Watched episode 1 and 3, skipping episode 2 — with no season 2,
+      // there's nothing after episode 3, so the skipped episode 2 must not
+      // be surfaced by default.
+      await watchEpisode(userId, show.id, 1, 1)
+      await watchEpisode(userId, show.id, 1, 3)
+
+      const res = await app.request('/api/v1/library/on-deck', { headers: { cookie } })
+      const body = await json<OnDeckResponse>(res)
+      expect(body.shows).toHaveLength(0)
+    })
+
+    it('surfaces the gap episode when the user has opted into onDeckFillGaps', async () => {
+      const cookie = await createUserAndCookie()
+      const userId = await meId(cookie)
+      await db.update(users).set({ onDeckFillGaps: true }).where(eq(users.id, userId))
+      const show = await insertShowWithSeasons([1])
+      stubTmdbSeasons()
+
+      await watchEpisode(userId, show.id, 1, 1)
+      await watchEpisode(userId, show.id, 1, 3)
+
+      const res = await app.request('/api/v1/library/on-deck', { headers: { cookie } })
+      const body = await json<OnDeckResponse>(res)
+      expect(body.shows).toHaveLength(1)
+      expect(body.shows[0]).toMatchObject({ slug: 'gap-show', seasonNumber: 1, episodeNumber: 2 })
+    })
+
+    it('surfaces the plain next episode for a linear watcher regardless of the setting', async () => {
+      const cookie = await createUserAndCookie()
+      const userId = await meId(cookie)
+      const show = await insertShowWithSeasons([1, 2])
+      stubTmdbSeasons()
+
+      await watchEpisode(userId, show.id, 1, 1)
+      await watchEpisode(userId, show.id, 1, 2)
+
+      const res = await app.request('/api/v1/library/on-deck', { headers: { cookie } })
+      const body = await json<OnDeckResponse>(res)
+      expect(body.shows).toHaveLength(1)
+      expect(body.shows[0]).toMatchObject({ slug: 'gap-show', seasonNumber: 1, episodeNumber: 3 })
     })
   })
 

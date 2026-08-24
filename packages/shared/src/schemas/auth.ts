@@ -45,6 +45,10 @@ export const userSchema = z.object({
   timezone: z.string(),
   theme: themeSchema,
   spoilerProtectionEnabled: z.boolean(),
+  /** See packages/db/src/schema.ts's doc comment on this column — off by
+   * default, so the Dashboard's On Deck row only surfaces the episode
+   * right after the latest one watched, not an earlier skipped one. */
+  onDeckFillGaps: z.boolean(),
   role: userRoleSchema,
   createdAt: z.string().datetime(),
 })
@@ -56,5 +60,6 @@ export const updateProfileRequestSchema = z.object({
   timezone: z.string().optional(),
   theme: themeSchema.optional(),
   spoilerProtectionEnabled: z.boolean().optional(),
+  onDeckFillGaps: z.boolean().optional(),
 })
 export type UpdateProfileRequest = z.infer<typeof updateProfileRequestSchema>

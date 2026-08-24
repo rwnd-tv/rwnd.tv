@@ -17,6 +17,7 @@ import {
   type ListLibraryMoviesResponse,
   type ListLibraryShowsResponse,
   type ListPlaysResponse,
+  type ListWebhookLinksResponse,
   type LoginRequest,
   type MarkShowWatchedRequest,
   type MarkShowWatchedResponse,
@@ -37,6 +38,7 @@ import {
   type TraktDevicePairing,
   type UpdateInstanceSettingsRequest,
   type UpdateProfileRequest,
+  type UpdateWebhookLinkRequest,
   type UpNextResponse,
   type User,
   type WatchedStatus,
@@ -105,6 +107,11 @@ export const api = {
     list: () => get<{ tokens: ApiToken[] }>('/tokens'),
     create: (body: CreateApiTokenRequest) => post<CreateApiTokenResponse>('/tokens', body),
     delete: (id: string) => del<void>(`/tokens/${id}`),
+    webhookLinks: (id: string) => get<ListWebhookLinksResponse>(`/tokens/${id}/webhook-links`),
+    updateWebhookLink: (id: string, linkId: string, body: UpdateWebhookLinkRequest) =>
+      patch<void>(`/tokens/${id}/webhook-links/${linkId}`, body),
+    deleteWebhookLink: (id: string, linkId: string) =>
+      del<void>(`/tokens/${id}/webhook-links/${linkId}`),
   },
   search: (q: string, type: 'movie' | 'show' | 'all' = 'all') =>
     get<SearchResponse>(`/search?q=${encodeURIComponent(q)}&type=${type}`),

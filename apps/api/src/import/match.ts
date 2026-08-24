@@ -4,6 +4,7 @@ import { episodes, externalIds, movies, shows } from '@rwnd/db'
 import type { MetadataProvider } from '../providers/types.js'
 import { pickRefreshTarget } from '../metadata/refresh.js'
 import { resolveMovie, resolveShow } from '../lib/media.js'
+import { resolveViaProvider } from '../lib/external-match.js'
 import type { TraktEpisode, TraktIds, TraktMovie, TraktSeason, TraktShow } from '../trakt/types.js'
 
 /**
@@ -109,91 +110,6 @@ async function lookupLocalIdByExternalId(
     )
     .limit(1)
   return row?.id ?? null
-}
-
-/** This provider's own field on a Trakt id bundle — `ids.tmdb` for TMDB,
- * `ids.tvdb` for TVDB — distinct from the *other* ids `findViaAlternateIds`
- * below tries as a same-provider reverse-lookup fallback. */
-function ownTraktId(provider: MetadataProvider, ids: TraktIds): string | null {
-  const id = ids[provider.source]
-  return id ? String(id) : null
-}
-
-/** Tries Trakt's `imdb` id, then its `tvdb` id (skipped when `provider`
- * *is* TVDB — reverse-looking-up a TVDB id against TVDB itself would be a
- * pointless self-referential call, already covered by `ownTraktId` above),
- * against `provider.findByExternalId`, returning the first hit. `imdb`
- * covers both movies and shows; `tvdb` is TV-only in practice, but there's
- * no harm asking either provider method for either entity type — the
- * provider itself returns null for a source it can't reverse-lookup. */
-async function findViaAlternateIds(
-  provider: MetadataProvider,
-  entityType: 'movie' | 'show',
-  ids: TraktIds,
-  locale: string,
-): Promise<string | null> {
-  if (ids.imdb) {
-    const found = await provider.findByExternalId(entityType, 'imdb', ids.imdb, locale)
-    if (found) return found
-  }
-  if (ids.tvdb && provider.source !== 'tvdb') {
-    const found = await provider.findByExternalId(entityType, 'tvdb', String(ids.tvdb), locale)
-    if (found) return found
-  }
-  return null
-}
-
-/**
- * Shared by matchMovie/matchShow: walks `providers` in priority order and,
- * for each one, tries `resolve` against that provider's own Trakt id first
- * (`ownTraktId`), then — whether that was absent, or present but rejected
- * by the provider (merged/deleted/wrong id) — whatever
- * `findViaAlternateIds` turns up for that same provider. Moves on to the
- * next provider only once the current one has been fully exhausted. The
- * `findByExternalId` call is only made when it's actually needed (no eager
- * lookup on the common path where a provider's own id just works), since
- * it's a live provider request. `error`/`provider` describe the *last*
- * attempt made, or are null if no candidate id was ever found to try
- * against any provider.
- */
-async function resolveViaProvider<T>(
-  resolve: (provider: MetadataProvider, providerExternalId: string) => Promise<T>,
-  providers: MetadataProvider[],
-  entityType: 'movie' | 'show',
-  ids: TraktIds,
-  locale: string,
-): Promise<
-  | { ok: true; value: T; provider: MetadataProvider; externalId: string }
-  | { ok: false; error: unknown; provider: MetadataProvider | null }
-> {
-  let lastError: unknown = null
-  let lastProvider: MetadataProvider | null = null
-  for (const provider of providers) {
-    const ownId = ownTraktId(provider, ids)
-    if (ownId) {
-      lastProvider = provider
-      try {
-        return { ok: true, value: await resolve(provider, ownId), provider, externalId: ownId }
-      } catch (err) {
-        lastError = err
-      }
-    }
-    const alternateId = await findViaAlternateIds(provider, entityType, ids, locale)
-    if (alternateId) {
-      lastProvider = provider
-      try {
-        return {
-          ok: true,
-          value: await resolve(provider, alternateId),
-          provider,
-          externalId: alternateId,
-        }
-      } catch (err) {
-        lastError = err
-      }
-    }
-  }
-  return { ok: false, error: lastError, provider: lastProvider }
 }
 
 async function backfillExternalIds(
@@ -327,7 +243,9 @@ async function matchShow(
       id: show.id,
       title: show.title,
       provider: result.provider,
-      providerExternalId: result.externalId,
+      // show.externalId — resolveShow's own corrected id, not
+      // result.externalId — see external-match.ts's identical fix for why.
+      providerExternalId: show.externalId,
     },
   }
 }

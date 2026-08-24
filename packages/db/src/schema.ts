@@ -39,6 +39,7 @@ export const registrationModeEnum = pgEnum('registration_mode', ['open', 'invite
 export const metadataEntityTypeEnum = pgEnum('metadata_entity_type', ['movie', 'show', 'episode'])
 export const externalIdSourceEnum = pgEnum('external_id_source', ['tmdb', 'imdb', 'tvdb', 'trakt'])
 export const playSourceEnum = pgEnum('play_source', ['manual', 'plex', 'import'])
+export const webhookSourceEnum = pgEnum('webhook_source', ['plex'])
 export const importSourceEnum = pgEnum('import_source', ['trakt'])
 export const importJobStatusEnum = pgEnum('import_job_status', [
   'pending',
@@ -136,6 +137,92 @@ export const apiTokens = pgTable('api_tokens', {
   lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 })
+
+/** Maps one external account (a Plex user, on one specific webhook
+ * integration) to the rwnd.tv user its plays should be logged against.
+ * Scoped to `tokenId`, not globally — Plex's `Account.id` is only
+ * unique *within one server*, so two unrelated Plex-server integrations
+ * on the same rwnd.tv instance must not collide. Every account starts
+ * (and, in practice, stays — live-verified 2026-08-24: Plex's own docs'
+ * claim that "the server owner is always account 1" does not hold for
+ * real payloads, so there's no reliable auto-link) with `userId` null,
+ * meaning "seen, not yet claimed" — created automatically the first
+ * time an unrecognized account shows up in a webhook event
+ * (`apps/api/src/lib/webhook-accounts.ts`), so a self-hoster never has
+ * to somehow discover a Plex account's numeric id themselves before
+ * they can link it (Settings > API tokens' per-token "Linked accounts"
+ * list is where that claim actually happens — see
+ * `apps/api/src/lib/webhook-plays.ts` for what happens to any watch
+ * that arrived while still unclaimed). Deleting the parent token
+ * cascades — a revoked webhook's account mappings have nothing left to
+ * attach to. */
+export const webhookAccountLinks = pgTable(
+  'webhook_account_links',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tokenId: uuid('token_id')
+      .notNull()
+      .references(() => apiTokens.id, { onDelete: 'cascade' }),
+    source: webhookSourceEnum('source').notNull(),
+    externalAccountId: text('external_account_id').notNull(),
+    // Display-only (Plex's Account.title, i.e. username) — never the
+    // match key, just so the claim UI shows a human a name instead of a
+    // bare number. Refreshed on every sighting in case it changes.
+    externalAccountName: text('external_account_name').notNull(),
+    userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }),
+    firstSeenAt: timestamp('first_seen_at', { withTimezone: true }).notNull().defaultNow(),
+    lastSeenAt: timestamp('last_seen_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('webhook_account_links_token_source_account_idx').on(
+      table.tokenId,
+      table.source,
+      table.externalAccountId,
+    ),
+  ],
+)
+
+/** A webhook event that arrived for an account not yet linked to a
+ * rwnd.tv user (see `webhookAccountLinks` above) — stored in full so it
+ * can become a real `plays` row retroactively the moment that account
+ * gets claimed, instead of being lost. `event` is the parsed,
+ * source-agnostic shape (`apps/api/src/webhooks/plex.ts`'s
+ * `IncomingWatchEvent`, or any future source's own equivalent) —
+ * defined structurally here rather than imported, since this package
+ * has no dependency on the app layer. `watchedAt` is when the event
+ * actually happened, not when it's eventually replayed — see
+ * `apps/api/src/lib/webhook-plays.ts`. No retention policy for a link
+ * that's never claimed: at this app's scale an indefinitely-growing
+ * table of unclaimed events isn't a real concern. */
+export const pendingWebhookEvents = pgTable(
+  'pending_webhook_events',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tokenId: uuid('token_id')
+      .notNull()
+      .references(() => apiTokens.id, { onDelete: 'cascade' }),
+    source: webhookSourceEnum('source').notNull(),
+    externalAccountId: text('external_account_id').notNull(),
+    watchedAt: timestamp('watched_at', { withTimezone: true }).notNull(),
+    event: jsonb('event')
+      .$type<{
+        ids: { imdb?: string | null; tmdb?: string | number | null; tvdb?: string | number | null }
+        ratingKey: string
+        media:
+          | { type: 'movie' }
+          | { type: 'episode'; showTitle: string; seasonNumber: number; episodeNumber: number }
+      }>()
+      .notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index('pending_webhook_events_token_source_account_idx').on(
+      table.tokenId,
+      table.source,
+      table.externalAccountId,
+    ),
+  ],
+)
 
 /** Singleton row (id is always 1) holding instance-wide configuration. */
 export const instanceSettings = pgTable(
@@ -564,6 +651,7 @@ export const usersRelations = relations(users, ({ many, one }) => ({
   credentials: many(userCredentials),
   sessions: many(sessions),
   apiTokens: many(apiTokens),
+  webhookAccountLinks: many(webhookAccountLinks),
   plays: many(plays),
   traktConnection: one(traktConnections, {
     fields: [users.id],
@@ -604,8 +692,19 @@ export const sessionsRelations = relations(sessions, ({ one }) => ({
   user: one(users, { fields: [sessions.userId], references: [users.id] }),
 }))
 
-export const apiTokensRelations = relations(apiTokens, ({ one }) => ({
+export const apiTokensRelations = relations(apiTokens, ({ one, many }) => ({
   user: one(users, { fields: [apiTokens.userId], references: [users.id] }),
+  webhookAccountLinks: many(webhookAccountLinks),
+  pendingWebhookEvents: many(pendingWebhookEvents),
+}))
+
+export const webhookAccountLinksRelations = relations(webhookAccountLinks, ({ one }) => ({
+  token: one(apiTokens, { fields: [webhookAccountLinks.tokenId], references: [apiTokens.id] }),
+  user: one(users, { fields: [webhookAccountLinks.userId], references: [users.id] }),
+}))
+
+export const pendingWebhookEventsRelations = relations(pendingWebhookEvents, ({ one }) => ({
+  token: one(apiTokens, { fields: [pendingWebhookEvents.tokenId], references: [apiTokens.id] }),
 }))
 
 export const showsRelations = relations(shows, ({ many }) => ({

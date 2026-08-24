@@ -74,6 +74,34 @@ describe('TmdbProvider.findByExternalId', () => {
     expect(id).toBe('1399')
   })
 
+  it("falls back to an episode hit's show_id when the id identifies an episode, not the show itself", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      findResponse({
+        movie_results: [],
+        tv_results: [],
+        tv_episode_results: [{ id: 1385732, show_id: 74313 }],
+      }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const id = await provider().findByExternalId('show', 'imdb', 'tt7579602', 'en-GB')
+    expect(id).toBe('74313')
+  })
+
+  it('prefers a direct tv_results hit over an episode fallback when both are somehow present', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      findResponse({
+        movie_results: [],
+        tv_results: [{ id: 1399 }],
+        tv_episode_results: [{ id: 1385732, show_id: 74313 }],
+      }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const id = await provider().findByExternalId('show', 'imdb', 'tt7579602', 'en-GB')
+    expect(id).toBe('1399')
+  })
+
   it('returns null when both result arrays are empty', async () => {
     const fetchMock = vi
       .fn()

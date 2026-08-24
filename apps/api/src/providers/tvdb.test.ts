@@ -219,6 +219,40 @@ describe('TvdbProvider.getMovie / getShow', () => {
     ])
   })
 
+  it("falls back to an episode's own seriesId when externalId 404s as a series — a native id, not a foreign one", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(loginOk())
+      .mockResolvedValueOnce(new Response(null, { status: 404 })) // /series/11569548/extended
+      .mockResolvedValueOnce(apiResponse({ id: 11569548, seriesId: 387219 })) // /episodes/11569548
+      .mockResolvedValueOnce(apiResponse({ id: 387219, name: 'Formula 1', seasons: [] })) // /series/387219/extended
+      .mockResolvedValueOnce(apiResponse({ name: 'Formula 1' })) // translation
+      .mockResolvedValueOnce(apiResponse({ episodes: [] })) // allEpisodes
+    vi.stubGlobal('fetch', fetchMock)
+
+    const show = await provider().getShow('11569548', 'en-GB')
+    expect(show.externalId).toBe('387219')
+    expect(show.title).toBe('Formula 1')
+
+    const urls = fetchMock.mock.calls.map(([url]) => String(url))
+    expect(urls[1]).toContain('/series/11569548/extended')
+    expect(urls[2]).toContain('/episodes/11569548')
+    expect(urls[3]).toContain('/series/387219/extended')
+  })
+
+  it('surfaces the original series 404 when externalId is neither a series nor an episode', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(loginOk())
+      .mockResolvedValueOnce(new Response(null, { status: 404 })) // /series/{id}/extended
+      .mockResolvedValueOnce(new Response(null, { status: 404 })) // /episodes/{id}
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(provider().getShow('999999999', 'en-GB')).rejects.toThrow(
+      /TVDB request failed: 404.*series\/999999999/,
+    )
+  })
+
   it('getShow pages through the full episode list until a short page ends it', async () => {
     const pageOf = (n: number, seasonNumber: number) =>
       Array.from({ length: n }, (_, i) => ({ seasonNumber, number: i + 1, aired: null }))
@@ -354,6 +388,30 @@ describe('TvdbProvider.findByExternalId', () => {
     vi.stubGlobal('fetch', fetchMock)
 
     const id = await provider().findByExternalId('show', 'imdb', 'tt0944947', 'en-GB')
+    expect(id).toBe('1399')
+  })
+
+  it("falls back to an episode match's seriesId when the id identifies an episode, not the series itself", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(loginOk())
+      .mockResolvedValueOnce(apiResponse([{ episode: { id: 6381361, seriesId: 330942 } }]))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const id = await provider().findByExternalId('show', 'imdb', 'tt7579602', 'en-GB')
+    expect(id).toBe('330942')
+  })
+
+  it('prefers a direct series match over an episode fallback when both are somehow present', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(loginOk())
+      .mockResolvedValueOnce(
+        apiResponse([{ series: { id: 1399 }, episode: { id: 6381361, seriesId: 330942 } }]),
+      )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const id = await provider().findByExternalId('show', 'imdb', 'tt7579602', 'en-GB')
     expect(id).toBe('1399')
   })
 

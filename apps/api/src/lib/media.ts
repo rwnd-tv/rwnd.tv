@@ -85,7 +85,7 @@ export async function resolveShow(
   provider: MetadataProvider,
   showExternalId: string,
   locale: string,
-): Promise<{ id: string; title: string; slug: string }> {
+): Promise<{ id: string; title: string; slug: string; externalId: string }> {
   const [existing] = await db
     .select({ id: externalIds.entityId })
     .from(externalIds)
@@ -100,10 +100,20 @@ export async function resolveShow(
 
   if (existing) {
     const [show] = await db.select().from(shows).where(eq(shows.id, existing.id)).limit(1)
-    if (show) return { id: show.id, title: show.title, slug: show.slug }
+    // showExternalId is already this row's own canonical external id — it's
+    // exactly what the WHERE clause above just matched it by.
+    if (show) return { id: show.id, title: show.title, slug: show.slug, externalId: showExternalId }
   }
 
   const fetched = await provider.getShow(showExternalId, locale)
+  // fetched.externalId, not showExternalId, is this show's real canonical id
+  // from here on — they can differ when the provider had to redirect
+  // (TvdbProvider.getShow's own episode-id fallback is the live-verified
+  // case for this: showExternalId identified an episode, not this series).
+  // Every downstream call (episode/season lookups, the external_ids row
+  // below) must key off the corrected id, or they 404 against an id that
+  // was never actually this show's own.
+  const canonicalExternalId = fetched.externalId
   const slug = await generateUniqueShowSlug(db, fetched.title, fetched.year)
   const [show] = await db
     .insert(shows)
@@ -127,7 +137,7 @@ export async function resolveShow(
       entityType: 'show',
       entityId: show.id,
       source: provider.source,
-      externalId: showExternalId,
+      externalId: canonicalExternalId,
     })
     .onConflictDoNothing()
 
@@ -150,7 +160,7 @@ export async function resolveShow(
       .onConflictDoNothing()
   }
 
-  return { id: show.id, title: show.title, slug: show.slug }
+  return { id: show.id, title: show.title, slug: show.slug, externalId: canonicalExternalId }
 }
 
 /** One episode resolved to a local row, with just the fields the "Watched"
@@ -229,7 +239,7 @@ export async function resolveShowEpisodes(
 
   const perSeason = await Promise.all(
     seasonRows.map(({ seasonNumber }) =>
-      resolveSeason(db, provider, show.id, showExternalId, seasonNumber, locale),
+      resolveSeason(db, provider, show.id, show.externalId, seasonNumber, locale),
     ),
   )
 
@@ -250,7 +260,7 @@ export async function resolveSeasonEpisodes(
   locale: string,
 ): Promise<ResolvedEpisode[]> {
   const show = await resolveShow(db, provider, showExternalId, locale)
-  return resolveSeason(db, provider, show.id, showExternalId, seasonNumber, locale)
+  return resolveSeason(db, provider, show.id, show.externalId, seasonNumber, locale)
 }
 
 export interface NextEpisode {
@@ -426,7 +436,7 @@ export async function resolveEpisode(
     }
   }
 
-  const fetched = await provider.getEpisode(showExternalId, seasonNumber, episodeNumber, locale)
+  const fetched = await provider.getEpisode(show.externalId, seasonNumber, episodeNumber, locale)
   const [episode] = await db
     .insert(episodes)
     .values({
@@ -446,7 +456,7 @@ export async function resolveEpisode(
       entityType: 'episode',
       entityId: episode.id,
       source: provider.source,
-      externalId: `${showExternalId}:${seasonNumber}:${episodeNumber}`,
+      externalId: `${show.externalId}:${seasonNumber}:${episodeNumber}`,
     })
     .onConflictDoNothing()
 

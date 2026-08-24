@@ -19,6 +19,8 @@ const TABLES = [
   'shows',
   'movies',
   'invites',
+  'pending_webhook_events',
+  'webhook_account_links',
   'api_tokens',
   'sessions',
   'user_credentials',

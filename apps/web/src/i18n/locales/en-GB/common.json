@@ -337,7 +337,20 @@
       "createdOnce": "Copy this token now — it won't be shown again.",
       "lastUsed": "Last used {{date}}",
       "neverUsed": "Never used",
-      "revoke": "Revoke"
+      "revoke": "Revoke",
+      "plex": {
+        "title": "Connect Plex",
+        "description": "Paste this URL into your Plex server's Settings → Webhooks (requires Plex Pass). Watches will start logging automatically.",
+        "copy": "Copy",
+        "copied": "Copied"
+      },
+      "linkedAccounts": {
+        "title": "Linked accounts",
+        "unclaimed": "Unclaimed",
+        "unassigned": "Unassigned",
+        "assignTo": "Assign {{name}} to",
+        "remove": "Remove"
+      }
     },
     "database": {
       "title": "Database",

@@ -114,9 +114,15 @@ more specific TODO elsewhere in this file (ratings/watchlist above
 double as their M3 entry). Kept brief — ROADMAP.md is the source of
 truth for scope; this is just so a TODO listing is complete.
 
-- [ ] **Plex/Tautulli webhook ingestion** (2026-08-23 15:30 added) — M2\
-      Watches log themselves as you watch, authenticated via the
-      per-user API tokens already built in M1 for this.
+- [ ] **Tautulli/Jellyfin/Emby/Kodi webhook ingestion** (2026-08-24 16:25 added) — M2\
+      Plex's own webhook shipped 2026-08-24 (see `docs/TODO_ARCHIVE.md`) —
+      the entity-resolution/auth core it's built on
+      (`apps/api/src/lib/external-match.ts`,
+      `apps/api/src/lib/api-tokens.ts`) is deliberately source-agnostic,
+      so each of these is "write one payload parser + one route," not a
+      rework. Tautulli's webhook body is fully user-templated (no fixed
+      shape — needs its own JSON template + setup docs, unlike Plex's
+      fixed format), which is why it wasn't bundled into the same pass.
 - [ ] **Full data export** (2026-08-23 15:31 added) — M2\
       An open-format export of everything — one of the project's stated
       aims since day one.

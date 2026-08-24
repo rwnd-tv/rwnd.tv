@@ -1326,3 +1326,158 @@ currently-dropped shows, since a row can have both
       (mostly season-0 specials, one two-parter finale) inside an
       already-resolved show, not a show/movie the importer couldn't find
       at all.
+
+## Webhooks & scrobbling
+
+- [x] **Plex webhook ingestion** (2026-08-23 15:30 added, done 2026-08-24) — M2\
+      Watches now log themselves as you watch, via Plex's own native
+      webhook feature (Plex Pass required) — the per-user API tokens
+      built in M1 were exactly for this. Built as a source-agnostic core + a thin Plex-specific parser, deliberately, since Tautulli/
+      Jellyfin/Emby/Kodi support is wanted next (own TODO item above):
+      `apps/api/src/lib/api-tokens.ts`'s `resolveApiToken` authenticates
+      via a token in the URL path (Plex's fixed `multipart/form-data`
+      POST has no way to attach custom headers — every future source
+      uses the same URL-token shape so setup instructions stay
+      identical); `apps/api/src/lib/external-match.ts` resolves _any_ of
+      a webhook event's external ids (tmdb/tvdb/imdb, whichever it
+      handed over) to a local movie/show, checking `external_ids` across
+      all of them before falling back to a live cross-provider lookup —
+      extracted from `apps/api/src/import/match.ts`'s own
+      `resolveViaProvider`/`findViaAlternateIds` (already generic in
+      everything but its Trakt-typed `ids` parameter, now shared by
+      both); `apps/api/src/webhooks/plex.ts` parses Plex's own payload
+      shape (`media.scrobble` events only — Plex's own definition of
+      "counts as watched," not something rwnd.tv second-guesses) into
+      that source-agnostic shape. Idempotency reuses `plays.sourceRef`'s
+      existing partial unique index (ADR 0004 already named this as "the
+      dedup key for Plex/Tautulli, no migration needed") — a
+      `${ratingKey}:${today's date}` composite key, a deliberate
+      imperfect compromise since Plex hands over no stable per-delivery
+      event id: collapses same-day retries (the real risk) while still
+      allowing a genuine rewatch the next day.\
+      New Settings > API tokens UI: once a token exists, the constructed
+      webhook URL (built client-side from `window.location.origin`, no
+      new backend config) with a copy button and a one-line Plex-Pass
+      note.\
+      A gap flagged rather than glossed over: exact Plex payload field
+      placement (particularly for episodes) couldn't be fully confirmed
+      from Plex's own docs alone, which are thin on this — the parser's
+      assumptions are covered by unit tests against constructed fixture
+      payloads, but real confidence needs a real Plex webhook delivery,
+      which only James can trigger.\
+      Live-verified on dev.rwnd.tv: the route rejects an invalid token
+      (401) and the new Settings UI renders/creates/copies correctly
+      against a real token.
+
+- [x] **Multi-user Plex attribution** (2026-08-24 17:10 added, done 2026-08-24) — M2\
+      James's ask, from real need: "I have two users on my Plex server,
+      myself - the Plex account holder, and another managed user. I want
+      only my own watches going into my rwnd.tv data, and I want to
+      setup a new rwnd.tv account for the managed user." One webhook URL
+      per Plex server now serves every account on it: a new
+      `webhook_account_links` table maps `(tokenId, source,
+      externalAccountId) → userId`, discovered lazily as accounts are
+      seen and requiring an explicit claim in Settings > API tokens >
+      Linked accounts (assignable to _any_ instance user, not just the
+      token's owner). The obvious shortcut — auto-link whichever account
+      has Plex's own `id: 1`, which Plex's docs claim is always the
+      server owner — was built, then live-tested and found to be simply
+      false: James's real account came back as id `274494`, a global
+      Plex.tv account id, not a small per-server placeholder. Removed
+      entirely rather than patched around; every account, owner
+      included, is unclaimed until explicitly linked, no exceptions
+      (`apps/api/src/lib/webhook-accounts.ts`'s `resolveWebhookAccount`,
+      and the schema doc comment on `webhook_account_links` recording
+      why). `apps/api/src/lib/api-tokens.ts`'s `resolveApiToken`
+      deliberately stops resolving the token's _owner_ as part of this —
+      a webhook request doesn't necessarily belong to them at all.\
+      Live-verified end to end on dev.rwnd.tv with a real second Plex
+      user and a real second rwnd.tv account ("Carol Bulman"): the
+      managed profile's play showed up as an unclaimed account, was
+      claimed to the new account in Settings, and the watch appeared in
+      that account's own History — never James's.
+
+- [x] **Retroactive replay of watches logged while unclaimed** (2026-08-24 17:20 added, done 2026-08-24) — M2\
+      Follow-on to multi-user attribution, James's ask: "when we assign
+      the Plex account to the rwnd.tv account, we should retroactively
+      add the watches as well" — the account-discovery live test had
+      just shown the triggering watch itself getting silently dropped
+      (only `console.error`d) rather than recovered once claimed. New
+      `pending_webhook_events` table stores the full parsed event
+      (typed jsonb — ids, ratingKey, movie/episode shape) whenever an
+      account resolves unclaimed, keyed the same way
+      `webhook_account_links` is; claiming a link
+      (`PATCH /tokens/{id}/webhook-links/{linkId}`) replays every
+      pending event for that exact tuple through the same
+      `logWebhookPlay` function a live delivery uses
+      (`apps/api/src/lib/webhook-plays.ts`, extracted so the two paths
+      can never drift apart), then deletes them regardless of
+      individual outcome — a one-shot replay, matching how a live
+      delivery only ever gets one attempt too. The idempotency key
+      (`${ratingKey}:${date}`) is computed from the event's own
+      `watchedAt`, not replay time, so a claim happening days later
+      doesn't produce a different key than immediate processing would
+      have.\
+      A genuinely unrecoverable edge case, accepted rather than solved:
+      a pending event's *own* first replay attempt is its only one — if
+      the title fails to resolve at that moment (see the two provider
+      bugs below, both found via exactly this path), the watch is gone
+      for good once the pending row is deleted. Confirmed live twice
+      (Blue Planet II, then a Formula 1 session) and accepted as a
+      known limitation of "one shot," not treated as a bug in the
+      replay mechanism itself.
+
+- [x] **Fixed: episode-vs-show id confusion in TMDB/TVDB provider lookups** (2026-08-24 18:00 added, done 2026-08-24) — M2\
+      Found live, twice, via the retroactive-replay path above — both
+      times a real watch that should have resolved instead got silently
+      dropped. Root cause: some content's external ids identify one of
+      its *episodes*, not its show, even where a show-level id is
+      expected — confirmed for both TMDB and TVDB, reachable via two
+      different code paths.\
+      First instance (Blue Planet II, via a *cross-provider* id lookup):
+      Plex's `Guid` array carried an episode-level tmdb/tvdb/imdb id
+      where a show-level one was expected. Both
+      `TmdbProvider.findByExternalId` and `TvdbProvider.findByExternalId`
+      only checked their show/movie-level result fields
+      (`tv_results`/`series`), silently discarding a hit that came back
+      as an episode instead (`tv_episode_results`/`episode`). Fixed by
+      falling back to the episode hit's own show/series id
+      (`apps/api/src/providers/tmdb.ts`, `apps/api/src/providers/tvdb.ts`).\
+      Second instance (a live F1 qualifying session, via TVDB's *own
+      native* id): the same confusion, but for an id TVDB itself
+      issued, hit via `getShow()`'s direct `/series/{id}` fetch rather
+      than a cross-provider lookup — the first fix didn't cover this
+      path at all. TVDB's id space is global across entity types, so a
+      plain series 404 means the id isn't a series id at all; fixed by
+      falling back to `/episodes/{id}` for its `seriesId` before giving
+      up (`TvdbProvider.getSeriesRecord`). This surfaced a second,
+      deeper bug: `resolveShow` (`apps/api/src/lib/media.ts`) was
+      storing and returning the _input_ external id rather than the
+      provider's own corrected one, so every downstream episode/season
+      lookup (and the `external_ids` row itself) kept using the wrong
+      id even after `getShow` had already redirected internally. Fixed
+      by threading the provider's real `externalId` through
+      `resolveShow`'s return value and every caller
+      (`resolveShowEpisodes`, `resolveSeasonEpisodes`, `resolveEpisode`,
+      `resolveShowFromExternalIds`, and Trakt import's `match.ts`,
+      which shared the same bug).\
+      Live-verified: re-tested Carol's Plex account against "Formula 1"
+      after deploying both fixes — the watch resolved and appeared
+      correctly in her History.
+
+- [x] **Fixed: a failed pending-event replay could wedge every other pending event behind it** (2026-08-24 19:20 added, done 2026-08-24) — M2\
+      The webhook-link claim route's replay loop
+      (`apps/api/src/routes/tokens.ts`) called `logWebhookPlay` for each
+      pending event with no per-event error handling — an unexpected
+      failure (as opposed to `logWebhookPlay`'s own ordinary "no
+      configured provider recognizes this title" case, which already
+      returns normally) threw out of the loop entirely, skipping every
+      later event in the same batch and skipping the unconditional
+      delete afterward too — directly contradicting the route's own
+      "whatever happens, the pending rows are gone afterward" design.
+      Found live during the Formula 1 investigation above (a TVDB 404
+      mid-replay left the pending row stuck, which is what made a clean
+      re-test possible once the provider bug was fixed). Fixed by
+      wrapping each replay attempt in its own try/catch, logged
+      server-side on failure, matching the same "log and move on"
+      convention `logWebhookPlay` already uses for a soft no-match.

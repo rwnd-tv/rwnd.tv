@@ -96,6 +96,12 @@ interface TvdbEpisode {
 interface TvdbEpisodesPage {
   episodes?: TvdbEpisode[]
 }
+// Only the one field getSeriesRecord's episode-fallback actually needs —
+// not merged into TvdbEpisode itself, which every other episode call site
+// already builds fixtures for without it.
+interface TvdbEpisodeSeriesLookup {
+  seriesId: number
+}
 interface TvdbTranslation {
   name?: string
   overview?: string
@@ -105,6 +111,13 @@ interface TvdbTranslation {
 interface TvdbRemoteIdMatch {
   movie?: { id: number }
   series?: { id: number }
+  // Some external ids identify a TV *episode*, not its series, even for
+  // what looks like a show-level lookup — confirmed live 2026-08-24 (see
+  // TmdbFindResponse's matching doc comment in tmdb.ts). TVDB's remote-id
+  // search still resolves these, just into this field instead of
+  // `series` — `seriesId` recovers the show a naive series-only read
+  // would miss entirely.
+  episode?: { seriesId: number }
 }
 
 /** Maps this app's BCP 47 locale to TheTVDB's 3-letter ISO 639-2 language
@@ -308,11 +321,38 @@ export class TvdbProvider implements MetadataProvider {
     }
   }
 
+  /** Fetches `/series/{externalId}` — unless externalId actually identifies
+   * one of that series's *episodes*, not the series itself. TVDB's id space
+   * is global across entity types (unlike TMDB's, where movie/show/episode
+   * ids can collide), so a plain series 404 here means externalId isn't a
+   * series id at all — worth one extra request to check whether it's an
+   * episode before giving up. Confirmed live 2026-08-24: a Plex webhook
+   * carried tvdb id 11569548 as what looked like a show-level id, which
+   * 404'd as a series but resolved as an episode of series 387219
+   * ("Formula 1") — same underlying confusion as TmdbFindResponse's
+   * tv_episode_results fallback and this file's own findByExternalId
+   * episode branch, just reachable here via a *native* id instead of a
+   * foreign one, so neither of those already-fixed paths caught it. */
+  private async getSeriesRecord(externalId: string): Promise<TvdbSeries> {
+    try {
+      return await this.request<TvdbSeries>(`/series/${externalId}/extended`, { short: 'true' })
+    } catch (err) {
+      if (!(err instanceof TvdbHttpError && err.status === 404)) throw err
+      let episode: TvdbEpisodeSeriesLookup
+      try {
+        episode = await this.request<TvdbEpisodeSeriesLookup>(`/episodes/${externalId}`)
+      } catch {
+        throw err // not an episode either — surface the original series 404
+      }
+      return this.request<TvdbSeries>(`/series/${episode.seriesId}/extended`, { short: 'true' })
+    }
+  }
+
   async getShow(externalId: string, locale: string): Promise<ProviderShow> {
-    const [show, translation, episodes] = await Promise.all([
-      this.request<TvdbSeries>(`/series/${externalId}/extended`, { short: 'true' }),
-      this.translation('series', externalId, locale),
-      this.allEpisodes(externalId),
+    const show = await this.getSeriesRecord(externalId)
+    const [translation, episodes] = await Promise.all([
+      this.translation('series', String(show.id), locale),
+      this.allEpisodes(String(show.id)),
     ])
 
     const bySeason = new Map<number, { count: number; earliestAired: string | null }>()
@@ -449,6 +489,7 @@ export class TvdbProvider implements MetadataProvider {
     for (const match of matches) {
       if (entityType === 'movie' && match.movie) return String(match.movie.id)
       if (entityType === 'show' && match.series) return String(match.series.id)
+      if (entityType === 'show' && match.episode) return String(match.episode.seriesId)
     }
     return null
   }

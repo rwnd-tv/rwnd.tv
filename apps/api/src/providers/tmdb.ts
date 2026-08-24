@@ -94,10 +94,19 @@ interface TmdbSeason {
   vote_average?: number | null
 }
 // /find only returns id + media-type-specific fields we don't need — every
-// other field on findByExternalId's two result arrays is ignored.
+// other field on findByExternalId's result arrays is ignored.
 interface TmdbFindResponse {
   movie_results: { id: number }[]
   tv_results: { id: number }[]
+  // Some external ids identify a TV *episode*, not its show, even for
+  // what looks like a show-level lookup — confirmed live 2026-08-24: a
+  // Plex agent (nature-documentary content, at least) reports an
+  // episode's own tmdb/imdb ids in the same place it would put a show's.
+  // TMDB's /find still resolves these, just into this array instead of
+  // tv_results — falling back to the episode's own show_id recovers the
+  // show a naive tv_results-only read would miss entirely. Optional
+  // rather than trusting it's always present on every response.
+  tv_episode_results?: { show_id: number }[]
 }
 
 /** Thrown by request() for any non-2xx TMDB response. Carries the HTTP
@@ -301,7 +310,11 @@ export class TmdbProvider implements MetadataProvider {
       if (err instanceof TmdbHttpError && err.status === 404) return null
       throw err
     }
-    const results = entityType === 'movie' ? data.movie_results : data.tv_results
-    return results[0] ? String(results[0].id) : null
+    if (entityType === 'movie') {
+      return data.movie_results[0] ? String(data.movie_results[0].id) : null
+    }
+    if (data.tv_results[0]) return String(data.tv_results[0].id)
+    const episodeHit = data.tv_episode_results?.[0]
+    return episodeHit ? String(episodeHit.show_id) : null
   }
 }

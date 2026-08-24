@@ -1376,7 +1376,7 @@ currently-dropped shows, since a row can have both
       setup a new rwnd.tv account for the managed user." One webhook URL
       per Plex server now serves every account on it: a new
       `webhook_account_links` table maps `(tokenId, source,
-      externalAccountId) → userId`, discovered lazily as accounts are
+    externalAccountId) → userId`, discovered lazily as accounts are
       seen and requiring an explicit claim in Settings > API tokens >
       Linked accounts (assignable to _any_ instance user, not just the
       token's owner). The obvious shortcut — auto-link whichever account
@@ -1419,7 +1419,7 @@ currently-dropped shows, since a row can have both
       doesn't produce a different key than immediate processing would
       have.\
       A genuinely unrecoverable edge case, accepted rather than solved:
-      a pending event's *own* first replay attempt is its only one — if
+      a pending event's _own_ first replay attempt is its only one — if
       the title fails to resolve at that moment (see the two provider
       bugs below, both found via exactly this path), the watch is gone
       for good once the pending row is deleted. Confirmed live twice
@@ -1431,10 +1431,10 @@ currently-dropped shows, since a row can have both
       Found live, twice, via the retroactive-replay path above — both
       times a real watch that should have resolved instead got silently
       dropped. Root cause: some content's external ids identify one of
-      its *episodes*, not its show, even where a show-level id is
+      its _episodes_, not its show, even where a show-level id is
       expected — confirmed for both TMDB and TVDB, reachable via two
       different code paths.\
-      First instance (Blue Planet II, via a *cross-provider* id lookup):
+      First instance (Blue Planet II, via a _cross-provider_ id lookup):
       Plex's `Guid` array carried an episode-level tmdb/tvdb/imdb id
       where a show-level one was expected. Both
       `TmdbProvider.findByExternalId` and `TvdbProvider.findByExternalId`
@@ -1443,8 +1443,8 @@ currently-dropped shows, since a row can have both
       as an episode instead (`tv_episode_results`/`episode`). Fixed by
       falling back to the episode hit's own show/series id
       (`apps/api/src/providers/tmdb.ts`, `apps/api/src/providers/tvdb.ts`).\
-      Second instance (a live F1 qualifying session, via TVDB's *own
-      native* id): the same confusion, but for an id TVDB itself
+      Second instance (a live F1 qualifying session, via TVDB's _own
+      native_ id): the same confusion, but for an id TVDB itself
       issued, hit via `getShow()`'s direct `/series/{id}` fetch rather
       than a cross-provider lookup — the first fix didn't cover this
       path at all. TVDB's id space is global across entity types, so a
@@ -1497,7 +1497,7 @@ currently-dropped shows, since a row can have both
       (`apps/api/src/import/trakt.ts`'s `processHistoryItem`,
       `apps/api/src/lib/webhook-plays.ts`'s `logWebhookPlay`): skips the
       insert if a play already exists for the same user/entity/calendar
-      day (UTC) from the *other* automated source. Deliberately scoped to
+      day (UTC) from the _other_ automated source. Deliberately scoped to
       `import`/`plex` only — a `manual` watch is the user's own explicit
       action, not a scrobble, and can legitimately coexist with (or
       precede) an automated one the same day without being a duplicate.
@@ -1517,7 +1517,7 @@ currently-dropped shows, since a row can have both
       actually new anywhere — confusing, and the opposite of what a user
       needs to trust the number. Root cause: `processRatingItem`/
       `processWatchlistItem`/`processDroppedItem` (`apps/api/src/import/
-      trakt.ts`) always returned `'imported'` on a successful match,
+    trakt.ts`) always returned `'imported'` on a successful match,
       regardless of whether the `onConflictDoUpdate` upsert actually
       changed anything — re-confirming identical Trakt data every run
       counted as "imported" every single time. Fixed with drizzle's
@@ -1542,8 +1542,8 @@ currently-dropped shows, since a row can have both
       James spotted the show/season/episode pages' TMDB rating badge
       directly hotlinking `themoviedb.org/assets/...svg` — the likely real
       cause of the "TMDB icon seems broken" report investigated earlier
-      today (that investigation confirmed the asset loaded fine *in that
-      moment*, but never ruled out TMDB's CDN being unreliable at other
+      today (that investigation confirmed the asset loaded fine _in that
+      moment_, but never ruled out TMDB's CDN being unreliable at other
       times, which is exactly the failure mode a hotlink risks and a
       self-hosted copy doesn't). Same pattern existed for both of TheTVDB's
       attribution logo variants.\
@@ -1554,7 +1554,7 @@ currently-dropped shows, since a row can have both
       provider's own domain. TMDB's terms only require the logo be used
       unmodified and less prominently than this app's own branding, and
       their attribution page itself offers the SVG as a direct download.
-      TheTVDB's api-information page requires a direct *link* to
+      TheTVDB's api-information page requires a direct _link_ to
       TheTVDB.com (already handled by `tvdbSeriesUrl`/`tvdbSeasonUrl`/etc.
       in `apps/web/src/lib/tvdb.ts`) but says nothing about the logo
       image's own hosting.\

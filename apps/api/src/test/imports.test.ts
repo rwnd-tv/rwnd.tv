@@ -398,7 +398,11 @@ describe('Trakt import', () => {
       .returning()
     await runTraktImport(db, providers, env, job2!.id)
 
-    const [finished] = await db.select().from(importJobs).where(eq(importJobs.id, job2!.id)).limit(1)
+    const [finished] = await db
+      .select()
+      .from(importJobs)
+      .where(eq(importJobs.id, job2!.id))
+      .limit(1)
     expect(finished?.status).toBe('completed')
     expect(finished?.itemsImported).toBe(0)
     expect(finished?.itemsSkipped).toBe(1)
@@ -804,7 +808,12 @@ describe('Trakt import', () => {
     vi.stubGlobal('fetch', createFetchStub(unchangedFixtures))
     const [job1] = await db
       .insert(importJobs)
-      .values({ userId: me.id, includeHistory: false, includeRatings: true, includeWatchlist: true })
+      .values({
+        userId: me.id,
+        includeHistory: false,
+        includeRatings: true,
+        includeWatchlist: true,
+      })
       .returning()
     await runTraktImport(db, providers, env, job1!.id)
     const [finished1] = await db
@@ -821,7 +830,12 @@ describe('Trakt import', () => {
     vi.stubGlobal('fetch', createFetchStub(unchangedFixtures))
     const [job2] = await db
       .insert(importJobs)
-      .values({ userId: me.id, includeHistory: false, includeRatings: true, includeWatchlist: true })
+      .values({
+        userId: me.id,
+        includeHistory: false,
+        includeRatings: true,
+        includeWatchlist: true,
+      })
       .returning()
     await runTraktImport(db, providers, env, job2!.id)
     const [finished2] = await db
@@ -839,7 +853,12 @@ describe('Trakt import', () => {
     )
     const [job3] = await db
       .insert(importJobs)
-      .values({ userId: me.id, includeHistory: false, includeRatings: true, includeWatchlist: true })
+      .values({
+        userId: me.id,
+        includeHistory: false,
+        includeRatings: true,
+        includeWatchlist: true,
+      })
       .returning()
     await runTraktImport(db, providers, env, job3!.id)
     const [finished3] = await db

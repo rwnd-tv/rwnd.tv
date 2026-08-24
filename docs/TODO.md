@@ -31,25 +31,6 @@ Format:
       leading-article rules are a bigger job than this feature needed; left
       as a known simplification.
 
-## Metadata & matching
-
-- [ ] **Multi-provider metadata (tmdb/imdb/tvdb)** (2026-08-11 22:20) — M2\
-      Right now tmdb id is the only key — a title with no tmdb id
-      can't be imported even if it has imdb/tvdb ids (hit this live
-      importing Formula 1 via Trakt; TMDB doesn't carry it). Idea: a
-      new internal id independent of any single provider, an
-      admin-configurable provider priority order, and a manual
-      per-title "refresh metadata" action rather than silent
-      background updates (explicit preference — don't want metadata
-      changing behind anyone's back). Also want a UI indicator on
-      show/movie pages showing which provider the current metadata
-      came from. Fairly fundamental, which is why it's tracked as M2
-      rather than deferred to "not yet scheduled". This is the
-      plumbing only — it doesn't require a second provider to exist
-      yet; actually adding one (Wikidata/TVDB) is the separate
-      "not yet scheduled" item below, which this would need to land
-      first.
-
 ## Ratings & watchlist
 
 - [ ] **Explore how ratings should work** (2026-08-23 14:15 added) — M3\
@@ -129,10 +110,9 @@ Format:
 ## Roadmap
 
 Every open item from [ROADMAP.md](ROADMAP.md) that doesn't already have a
-more specific TODO elsewhere in this file (multi-provider metadata,
-ratings/watchlist, and additional locales above all double as their
-M2/M3 entries). Kept brief — ROADMAP.md is the source of truth for
-scope; this is just so a TODO listing is complete.
+more specific TODO elsewhere in this file (ratings/watchlist above
+double as their M3 entry). Kept brief — ROADMAP.md is the source of
+truth for scope; this is just so a TODO listing is complete.
 
 - [ ] **Plex/Tautulli webhook ingestion** (2026-08-23 15:30 added) — M2\
       Watches log themselves as you watch, authenticated via the
@@ -150,8 +130,9 @@ scope; this is just so a TODO listing is complete.
       [ADR 0003](adr/0003-auth-model.md).
 - [ ] **Wikidata/TVDB metadata provider alongside TMDB** (2026-08-23 15:36 added) — Not yet scheduled\
       The second provider itself, not the infrastructure to support
-      one — that's the "Multi-provider metadata" M2 item above, and
-      needs to land first.
+      one — that plumbing shipped 2026-08-24, see
+      `docs/TODO_ARCHIVE.md`'s "Multi-provider metadata" entry and
+      [ADR 0006](adr/0006-multi-provider-metadata.md).
 - [ ] **Mobile-friendly PWA installability** (2026-08-23 15:37 added) — Not yet scheduled\
       Installable/add-to-home-screen support.
 - [ ] **Public/shareable profile pages** (2026-08-23 15:38 added) — Not yet scheduled\

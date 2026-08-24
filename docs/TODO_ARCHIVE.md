@@ -1226,3 +1226,47 @@ currently-dropped shows, since a row can have both
       supported locale can never exercise the fallback path itself.
       Cleaned up afterward: deleted the throwaway account and restored
       registration to `Closed`.
+
+## Metadata & matching
+
+- [x] **Multi-provider metadata (tmdb/imdb/tvdb)** (2026-08-11 22:20 added, done 2026-08-24) — M2\
+      Done, as six sequential PRs — see `[ADR 0006](adr/0006-multi-provider-metadata.md)`
+      for the full design and reasoning, only summarised here. `MetadataProvider.source`
+      and every hardcoded `source: 'tmdb'` query (routes, the Trakt import
+      matcher, the metadata refresher) widened to a real
+      `MetadataProviderSource` type (`'tmdb' | 'tvdb'`, excluding the
+      id-only `imdb`/`trakt` namespaces). The real bug behind the Formula 1
+      anecdote — a Trakt item with no `tmdb` id gave up immediately even
+      when Trakt had handed over a usable `imdb`/`tvdb` id — is fixed via a
+      new `MetadataProvider.findByExternalId` (TMDB's `/find` endpoint);
+      **does not fix Formula 1 itself**, which TMDB has no entry for under
+      any id — the fallback fixes the general stale/missing-id case, not
+      that specific title. `METADATA_PROVIDER` env var removed —
+      which providers exist is now derived from which credentials are
+      configured. New instance-settings `metadataProviderPriority`
+      (admin-configurable, read-only UI for now — only one provider has
+      ever existed to order) governs fallback order for the background
+      refresher and the manual "refresh metadata" buttons (already built
+      before this work, just made provider-aware rather than TMDB-only).
+      New `shows.metadataSource`/`movies.metadataSource` columns record
+      which provider actually wrote a row's cached fields, surfaced as a
+      "Metadata: TMDB" indicator on both detail pages next to (not
+      replacing) the existing TMDB rating badge. Backups deliberately left
+      untouched — still keyed by a bare `tmdbId`, with the future
+      `formatVersion: 2` shape recorded in the ADR rather than built now,
+      since nothing this work introduces creates an entity backups can't
+      already represent.\
+      Verified live on dev.rwnd.tv at every stage: a real Trakt
+      re-import's unmatched-item count and composition held identical
+      before/after the import-matching fix (372 items, same reasons),
+      NASA's failure message changed to confirm the new fallback path
+      actually ran (`"tried tmdb, imdb and tvdb ids"`), the app booted
+      cleanly with `METADATA_PROVIDER` gone, the priority migration
+      backfilled the existing instance to `{tmdb}`, the metadata-source
+      migration backfilled all 481 shows and 563 movies to `'tmdb'` with
+      nothing left null, and the indicator + re-gated refresh buttons both
+      render and work correctly on real show/movie pages.\
+      Not done: the second provider itself (Wikidata/TVDB) — separate,
+      still "not yet scheduled" — and the backup format's `tmdbId` ->
+      `externalIds[]` migration, deferred until an entity actually exists
+      that needs it.

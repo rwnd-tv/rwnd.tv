@@ -95,6 +95,9 @@ export async function restoreBackupFile(
           runtimeMinutes: movie.runtimeMinutes,
           overview: movie.overview,
           posterPath: movie.posterPath,
+          // Truthful by construction: the row below records the exact same
+          // 'tmdb' source for this entity's external id.
+          metadataSource: 'tmdb',
         })
         .returning({ id: movies.id })
       if (!inserted) throw new Error(`Failed to insert movie ${movie.tmdbId}`)
@@ -128,6 +131,8 @@ export async function restoreBackupFile(
             status: show.status,
             genres: show.genres,
             voteAverage: show.voteAverage,
+            // Same reasoning as the movie insert above.
+            metadataSource: 'tmdb',
           })
           .returning({ id: shows.id })
         if (!inserted) throw new Error(`Failed to insert show ${show.tmdbId}`)

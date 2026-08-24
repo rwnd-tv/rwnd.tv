@@ -5,8 +5,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { ShowDetail } from '@rwnd/shared'
 import { api, ApiError } from '../lib/api-client.js'
 import { invalidateWatchData } from '../lib/query-client.js'
-import { markWatchedRequestBody } from '../lib/date.js'
+import { markWatchedRequestBody, formatDateTimeInput } from '../lib/date.js'
 import { TMDB_LOGO_URL } from '../lib/tmdb.js'
+import { PROVIDER_LABELS } from '../lib/provider-labels.js'
 import { useAuth } from '../lib/auth-context.js'
 import { EpisodeCard } from '../components/library/EpisodeCard.js'
 import { PosterGrid } from '../components/library/PosterGrid.js'
@@ -277,6 +278,22 @@ export function ShowDetailPage() {
                     {show.voteAverage.toFixed(1)}
                   </span>
                 ) : null,
+                // Distinct from the rating badge above — that answers
+                // "where did this 8.4 come from and where do I click
+                // through"; this answers "where did the rest of this page's
+                // metadata come from". Text, not the TMDB logo, so the two
+                // aren't visually indistinguishable.
+                show.metadataSource ? (
+                  <span
+                    title={t('showDetail.metadataSourceTooltip', {
+                      date: formatDateTimeInput(new Date(show.metadataRefreshedAt), locale),
+                    })}
+                  >
+                    {t('showDetail.metadataSource', {
+                      provider: PROVIDER_LABELS[show.metadataSource],
+                    })}
+                  </span>
+                ) : null,
               ] satisfies (ReactNode | null)[]
             )
               .filter((fact) => fact !== null)
@@ -369,9 +386,9 @@ export function ShowDetailPage() {
               variant="secondary"
               type="button"
               className="px-2.5 py-2.5"
-              disabled={refreshMetadata.isPending || !show.tmdbId}
+              disabled={refreshMetadata.isPending || !show.metadataSource}
               title={
-                show.tmdbId
+                show.metadataSource
                   ? t('showDetail.refreshMetadataTooltip')
                   : t('showDetail.refreshMetadataDisabled')
               }

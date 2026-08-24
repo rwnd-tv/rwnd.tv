@@ -57,6 +57,7 @@ export async function resolveMovie(
       posterPath: fetched.posterPath,
       genres: fetched.genres,
       voteAverage: fetched.voteAverage,
+      metadataSource: provider.source,
     })
     .returning()
   if (!movie) throw new Error('Failed to insert movie')
@@ -115,6 +116,7 @@ export async function resolveShow(
       status: fetched.status,
       genres: fetched.genres,
       voteAverage: fetched.voteAverage,
+      metadataSource: provider.source,
     })
     .returning()
   if (!show) throw new Error('Failed to insert show')

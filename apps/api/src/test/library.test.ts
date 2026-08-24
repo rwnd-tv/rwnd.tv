@@ -224,6 +224,44 @@ describe('library', () => {
       expect(res.status).toBe(404)
     })
 
+    it('carries metadataSource/metadataRefreshedAt, null when the show has never been resolved via a provider', async () => {
+      const cookie = await createUserAndCookie()
+      const [show] = await db
+        .insert(shows)
+        .values({ title: 'No Provider Yet', slug: 'no-provider-yet' })
+        .returning()
+      if (!show) throw new Error('failed to insert show')
+
+      const res = await app.request(`/api/v1/library/shows/${show.slug}`, { headers: { cookie } })
+      expect(res.status).toBe(200)
+      const detail = await json<ShowDetail>(res)
+      // Never resolved via resolveShow/refreshOneShow (migration 0012's
+      // backfill only covers rows that already had a tmdb external_ids row
+      // at the time it ran) — metadataSource is genuinely unknown here.
+      expect(detail.metadataSource).toBeNull()
+      expect(detail.metadataRefreshedAt).toBeTruthy()
+    })
+
+    it('carries metadataSource once the show has an external id from a configured provider', async () => {
+      const cookie = await createUserAndCookie()
+      const [show] = await db
+        .insert(shows)
+        .values({ title: 'Resolved Show', slug: 'resolved-show', metadataSource: 'tmdb' })
+        .returning()
+      if (!show) throw new Error('failed to insert show')
+      await db.insert(externalIds).values({
+        entityType: 'show',
+        entityId: show.id,
+        source: 'tmdb',
+        externalId: '999',
+      })
+
+      const res = await app.request(`/api/v1/library/shows/${show.slug}`, { headers: { cookie } })
+      expect(res.status).toBe(200)
+      const detail = await json<ShowDetail>(res)
+      expect(detail.metadataSource).toBe('tmdb')
+    })
+
     it('reports real per-season watched counts, but excludes specials from the header total (regression)', async () => {
       const cookie = await createUserAndCookie()
       const userId = await meId(cookie)
@@ -1816,6 +1854,41 @@ describe('library', () => {
       const cookie = await createUserAndCookie()
       const res = await app.request('/api/v1/library/movies/no-such-movie', { headers: { cookie } })
       expect(res.status).toBe(404)
+    })
+
+    it('carries metadataSource/metadataRefreshedAt, null when the movie has never been resolved via a provider', async () => {
+      const cookie = await createUserAndCookie()
+      const [movie] = await db
+        .insert(movies)
+        .values({ title: 'No Provider Yet', slug: 'no-provider-yet-movie' })
+        .returning()
+      if (!movie) throw new Error('failed to insert movie')
+
+      const res = await app.request(`/api/v1/library/movies/${movie.slug}`, { headers: { cookie } })
+      expect(res.status).toBe(200)
+      const detail = await json<MovieDetail>(res)
+      expect(detail.metadataSource).toBeNull()
+      expect(detail.metadataRefreshedAt).toBeTruthy()
+    })
+
+    it('carries metadataSource once the movie has an external id from a configured provider', async () => {
+      const cookie = await createUserAndCookie()
+      const [movie] = await db
+        .insert(movies)
+        .values({ title: 'Resolved Movie', slug: 'resolved-movie', metadataSource: 'tmdb' })
+        .returning()
+      if (!movie) throw new Error('failed to insert movie')
+      await db.insert(externalIds).values({
+        entityType: 'movie',
+        entityId: movie.id,
+        source: 'tmdb',
+        externalId: '999',
+      })
+
+      const res = await app.request(`/api/v1/library/movies/${movie.slug}`, { headers: { cookie } })
+      expect(res.status).toBe(200)
+      const detail = await json<MovieDetail>(res)
+      expect(detail.metadataSource).toBe('tmdb')
     })
 
     it("returns metadata and the current user's watch status", async () => {

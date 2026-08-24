@@ -195,6 +195,13 @@ export const movies = pgTable('movies', {
   // shows.voteAverage below. Not the user's own rating of the movie —
   // that's the separate `ratings` table.
   voteAverage: real('vote_average'),
+  // Which provider last wrote the fields above — recorded at write time
+  // rather than derived from external_ids + the priority order at read
+  // time, since those two answer different questions once the priority
+  // order can change after the fact (see docs/adr/0006). Null only for a
+  // row written before this column existed and never refreshed since;
+  // backfilled for everything else by migration 0012.
+  metadataSource: externalIdSourceEnum('metadata_source'),
   // Never older than the provider's max cache lifetime (6 months for TMDB).
   metadataRefreshedAt: timestamp('metadata_refreshed_at', { withTimezone: true })
     .notNull()
@@ -232,6 +239,9 @@ export const shows = pgTable('shows', {
   // by the gallery (see ShowsPage.tsx's rating filter/sort). Not a user's
   // own rating of the show — that's the separate `ratings` table below.
   voteAverage: real('vote_average'),
+  // See movies.metadataSource above for what this means and why it's
+  // stored rather than derived.
+  metadataSource: externalIdSourceEnum('metadata_source'),
   metadataRefreshedAt: timestamp('metadata_refreshed_at', { withTimezone: true })
     .notNull()
     .defaultNow(),

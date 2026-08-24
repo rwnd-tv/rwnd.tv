@@ -162,8 +162,22 @@ export const showDetailSchema = z.object({
   /** TMDB's own numeric id for this show (e.g. "94605"), for linking to its
    * TMDB page — see ShowDetailPage.tsx's rating badge. Null for a show with
    * no external id on record (shouldn't happen with TMDB as the only
-   * provider today, but not guaranteed by the schema). */
+   * provider today, but not guaranteed by the schema). Now that a real
+   * answer exists for what happens with more than one provider, see
+   * `metadataSource` below — this field stays TMDB-specific on purpose,
+   * it's a themoviedb.org deep link, not a provenance indicator. */
   tmdbId: z.string().nullable(),
+  /** Which provider the cached metadata on this page (title/overview/
+   * genres/etc., not `tmdbId` above) was last fetched from — shown as a
+   * provenance label next to the rating badge (docs/adr/0006). Null for a
+   * row no provider has ever written (shouldn't happen in practice, same
+   * caveat as `tmdbId`). */
+  metadataSource: metadataProviderSourceSchema.nullable(),
+  /** When `metadataSource` last wrote the cached fields. Surfaced as the
+   * provenance label's tooltip — with metadata refreshed on request rather
+   * than silently in the background (docs/adr/0005), "how old is this" is
+   * a question a user can reasonably ask. */
+  metadataRefreshedAt: z.string().datetime(),
   /** See libraryShowSchema's `dropped` for what this means. */
   dropped: z.boolean(),
   /** When the show was dropped — from Trakt's `hidden_at` if imported, or
@@ -428,6 +442,10 @@ export const movieDetailSchema = z.object({
   /** TMDB's own numeric id for this movie, for linking to its TMDB page —
    * see showDetailSchema's `tmdbId` for the same convention. */
   tmdbId: z.string().nullable(),
+  /** See showDetailSchema's field of the same name. */
+  metadataSource: metadataProviderSourceSchema.nullable(),
+  /** See showDetailSchema's field of the same name. */
+  metadataRefreshedAt: z.string().datetime(),
   watched: z.boolean(),
   /** How many times the current user has logged a play of this movie —
    * see seasonEpisodeSchema's `watchedCount` for the same reasoning. */

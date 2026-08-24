@@ -254,6 +254,7 @@ export async function refreshOneShow(
       status: fetched.status,
       genres: fetched.genres,
       voteAverage: fetched.voteAverage,
+      metadataSource: provider.source,
       metadataRefreshedAt: new Date(),
     })
     .where(eq(shows.id, candidate.id))
@@ -341,6 +342,7 @@ export async function refreshOneMovie(
       posterPath: fetched.posterPath,
       genres: fetched.genres,
       voteAverage: fetched.voteAverage,
+      metadataSource: provider.source,
       metadataRefreshedAt: new Date(),
     })
     .where(eq(movies.id, candidate.id))

@@ -35,6 +35,7 @@ import {
 } from '../lib/media.js'
 import { pickRefreshTarget, refreshOneMovie, refreshOneShow } from '../metadata/refresh.js'
 import { orderedProviders } from '../providers/priority.js'
+import { isProviderSource } from '../lib/provider-source.js'
 
 /**
  * Shared by the show- and season-level "Watched" button routes below.
@@ -683,6 +684,9 @@ libraryRoutes.openapi(
       genres: show.genres,
       voteAverage: show.voteAverage,
       tmdbId: tmdbExternalId?.externalId ?? null,
+      metadataSource:
+        show.metadataSource && isProviderSource(show.metadataSource) ? show.metadataSource : null,
+      metadataRefreshedAt: show.metadataRefreshedAt.toISOString(),
       dropped,
       droppedAt: dropped && droppedAt ? droppedAt.toISOString() : null,
       watchedEpisodes,
@@ -1558,6 +1562,11 @@ libraryRoutes.openapi(
       genres: movie.genres,
       voteAverage: movie.voteAverage,
       tmdbId: tmdbExternalId?.externalId ?? null,
+      metadataSource:
+        movie.metadataSource && isProviderSource(movie.metadataSource)
+          ? movie.metadataSource
+          : null,
+      metadataRefreshedAt: movie.metadataRefreshedAt.toISOString(),
       watched: (watchedRange?.watchedCount ?? 0) > 0,
       watchedCount: watchedRange?.watchedCount ?? 0,
       firstWatchedAt: watchedRange?.firstWatchedAt

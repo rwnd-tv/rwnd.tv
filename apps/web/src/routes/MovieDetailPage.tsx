@@ -6,6 +6,8 @@ import { api, ApiError } from '../lib/api-client.js'
 import { useAuth } from '../lib/auth-context.js'
 import { useMovieWatchActions } from '../lib/use-movie-watch-actions.js'
 import { TMDB_LOGO_URL } from '../lib/tmdb.js'
+import { PROVIDER_LABELS } from '../lib/provider-labels.js'
+import { formatDateTimeInput } from '../lib/date.js'
 import { UnwatchConfirmDialog } from '../components/library/UnwatchConfirmDialog.js'
 import { WatchDateDialog } from '../components/library/WatchDateDialog.js'
 import { Button } from '../components/ui/Button.js'
@@ -204,6 +206,19 @@ export function MovieDetailPage() {
                     {movie.voteAverage.toFixed(1)}
                   </span>
                 ) : null,
+                // See ShowDetailPage.tsx's own metadataSource entry for why
+                // this is separate from the rating badge above.
+                movie.metadataSource ? (
+                  <span
+                    title={t('movieDetail.metadataSourceTooltip', {
+                      date: formatDateTimeInput(new Date(movie.metadataRefreshedAt), locale),
+                    })}
+                  >
+                    {t('movieDetail.metadataSource', {
+                      provider: PROVIDER_LABELS[movie.metadataSource],
+                    })}
+                  </span>
+                ) : null,
               ] satisfies (ReactNode | null)[]
             )
               .filter((fact) => fact !== null)
@@ -253,9 +268,9 @@ export function MovieDetailPage() {
               variant="secondary"
               type="button"
               className="px-2.5 py-2.5"
-              disabled={refreshMetadata.isPending || !movie.tmdbId}
+              disabled={refreshMetadata.isPending || !movie.metadataSource}
               title={
-                movie.tmdbId
+                movie.metadataSource
                   ? t('movieDetail.refreshMetadataTooltip')
                   : t('movieDetail.refreshMetadataDisabled')
               }

@@ -2,7 +2,6 @@ import { OpenAPIHono, createRoute } from '@hono/zod-openapi'
 import {
   SUPPORTED_LOCALES,
   instanceSettingsSchema,
-  metadataProviderSourceSchema,
   updateInstanceSettingsRequestSchema,
   type InstanceSettings,
   type MetadataProviderSource,
@@ -12,6 +11,7 @@ import type { AppEnv } from '../types.js'
 import { requireAdmin, requireAuth } from '../middleware/auth.js'
 import { loadEnv } from '../env.js'
 import { availableProviderSources } from '../providers/index.js'
+import { isProviderSource } from '../lib/provider-source.js'
 
 export const settingsRoutes = new OpenAPIHono<AppEnv>()
 
@@ -24,10 +24,6 @@ const DEFAULT_SETTINGS = {
 
 function isSupportedLocale(value: string): value is InstanceSettings['defaultLocale'] {
   return (SUPPORTED_LOCALES as readonly string[]).includes(value)
-}
-
-function isProviderSource(value: string): value is MetadataProviderSource {
-  return metadataProviderSourceSchema.safeParse(value).success
 }
 
 /** Narrows a DB row's free-form `defaultLocale`/`metadataProviderPriority`

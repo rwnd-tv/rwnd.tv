@@ -456,7 +456,9 @@ describe('backups', () => {
           status: null,
           genres: ['Drama'],
           voteAverage: null,
-          seasons: [{ seasonNumber: 1, name: 'Season 1', episodeCount: 7, airDate: null, posterPath: null }],
+          seasons: [
+            { seasonNumber: 1, name: 'Season 1', episodeCount: 7, airDate: null, posterPath: null },
+          ],
           episodes: [
             {
               seasonNumber: 1,

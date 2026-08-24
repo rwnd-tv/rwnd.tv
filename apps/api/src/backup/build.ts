@@ -1,6 +1,15 @@
 import { eq, inArray } from 'drizzle-orm'
 import type { Database } from '@rwnd/db'
-import { droppedShows, episodes, movies, plays, ratings, seasons, shows, watchlistItems } from '@rwnd/db'
+import {
+  droppedShows,
+  episodes,
+  movies,
+  plays,
+  ratings,
+  seasons,
+  shows,
+  watchlistItems,
+} from '@rwnd/db'
 import {
   BACKUP_FORMAT_VERSION,
   type BackupDroppedShow,
@@ -122,7 +131,9 @@ export async function buildBackupFile(
    * episode number, or null if the episode is unknown or its show has no id
    * from any configured provider — same "can't be represented" case as a
    * movie/show with no external_ids row at all. */
-  function episodeRef(episodeId: string): { show: ExternalRef; season: number; episode: number } | null {
+  function episodeRef(
+    episodeId: string,
+  ): { show: ExternalRef; season: number; episode: number } | null {
     const episode = episodeById.get(episodeId)
     if (!episode) return null
     const showRefValue = showRef.get(episode.showId)

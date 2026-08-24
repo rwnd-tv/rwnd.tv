@@ -96,9 +96,9 @@ describe('TmdbProvider.findByExternalId', () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 500 }))
     vi.stubGlobal('fetch', fetchMock)
 
-    await expect(provider().findByExternalId('movie', 'imdb', 'tt0133093', 'en-GB')).rejects.toThrow(
-      /500/,
-    )
+    await expect(
+      provider().findByExternalId('movie', 'imdb', 'tt0133093', 'en-GB'),
+    ).rejects.toThrow(/500/)
   })
 
   it('sends external_source=imdb_id vs tvdb_id depending on the requested source', async () => {

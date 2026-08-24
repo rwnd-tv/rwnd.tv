@@ -317,7 +317,9 @@ describe('Trakt import', () => {
     expect(finished?.itemsImported).toBe(3)
     expect(finished?.itemsSkipped).toBe(1)
     expect(finished?.failures).toHaveLength(1)
-    expect(finished?.failures[0]?.reason).toMatch(/No match for this movie from any configured metadata provider/)
+    expect(finished?.failures[0]?.reason).toMatch(
+      /No match for this movie from any configured metadata provider/,
+    )
 
     const allPlays = await db.select().from(plays).where(eq(plays.userId, me.id))
     expect(allPlays).toHaveLength(3)

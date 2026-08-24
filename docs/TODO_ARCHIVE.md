@@ -1537,3 +1537,43 @@ currently-dropped shows, since a row can have both
       Live-verified against James's real ~11,300-item Trakt account: a
       re-import now reports 0 imported / 11286 processed / 5 unmatched,
       accurately reflecting that nothing had actually changed.
+
+- [x] **Self-hosted the TMDB/TVDB attribution logos instead of hotlinking them** (2026-08-24 20:20 added, done 2026-08-24) — M2\
+      James spotted the show/season/episode pages' TMDB rating badge
+      directly hotlinking `themoviedb.org/assets/...svg` — the likely real
+      cause of the "TMDB icon seems broken" report investigated earlier
+      today (that investigation confirmed the asset loaded fine *in that
+      moment*, but never ruled out TMDB's CDN being unreliable at other
+      times, which is exactly the failure mode a hotlink risks and a
+      self-hosted copy doesn't). Same pattern existed for both of TheTVDB's
+      attribution logo variants.\
+      Checked TMDB's and TheTVDB's own attribution pages and API terms of
+      use before changing anything (`docs/TODO_ARCHIVE.md`'s TVDB
+      licensing entry already covers verifying compliance rather than
+      assuming it): neither requires serving the logo live from the
+      provider's own domain. TMDB's terms only require the logo be used
+      unmodified and less prominently than this app's own branding, and
+      their attribution page itself offers the SVG as a direct download.
+      TheTVDB's api-information page requires a direct *link* to
+      TheTVDB.com (already handled by `tvdbSeriesUrl`/`tvdbSeasonUrl`/etc.
+      in `apps/web/src/lib/tvdb.ts`) but says nothing about the logo
+      image's own hosting.\
+      All three logos (`apps/web/src/lib/tmdb.ts`'s TMDB_LOGO_URL,
+      `apps/web/src/lib/tvdb.ts`'s TVDB_LOGO_LIGHT_BG_URL/
+      TVDB_LOGO_DARK_BG_URL) downloaded byte-for-byte and committed to
+      `apps/web/public/attribution/` — served as static files (not run
+      through Vite's hashed-asset pipeline, so the URL stays stable)
+      rather than fetched live from themoviedb.org/thetvdb.com. Also
+      updated `EpisodeDetailPage.tsx`/`SeasonDetailPage.tsx`'s own
+      duplicated TMDB_LOGO_URL constants (same per-file icon precedent as
+      before — see their own doc comments) and README.md's attribution
+      footer (now a repo-relative path GitHub resolves from the repo
+      itself, not TMDB's CDN). Explicitly accepted tradeoff, matching
+      `lib/tmdb.ts`'s own prior doc comment on why hotlinking was tried
+      first: a self-hosted copy needs a manual re-download if TMDB/TVDB
+      ever redesign their logo, in exchange for no longer depending on
+      their CDN's uptime for something as basic as an attribution icon
+      rendering correctly.\
+      Live-verified on dev.rwnd.tv: all three logos render correctly and
+      `img.src` for each now resolves to `dev.rwnd.tv/attribution/...`,
+      not the original third-party domain.

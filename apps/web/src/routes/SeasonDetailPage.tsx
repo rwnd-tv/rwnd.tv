@@ -116,9 +116,9 @@ function ChevronRightIcon() {
 
 /** Same TMDB attribution logo used on ShowDetailPage.tsx's rating badge —
  * duplicated rather than shared, matching this file's existing per-file
- * icon precedent (see CheckIcon above). */
-const TMDB_LOGO_URL =
-  'https://www.themoviedb.org/assets/2/v4/logos/v2/blue_short-8e7b30f73a4020692ccca9c88bafe5dcb6f8a62a4c6bc55cd9ba82bb2cd95f6c.svg'
+ * icon precedent (see CheckIcon above). Self-hosted — see TMDB_LOGO_URL's
+ * own doc comment in lib/tmdb.ts for why. */
+const TMDB_LOGO_URL = '/attribution/tmdb-logo.svg'
 
 export function SeasonDetailPage() {
   const { t } = useTranslation()

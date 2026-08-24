@@ -5,6 +5,8 @@ import { useQuery } from '@tanstack/react-query'
 import { api, ApiError } from '../lib/api-client.js'
 import { useAuth } from '../lib/auth-context.js'
 import { useEpisodeWatchActions } from '../lib/use-episode-watch-actions.js'
+import { formatDateTimeInput } from '../lib/date.js'
+import { PROVIDER_LABELS } from '../lib/provider-labels.js'
 import { SpoilerGuard } from '../components/library/SpoilerGuard.js'
 import { WatchDateDialog } from '../components/library/WatchDateDialog.js'
 import { UnwatchConfirmDialog } from '../components/library/UnwatchConfirmDialog.js'
@@ -318,6 +320,19 @@ export function EpisodeDetailPage() {
             >
               <p className="text-sm">{episode.overview}</p>
             </SpoilerGuard>
+          )}
+          {show?.metadataSource && (
+            // Inherited from the show — an episode has no metadata source
+            // of its own. Same styling/placement as ShowDetailPage.tsx's
+            // own metadataSource block.
+            <p
+              className="text-sm text-[var(--color-fg-muted)]"
+              title={t('showDetail.metadataSourceTooltip', {
+                date: formatDateTimeInput(new Date(show.metadataRefreshedAt), locale),
+              })}
+            >
+              {t('showDetail.metadataSource', { provider: PROVIDER_LABELS[show.metadataSource] })}
+            </p>
           )}
 
           <div className="flex gap-2">

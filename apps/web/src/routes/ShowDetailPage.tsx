@@ -278,22 +278,6 @@ export function ShowDetailPage() {
                     {show.voteAverage.toFixed(1)}
                   </span>
                 ) : null,
-                // Distinct from the rating badge above — that answers
-                // "where did this 8.4 come from and where do I click
-                // through"; this answers "where did the rest of this page's
-                // metadata come from". Text, not the TMDB logo, so the two
-                // aren't visually indistinguishable.
-                show.metadataSource ? (
-                  <span
-                    title={t('showDetail.metadataSourceTooltip', {
-                      date: formatDateTimeInput(new Date(show.metadataRefreshedAt), locale),
-                    })}
-                  >
-                    {t('showDetail.metadataSource', {
-                      provider: PROVIDER_LABELS[show.metadataSource],
-                    })}
-                  </span>
-                ) : null,
               ] satisfies (ReactNode | null)[]
             )
               .filter((fact) => fact !== null)
@@ -316,6 +300,21 @@ export function ShowDetailPage() {
             >
               <p className="text-sm">{show.overview}</p>
             </SpoilerGuard>
+          )}
+          {show.metadataSource && (
+            // Distinct from the rating badge above — that answers "where
+            // did this 8.4 come from and where do I click through"; this
+            // answers "where did the rest of this page's metadata come
+            // from". Its own line rather than folded into the fact line, so
+            // it doesn't compete with year/genres/status for attention.
+            <p
+              className="text-sm text-[var(--color-fg-muted)]"
+              title={t('showDetail.metadataSourceTooltip', {
+                date: formatDateTimeInput(new Date(show.metadataRefreshedAt), locale),
+              })}
+            >
+              {t('showDetail.metadataSource', { provider: PROVIDER_LABELS[show.metadataSource] })}
+            </p>
           )}
 
           {show.totalEpisodes !== null ? (

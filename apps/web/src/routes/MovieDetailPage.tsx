@@ -206,19 +206,6 @@ export function MovieDetailPage() {
                     {movie.voteAverage.toFixed(1)}
                   </span>
                 ) : null,
-                // See ShowDetailPage.tsx's own metadataSource entry for why
-                // this is separate from the rating badge above.
-                movie.metadataSource ? (
-                  <span
-                    title={t('movieDetail.metadataSourceTooltip', {
-                      date: formatDateTimeInput(new Date(movie.metadataRefreshedAt), locale),
-                    })}
-                  >
-                    {t('movieDetail.metadataSource', {
-                      provider: PROVIDER_LABELS[movie.metadataSource],
-                    })}
-                  </span>
-                ) : null,
               ] satisfies (ReactNode | null)[]
             )
               .filter((fact) => fact !== null)
@@ -231,6 +218,19 @@ export function MovieDetailPage() {
           </div>
 
           {movie.overview && <p className="max-w-2xl text-sm">{movie.overview}</p>}
+          {movie.metadataSource && (
+            // See ShowDetailPage.tsx's own metadataSource block for why
+            // this is separate from the rating badge above and on its own
+            // line rather than folded into the fact line.
+            <p
+              className="text-sm text-[var(--color-fg-muted)]"
+              title={t('movieDetail.metadataSourceTooltip', {
+                date: formatDateTimeInput(new Date(movie.metadataRefreshedAt), locale),
+              })}
+            >
+              {t('movieDetail.metadataSource', { provider: PROVIDER_LABELS[movie.metadataSource] })}
+            </p>
+          )}
 
           <div className="flex gap-2">
             <Button

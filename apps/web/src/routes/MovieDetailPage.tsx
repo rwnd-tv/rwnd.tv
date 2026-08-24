@@ -6,6 +6,7 @@ import { api, ApiError } from '../lib/api-client.js'
 import { useAuth } from '../lib/auth-context.js'
 import { useMovieWatchActions } from '../lib/use-movie-watch-actions.js'
 import { TMDB_LOGO_URL } from '../lib/tmdb.js'
+import { TVDB_LOGO_DARK_BG_URL, TVDB_LOGO_LIGHT_BG_URL, tvdbMovieUrl } from '../lib/tvdb.js'
 import { MetadataAttribution } from '../components/library/MetadataAttribution.js'
 import { UnwatchConfirmDialog } from '../components/library/UnwatchConfirmDialog.js'
 import { WatchDateDialog } from '../components/library/WatchDateDialog.js'
@@ -204,6 +205,27 @@ export function MovieDetailPage() {
                     )}
                     {movie.voteAverage.toFixed(1)}
                   </span>
+                ) : null,
+                // See ShowDetailPage.tsx's own tvdbId fact for why this is
+                // just the logo/link rather than a rating badge.
+                movie.tvdbId ? (
+                  <a
+                    href={tvdbMovieUrl(movie.tvdbId)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title={t('movieDetail.viewOnTvdb')}
+                  >
+                    <img
+                      src={TVDB_LOGO_LIGHT_BG_URL}
+                      alt={t('movieDetail.viewOnTvdb')}
+                      className="tvdb-logo-light h-[0.9rem]"
+                    />
+                    <img
+                      src={TVDB_LOGO_DARK_BG_URL}
+                      alt={t('movieDetail.viewOnTvdb')}
+                      className="tvdb-logo-dark h-[0.9rem]"
+                    />
+                  </a>
                 ) : null,
               ] satisfies (ReactNode | null)[]
             )

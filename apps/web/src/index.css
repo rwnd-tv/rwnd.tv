@@ -124,3 +124,27 @@ body {
   outline: 2px solid var(--color-focus-ring);
   outline-offset: 2px;
 }
+
+/* ShowDetailPage.tsx/MovieDetailPage.tsx's TVDB link: neither of TVDB's own
+   logo variants (see apps/web/src/lib/tvdb.ts) reads on both themes, so
+   both are rendered and only one is shown, picked with the exact same
+   selectors as the theme tokens at the top of this file. */
+.tvdb-logo-dark {
+  display: none;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .tvdb-logo-dark {
+    display: inline-block;
+  }
+  :root:not([data-theme='light']) .tvdb-logo-light {
+    display: none;
+  }
+}
+
+:root[data-theme='dark'] .tvdb-logo-dark {
+  display: inline-block;
+}
+:root[data-theme='dark'] .tvdb-logo-light {
+  display: none;
+}

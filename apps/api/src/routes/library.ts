@@ -587,6 +587,21 @@ libraryRoutes.openapi(
       )
       .limit(1)
 
+    // Backs the TVDB link on the same page — see the tmdbExternalId query
+    // above for the identical convention. Independent of `tmdbExternalId`:
+    // a show can have either id, both, or neither on record.
+    const [tvdbExternalId] = await db
+      .select({ externalId: externalIds.externalId })
+      .from(externalIds)
+      .where(
+        and(
+          eq(externalIds.entityType, 'show'),
+          eq(externalIds.entityId, show.id),
+          eq(externalIds.source, 'tvdb'),
+        ),
+      )
+      .limit(1)
+
     const [droppedRow] = await db
       .select({
         traktDropped: droppedShows.traktDropped,
@@ -684,6 +699,7 @@ libraryRoutes.openapi(
       genres: show.genres,
       voteAverage: show.voteAverage,
       tmdbId: tmdbExternalId?.externalId ?? null,
+      tvdbId: tvdbExternalId?.externalId ?? null,
       metadataSource:
         show.metadataSource && isProviderSource(show.metadataSource) ? show.metadataSource : null,
       metadataRefreshedAt: show.metadataRefreshedAt.toISOString(),
@@ -823,6 +839,48 @@ libraryRoutes.openapi(
       .limit(1)
     if (!providerExternalId) return c.json({ error: 'Season not found' }, 404)
 
+    // TVDB's own season/episode ids for the "view on TVDB" links —
+    // deliberately independent of `provider` above (still the single
+    // primary provider for the season's actual content, per ADR 0006's
+    // documented seam). A live, best-effort side lookup: only attempted
+    // when TVDB is configured and this show has a recorded `tvdb` external
+    // id, and never lets a failed/slow TVDB call break the rest of the
+    // page — the link is just absent.
+    const tvdbProvider = c.get('metadataProviders').find((p) => p.source === 'tvdb')
+    let tvdbSeasonId: string | null = null
+    const tvdbEpisodeIdByNumber = new Map<number, string>()
+    if (tvdbProvider) {
+      const [tvdbExternalId] = await db
+        .select({ externalId: externalIds.externalId })
+        .from(externalIds)
+        .where(
+          and(
+            eq(externalIds.entityType, 'show'),
+            eq(externalIds.entityId, show.id),
+            eq(externalIds.source, 'tvdb'),
+          ),
+        )
+        .limit(1)
+      if (tvdbExternalId) {
+        try {
+          const tvdbSeason = await tvdbProvider.getSeason(
+            tvdbExternalId.externalId,
+            seasonNumber,
+            user.locale,
+          )
+          tvdbSeasonId = tvdbSeason.externalId
+          for (const episode of tvdbSeason.episodes) {
+            if (episode.externalId)
+              tvdbEpisodeIdByNumber.set(episode.episodeNumber, episode.externalId)
+          }
+        } catch {
+          // Network hiccup or no matching season on TVDB's side — leave
+          // both maps empty rather than failing the whole page over a
+          // supplementary link.
+        }
+      }
+    }
+
     const {
       overview: seasonOverview,
       voteAverage: seasonVoteAverage,
@@ -887,8 +945,10 @@ libraryRoutes.openapi(
               : null,
             hasUnknownWatch: watch?.hasUnknownWatch ?? false,
             voteAverage: episode.voteAverage,
+            tvdbEpisodeId: tvdbEpisodeIdByNumber.get(episode.episodeNumber) ?? null,
           }
         }),
+      tvdbSeasonId,
     })
   },
 )
@@ -1535,6 +1595,20 @@ libraryRoutes.openapi(
       )
       .limit(1)
 
+    // Backs the TVDB link — same convention as the show route's own
+    // tvdbExternalId query.
+    const [tvdbExternalId] = await db
+      .select({ externalId: externalIds.externalId })
+      .from(externalIds)
+      .where(
+        and(
+          eq(externalIds.entityType, 'movie'),
+          eq(externalIds.entityId, movie.id),
+          eq(externalIds.source, 'tvdb'),
+        ),
+      )
+      .limit(1)
+
     // Same 1900-01-01 Trakt-sentinel exclusion as the show route's
     // watchedRange query above — see that query's doc comment.
     const [watchedRange] = await db
@@ -1562,6 +1636,7 @@ libraryRoutes.openapi(
       genres: movie.genres,
       voteAverage: movie.voteAverage,
       tmdbId: tmdbExternalId?.externalId ?? null,
+      tvdbId: tvdbExternalId?.externalId ?? null,
       metadataSource:
         movie.metadataSource && isProviderSource(movie.metadataSource)
           ? movie.metadataSource

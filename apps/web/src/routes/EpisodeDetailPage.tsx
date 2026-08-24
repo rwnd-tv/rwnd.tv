@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query'
 import { api, ApiError } from '../lib/api-client.js'
 import { useAuth } from '../lib/auth-context.js'
 import { useEpisodeWatchActions } from '../lib/use-episode-watch-actions.js'
+import { TVDB_LOGO_DARK_BG_URL, TVDB_LOGO_LIGHT_BG_URL, tvdbEpisodeUrl } from '../lib/tvdb.js'
 import { MetadataAttribution } from '../components/library/MetadataAttribution.js'
 import { SpoilerGuard } from '../components/library/SpoilerGuard.js'
 import { WatchDateDialog } from '../components/library/WatchDateDialog.js'
@@ -296,6 +297,30 @@ export function EpisodeDetailPage() {
                     )}
                     {episode.voteAverage.toFixed(1)}
                   </span>
+                ) : null,
+                // See ShowDetailPage.tsx's own tvdbId fact for why this is
+                // just the logo/link rather than a rating badge. Uses this
+                // episode's own tvdbEpisodeId (a live, best-effort lookup —
+                // see the season route's doc comment), not the show's
+                // tvdbId, so it opens this exact episode on TVDB.
+                episode.tvdbEpisodeId ? (
+                  <a
+                    href={tvdbEpisodeUrl(episode.tvdbEpisodeId)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title={t('showDetail.viewOnTvdb.episode')}
+                  >
+                    <img
+                      src={TVDB_LOGO_LIGHT_BG_URL}
+                      alt={t('showDetail.viewOnTvdb.episode')}
+                      className="tvdb-logo-light h-[0.9rem]"
+                    />
+                    <img
+                      src={TVDB_LOGO_DARK_BG_URL}
+                      alt={t('showDetail.viewOnTvdb.episode')}
+                      className="tvdb-logo-dark h-[0.9rem]"
+                    />
+                  </a>
                 ) : null,
               ] satisfies (ReactNode | null)[]
             )

@@ -54,6 +54,13 @@ export interface ProviderSeason {
    * provider doesn't expose one / has no votes yet, same convention as
    * ProviderShow.voteAverage above. */
   voteAverage: number | null
+  /** This provider's own internal id for this season, distinct from
+   * seasonNumber — only meaningful for a provider whose own website needs
+   * an id (not a number) to link to a specific season page, e.g. TVDB's
+   * thetvdb.com/dereferrer/season/{id}. TMDB's season pages are
+   * number-addressed and have no use for this, so TmdbProvider always
+   * returns null here. */
+  externalId: string | null
   episodes: ProviderEpisode[]
 }
 
@@ -133,4 +140,9 @@ export interface ProviderEpisode {
    * provider doesn't expose one / has no votes yet, same convention as
    * ProviderShow.voteAverage. */
   voteAverage: number | null
+  /** This provider's own internal id for this episode — see
+   * ProviderSeason.externalId for the same convention
+   * (thetvdb.com/dereferrer/episode/{id}). TmdbProvider always returns
+   * null here. */
+  externalId: string | null
 }

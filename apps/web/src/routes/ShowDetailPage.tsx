@@ -7,6 +7,7 @@ import { api, ApiError } from '../lib/api-client.js'
 import { invalidateWatchData } from '../lib/query-client.js'
 import { markWatchedRequestBody } from '../lib/date.js'
 import { TMDB_LOGO_URL } from '../lib/tmdb.js'
+import { TVDB_LOGO_DARK_BG_URL, TVDB_LOGO_LIGHT_BG_URL, tvdbSeriesUrl } from '../lib/tvdb.js'
 import { useAuth } from '../lib/auth-context.js'
 import { EpisodeCard } from '../components/library/EpisodeCard.js'
 import { MetadataAttribution } from '../components/library/MetadataAttribution.js'
@@ -277,6 +278,29 @@ export function ShowDetailPage() {
                     )}
                     {show.voteAverage.toFixed(1)}
                   </span>
+                ) : null,
+                // TVDB never populates voteAverage (see
+                // apps/api/src/providers/tvdb.ts) — its "score" isn't a
+                // comparable rating, so this is just the logo/link, no
+                // number next to it like the TMDB one above.
+                show.tvdbId ? (
+                  <a
+                    href={tvdbSeriesUrl(show.tvdbId)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title={t('showDetail.viewOnTvdb.show')}
+                  >
+                    <img
+                      src={TVDB_LOGO_LIGHT_BG_URL}
+                      alt={t('showDetail.viewOnTvdb.show')}
+                      className="tvdb-logo-light h-[0.9rem]"
+                    />
+                    <img
+                      src={TVDB_LOGO_DARK_BG_URL}
+                      alt={t('showDetail.viewOnTvdb.show')}
+                      className="tvdb-logo-dark h-[0.9rem]"
+                    />
+                  </a>
                 ) : null,
               ] satisfies (ReactNode | null)[]
             )

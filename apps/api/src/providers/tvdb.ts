@@ -48,6 +48,7 @@ interface TvdbStatus {
   name?: string | null
 }
 interface TvdbSeasonType {
+  id?: number
   type?: string
 }
 interface TvdbSeasonSummary {
@@ -74,6 +75,13 @@ interface TvdbSeries {
   status?: TvdbStatus | null
   genres?: TvdbGenre[]
   seasons?: TvdbSeasonSummary[]
+  // Id of this show's own "aired order" season-type grouping (a show can
+  // have several — DVD order, absolute order, etc. — alongside it). NOT
+  // the same thing as the string "default" used as a path segment on the
+  // episodes endpoint below, which is a request-time alias the API
+  // resolves to whichever type this field points at — season records
+  // themselves are never tagged with a literal type of "default".
+  defaultSeasonType?: number
 }
 interface TvdbEpisode {
   id: number
@@ -113,6 +121,20 @@ const LANGUAGE_BY_LOCALE: Record<string, string> = {
 
 function tvdbLanguage(locale: string): string {
   return LANGUAGE_BY_LOCALE[locale] ?? 'eng'
+}
+
+/** Whether a season belongs to the show's own "aired order" grouping.
+ * TVDB tags a season's type by *id* (`show.defaultSeasonType`, e.g. `1`),
+ * not by a literal string — confirmed live against a real show, where the
+ * matching SeasonType's own `type` string was "official", not "default"
+ * (that string is only ever a path segment on the episodes endpoint, an
+ * alias the API resolves server-side to whichever type this points at —
+ * see TvdbSeries.defaultSeasonType's own doc comment). Falls back to the
+ * "official" string on the rare chance `defaultSeasonType` is itself
+ * missing, rather than matching nothing at all. */
+function isDefaultSeasonType(season: TvdbSeasonSummary, show: TvdbSeries): boolean {
+  if (show.defaultSeasonType !== undefined) return season.type?.id === show.defaultSeasonType
+  return season.type?.type === 'official'
 }
 
 /** Thrown by request()/login() for any non-2xx TVDB response. Carries the
@@ -313,7 +335,7 @@ export class TvdbProvider implements MetadataProvider {
       genres: (show.genres ?? []).map((g) => g.name),
       voteAverage: null,
       seasons: (show.seasons ?? [])
-        .filter((s) => s.type?.type === 'default')
+        .filter((s) => isDefaultSeasonType(s, show))
         .map((s): ProviderSeasonSummary => {
           const derived = bySeason.get(s.number)
           return {
@@ -363,6 +385,7 @@ export class TvdbProvider implements MetadataProvider {
       overview: episode.overview ?? null,
       stillPath: episode.image ?? null,
       voteAverage: null,
+      externalId: String(episode.id),
     }
   }
 
@@ -379,13 +402,14 @@ export class TvdbProvider implements MetadataProvider {
       }),
     ])
     const season = (show.seasons ?? []).find(
-      (s) => s.number === seasonNumber && s.type?.type === 'default',
+      (s) => s.number === seasonNumber && isDefaultSeasonType(s, show),
     )
     const translation = season ? await this.translation('seasons', String(season.id), locale) : null
 
     return {
       overview: translation?.overview ?? null,
       voteAverage: null,
+      externalId: season ? String(season.id) : null,
       episodes: (episodesPage.episodes ?? []).map((e) => ({
         title: e.name ?? null,
         seasonNumber: e.seasonNumber,
@@ -395,6 +419,7 @@ export class TvdbProvider implements MetadataProvider {
         overview: e.overview ?? null,
         stillPath: e.image ?? null,
         voteAverage: null,
+        externalId: String(e.id),
       })),
     }
   }

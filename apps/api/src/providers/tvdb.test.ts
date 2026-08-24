@@ -165,9 +165,10 @@ describe('TvdbProvider.getMovie / getShow', () => {
           overview: 'primary overview',
           status: { name: 'Ended' },
           genres: [{ name: 'Drama' }],
+          defaultSeasonType: 1,
           seasons: [
-            { id: 10, number: 1, name: 'Season 1', type: { type: 'default' } },
-            { id: 11, number: 1, name: 'Season 1 (DVD)', type: { type: 'dvd' } },
+            { id: 10, number: 1, name: 'Season 1', type: { id: 1, type: 'official' } },
+            { id: 11, number: 1, name: 'Season 1 (DVD)', type: { id: 2, type: 'dvd' } },
           ],
         }),
       )
@@ -194,6 +195,27 @@ describe('TvdbProvider.getMovie / getShow', () => {
         airDate: '2011-04-17',
         posterPath: null,
       },
+    ])
+  })
+
+  it('falls back to matching the "official" season type by name when defaultSeasonType is itself missing', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(loginOk())
+      .mockResolvedValueOnce(
+        apiResponse({
+          id: 1399,
+          name: 'Game of Thrones',
+          seasons: [{ id: 10, number: 1, name: 'Season 1', type: { id: 1, type: 'official' } }],
+        }),
+      )
+      .mockResolvedValueOnce(apiResponse({ name: 'Game of Thrones' }))
+      .mockResolvedValueOnce(apiResponse({ episodes: [] }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const show = await provider().getShow('1399', 'en-GB')
+    expect(show.seasons).toEqual([
+      { seasonNumber: 1, name: 'Season 1', episodeCount: 0, airDate: null, posterPath: null },
     ])
   })
 
@@ -251,6 +273,7 @@ describe('TvdbProvider.getEpisode', () => {
       overview: 'ov',
       stillPath: 'https://example.com/still.jpg',
       voteAverage: null,
+      externalId: '1',
     })
     const [, secondCall] = fetchMock.mock.calls as [unknown, [URL]]
     const [url] = secondCall
@@ -280,7 +303,8 @@ describe('TvdbProvider.getSeason', () => {
         apiResponse({
           id: 1399,
           name: 'Game of Thrones',
-          seasons: [{ id: 10, number: 1, type: { type: 'default' } }],
+          defaultSeasonType: 1,
+          seasons: [{ id: 10, number: 1, type: { id: 1, type: 'official' } }],
         }),
       )
       .mockResolvedValueOnce(

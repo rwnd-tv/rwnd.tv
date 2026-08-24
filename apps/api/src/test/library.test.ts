@@ -14,6 +14,8 @@ import type {
   Watches,
 } from '@rwnd/shared'
 import { createLocalUser, extractCookie, json, resetDb, testApp, testDb } from './helpers.js'
+import { createApp } from '../app.js'
+import type { MetadataProvider, ProviderSeason } from '../providers/types.js'
 
 const db = testDb()
 const app = testApp()
@@ -260,6 +262,32 @@ describe('library', () => {
       expect(res.status).toBe(200)
       const detail = await json<ShowDetail>(res)
       expect(detail.metadataSource).toBe('tmdb')
+    })
+
+    it('carries tvdbId independently of tmdbId/metadataSource — a show can have both, either, or neither', async () => {
+      const cookie = await createUserAndCookie()
+      const [show] = await db
+        .insert(shows)
+        .values({
+          title: 'Cross-Provider Show',
+          slug: 'cross-provider-show',
+          metadataSource: 'tmdb',
+        })
+        .returning()
+      if (!show) throw new Error('failed to insert show')
+      await db.insert(externalIds).values([
+        { entityType: 'show', entityId: show.id, source: 'tmdb', externalId: '111' },
+        { entityType: 'show', entityId: show.id, source: 'tvdb', externalId: '222' },
+      ])
+
+      const res = await app.request(`/api/v1/library/shows/${show.slug}`, { headers: { cookie } })
+      expect(res.status).toBe(200)
+      const detail = await json<ShowDetail>(res)
+      // TVDB currently the fallback provider (metadataSource: 'tmdb'), but
+      // the link is still present — see showDetailSchema's `tvdbId` doc
+      // comment for why it isn't gated on metadataSource.
+      expect(detail.tmdbId).toBe('111')
+      expect(detail.tvdbId).toBe('222')
     })
 
     it('reports real per-season watched counts, but excludes specials from the header total (regression)', async () => {
@@ -626,6 +654,98 @@ describe('library', () => {
         headers: { cookie },
       })
       expect((await json<SeasonDetail>(res)).episodes[0]?.hasUnknownWatch).toBe(false)
+    })
+
+    it('resolves tvdbSeasonId/tvdbEpisodeId via a live TVDB side-lookup, independent of the primary provider', async () => {
+      const cookie = await createUserAndCookie()
+      const [show] = await db
+        .insert(shows)
+        .values({ title: 'Cross-Provider Season Show', slug: 'cross-provider-season-show' })
+        .returning()
+      if (!show) throw new Error('failed to insert show')
+      await db.insert(externalIds).values([
+        { entityType: 'show', entityId: show.id, source: 'tmdb', externalId: '70001' },
+        { entityType: 'show', entityId: show.id, source: 'tvdb', externalId: '9001' },
+      ])
+      await db.insert(seasons).values({ showId: show.id, seasonNumber: 1, episodeCount: 1 })
+
+      // Fakes rather than real Tmdb/TvdbProvider instances — this test is
+      // about the route's own cross-provider merge logic, already exercised
+      // against the real API shapes in apps/api/src/providers/tvdb.test.ts.
+      const fakeSeason = (externalId: string | null): ProviderSeason => ({
+        overview: null,
+        voteAverage: null,
+        externalId,
+        episodes: [
+          {
+            title: 'Ep 1',
+            seasonNumber: 1,
+            episodeNumber: 1,
+            runtimeMinutes: null,
+            firstAired: null,
+            overview: null,
+            stillPath: null,
+            voteAverage: null,
+            externalId: externalId ? `${externalId}-ep` : null,
+          },
+        ],
+      })
+      const fakeTmdb = {
+        source: 'tmdb',
+        getSeason: async () => fakeSeason(null),
+      } as unknown as MetadataProvider
+      const fakeTvdb = {
+        source: 'tvdb',
+        getSeason: async () => fakeSeason('55555'),
+      } as unknown as MetadataProvider
+
+      const customApp = createApp({ db, metadataProviders: [fakeTmdb, fakeTvdb] })
+      const res = await customApp.request(`/api/v1/library/shows/${show.slug}/seasons/1`, {
+        headers: { cookie },
+      })
+      expect(res.status).toBe(200)
+      const body = await json<SeasonDetail>(res)
+      expect(body.tvdbSeasonId).toBe('55555')
+      expect(body.episodes[0]?.tvdbEpisodeId).toBe('55555-ep')
+    })
+
+    it('leaves tvdbSeasonId/tvdbEpisodeId null when the show has no tvdb external id, without calling TVDB at all', async () => {
+      const cookie = await createUserAndCookie()
+      const show = await insertShowWithSeason('2020-01-01')
+
+      const fakeTmdb = {
+        source: 'tmdb',
+        getSeason: async () => ({
+          overview: null,
+          voteAverage: null,
+          externalId: null,
+          episodes: [
+            {
+              title: 'Ep 1',
+              seasonNumber: 1,
+              episodeNumber: 1,
+              runtimeMinutes: null,
+              firstAired: null,
+              overview: null,
+              stillPath: null,
+              voteAverage: null,
+              externalId: null,
+            },
+          ],
+        }),
+      } as unknown as MetadataProvider
+      const tvdbGetSeason = vi.fn()
+      const fakeTvdb = { source: 'tvdb', getSeason: tvdbGetSeason } as unknown as MetadataProvider
+
+      const customApp = createApp({ db, metadataProviders: [fakeTmdb, fakeTvdb] })
+      const res = await customApp.request(`/api/v1/library/shows/${show.slug}/seasons/1`, {
+        headers: { cookie },
+      })
+      expect(res.status).toBe(200)
+      const body = await json<SeasonDetail>(res)
+      expect(body.tvdbSeasonId).toBeNull()
+      expect(body.episodes[0]?.tvdbEpisodeId).toBeNull()
+      expect(tvdbGetSeason).not.toHaveBeenCalled()
     })
   })
 
@@ -1889,6 +2009,29 @@ describe('library', () => {
       expect(res.status).toBe(200)
       const detail = await json<MovieDetail>(res)
       expect(detail.metadataSource).toBe('tmdb')
+    })
+
+    it('carries tvdbId independently of tmdbId/metadataSource — same convention as the show route', async () => {
+      const cookie = await createUserAndCookie()
+      const [movie] = await db
+        .insert(movies)
+        .values({
+          title: 'Cross-Provider Movie',
+          slug: 'cross-provider-movie',
+          metadataSource: 'tmdb',
+        })
+        .returning()
+      if (!movie) throw new Error('failed to insert movie')
+      await db.insert(externalIds).values([
+        { entityType: 'movie', entityId: movie.id, source: 'tmdb', externalId: '111' },
+        { entityType: 'movie', entityId: movie.id, source: 'tvdb', externalId: '222' },
+      ])
+
+      const res = await app.request(`/api/v1/library/movies/${movie.slug}`, { headers: { cookie } })
+      expect(res.status).toBe(200)
+      const detail = await json<MovieDetail>(res)
+      expect(detail.tmdbId).toBe('111')
+      expect(detail.tvdbId).toBe('222')
     })
 
     it("returns metadata and the current user's watch status", async () => {

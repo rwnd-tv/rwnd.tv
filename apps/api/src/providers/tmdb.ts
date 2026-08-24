@@ -249,6 +249,9 @@ export class TmdbProvider implements MetadataProvider {
       overview: e.overview ?? null,
       stillPath: this.stillUrl(e.still_path),
       voteAverage: e.vote_average ? e.vote_average : null,
+      // TMDB's episode pages are addressed by number, not id — see
+      // ProviderEpisode.externalId's doc comment.
+      externalId: null,
     }
   }
 
@@ -261,6 +264,9 @@ export class TmdbProvider implements MetadataProvider {
     return {
       overview: s.overview ?? null,
       voteAverage: s.vote_average ? s.vote_average : null,
+      // TMDB's season pages are addressed by number, not id — see
+      // ProviderSeason.externalId's doc comment.
+      externalId: null,
       episodes: s.episodes.map((e) => ({
         title: e.name ?? null,
         seasonNumber: e.season_number,
@@ -270,6 +276,7 @@ export class TmdbProvider implements MetadataProvider {
         overview: e.overview ?? null,
         stillPath: this.stillUrl(e.still_path),
         voteAverage: e.vote_average ? e.vote_average : null,
+        externalId: null,
       })),
     }
   }

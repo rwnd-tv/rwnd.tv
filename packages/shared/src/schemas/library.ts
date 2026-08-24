@@ -167,11 +167,18 @@ export const showDetailSchema = z.object({
    * `metadataSource` below — this field stays TMDB-specific on purpose,
    * it's a themoviedb.org deep link, not a provenance indicator. */
   tmdbId: z.string().nullable(),
+  /** TVDB's own numeric id for this show, for linking to its TheTVDB page
+   * (thetvdb.com/dereferrer/series/{id} — see apps/web/src/lib/tvdb.ts).
+   * Same "deep link, not a provenance indicator" convention as `tmdbId`
+   * above — populated whenever a `tvdb` external id is on record
+   * regardless of which provider is currently `metadataSource`, so the
+   * link doesn't disappear just because TMDB happens to be primary. */
+  tvdbId: z.string().nullable(),
   /** Which provider the cached metadata on this page (title/overview/
-   * genres/etc., not `tmdbId` above) was last fetched from — shown as a
-   * provenance label next to the rating badge (docs/adr/0006). Null for a
-   * row no provider has ever written (shouldn't happen in practice, same
-   * caveat as `tmdbId`). */
+   * genres/etc., not `tmdbId`/`tvdbId` above) was last fetched from —
+   * shown as a provenance label next to the rating badge (docs/adr/0006).
+   * Null for a row no provider has ever written (shouldn't happen in
+   * practice, same caveat as `tmdbId`). */
   metadataSource: metadataProviderSourceSchema.nullable(),
   /** When `metadataSource` last wrote the cached fields. Surfaced as the
    * provenance label's tooltip — with metadata refreshed on request rather
@@ -247,6 +254,15 @@ export const seasonEpisodeSchema = z.object({
    * or genuinely unrated — both render the same way (no rating shown), same
    * convention as those other fields. */
   voteAverage: z.number().nullable(),
+  /** This episode's own TVDB numeric id, for linking to its exact TVDB page
+   * (thetvdb.com/dereferrer/episode/{id} — see apps/web/src/lib/tvdb.ts).
+   * Distinct from `episodeNumber`, which is what the primary provider
+   * (TMDB, whichever this route otherwise reads from) addresses episodes
+   * by instead. Resolved with a live, best-effort TVDB lookup alongside
+   * the rest of this route's own provider call — null when the show has
+   * no `tvdb` external id, TVDB has no matching episode, or that lookup
+   * fails; never blocks the rest of the page on that failure. */
+  tvdbEpisodeId: z.string().nullable(),
 })
 export type SeasonEpisode = z.infer<typeof seasonEpisodeSchema>
 
@@ -265,6 +281,10 @@ export const seasonDetailSchema = z.object({
    * rating shown), same convention as the show-level field. */
   voteAverage: z.number().nullable(),
   episodes: z.array(seasonEpisodeSchema),
+  /** This season's own TVDB numeric id — see seasonEpisodeSchema's
+   * `tvdbEpisodeId` for the same convention
+   * (thetvdb.com/dereferrer/season/{id}). */
+  tvdbSeasonId: z.string().nullable(),
 })
 export type SeasonDetail = z.infer<typeof seasonDetailSchema>
 
@@ -442,6 +462,9 @@ export const movieDetailSchema = z.object({
   /** TMDB's own numeric id for this movie, for linking to its TMDB page —
    * see showDetailSchema's `tmdbId` for the same convention. */
   tmdbId: z.string().nullable(),
+  /** TVDB's own numeric id for this movie — see showDetailSchema's
+   * `tvdbId` for the same convention (thetvdb.com/dereferrer/movie/{id}). */
+  tvdbId: z.string().nullable(),
   /** See showDetailSchema's field of the same name. */
   metadataSource: metadataProviderSourceSchema.nullable(),
   /** See showDetailSchema's field of the same name. */

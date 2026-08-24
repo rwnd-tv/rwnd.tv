@@ -127,6 +127,11 @@
       "season": "View this season on TMDB",
       "episode": "View this episode on TMDB"
     },
+    "viewOnTvdb": {
+      "show": "View this TV show on TheTVDB",
+      "season": "View this season on TheTVDB",
+      "episode": "View this episode on TheTVDB"
+    },
     "droppedFact": "Dropped",
     "watchedButton": "Watched",
     "watchedButtonDisabled": "This show has no TMDB match, so episodes can't be resolved",
@@ -228,6 +233,7 @@
     "runtime": "{{minutes}} min",
     "ratingSource": "TMDB rating",
     "viewOnTmdb": "View this film on TMDB",
+    "viewOnTvdb": "View this film on TheTVDB",
     "watchedButton": "Watched",
     "watchedButtonDisabled": "This film has no TMDB match, so a watch can't be logged",
     "watchedButtonTooltip": {

@@ -95,18 +95,31 @@ function PlusIcon() {
  * found came up often enough to be annoying. The title is
  * swapped for the generic label under the same `stillHidden` condition as
  * the image, so clicking reveal shows both together — it has no reveal
- * control of its own, but isn't independent of the still's either.
+ * control of its own, but isn't independent of the still's either. See the
+ * `revealed` prop for the season-wide "reveal all at once" alternative to
+ * this per-tile button, e.g. for a season with too many hidden tiles to
+ * reveal one at a time.
  */
 export function EpisodeCard({
   episode,
   slug,
   seasonNumber,
   tmdbId,
+  revealed = false,
 }: {
   episode: SeasonEpisode
   slug: string
   seasonNumber: number
   tmdbId: string | null
+  /** Reveals this tile even before its own per-tile button is clicked —
+   * SeasonDetailPage.tsx's "reveal all episodes" control, for a season
+   * with too many hidden tiles to reveal one at a time. Doesn't replace
+   * the per-tile state below, just ORs with it: revealing everything here
+   * doesn't stop a later individual reveal from still working the same
+   * way it always has (there's nothing to "un-reveal" this from). Left
+   * unset (false) for ShowDetailPage.tsx's own single-season grid, which
+   * has no such control. */
+  revealed?: boolean
 }) {
   const { t } = useTranslation()
   const { user } = useAuth()
@@ -128,7 +141,7 @@ export function EpisodeCard({
 
   const episodeLabel = t('import.progress.episode', { number: episode.episodeNumber })
   const spoilerHidden = Boolean(user?.spoilerProtectionEnabled) && !episode.watched
-  const stillHidden = spoilerHidden && !stillRevealed
+  const stillHidden = spoilerHidden && !stillRevealed && !revealed
   const displayTitle = stillHidden ? episodeLabel : (episode.title ?? episodeLabel)
   const toggleLabel = t(episode.watched ? 'showDetail.markUnwatched' : 'showDetail.markWatched')
   const toggleTitle =

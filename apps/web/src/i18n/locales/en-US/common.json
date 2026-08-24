@@ -58,7 +58,8 @@
     }
   },
   "spoiler": {
-    "reveal": "Reveal spoiler"
+    "reveal": "Reveal spoiler",
+    "revealEpisodes": "Reveal episodes"
   },
   "search": {
     "title": "Search",

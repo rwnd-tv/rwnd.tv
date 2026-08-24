@@ -56,6 +56,28 @@ function PlusIcon() {
   )
 }
 
+/** Icon for the "reveal all episodes" button below — duplicated from
+ * EpisodeCard.tsx's own EyeIcon rather than shared, same per-file icon
+ * precedent as PlusIcon above. */
+function EyeIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width={16}
+      height={16}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  )
+}
+
 function ChevronLeftIcon() {
   return (
     <svg
@@ -114,6 +136,15 @@ export function SeasonDetailPage() {
   const [logAdditionalWatchOpen, setLogAdditionalWatchOpen] = useState(false)
   const [removeWatchesConfirmOpen, setRemoveWatchesConfirmOpen] = useState(false)
   const [overviewRevealed, setOverviewRevealed] = useState(false)
+  // Separate from overviewRevealed above — this season might have no
+  // overview at all to reveal (common with TVDB, especially for
+  // sports/reality content), but its episode tiles below still each have
+  // their own spoiler-hidden still/title (EpisodeCard.tsx) that's tedious
+  // to reveal one at a time, hovering + clicking each tile individually,
+  // on a season with dozens of episodes. This reveals every tile at once;
+  // EpisodeCard's own per-tile reveal button still works independently of
+  // it (e.g. to reveal just one before this is clicked).
+  const [episodesRevealed, setEpisodesRevealed] = useState(false)
 
   // Same queryKey ShowDetailPage.tsx/PageTitleEffect.tsx use — shared React
   // Query cache, so this is free if the user navigated here from the show
@@ -187,6 +218,13 @@ export function SeasonDetailPage() {
   const posterPath = season.posterPath ?? show?.posterPath ?? null
   const seasonYear = season.airDate ? new Date(season.airDate).getFullYear() : null
   const watchedEpisodes = season.episodes.filter((episode) => episode.watched).length
+  // Whether the "reveal all episodes" button below has anything to do —
+  // same condition each EpisodeCard uses itself (spoilerHidden), just
+  // checked across the whole season rather than per-tile.
+  const hasHiddenEpisodes =
+    Boolean(user?.spoilerProtectionEnabled) &&
+    !episodesRevealed &&
+    season.episodes.some((episode) => !episode.watched)
   // Purple/primary once every *aired* episode of this season has been
   // watched — same "Watched" button behaviour as ShowDetailPage.tsx, just
   // scoped to one season (specials included, unlike the show-level
@@ -404,6 +442,17 @@ export function SeasonDetailPage() {
                 <PlusIcon />
               </Button>
             )}
+            {hasHiddenEpisodes && (
+              <Button
+                variant="secondary"
+                type="button"
+                title={t('spoiler.revealEpisodes')}
+                onClick={() => setEpisodesRevealed(true)}
+              >
+                <EyeIcon />
+                {t('spoiler.revealEpisodes')}
+              </Button>
+            )}
           </div>
         </div>
       </div>
@@ -464,6 +513,7 @@ export function SeasonDetailPage() {
             slug={slug!}
             seasonNumber={season.seasonNumber}
             tmdbId={show?.tmdbId ?? null}
+            revealed={episodesRevealed}
           />
         ))}
       </PosterGrid>

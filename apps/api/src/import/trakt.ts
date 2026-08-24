@@ -1,4 +1,4 @@
-import { eq, sql } from 'drizzle-orm'
+import { eq, ne, or, sql } from 'drizzle-orm'
 import type { Database } from '@rwnd/db'
 import {
   droppedShows,
@@ -256,20 +256,23 @@ export async function runTraktImport(
       pushFailure('ratings', match)
       return 'skipped'
     }
-    await db
+    const rating = item.rating
+    const ratedAt = new Date(item.rated_at)
+    // setWhere makes RETURNING report a row only when the conflict branch
+    // actually changes something — without it, re-running an import against
+    // unchanged Trakt data reports every rating as freshly "imported" every
+    // time (itemsImported becoming meaningless noise rather than a real
+    // count of new/changed activity).
+    const written = await db
       .insert(ratings)
-      .values({
-        userId,
-        entityType: match.entityType,
-        entityId: match.entityId,
-        rating: item.rating,
-        ratedAt: new Date(item.rated_at),
-      })
+      .values({ userId, entityType: match.entityType, entityId: match.entityId, rating, ratedAt })
       .onConflictDoUpdate({
         target: [ratings.userId, ratings.entityType, ratings.entityId],
-        set: { rating: item.rating, ratedAt: new Date(item.rated_at) },
+        set: { rating, ratedAt },
+        setWhere: or(ne(ratings.rating, rating), ne(ratings.ratedAt, ratedAt)),
       })
-    return 'imported'
+      .returning({ id: ratings.id })
+    return written.length > 0 ? 'imported' : 'skipped'
   }
 
   async function processWatchlistItem(item: TraktWatchlistItem): Promise<'imported' | 'skipped'> {
@@ -278,19 +281,18 @@ export async function runTraktImport(
       pushFailure('watchlist', match)
       return 'skipped'
     }
-    await db
+    const listedAt = new Date(item.listed_at)
+    // See processRatingItem's own comment on setWhere — same reasoning.
+    const written = await db
       .insert(watchlistItems)
-      .values({
-        userId,
-        entityType: match.entityType,
-        entityId: match.entityId,
-        listedAt: new Date(item.listed_at),
-      })
+      .values({ userId, entityType: match.entityType, entityId: match.entityId, listedAt })
       .onConflictDoUpdate({
         target: [watchlistItems.userId, watchlistItems.entityType, watchlistItems.entityId],
-        set: { listedAt: new Date(item.listed_at) },
+        set: { listedAt },
+        setWhere: ne(watchlistItems.listedAt, listedAt),
       })
-    return 'imported'
+      .returning({ id: watchlistItems.id })
+    return written.length > 0 ? 'imported' : 'skipped'
   }
 
   async function processDroppedItem(item: TraktHiddenItem): Promise<'imported' | 'skipped'> {
@@ -303,7 +305,12 @@ export async function runTraktImport(
       return 'skipped'
     }
     const traktDroppedAt = new Date(item.hidden_at)
-    await db
+    // See processRatingItem's own comment on setWhere — same reasoning,
+    // adapted to this row's own "would the update actually change
+    // anything" condition: only when it isn't already traktDropped with
+    // this exact traktDroppedAt, or a manual override is still sitting
+    // there needing the conditional clear above to fire.
+    const written = await db
       .insert(droppedShows)
       .values({
         userId,
@@ -327,8 +334,19 @@ export async function runTraktImport(
           manualDropped: sql`case when ${droppedShows.manualDropped} = true then null else ${droppedShows.manualDropped} end`,
           manualDroppedAt: sql`case when ${droppedShows.manualDropped} = true then null else ${droppedShows.manualDroppedAt} end`,
         },
+        // traktDroppedAt is passed as an explicit ISO string + cast, not the
+        // raw Date — a Date interpolated directly into a sql`` template
+        // doesn't get the same value serialization values()/set() apply,
+        // and stringifies via Date.prototype.toString() instead (not a
+        // valid timestamptz literal), silently failing this whole query.
+        setWhere: sql`NOT (
+          ${droppedShows.traktDropped} IS TRUE
+          AND ${droppedShows.traktDroppedAt} IS NOT DISTINCT FROM ${traktDroppedAt.toISOString()}::timestamptz
+          AND ${droppedShows.manualDropped} IS NOT TRUE
+        )`,
       })
-    return 'imported'
+      .returning({ id: droppedShows.id })
+    return written.length > 0 ? 'imported' : 'skipped'
   }
 
   /** Runs one phase from `fromPage` to completion. Returns true if the job

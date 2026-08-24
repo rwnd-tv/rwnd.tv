@@ -790,6 +790,67 @@ describe('Trakt import', () => {
     expect(secondPass[0]?.rating).toBe(9)
   })
 
+  it('reports itemsImported accurately — only new/changed ratings, watchlist entries, and dropped shows count, not every successfully-matched item on re-import', async () => {
+    const cookie = await createUserAndCookie()
+    const me = await json<User>(await app.request('/api/v1/auth/me', { headers: { cookie } }))
+    await createTraktConnection(db, me.id)
+
+    const unchangedFixtures = {
+      ratingsItems: [fx.matrixRatingItem(7)],
+      watchlistItemsList: [fx.matrixWatchlistItem],
+      droppedItems: [fx.breakingBadDroppedItem('2024-02-01T00:00:00.000Z')],
+    }
+
+    vi.stubGlobal('fetch', createFetchStub(unchangedFixtures))
+    const [job1] = await db
+      .insert(importJobs)
+      .values({ userId: me.id, includeHistory: false, includeRatings: true, includeWatchlist: true })
+      .returning()
+    await runTraktImport(db, providers, env, job1!.id)
+    const [finished1] = await db
+      .select()
+      .from(importJobs)
+      .where(eq(importJobs.id, job1!.id))
+      .limit(1)
+    // First pass: all three are genuinely new rows.
+    expect(finished1?.itemsImported).toBe(3)
+    expect(finished1?.itemsSkipped).toBe(0)
+
+    // Re-running against the exact same Trakt data — nothing has actually
+    // changed, so nothing should count as "imported" this time.
+    vi.stubGlobal('fetch', createFetchStub(unchangedFixtures))
+    const [job2] = await db
+      .insert(importJobs)
+      .values({ userId: me.id, includeHistory: false, includeRatings: true, includeWatchlist: true })
+      .returning()
+    await runTraktImport(db, providers, env, job2!.id)
+    const [finished2] = await db
+      .select()
+      .from(importJobs)
+      .where(eq(importJobs.id, job2!.id))
+      .limit(1)
+    expect(finished2?.itemsImported).toBe(0)
+    expect(finished2?.itemsSkipped).toBe(3)
+
+    // A genuinely changed rating still counts as imported, not skipped.
+    vi.stubGlobal(
+      'fetch',
+      createFetchStub({ ...unchangedFixtures, ratingsItems: [fx.matrixRatingItem(9)] }),
+    )
+    const [job3] = await db
+      .insert(importJobs)
+      .values({ userId: me.id, includeHistory: false, includeRatings: true, includeWatchlist: true })
+      .returning()
+    await runTraktImport(db, providers, env, job3!.id)
+    const [finished3] = await db
+      .select()
+      .from(importJobs)
+      .where(eq(importJobs.id, job3!.id))
+      .limit(1)
+    expect(finished3?.itemsImported).toBe(1)
+    expect(finished3?.itemsSkipped).toBe(2)
+  })
+
   it('imports a dropped show, and re-importing with a new hidden_at updates it rather than duplicating', async () => {
     const cookie = await createUserAndCookie()
     const me = await json<User>(await app.request('/api/v1/auth/me', { headers: { cookie } }))

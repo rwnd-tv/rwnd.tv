@@ -1510,3 +1510,30 @@ currently-dropped shows, since a row can have both
       alternative (every dual-pipeline watch double-counted), and not
       worth the added complexity of picking a "winner" between sources
       that disagree, which the original TODO had flagged as unresolved.
+
+- [x] **Fixed: Trakt import's itemsImported count was noise, not a real number** (2026-08-24 20:00 added, done 2026-08-24) — M2\
+      James's ask, live: re-running an import against an already-up-to-
+      date Trakt account reported dozens of "items imported" with nothing
+      actually new anywhere — confusing, and the opposite of what a user
+      needs to trust the number. Root cause: `processRatingItem`/
+      `processWatchlistItem`/`processDroppedItem` (`apps/api/src/import/
+      trakt.ts`) always returned `'imported'` on a successful match,
+      regardless of whether the `onConflictDoUpdate` upsert actually
+      changed anything — re-confirming identical Trakt data every run
+      counted as "imported" every single time. Fixed with drizzle's
+      `setWhere` on each upsert (comparing the incoming values against
+      what's already stored), so `RETURNING` — and therefore the
+      `'imported'`/`'skipped'` outcome — only fires on a genuine insert or
+      an actual data change.\
+      Surfaced a real, separate bug while fixing this: a raw `Date`
+      interpolated directly into a `sql`-tagged template (the
+      `dropped_shows` `setWhere` condition) doesn't get the same value
+      serialization `values()`/`set()` apply — it stringifies via
+      `Date.prototype.toString()` instead of an ISO string, an invalid
+      timestamptz literal that silently failed every dropped-show
+      write (caught by the per-item error handler, so the job still
+      "completed," just having quietly done nothing). Fixed by passing
+      an explicit `.toISOString()` + `::timestamptz` cast instead.\
+      Live-verified against James's real ~11,300-item Trakt account: a
+      re-import now reports 0 imported / 11286 processed / 5 unmatched,
+      accurately reflecting that nothing had actually changed.

@@ -318,6 +318,11 @@ libraryRoutes.openapi(
  * guess, not something James asked for by number; easy to retune later. */
 const DASHBOARD_ROW_WINDOW_DAYS = 30
 
+/** Cap on how many cards the Dashboard's On Deck and Up Next rows show
+ * (James, 2026-08-24) — applied after sorting, so it's always the 8
+ * most-relevant-by-that-row's-own-ordering, not an arbitrary 8. */
+const DASHBOARD_ROW_LIMIT = 8
+
 interface RecentlyWatchedCandidate {
   id: string
   slug: string
@@ -467,7 +472,7 @@ libraryRoutes.openapi(
     // which reads as more urgent than a show you're only one day behind on.
     shownShows.sort((a, b) => a.firstAired.localeCompare(b.firstAired))
 
-    return c.json({ shows: shownShows })
+    return c.json({ shows: shownShows.slice(0, DASHBOARD_ROW_LIMIT) })
   },
 )
 
@@ -527,7 +532,7 @@ libraryRoutes.openapi(
     // countdown rather than "what did I watch most recently".
     shownShows.sort((a, b) => a.firstAired.localeCompare(b.firstAired))
 
-    return c.json({ shows: shownShows })
+    return c.json({ shows: shownShows.slice(0, DASHBOARD_ROW_LIMIT) })
   },
 )
 

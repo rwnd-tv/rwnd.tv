@@ -109,8 +109,13 @@ export const api = {
   search: (q: string, type: 'movie' | 'show' | 'all' = 'all') =>
     get<SearchResponse>(`/search?q=${encodeURIComponent(q)}&type=${type}`),
   plays: {
-    list: (cursor?: string) =>
-      get<ListPlaysResponse>(`/plays${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`),
+    list: (cursor?: string, limit?: number) => {
+      const params = new URLSearchParams()
+      if (cursor) params.set('cursor', cursor)
+      if (limit) params.set('limit', String(limit))
+      const qs = params.toString()
+      return get<ListPlaysResponse>(`/plays${qs ? `?${qs}` : ''}`)
+    },
     create: (body: CreatePlayRequest) => post<Play>('/plays', body),
     delete: (id: string) => del<void>(`/plays/${id}`),
   },

@@ -6,6 +6,7 @@ import { useDebouncedValue } from '../lib/use-debounced-value.js'
 import { SearchResultCard } from '../components/SearchResultCard.js'
 import { OnDeckRow } from '../components/library/OnDeckRow.js'
 import { UpNextRow } from '../components/library/UpNextRow.js'
+import { HistoryRow } from '../components/library/HistoryRow.js'
 import { Field } from '../components/ui/Field.js'
 import { Spinner } from '../components/ui/Spinner.js'
 
@@ -24,6 +25,7 @@ export function DashboardPage() {
     <div className="flex flex-col gap-6">
       <OnDeckRow />
       <UpNextRow />
+      <HistoryRow />
       <div className="flex flex-col gap-3">
         <h1 className="text-2xl font-semibold">{t('search.title')}</h1>
         <Field

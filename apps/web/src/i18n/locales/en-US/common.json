@@ -44,12 +44,17 @@
   },
   "dashboard": {
     "onDeck": {
-      "title": "On Deck",
+      "title": "Continue Watching",
       "episodeLabel": "S{{season}} E{{episode}} · {{date}}"
     },
     "upNext": {
-      "title": "Up Next",
+      "title": "Upcoming",
       "episodeLabel": "S{{season}} E{{episode}} · {{date}}"
+    },
+    "history": {
+      "title": "History",
+      "episodeLabel": "S{{season}} E{{episode}} · {{date}}",
+      "watchedLabel": "{{date}}"
     }
   },
   "spoiler": {

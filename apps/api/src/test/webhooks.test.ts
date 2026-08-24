@@ -103,7 +103,13 @@ function fakeTvdbWithEpisodeRedirect(): MetadataProvider {
       throw new Error('Not used')
     },
     async getShow(externalId) {
-      if (externalId !== '11569546') throw new Error(`Unexpected show lookup: ${externalId}`)
+      // '387219' is the show's own real id (no redirect needed) — accepted
+      // too so a test can first resolve the show normally, then separately
+      // exercise the episode-id-redirect path against an *already-known*
+      // show (see the "does not create a duplicate show" test below).
+      if (externalId !== '11569546' && externalId !== '387219') {
+        throw new Error(`Unexpected show lookup: ${externalId}`)
+      }
       return {
         externalId: '387219',
         title: 'Formula 1',
@@ -134,6 +140,17 @@ function fakeTvdbWithEpisodeRedirect(): MetadataProvider {
             episodeNumber: 66,
             runtimeMinutes: 60,
             firstAired: '2026-08-22',
+            overview: null,
+            stillPath: null,
+            voteAverage: null,
+            externalId: null,
+          },
+          {
+            title: 'Netherlands (Practice)',
+            seasonNumber: 2026,
+            episodeNumber: 65,
+            runtimeMinutes: 60,
+            firstAired: '2026-08-21',
             overview: null,
             stillPath: null,
             voteAverage: null,
@@ -307,6 +324,53 @@ describe('POST /webhooks/plex/:token', () => {
 
     const [show] = await db.select().from(shows).where(eq(shows.title, 'Formula 1'))
     expect(show).toBeDefined()
+  })
+
+  it('does not create a duplicate show when a later event redirects to an id already known under its own', async () => {
+    const app = createApp({ db, metadataProviders: [fakeTvdbWithEpisodeRedirect()] })
+    const { cookie, token } = await createClaimedTokenAndCookie(app)
+
+    // First delivery resolves the show via its own real id (no redirect
+    // needed) — same as an ordinary earlier watch.
+    const first = await postWebhook(app, token, {
+      event: 'media.scrobble',
+      Account: DEFAULT_ACCOUNT,
+      Metadata: {
+        type: 'episode',
+        ratingKey: '32914',
+        grandparentTitle: 'Formula 1',
+        parentIndex: 2026,
+        index: 65,
+        Guid: [{ id: 'tvdb://387219' }],
+      },
+    })
+    expect(first.status).toBe(200)
+
+    // Second delivery, a different episode, arrives with an id that
+    // redirects to the *same* show (387219) — before the fix, resolveShow
+    // couldn't tell this was already-known and created a second "Formula
+    // 1" show with the wrong (uncorrected) external id, live-verified
+    // 2026-08-24.
+    const second = await postWebhook(app, token, {
+      event: 'media.scrobble',
+      Account: DEFAULT_ACCOUNT,
+      Metadata: {
+        type: 'episode',
+        ratingKey: '32915',
+        grandparentTitle: 'Formula 1',
+        parentIndex: 2026,
+        index: 66,
+        Guid: [{ id: 'tvdb://11569546' }],
+      },
+    })
+    expect(second.status).toBe(200)
+
+    const formula1Shows = await db.select().from(shows).where(eq(shows.title, 'Formula 1'))
+    expect(formula1Shows).toHaveLength(1)
+
+    const historyRes = await app.request('/api/v1/plays', { headers: { cookie } })
+    const { plays: history } = await json<{ plays: unknown[] }>(historyRes)
+    expect(history).toHaveLength(2)
   })
 
   it('is idempotent — the same scrobble delivered twice logs one play, not two', async () => {

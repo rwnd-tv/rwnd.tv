@@ -1577,3 +1577,71 @@ trakt.ts`) always returned `'imported'` on a successful match,
       Live-verified on dev.rwnd.tv: all three logos render correctly and
       `img.src` for each now resolves to `dev.rwnd.tv/attribution/...`,
       not the original third-party domain.
+
+- [x] **Fixed: resolveShow created a duplicate show when a redirected id was already known under its own** (2026-08-24 21:45 added, done 2026-08-24) — M2\
+      Fallout from the earlier TVDB native-id fix: when `TvdbProvider.getShow`
+      redirects an episode-shaped input id to a show's real id (see the
+      "TVDB id-space collision" entry above), `resolveShow`
+      (`apps/api/src/lib/media.ts`) never re-checked whether _that_
+      corrected id already mapped to a show it already knew about. It
+      created a genuine duplicate `shows` row instead — the duplicate's
+      own `external_ids` insert then silently no-ops against the
+      original's existing row (unique on `(entityType, source,
+externalId)` alone), but nothing then stopped
+      `backfillExternalIdBundle` (`apps/api/src/lib/external-match.ts`)
+      from giving the duplicate a _wrong_ external_ids row of its own —
+      the raw, uncorrected id, since `entityId` differs so no unique
+      index caught it. Found live: Carol's Plex account produced four
+      separate "Formula 1" shows on dev over the course of testing (the
+      real one with James's 343-play history, plus three junk
+      duplicates holding one or two of Carol's plays each), which broke
+      the Dashboard's On Deck/Up Next rows outright (500s) once one of
+      the duplicates' broken external id got queried directly.\
+      Fixed by re-checking `lookupShowByExternalId` against the
+      _canonical_ (corrected) id before creating a new show, reusing the
+      existing one if found. Manually repaired the already-corrupted
+      data on both dev (3 duplicate shows, 2 misplaced plays) and prod
+      (1 duplicate, 1 misplaced play) by repointing the misplaced plays
+      to the correct show's matching episodes and deleting the orphaned
+      duplicate show rows — a one-off data fix, not something the code
+      change itself could retroactively undo.
+
+- [x] **Fixed: switching accounts needed a hard refresh, and a first attempted fix broke login/logout outright** (2026-08-24 21:15 added, done 2026-08-24) — M2\
+      James's ask, from real multi-account use: switching between "James
+      Bulman" and "Carol Bulman" on a shared browser needed an F5/Ctrl-F5
+      to see accurate content — login/logout only ever invalidated the
+      `['auth','me']` query, leaving every other cached query (library,
+      history, on-deck, show/episode pages, ...) holding the _previous_
+      account's data, compounded by a 30-second default `staleTime` that
+      meant React Query wouldn't even attempt a background refetch in
+      that window.\
+      First attempt — `queryClient.clear()` plus an explicit
+      `refetchQueries(['auth','me'])` on both login and logout — made
+      things _worse_, not better: clicking Log in or Log out visibly did
+      nothing until a hard refresh, live-verified repeatedly on dev.
+      Chased several wrong leads before finding the real cause (a 503
+      that turned out to be a real but unrelated intermittent glitch,
+      ruled-out browser extensions, ruled-out nginx-pm config — dev has
+      an IP-allowlist prod doesn't, but it wasn't the cause either).\
+      The decisive test, at James's suggestion to compare _code_ rather
+      than infra: temporarily reverted dev's `Sidebar.tsx`/`LoginPage.tsx`
+      to byte-identical copies of what prod was still running (the
+      original plain-`invalidateQueries` version, since prod hadn't been
+      promoted past commit `e297c92` yet) — dev worked perfectly with
+      that code, conclusively proving the `clear()`+`refetchQueries`
+      change itself was the bug, not environment. Root cause:
+      `queryClient.clear()` destroys the `['auth','me']` query object
+      entirely; calling `refetchQueries` on that same key immediately
+      afterward races against React re-subscribing `AuthProvider`'s
+      already-mounted observer to a freshly-recreated query — the
+      refetch call can find nothing to refetch yet and silently no-ops,
+      leaving `user` stuck until something forces a remount (a hard
+      refresh).\
+      Real fix: `queryClient.removeQueries({ predicate: (query) =>
+query.queryKey[0] !== 'auth' })` — drops every _other_ cached query
+      but leaves `auth/me`'s own query object, and therefore
+      AuthProvider's live observer, untouched — followed by a plain
+      `invalidateQueries(['auth','me'])`, the same call that already
+      worked reliably before any of this. Live-verified on dev: login and
+      logout both update immediately, and switching between James's and
+      Carol's accounts no longer needs a refresh to show correct content.

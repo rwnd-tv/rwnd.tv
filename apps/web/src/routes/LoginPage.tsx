@@ -40,6 +40,11 @@ export function LoginPage() {
     setSubmitting(true)
     try {
       await api.auth.login({ email, password })
+      // See Sidebar.tsx's handleLogout for why this is removeQueries on
+      // everything else + a plain invalidate on auth/me, not clear().
+      // Covers reaching /login without going through the logout button
+      // too (e.g. a session that expired server-side).
+      queryClient.removeQueries({ predicate: (query) => query.queryKey[0] !== 'auth' })
       await queryClient.invalidateQueries({ queryKey: ['auth', 'me'] })
       navigate('/dashboard')
     } catch (err) {

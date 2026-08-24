@@ -80,30 +80,36 @@ export async function resolveMovie(
  * on its own (for a Trakt rating/watchlist entry of type 'show') as well as
  * before resolving individual episodes.
  */
-export async function resolveShow(
+async function lookupShowByExternalId(
   db: Database,
-  provider: MetadataProvider,
-  showExternalId: string,
-  locale: string,
-): Promise<{ id: string; title: string; slug: string; externalId: string }> {
+  source: MetadataProvider['source'],
+  externalId: string,
+): Promise<{ id: string; title: string; slug: string; externalId: string } | null> {
   const [existing] = await db
     .select({ id: externalIds.entityId })
     .from(externalIds)
     .where(
       and(
         eq(externalIds.entityType, 'show'),
-        eq(externalIds.source, provider.source),
-        eq(externalIds.externalId, showExternalId),
+        eq(externalIds.source, source),
+        eq(externalIds.externalId, externalId),
       ),
     )
     .limit(1)
+  if (!existing) return null
 
-  if (existing) {
-    const [show] = await db.select().from(shows).where(eq(shows.id, existing.id)).limit(1)
-    // showExternalId is already this row's own canonical external id — it's
-    // exactly what the WHERE clause above just matched it by.
-    if (show) return { id: show.id, title: show.title, slug: show.slug, externalId: showExternalId }
-  }
+  const [show] = await db.select().from(shows).where(eq(shows.id, existing.id)).limit(1)
+  return show ? { id: show.id, title: show.title, slug: show.slug, externalId } : null
+}
+
+export async function resolveShow(
+  db: Database,
+  provider: MetadataProvider,
+  showExternalId: string,
+  locale: string,
+): Promise<{ id: string; title: string; slug: string; externalId: string }> {
+  const existingByInput = await lookupShowByExternalId(db, provider.source, showExternalId)
+  if (existingByInput) return existingByInput
 
   const fetched = await provider.getShow(showExternalId, locale)
   // fetched.externalId, not showExternalId, is this show's real canonical id
@@ -114,6 +120,27 @@ export async function resolveShow(
   // below) must key off the corrected id, or they 404 against an id that
   // was never actually this show's own.
   const canonicalExternalId = fetched.externalId
+
+  // The redirect above can land on a show already known locally under its
+  // *own* id, just not under showExternalId (whatever other id it arrived
+  // as). Without this check, the insert below creates a genuine duplicate
+  // show — its own external_ids insert silently no-ops against the
+  // original's existing row (external_ids_source_lookup_idx conflicts on
+  // (entityType, source, externalId) alone), but nothing then stops
+  // backfillExternalIdBundle (apps/api/src/lib/external-match.ts) from
+  // giving that duplicate a *wrong* external_ids row of its own — the raw,
+  // uncorrected id, since entity_id differs so no unique index blocks it.
+  // Confirmed live 2026-08-24: two duplicate "Formula 1" shows created
+  // this exact way, each missing the real tvdb id entirely.
+  if (canonicalExternalId !== showExternalId) {
+    const existingByCanonical = await lookupShowByExternalId(
+      db,
+      provider.source,
+      canonicalExternalId,
+    )
+    if (existingByCanonical) return existingByCanonical
+  }
+
   const slug = await generateUniqueShowSlug(db, fetched.title, fetched.year)
   const [show] = await db
     .insert(shows)

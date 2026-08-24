@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { metadataProviderSourceSchema } from './common.js'
 
 export const searchQuerySchema = z.object({
   q: z.string().trim().min(1).max(200),
@@ -8,7 +9,11 @@ export type SearchQuery = z.infer<typeof searchQuerySchema>
 
 export const searchResultSchema = z.object({
   type: z.enum(['movie', 'show']),
-  source: z.literal('tmdb'),
+  /** Which provider this result came from — echoed straight back by
+   * SearchResultCard.tsx into POST /library/shows|movies/resolve's own
+   * `source`, so this widens in lockstep with
+   * resolveMediaRequestSchema.source (library.ts). */
+  source: metadataProviderSourceSchema,
   externalId: z.string(),
   title: z.string(),
   year: z.number().int().nullable(),

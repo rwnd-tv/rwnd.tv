@@ -5,6 +5,17 @@ import { paginationQuerySchema } from './common.js'
  * A play is logged against a *provider* result, not a local row directly —
  * the API resolves/creates the local movie or episode as part of handling
  * the request. Exactly one of movie/episode must be present.
+ *
+ * `source` is deliberately still `z.literal('tmdb')`, not the wider
+ * `metadataProviderSourceSchema` (schemas/common.ts) used elsewhere as of
+ * the multi-provider plumbing work (docs/adr/0006) — unlike
+ * searchResultSchema/resolveMediaRequestSchema, this value is *authored by
+ * the client* from a `tmdbId` field (see use-movie-watch-actions.ts,
+ * use-episode-watch-actions.ts, both of which hardcode `'tmdb'`), and the
+ * handler ignores it and resolves against whichever provider is on
+ * context. Widening this now would let a request claim `source: 'tvdb'`
+ * and silently resolve it against TMDB anyway. Widen this once POST /plays
+ * actually honours `source` per-request, not before.
  */
 export const createPlayRequestSchema = z
   .object({

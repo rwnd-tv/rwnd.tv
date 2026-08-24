@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { metadataProviderSourceSchema } from './common.js'
 
 /**
  * TV Shows / Movies gallery pages (apps/web/src/routes/ShowsPage.tsx,
@@ -18,10 +19,15 @@ import { z } from 'zod'
  * types — `resolveShowRequestSchema`/`resolveMovieRequestSchema` would be
  * identical structs, and the show/movie-specific routes
  * (POST /library/shows/resolve, POST /library/movies/resolve) already tell
- * them apart by path.
+ * them apart by path. `source` widens in lockstep with
+ * searchResultSchema.source (schemas/search.ts) — this is that value
+ * round-tripped straight back by the client, and both handlers below
+ * (POST /library/shows/resolve, POST /library/movies/resolve) already
+ * ignore it and resolve using only `externalId` against whichever provider
+ * is on context, so widening it is purely additive.
  */
 export const resolveMediaRequestSchema = z.object({
-  source: z.literal('tmdb'),
+  source: metadataProviderSourceSchema,
   externalId: z.string(),
 })
 export type ResolveMediaRequest = z.infer<typeof resolveMediaRequestSchema>

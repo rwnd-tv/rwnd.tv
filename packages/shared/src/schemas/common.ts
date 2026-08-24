@@ -17,6 +17,18 @@ export type Theme = z.infer<typeof themeSchema>
 export const userRoleSchema = z.enum(['admin', 'user'])
 export type UserRole = z.infer<typeof userRoleSchema>
 
+/** Which metadata provider fetched a title's cached fields, or is being
+ * asked to. Deliberately a *subset* of the DB's 4-value
+ * `external_id_source` enum (packages/db/src/schema.ts) — `imdb`/`trakt`
+ * are id namespaces things get looked up *by*, not systems metadata is
+ * ever fetched *from*, so they don't belong in this narrower list. Still
+ * assignable to the `externalIds.source` column type. `tvdb` has no real
+ * implementation yet (see docs/adr/0002-metadata-provider.md) — it's here
+ * so the type doesn't need widening again the day one exists; every code
+ * path that only knows about `tmdb` today keeps working unchanged. */
+export const metadataProviderSourceSchema = z.enum(['tmdb', 'tvdb'])
+export type MetadataProviderSource = z.infer<typeof metadataProviderSourceSchema>
+
 export const uuidSchema = z.string().uuid()
 
 export const paginationQuerySchema = z.object({

@@ -22,6 +22,7 @@ import {
 import type { Database } from '@rwnd/db'
 import { droppedShows, episodes, externalIds, movies, plays, seasons, shows } from '@rwnd/db'
 import type { AppEnv } from '../types.js'
+import type { MetadataProvider } from '../providers/types.js'
 import { requireAuth } from '../middleware/auth.js'
 import {
   findNextAiringEpisode,
@@ -328,7 +329,7 @@ interface RecentlyWatchedCandidate {
   slug: string
   title: string
   posterPath: string | null
-  tmdbId: string
+  providerExternalId: string
   /** Highest non-special season number this user has a watch in — where to
    * start scanning forward from (both On Deck and Up Next below want "from
    * wherever the viewer actually got to", not from season 1). Null if every
@@ -338,9 +339,10 @@ interface RecentlyWatchedCandidate {
 
 /**
  * Shows the current user watched within `DASHBOARD_ROW_WINDOW_DAYS` days,
- * not dropped, with a TMDB id (a show without one can't be resolved against
- * the provider at all — see docs/TODO.md's multi-provider item — so it's
- * excluded rather than kept as a candidate nothing can act on). Shared by
+ * not dropped, with an external id from `provider` (a show without one
+ * can't be resolved against it — excluded rather than kept as a candidate
+ * nothing can act on; docs/adr/0006 covers why this stays on the single
+ * primary provider rather than trying every configured one). Shared by
  * the On Deck and Up Next routes below: both start from the same "what has
  * this person been watching lately" set, they just look for a different
  * next episode from it.
@@ -348,6 +350,7 @@ interface RecentlyWatchedCandidate {
 async function getRecentlyWatchedCandidates(
   db: Database,
   userId: string,
+  provider: MetadataProvider,
 ): Promise<RecentlyWatchedCandidate[]> {
   const cutoff = new Date(Date.now() - DASHBOARD_ROW_WINDOW_DAYS * 24 * 60 * 60 * 1000)
 
@@ -382,7 +385,7 @@ async function getRecentlyWatchedCandidates(
       slug: shows.slug,
       title: shows.title,
       posterPath: shows.posterPath,
-      tmdbId: externalIds.externalId,
+      providerExternalId: externalIds.externalId,
       maxWatchedSeason: recentWatch.maxWatchedSeason,
       // Null when this user has no droppedShows row at all for this show —
       // same join shape as /library/shows above.
@@ -396,7 +399,7 @@ async function getRecentlyWatchedCandidates(
       and(
         eq(externalIds.entityType, 'show'),
         eq(externalIds.entityId, shows.id),
-        eq(externalIds.source, 'tmdb'),
+        eq(externalIds.source, provider.source),
       ),
     )
     .leftJoin(droppedShows, and(eq(droppedShows.showId, shows.id), eq(droppedShows.userId, userId)))
@@ -439,7 +442,7 @@ libraryRoutes.openapi(
     const db = c.get('db')
     const provider = c.get('metadataProvider')
 
-    const candidates = await getRecentlyWatchedCandidates(db, user.id)
+    const candidates = await getRecentlyWatchedCandidates(db, user.id, provider)
 
     const shownShows = []
     for (const candidate of candidates) {
@@ -448,7 +451,7 @@ libraryRoutes.openapi(
         provider,
         user.id,
         candidate.id,
-        candidate.tmdbId,
+        candidate.providerExternalId,
         // No non-special watch yet (e.g. only specials watched recently) —
         // start from season 1 rather than treating season 0 as the
         // furthest point reached.
@@ -502,7 +505,7 @@ libraryRoutes.openapi(
     const db = c.get('db')
     const provider = c.get('metadataProvider')
 
-    const candidates = await getRecentlyWatchedCandidates(db, user.id)
+    const candidates = await getRecentlyWatchedCandidates(db, user.id, provider)
 
     const shownShows = []
     for (const candidate of candidates) {
@@ -510,7 +513,7 @@ libraryRoutes.openapi(
         db,
         provider,
         candidate.id,
-        candidate.tmdbId,
+        candidate.providerExternalId,
         candidate.maxWatchedSeason ?? 1,
         user.locale,
       )
@@ -806,26 +809,27 @@ libraryRoutes.openapi(
       .limit(1)
     if (!seasonRow) return c.json({ error: 'Season not found' }, 404)
 
-    // Same join already used for the TMDB rating badge's link — see the
-    // show-detail route above.
-    const [tmdbExternalId] = await db
+    // Looks up this show's id from the same provider that's about to be
+    // asked for the season — not necessarily 'tmdb' as of the
+    // multi-provider plumbing work (docs/adr/0006).
+    const [providerExternalId] = await db
       .select({ externalId: externalIds.externalId })
       .from(externalIds)
       .where(
         and(
           eq(externalIds.entityType, 'show'),
           eq(externalIds.entityId, show.id),
-          eq(externalIds.source, 'tmdb'),
+          eq(externalIds.source, provider.source),
         ),
       )
       .limit(1)
-    if (!tmdbExternalId) return c.json({ error: 'Season not found' }, 404)
+    if (!providerExternalId) return c.json({ error: 'Season not found' }, 404)
 
     const {
       overview: seasonOverview,
       voteAverage: seasonVoteAverage,
       episodes: providerEpisodes,
-    } = await provider.getSeason(tmdbExternalId.externalId, seasonNumber, user.locale)
+    } = await provider.getSeason(providerExternalId.externalId, seasonNumber, user.locale)
 
     // Scoped to the current user in the join condition (not a WHERE
     // clause) so an episode with no plays from this user still gets a row
@@ -1096,23 +1100,23 @@ libraryRoutes.openapi(
     const [show] = await db.select().from(shows).where(eq(shows.slug, slug)).limit(1)
     if (!show) return c.json({ error: 'Show not found' }, 404)
 
-    const [tmdbExternalId] = await db
+    const [providerExternalId] = await db
       .select({ externalId: externalIds.externalId })
       .from(externalIds)
       .where(
         and(
           eq(externalIds.entityType, 'show'),
           eq(externalIds.entityId, show.id),
-          eq(externalIds.source, 'tmdb'),
+          eq(externalIds.source, provider.source),
         ),
       )
       .limit(1)
-    if (!tmdbExternalId) return c.json({ error: 'Show not found' }, 404)
+    if (!providerExternalId) return c.json({ error: 'Show not found' }, 404)
 
     const resolvedEpisodes = await resolveSeasonEpisodes(
       db,
       provider,
-      tmdbExternalId.externalId,
+      providerExternalId.externalId,
       seasonNumber,
       user.locale,
     )
@@ -1350,25 +1354,25 @@ libraryRoutes.openapi(
     const [show] = await db.select().from(shows).where(eq(shows.slug, slug)).limit(1)
     if (!show) return c.json({ error: 'Show not found' }, 404)
 
-    // Same reasoning as the season detail route above: without a tmdb id
-    // there's no provider to resolve episodes from.
-    const [tmdbExternalId] = await db
+    // Same reasoning as the season detail route above: without an id from
+    // this provider there's nothing to resolve episodes from.
+    const [providerExternalId] = await db
       .select({ externalId: externalIds.externalId })
       .from(externalIds)
       .where(
         and(
           eq(externalIds.entityType, 'show'),
           eq(externalIds.entityId, show.id),
-          eq(externalIds.source, 'tmdb'),
+          eq(externalIds.source, provider.source),
         ),
       )
       .limit(1)
-    if (!tmdbExternalId) return c.json({ error: 'Show not found' }, 404)
+    if (!providerExternalId) return c.json({ error: 'Show not found' }, 404)
 
     const resolvedEpisodes = await resolveShowEpisodes(
       db,
       provider,
-      tmdbExternalId.externalId,
+      providerExternalId.externalId,
       user.locale,
     )
 

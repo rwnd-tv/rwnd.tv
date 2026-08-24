@@ -1,3 +1,5 @@
+import type { MetadataProviderSource } from '@rwnd/shared'
+
 /**
  * Source of show/movie/episode metadata and artwork. TMDB is the only
  * implementation today (see ./tmdb.ts and docs/adr/0002), but nothing
@@ -7,7 +9,7 @@
  * full poster URLs, plain numbers/strings, no TMDB-specific shapes leak out.
  */
 export interface MetadataProvider {
-  readonly source: 'tmdb'
+  readonly source: MetadataProviderSource
   searchMulti(query: string, locale: string): Promise<ProviderSearchResult[]>
   getMovie(externalId: string, locale: string): Promise<ProviderMovie>
   getShow(externalId: string, locale: string): Promise<ProviderShow>

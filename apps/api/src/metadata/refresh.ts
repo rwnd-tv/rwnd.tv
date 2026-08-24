@@ -2,6 +2,7 @@ import { and, eq, exists, gt, inArray, isNull, lt, notExists, or, sql } from 'dr
 import type { Database } from '@rwnd/db'
 import { externalIds, instanceSettings, movies, seasons, shows } from '@rwnd/db'
 import type { MetadataProvider } from '../providers/types.js'
+import { orderedProviders } from '../providers/priority.js'
 
 /**
  * Keeps cached show/movie metadata (apps/api/src/lib/media.ts's
@@ -61,7 +62,76 @@ async function currentLocale(db: Database): Promise<string> {
 
 export interface RefreshCandidate {
   id: string
-  tmdbExternalId: string | null
+}
+
+/** Which provider actually has an id for `entityId`, walking `ordered`
+ * (apps/api/src/providers/priority.ts) and stopping at the first hit — the
+ * same "highest-priority provider with something to work with" choice
+ * `pickRefreshTargets` below makes in bulk for the background sweep. Used
+ * directly by the manual "refresh metadata" routes
+ * (apps/api/src/routes/library.ts), which only ever need one entity at a
+ * time. */
+export async function pickRefreshTarget(
+  db: Database,
+  entityType: 'movie' | 'show',
+  entityId: string,
+  ordered: MetadataProvider[],
+): Promise<{ provider: MetadataProvider; externalId: string } | null> {
+  const rows = await db
+    .select({ source: externalIds.source, externalId: externalIds.externalId })
+    .from(externalIds)
+    .where(and(eq(externalIds.entityType, entityType), eq(externalIds.entityId, entityId)))
+  const idsBySource = new Map(rows.map((row) => [row.source, row.externalId]))
+  for (const provider of ordered) {
+    const externalId = idsBySource.get(provider.source)
+    if (externalId) return { provider, externalId }
+  }
+  return null
+}
+
+/** Bulk counterpart of pickRefreshTarget, for the background sweep below —
+ * one query for every stale entity's external ids rather than one per
+ * entity, since a sweep can cover hundreds of rows. */
+async function pickRefreshTargets(
+  db: Database,
+  entityType: 'movie' | 'show',
+  entityIds: string[],
+  ordered: MetadataProvider[],
+): Promise<Map<string, { provider: MetadataProvider; externalId: string }>> {
+  const result = new Map<string, { provider: MetadataProvider; externalId: string }>()
+  if (entityIds.length === 0) return result
+
+  const rows = await db
+    .select({
+      entityId: externalIds.entityId,
+      source: externalIds.source,
+      externalId: externalIds.externalId,
+    })
+    .from(externalIds)
+    .where(and(eq(externalIds.entityType, entityType), inArray(externalIds.entityId, entityIds)))
+
+  const idsByEntity = new Map<string, Map<string, string>>()
+  for (const row of rows) {
+    let idsBySource = idsByEntity.get(row.entityId)
+    if (!idsBySource) {
+      idsBySource = new Map()
+      idsByEntity.set(row.entityId, idsBySource)
+    }
+    idsBySource.set(row.source, row.externalId)
+  }
+
+  for (const entityId of entityIds) {
+    const idsBySource = idsByEntity.get(entityId)
+    if (!idsBySource) continue
+    for (const provider of ordered) {
+      const externalId = idsBySource.get(provider.source)
+      if (externalId) {
+        result.set(entityId, { provider, externalId })
+        break
+      }
+    }
+  }
+  return result
 }
 
 async function findStaleShows(db: Database): Promise<RefreshCandidate[]> {
@@ -69,12 +139,8 @@ async function findStaleShows(db: Database): Promise<RefreshCandidate[]> {
   const complianceCutoff = new Date(Date.now() - COMPLIANCE_MAX_AGE_MS)
 
   const rows = await db
-    .select({ id: shows.id, tmdbExternalId: externalIds.externalId })
+    .select({ id: shows.id })
     .from(shows)
-    .leftJoin(
-      externalIds,
-      sql`${externalIds.entityType} = 'show' AND ${externalIds.entityId} = ${shows.id} AND ${externalIds.source} = 'tmdb'`,
-    )
     .where(
       or(
         // Never had a season breakdown fetched — covers both the one-time
@@ -134,12 +200,8 @@ async function findStaleShows(db: Database): Promise<RefreshCandidate[]> {
 async function findStaleMovies(db: Database): Promise<RefreshCandidate[]> {
   const complianceCutoff = new Date(Date.now() - COMPLIANCE_MAX_AGE_MS)
   const rows = await db
-    .select({ id: movies.id, tmdbExternalId: externalIds.externalId })
+    .select({ id: movies.id })
     .from(movies)
-    .leftJoin(
-      externalIds,
-      sql`${externalIds.entityType} = 'movie' AND ${externalIds.entityId} = ${movies.id} AND ${externalIds.source} = 'tmdb'`,
-    )
     .where(
       or(
         // Never had genres fetched — same "never populated" reasoning as
@@ -170,16 +232,17 @@ async function findStaleMovies(db: Database): Promise<RefreshCandidate[]> {
  * (apps/api/src/routes/library.ts's POST /library/shows/{slug}/refresh) —
  * same fetch-and-upsert logic the background sweep above uses per show, so
  * a user fixing a show TMDB itself has wrong doesn't get different/lesser
- * results than waiting for the next automatic pass.
+ * results than waiting for the next automatic pass. Callers have already
+ * resolved which provider and which of its ids to use (pickRefreshTarget
+ * above) — there's nothing left for this function to skip on.
  */
 export async function refreshOneShow(
   db: Database,
   provider: MetadataProvider,
-  candidate: RefreshCandidate,
+  candidate: { id: string; externalId: string },
   locale: string,
-): Promise<boolean> {
-  if (!candidate.tmdbExternalId) return false // no known TMDB id — nothing to refetch against
-  const fetched = await provider.getShow(candidate.tmdbExternalId, locale)
+): Promise<void> {
+  const fetched = await provider.getShow(candidate.externalId, locale)
 
   await db
     .update(shows)
@@ -207,9 +270,9 @@ export async function refreshOneShow(
     // worth an extra per-episode fetch for (see showDetailSchema's
     // `airedEpisodes` doc comment for why this number exists at all).
     let latestSeasonAiredCount: number | null = null
-    if (isAiring && latestSeasonNumber !== null && candidate.tmdbExternalId) {
+    if (isAiring && latestSeasonNumber !== null) {
       const { episodes: latestEpisodes } = await provider.getSeason(
-        candidate.tmdbExternalId,
+        candidate.externalId,
         latestSeasonNumber,
         locale,
       )
@@ -249,7 +312,6 @@ export async function refreshOneShow(
         },
       })
   }
-  return true
 }
 
 /**
@@ -259,16 +321,16 @@ export async function refreshOneShow(
  * a user fixing a movie TMDB itself has wrong doesn't get different/lesser
  * results than waiting for the next automatic pass. Deliberately does NOT
  * set `slug` — a title change must not change the movie's URL, same as
- * refreshOneShow above never touches `shows.slug`.
+ * refreshOneShow above never touches `shows.slug`. Same "caller already
+ * resolved the provider/id" reasoning as refreshOneShow.
  */
 export async function refreshOneMovie(
   db: Database,
   provider: MetadataProvider,
-  candidate: RefreshCandidate,
+  candidate: { id: string; externalId: string },
   locale: string,
-): Promise<boolean> {
-  if (!candidate.tmdbExternalId) return false
-  const fetched = await provider.getMovie(candidate.tmdbExternalId, locale)
+): Promise<void> {
+  const fetched = await provider.getMovie(candidate.externalId, locale)
   await db
     .update(movies)
     .set({
@@ -282,42 +344,77 @@ export async function refreshOneMovie(
       metadataRefreshedAt: new Date(),
     })
     .where(eq(movies.id, candidate.id))
-  return true
 }
 
 /**
  * Runs one full pass: finds every stale show/movie and refetches it from
- * the provider, staggered to stay well clear of rate limits. Safe to call
- * concurrently with a Trakt import — both paths only ever insert/update via
- * `onConflictDoUpdate`/plain `UPDATE ... WHERE id = ...`, never delete.
- * Errors on one item (a since-removed TMDB id, a transient 5xx) are logged
- * and skipped rather than aborting the whole pass — mirrors the import
- * job's per-item failure handling in apps/api/src/import/match.ts.
+ * whichever configured provider has an id for it, in admin-configured
+ * priority order (apps/api/src/providers/priority.ts) — re-read here, not
+ * once at boot, so a priority change takes effect on the very next sweep
+ * with no restart needed. Staggered to stay well clear of rate limits. Safe
+ * to call concurrently with a Trakt import — both paths only ever
+ * insert/update via `onConflictDoUpdate`/plain `UPDATE ... WHERE id = ...`,
+ * never delete. Errors on one item (a since-removed provider id, a
+ * transient 5xx) are logged and skipped rather than aborting the whole
+ * pass — mirrors the import job's per-item failure handling in
+ * apps/api/src/import/match.ts.
  */
 export async function runMetadataRefresh(
   db: Database,
-  provider: MetadataProvider,
+  providers: MetadataProvider[],
 ): Promise<{ showsRefreshed: number; moviesRefreshed: number }> {
-  const locale = await currentLocale(db)
-  const [staleShows, staleMovies] = await Promise.all([findStaleShows(db), findStaleMovies(db)])
+  const [locale, ordered, staleShows, staleMovies] = await Promise.all([
+    currentLocale(db),
+    orderedProviders(db, providers),
+    findStaleShows(db),
+    findStaleMovies(db),
+  ])
 
+  const showTargets = await pickRefreshTargets(
+    db,
+    'show',
+    staleShows.map((s) => s.id),
+    ordered,
+  )
   let showsRefreshed = 0
   for (const candidate of staleShows) {
+    // No configured provider has any id for this show at all — a no-op
+    // skip, not a failed refresh, so it's neither counted nor logged as an
+    // error (there's nothing an admin could act on here).
+    const target = showTargets.get(candidate.id)
+    if (!target) continue
     try {
-      // Both refresh functions return false (not just "resolve") for a
-      // candidate with no known TMDB id — a no-op skip is not the same
-      // thing as a successful refresh, and must not be counted as one.
-      if (await refreshOneShow(db, provider, candidate, locale)) showsRefreshed += 1
+      await refreshOneShow(
+        db,
+        target.provider,
+        { id: candidate.id, externalId: target.externalId },
+        locale,
+      )
+      showsRefreshed += 1
     } catch (err) {
       console.error(`Metadata refresh failed for show ${candidate.id}:`, err)
     }
     await sleep(REQUEST_STAGGER_MS)
   }
 
+  const movieTargets = await pickRefreshTargets(
+    db,
+    'movie',
+    staleMovies.map((m) => m.id),
+    ordered,
+  )
   let moviesRefreshed = 0
   for (const candidate of staleMovies) {
+    const target = movieTargets.get(candidate.id)
+    if (!target) continue
     try {
-      if (await refreshOneMovie(db, provider, candidate, locale)) moviesRefreshed += 1
+      await refreshOneMovie(
+        db,
+        target.provider,
+        { id: candidate.id, externalId: target.externalId },
+        locale,
+      )
+      moviesRefreshed += 1
     } catch (err) {
       console.error(`Metadata refresh failed for movie ${candidate.id}:`, err)
     }
@@ -335,10 +432,10 @@ export async function runMetadataRefresh(
  * lives at the boot entrypoint instead: testApp() calls createApp() in
  * every test, and this must not fire there.
  */
-export function scheduleMetadataRefresh(db: Database, provider: MetadataProvider): void {
+export function scheduleMetadataRefresh(db: Database, providers: MetadataProvider[]): void {
   const DAY_MS = 24 * 60 * 60 * 1000
   const run = () =>
-    runMetadataRefresh(db, provider)
+    runMetadataRefresh(db, providers)
       .then(({ showsRefreshed, moviesRefreshed }) => {
         if (showsRefreshed || moviesRefreshed) {
           console.log(

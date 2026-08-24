@@ -181,7 +181,7 @@ describe('metadata refresh', () => {
       ),
     )
 
-    const result = await runMetadataRefresh(db, provider)
+    const result = await runMetadataRefresh(db, [provider])
     expect(result.showsRefreshed).toBe(1)
 
     const [updated] = await db.select().from(shows).where(eq(shows.id, show.id))
@@ -206,7 +206,7 @@ describe('metadata refresh', () => {
     const fetchMock = vi.fn()
     vi.stubGlobal('fetch', fetchMock)
 
-    const result = await runMetadataRefresh(db, provider)
+    const result = await runMetadataRefresh(db, [provider])
     expect(result.showsRefreshed).toBe(0)
     expect(fetchMock).not.toHaveBeenCalled()
   })
@@ -240,7 +240,7 @@ describe('metadata refresh', () => {
       ),
     )
 
-    const result = await runMetadataRefresh(db, provider)
+    const result = await runMetadataRefresh(db, [provider])
     expect(result.showsRefreshed).toBe(1)
     const [updated] = await db.select().from(shows).where(eq(shows.id, show.id))
     expect(updated?.genres).toEqual(['Comedy'])
@@ -280,7 +280,7 @@ describe('metadata refresh', () => {
       }),
     )
 
-    const result = await runMetadataRefresh(db, provider)
+    const result = await runMetadataRefresh(db, [provider])
     expect(result.showsRefreshed).toBe(1)
 
     const showSeasons = await db.select().from(seasons).where(eq(seasons.showId, show.id))
@@ -310,7 +310,7 @@ describe('metadata refresh', () => {
     )
     vi.stubGlobal('fetch', fetchMock)
 
-    const result = await runMetadataRefresh(db, provider)
+    const result = await runMetadataRefresh(db, [provider])
     expect(result.showsRefreshed).toBe(1)
 
     // Ended means every episode necessarily aired — no /season/1 call needed
@@ -365,7 +365,7 @@ describe('metadata refresh', () => {
       }),
     )
 
-    const result = await runMetadataRefresh(db, provider)
+    const result = await runMetadataRefresh(db, [provider])
     expect(result.showsRefreshed).toBe(1)
 
     const showSeasons = await db.select().from(seasons).where(eq(seasons.showId, show.id))
@@ -387,7 +387,7 @@ describe('metadata refresh', () => {
     const fetchMock = vi.fn()
     vi.stubGlobal('fetch', fetchMock)
 
-    const result = await runMetadataRefresh(db, provider)
+    const result = await runMetadataRefresh(db, [provider])
     expect(result.showsRefreshed).toBe(0)
     expect(fetchMock).not.toHaveBeenCalled()
   })
@@ -414,7 +414,7 @@ describe('metadata refresh', () => {
       ),
     )
 
-    const result = await runMetadataRefresh(db, provider)
+    const result = await runMetadataRefresh(db, [provider])
     expect(result.showsRefreshed).toBe(1)
   })
 
@@ -423,7 +423,29 @@ describe('metadata refresh', () => {
     const fetchMock = vi.fn()
     vi.stubGlobal('fetch', fetchMock)
 
-    const result = await runMetadataRefresh(db, provider)
+    const result = await runMetadataRefresh(db, [provider])
+    expect(result.showsRefreshed).toBe(0)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('skips a show whose only external id is from a source none of the configured providers use', async () => {
+    // Distinct from the "no known TMDB id at all" case above — this show
+    // does have an external id, just not from any provider this instance
+    // has configured (the test env only ever configures TMDB). Simulates
+    // an id backfilled from a Trakt import (docs/adr/0006's import-match
+    // work stores imdb/tvdb ids opportunistically) that no provider here
+    // can act on yet.
+    const show = await insertShow({ status: null, metadataRefreshedAt: new Date() })
+    await db.insert(externalIds).values({
+      entityType: 'show',
+      entityId: show.id,
+      source: 'imdb',
+      externalId: 'tt0000001',
+    })
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await runMetadataRefresh(db, [provider])
     expect(result.showsRefreshed).toBe(0)
     expect(fetchMock).not.toHaveBeenCalled()
   })
@@ -450,7 +472,7 @@ describe('metadata refresh', () => {
       }),
     )
 
-    const result = await runMetadataRefresh(db, provider)
+    const result = await runMetadataRefresh(db, [provider])
     expect(result.showsRefreshed).toBe(1) // the 404'd show doesn't count...
     const okSeasons = await db.select().from(seasons).where(eq(seasons.showId, ok.id))
     expect(okSeasons).toHaveLength(1) // ...but the other show still went through
@@ -470,7 +492,7 @@ describe('metadata refresh', () => {
       ),
     )
 
-    const result = await runMetadataRefresh(db, provider)
+    const result = await runMetadataRefresh(db, [provider])
     expect(result.moviesRefreshed).toBe(1)
     const [updated] = await db.select().from(movies).where(eq(movies.id, movie.id))
     expect(updated?.genres).toEqual(['Action'])
@@ -492,7 +514,7 @@ describe('metadata refresh', () => {
       ),
     )
 
-    const result = await runMetadataRefresh(db, provider)
+    const result = await runMetadataRefresh(db, [provider])
     expect(result.moviesRefreshed).toBe(1)
     const [updated] = await db.select().from(movies).where(eq(movies.id, movie.id))
     expect(updated?.voteAverage).toBe(7.5)
@@ -508,7 +530,7 @@ describe('metadata refresh', () => {
     const fetchMock = vi.fn()
     vi.stubGlobal('fetch', fetchMock)
 
-    const result = await runMetadataRefresh(db, provider)
+    const result = await runMetadataRefresh(db, [provider])
     expect(result.moviesRefreshed).toBe(0)
     expect(fetchMock).not.toHaveBeenCalled()
   })
@@ -530,7 +552,7 @@ describe('metadata refresh', () => {
       ),
     )
 
-    const result = await runMetadataRefresh(db, provider)
+    const result = await runMetadataRefresh(db, [provider])
     expect(result.moviesRefreshed).toBe(1)
   })
 
@@ -539,7 +561,7 @@ describe('metadata refresh', () => {
     const fetchMock = vi.fn()
     vi.stubGlobal('fetch', fetchMock)
 
-    const result = await runMetadataRefresh(db, provider)
+    const result = await runMetadataRefresh(db, [provider])
     expect(result.moviesRefreshed).toBe(0)
     expect(fetchMock).not.toHaveBeenCalled()
   })

@@ -33,7 +33,8 @@ import {
   resolveShowEpisodes,
   type ResolvedEpisode,
 } from '../lib/media.js'
-import { refreshOneMovie, refreshOneShow } from '../metadata/refresh.js'
+import { pickRefreshTarget, refreshOneMovie, refreshOneShow } from '../metadata/refresh.js'
+import { orderedProviders } from '../providers/priority.js'
 
 /**
  * Shared by the show- and season-level "Watched" button routes below.
@@ -733,28 +734,21 @@ libraryRoutes.openapi(
     const { slug } = c.req.valid('param')
     const user = c.get('user')!
     const db = c.get('db')
-    const provider = c.get('metadataProvider')
 
     const [show] = await db.select().from(shows).where(eq(shows.slug, slug)).limit(1)
     if (!show) return c.json({ error: 'Show not found' }, 404)
 
-    const [tmdbExternalId] = await db
-      .select({ externalId: externalIds.externalId })
-      .from(externalIds)
-      .where(
-        and(
-          eq(externalIds.entityType, 'show'),
-          eq(externalIds.entityId, show.id),
-          eq(externalIds.source, 'tmdb'),
-        ),
-      )
-      .limit(1)
-    if (!tmdbExternalId) return c.json({ error: 'Show not found' }, 404)
+    const ordered = await orderedProviders(db, c.get('metadataProviders'))
+    const target = await pickRefreshTarget(db, 'show', show.id, ordered)
+    // No configured provider has any id for this show — same 404 as "show
+    // not found" itself, since there's nothing this route can refresh it
+    // from either way.
+    if (!target) return c.json({ error: 'Show not found' }, 404)
 
     await refreshOneShow(
       db,
-      provider,
-      { id: show.id, tmdbExternalId: tmdbExternalId.externalId },
+      target.provider,
+      { id: show.id, externalId: target.externalId },
       user.locale,
     )
 
@@ -1598,28 +1592,19 @@ libraryRoutes.openapi(
     const { slug } = c.req.valid('param')
     const user = c.get('user')!
     const db = c.get('db')
-    const provider = c.get('metadataProvider')
 
     const [movie] = await db.select().from(movies).where(eq(movies.slug, slug)).limit(1)
     if (!movie) return c.json({ error: 'Movie not found' }, 404)
 
-    const [tmdbExternalId] = await db
-      .select({ externalId: externalIds.externalId })
-      .from(externalIds)
-      .where(
-        and(
-          eq(externalIds.entityType, 'movie'),
-          eq(externalIds.entityId, movie.id),
-          eq(externalIds.source, 'tmdb'),
-        ),
-      )
-      .limit(1)
-    if (!tmdbExternalId) return c.json({ error: 'Movie not found' }, 404)
+    const ordered = await orderedProviders(db, c.get('metadataProviders'))
+    const target = await pickRefreshTarget(db, 'movie', movie.id, ordered)
+    // Same reasoning as the show refresh route above.
+    if (!target) return c.json({ error: 'Movie not found' }, 404)
 
     await refreshOneMovie(
       db,
-      provider,
-      { id: movie.id, tmdbExternalId: tmdbExternalId.externalId },
+      target.provider,
+      { id: movie.id, externalId: target.externalId },
       user.locale,
     )
     return c.body(null, 204)

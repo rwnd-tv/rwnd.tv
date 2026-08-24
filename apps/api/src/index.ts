@@ -39,7 +39,7 @@ void resumeInterruptedImports()
 // not fire there. Covers the initial season-count backfill, ongoing airing
 // shows, and TMDB's 6-month cache-retention limit — see
 // apps/api/src/metadata/refresh.ts.
-scheduleMetadataRefresh(db, metadataProvider)
+scheduleMetadataRefresh(db, metadataProviders)
 
 serve({ fetch: app.fetch, port: env.PORT }, (info) => {
   console.log(`rwnd.tv API listening on http://localhost:${info.port}`)

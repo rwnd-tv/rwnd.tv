@@ -18,6 +18,26 @@ Format:
       `typescript-eslint` doesn't support TS 7 yet; leave any TS 7.0
       Dependabot bump open until it does.
 
+## Dashboard
+
+- [ ] **Loading-order layout shift on Dashboard** (2026-08-24 22:35 added)\
+      James's observation, live: History appears at the top of the page
+      first, then gets shoved down a moment later once Continue Watching
+      and Upcoming pop in above it. Root cause is in `DashboardPage.tsx`'s
+      three row components (`OnDeckRow.tsx`, `UpNextRow.tsx`,
+      `HistoryRow.tsx`) — each deliberately `return null`s while its own
+      query is loading or empty (see their shared doc comment), and
+      `GET /plays` (History's query) is a plain single-table read that
+      resolves much faster than `/library/on-deck`/`/up-next` (per-show
+      next-episode resolution, `findNextUnwatchedEpisode`/
+      `findNextAiringEpisode` in `apps/api/src/lib/media.ts`), so History
+      routinely finishes first despite being rendered last in the JSX.
+      Needs a design call, not just a fetch-order tweak: reserve History's
+      final position with a skeleton/placeholder until all three rows
+      have settled, or hold the whole row group's render until every
+      query is done — either fixes the visible shift, but changes the
+      page's perceived load speed differently.
+
 ## TV Shows / Movies gallery follow-ups
 
 - [ ] **Virtualize the gallery grid if libraries grow** (2026-08-19 15:25)\
@@ -79,6 +99,34 @@ Format:
       generally make the repo read as more current and inviting to
       someone landing on it cold.
 
+## Import
+
+- [ ] **Investigate importing Trakt's own "Export now" ZIP as an alternative to the OAuth import** (2026-08-24 22:50 added)\
+      James's idea, from researching Trakt's free-vs-VIP situation:
+      Settings > Data > "Export now" on trakt.tv gives any account
+      (free or VIP — confirmed not gated) a ZIP of separate JSON files,
+      no API/OAuth connection needed. Real motivation, not just
+      convenience: Trakt's 2026 "Community App" policy caps free
+      accounts at _one_ connected third-party OAuth app at a time
+      (confirmed against Trakt's own forum announcement — any app built
+      on their public API counts, no exemption for small/self-hosted
+      ones) — a free user who already has a different Trakt-connected
+      app (a Plex scrobbler, Kodi
+      plugin, etc.) can't also OAuth-connect rwnd.tv's importer without
+      disconnecting it first or paying for VIP. A file-upload import
+      sidesteps that entirely, since it never touches the Community App
+      connection limit at all.\
+      Needs investigation before design: what's actually inside the ZIP
+      (confirmed grouped-by-category JSON files, but not yet the exact
+      schema per category — likely close to but not necessarily
+      identical to the `/sync/history`, `/sync/ratings`,
+      `/sync/watchlist`, `/users/hidden/dropped` API response shapes
+      `apps/api/src/trakt/types.ts` already models), whether it's a
+      one-time export or can be regenerated/re-uploaded to pick up new
+      history since the last import, and how much of the existing
+      `apps/api/src/import/match.ts` matching logic could be reused
+      as-is versus needing its own parser for a different input shape.
+
 ## Auth & accounts
 
 - [ ] **Profile pictures** (2026-08-24 21:15 added)\
@@ -126,7 +174,7 @@ more specific TODO elsewhere in this file (ratings/watchlist above
 double as their M3 entry). Kept brief — ROADMAP.md is the source of
 truth for scope; this is just so a TODO listing is complete.
 
-- [ ] **Tautulli/Jellyfin/Emby/Kodi webhook ingestion** (2026-08-24 16:25 added) — M2\
+- [ ] **Tautulli/Jellyfin/Emby/Kodi webhook ingestion** (2026-08-24 16:25 added, un-M2'd 2026-08-24)\
       Plex's own webhook shipped 2026-08-24 (see `docs/TODO_ARCHIVE.md`) —
       the entity-resolution/auth core it's built on
       (`apps/api/src/lib/external-match.ts`,
@@ -135,6 +183,11 @@ truth for scope; this is just so a TODO listing is complete.
       rework. Tautulli's webhook body is fully user-templated (no fixed
       shape — needs its own JSON template + setup docs, unlike Plex's
       fixed format), which is why it wasn't bundled into the same pass.
+      James, 2026-08-24: not needed to close out M2 — ROADMAP.md's own M2
+      "Plex webhook ingestion" bullet only ever mentioned these in
+      passing as future work, not as a separate required checkbox, so
+      this was over-tagged M2 when first added. Left unmilestoned rather
+      than reassigned to M3 — no strong reason it belongs there either.
 - [ ] **Full data export** (2026-08-23 15:31 added) — M2\
       An open-format export of everything — one of the project's stated
       aims since day one.

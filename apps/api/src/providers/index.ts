@@ -1,6 +1,7 @@
 import type { MetadataProviderSource } from '@rwnd/shared'
 import type { Env } from '../env.js'
 import { TmdbProvider } from './tmdb.js'
+import { TvdbProvider } from './tvdb.js'
 import type { MetadataProvider } from './types.js'
 
 export type { MetadataProvider } from './types.js'
@@ -22,6 +23,15 @@ export function createMetadataProviders(env: Env): MetadataProvider[] {
         apiKey: env.TMDB_API_KEY,
         apiBaseUrl: env.TMDB_API_BASE_URL,
         imageBaseUrl: env.TMDB_IMAGE_BASE_URL,
+      }),
+    )
+  }
+  if (env.TVDB_API_KEY) {
+    providers.push(
+      new TvdbProvider({
+        apiKey: env.TVDB_API_KEY,
+        pin: env.TVDB_PIN,
+        apiBaseUrl: env.TVDB_API_BASE_URL,
       }),
     )
   }

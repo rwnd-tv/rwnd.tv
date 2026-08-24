@@ -5,11 +5,11 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { ShowDetail } from '@rwnd/shared'
 import { api, ApiError } from '../lib/api-client.js'
 import { invalidateWatchData } from '../lib/query-client.js'
-import { markWatchedRequestBody, formatDateTimeInput } from '../lib/date.js'
+import { markWatchedRequestBody } from '../lib/date.js'
 import { TMDB_LOGO_URL } from '../lib/tmdb.js'
-import { PROVIDER_LABELS } from '../lib/provider-labels.js'
 import { useAuth } from '../lib/auth-context.js'
 import { EpisodeCard } from '../components/library/EpisodeCard.js'
+import { MetadataAttribution } from '../components/library/MetadataAttribution.js'
 import { PosterGrid } from '../components/library/PosterGrid.js'
 import { ProgressBar } from '../components/library/ProgressBar.js'
 import { SpoilerGuard } from '../components/library/SpoilerGuard.js'
@@ -307,14 +307,11 @@ export function ShowDetailPage() {
             // answers "where did the rest of this page's metadata come
             // from". Its own line rather than folded into the fact line, so
             // it doesn't compete with year/genres/status for attention.
-            <p
-              className="text-sm text-[var(--color-fg-muted)]"
-              title={t('showDetail.metadataSourceTooltip', {
-                date: formatDateTimeInput(new Date(show.metadataRefreshedAt), locale),
-              })}
-            >
-              {t('showDetail.metadataSource', { provider: PROVIDER_LABELS[show.metadataSource] })}
-            </p>
+            <MetadataAttribution
+              source={show.metadataSource}
+              refreshedAt={show.metadataRefreshedAt}
+              locale={locale}
+            />
           )}
 
           {show.totalEpisodes !== null ? (

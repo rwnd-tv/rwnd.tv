@@ -23,6 +23,24 @@ describe('COOKIE_SECURE parsing', () => {
   })
 })
 
+describe('metadata provider config', () => {
+  it('requires at least one of TMDB_API_KEY or TVDB_API_KEY', () => {
+    expect(() => parseEnv({ DATABASE_URL: base.DATABASE_URL })).toThrow(
+      /At least one metadata provider/,
+    )
+  })
+
+  it('is fine with only TVDB_API_KEY set', () => {
+    expect(() =>
+      parseEnv({ DATABASE_URL: base.DATABASE_URL, TVDB_API_KEY: 'tvdb-key' }),
+    ).not.toThrow()
+  })
+
+  it('is fine with both configured', () => {
+    expect(() => parseEnv({ ...base, TVDB_API_KEY: 'tvdb-key' })).not.toThrow()
+  })
+})
+
 describe('Trakt import config', () => {
   const validKey = Buffer.alloc(32, 7).toString('base64')
 

@@ -5,7 +5,7 @@ rwnd.tv ships as a single Docker image plus a PostgreSQL database.
 ## Requirements
 
 - Docker and Docker Compose
-- A free [TMDB API key](https://www.themoviedb.org/settings/api) (Settings → API → "API Key (v3 auth)")
+- At least one metadata provider: a free [TMDB API key](https://www.themoviedb.org/settings/api) (Settings → API → "API Key (v3 auth)"), and/or a [TheTVDB API key](https://www.thetvdb.com/api-information) (a commercial key, or a free "user-supported" key paired with your subscriber PIN)
 - A reverse proxy for TLS if you're exposing this beyond your local network (e.g. nginx-pm, Caddy, Traefik)
 
 ## Quick start
@@ -14,7 +14,8 @@ rwnd.tv ships as a single Docker image plus a PostgreSQL database.
 curl -O https://raw.githubusercontent.com/rwnd-tv/rwnd.tv/main/docker-compose.yml
 curl -O https://raw.githubusercontent.com/rwnd-tv/rwnd.tv/main/.env.example
 mv .env.example .env
-# edit .env: set POSTGRES_PASSWORD, TMDB_API_KEY, and DATABASE_URL to match
+# edit .env: set POSTGRES_PASSWORD, a metadata provider key (TMDB_API_KEY
+# and/or TVDB_API_KEY), and DATABASE_URL to match
 docker compose up -d
 ```
 
@@ -27,7 +28,9 @@ All configuration is environment variables, set in `.env` (see `.env.example` fo
 | Variable              | Required                         | Notes                                                                              |
 | --------------------- | -------------------------------- | ---------------------------------------------------------------------------------- |
 | `DATABASE_URL`        | Yes                              | Postgres connection string                                                         |
-| `TMDB_API_KEY`        | Yes                              | Free at themoviedb.org                                                             |
+| `TMDB_API_KEY`        | At least one of TMDB/TVDB        | Free at themoviedb.org                                                             |
+| `TVDB_API_KEY`        | At least one of TMDB/TVDB        | Commercial or free "user-supported" key from thetvdb.com                           |
+| `TVDB_PIN`            | Only for a "user-supported" key  | Your TheTVDB subscriber PIN — leave unset for a commercial key                     |
 | `COOKIE_SECURE`       | Recommended in production        | Set `true` once served over HTTPS — browsers drop `Secure` cookies over plain HTTP |
 | `SESSION_COOKIE_NAME` | No                               | Defaults to `rwnd_session`                                                         |
 | `TRAKT_CLIENT_ID`     | No                               | Enables Trakt import (Settings > Import) — free app at trakt.tv/oauth/applications |

@@ -127,8 +127,6 @@
       "season": "View this season on TMDB",
       "episode": "View this episode on TMDB"
     },
-    "metadataSource": "Metadata: {{provider}}",
-    "metadataSourceTooltip": "Last refreshed {{date}}",
     "droppedFact": "Dropped",
     "watchedButton": "Watched",
     "watchedButtonDisabled": "This show has no TMDB match, so episodes can't be resolved",
@@ -230,8 +228,6 @@
     "runtime": "{{minutes}} min",
     "ratingSource": "TMDB rating",
     "viewOnTmdb": "View this movie on TMDB",
-    "metadataSource": "Metadata: {{provider}}",
-    "metadataSourceTooltip": "Last refreshed {{date}}",
     "watchedButton": "Watched",
     "watchedButtonDisabled": "This movie has no TMDB match, so a watch can't be logged",
     "watchedButtonTooltip": {
@@ -374,8 +370,15 @@
       "save": "Save changes",
       "environmentLabel": "This instance is labeled \"{{label}}\", set via the ENVIRONMENT_LABEL environment variable — not editable here.",
       "metadataProviders": "Metadata providers",
-      "metadataProvidersSingle": "Only one provider is configured on this instance."
+      "metadataProvidersSingle": "Only one provider is configured on this instance.",
+      "metadataProviderMoveUp": "Move {{provider}} up",
+      "metadataProviderMoveDown": "Move {{provider}} down"
     }
+  },
+  "metadata": {
+    "source": "Metadata: {{provider}}",
+    "sourceTooltip": "Last refreshed {{date}}",
+    "tvdbAttribution": "Metadata provided by TheTVDB. Please consider adding missing information or subscribing."
   },
   "common": {
     "loading": "Loading…",

@@ -4,10 +4,10 @@ import { Link, useNavigate, useParams } from 'react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, ApiError } from '../lib/api-client.js'
 import { invalidateWatchData } from '../lib/query-client.js'
-import { markWatchedRequestBody, formatDateTimeInput } from '../lib/date.js'
+import { markWatchedRequestBody } from '../lib/date.js'
 import { useAuth } from '../lib/auth-context.js'
-import { PROVIDER_LABELS } from '../lib/provider-labels.js'
 import { EpisodeCard } from '../components/library/EpisodeCard.js'
+import { MetadataAttribution } from '../components/library/MetadataAttribution.js'
 import { PosterGrid } from '../components/library/PosterGrid.js'
 import { ProgressBar } from '../components/library/ProgressBar.js'
 import { SpoilerGuard } from '../components/library/SpoilerGuard.js'
@@ -322,16 +322,12 @@ export function SeasonDetailPage() {
           )}
           {show?.metadataSource && (
             // Inherited from the show — a season has no metadata source of
-            // its own. Same styling/placement as ShowDetailPage.tsx's own
-            // metadataSource block.
-            <p
-              className="text-sm text-[var(--color-fg-muted)]"
-              title={t('showDetail.metadataSourceTooltip', {
-                date: formatDateTimeInput(new Date(show.metadataRefreshedAt), locale),
-              })}
-            >
-              {t('showDetail.metadataSource', { provider: PROVIDER_LABELS[show.metadataSource] })}
-            </p>
+            // its own.
+            <MetadataAttribution
+              source={show.metadataSource}
+              refreshedAt={show.metadataRefreshedAt}
+              locale={locale}
+            />
           )}
 
           <div className="flex max-w-xs flex-col gap-1">

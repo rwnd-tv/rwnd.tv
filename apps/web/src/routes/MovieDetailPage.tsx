@@ -6,8 +6,7 @@ import { api, ApiError } from '../lib/api-client.js'
 import { useAuth } from '../lib/auth-context.js'
 import { useMovieWatchActions } from '../lib/use-movie-watch-actions.js'
 import { TMDB_LOGO_URL } from '../lib/tmdb.js'
-import { PROVIDER_LABELS } from '../lib/provider-labels.js'
-import { formatDateTimeInput } from '../lib/date.js'
+import { MetadataAttribution } from '../components/library/MetadataAttribution.js'
 import { UnwatchConfirmDialog } from '../components/library/UnwatchConfirmDialog.js'
 import { WatchDateDialog } from '../components/library/WatchDateDialog.js'
 import { Button } from '../components/ui/Button.js'
@@ -222,14 +221,11 @@ export function MovieDetailPage() {
             // See ShowDetailPage.tsx's own metadataSource block for why
             // this is separate from the rating badge above and on its own
             // line rather than folded into the fact line.
-            <p
-              className="text-sm text-[var(--color-fg-muted)]"
-              title={t('movieDetail.metadataSourceTooltip', {
-                date: formatDateTimeInput(new Date(movie.metadataRefreshedAt), locale),
-              })}
-            >
-              {t('movieDetail.metadataSource', { provider: PROVIDER_LABELS[movie.metadataSource] })}
-            </p>
+            <MetadataAttribution
+              source={movie.metadataSource}
+              refreshedAt={movie.metadataRefreshedAt}
+              locale={locale}
+            />
           )}
 
           <div className="flex gap-2">

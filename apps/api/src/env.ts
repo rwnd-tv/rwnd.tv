@@ -30,6 +30,15 @@ const rawEnvSchema = z.object({
   TMDB_API_KEY: z.string().optional(),
   TMDB_API_BASE_URL: z.string().url().default('https://api.themoviedb.org/3'),
   TMDB_IMAGE_BASE_URL: z.string().url().default('https://image.tmdb.org/t/p'),
+  // TheTVDB v4 API requires an account — either a paid/commercial key, or a
+  // free "user-supported" key paired with the subscriber's PIN (see
+  // apps/api/src/providers/tvdb.ts's login()). PIN is optional even when
+  // TVDB_API_KEY is set: a commercial key doesn't use one, and the API
+  // itself treats a present-but-empty pin as an error rather than ignoring
+  // it, so this is only ever sent when actually configured.
+  TVDB_API_KEY: z.string().optional(),
+  TVDB_PIN: z.string().optional(),
+  TVDB_API_BASE_URL: z.string().url().default('https://api4.thetvdb.com/v4'),
   // Trakt import (M2). Both optional — a self-hoster who doesn't want Trakt
   // import just leaves these unset, and the /import UI hides itself (same
   // "optional credential, feature hides itself" pattern as TMDB_API_KEY
@@ -74,12 +83,13 @@ export function parseEnv(source: NodeJS.ProcessEnv): Env {
     console.error('Invalid environment configuration:', parsed.error.flatten().fieldErrors)
     throw new Error('Invalid environment configuration')
   }
-  // At least one metadata provider's credentials must be configured — grows
-  // into an `||` the day a second provider exists (see
+  // At least one metadata provider's credentials must be configured — see
   // apps/api/src/providers/index.ts's createMetadataProviders, which this
-  // check mirrors).
-  if (!parsed.data.TMDB_API_KEY) {
-    throw new Error('At least one metadata provider must be configured — set TMDB_API_KEY')
+  // check mirrors.
+  if (!parsed.data.TMDB_API_KEY && !parsed.data.TVDB_API_KEY) {
+    throw new Error(
+      'At least one metadata provider must be configured — set TMDB_API_KEY and/or TVDB_API_KEY',
+    )
   }
   if (parsed.data.TRAKT_CLIENT_ID) {
     if (!parsed.data.TRAKT_CLIENT_SECRET) {

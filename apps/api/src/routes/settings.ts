@@ -36,21 +36,31 @@ function serializeSettings(row?: {
 }): InstanceSettings {
   const source = row ?? DEFAULT_SETTINGS
   const available = availableProviderSources(loadEnv())
+  const availableSet = new Set(available)
   // Drops anything the stored list names that this instance doesn't (or no
-  // longer) have credentials for — same reasoning as isSupportedLocale
-  // above. Falls back to the default (not `available` verbatim) when
-  // nothing valid survives, so an instance with a garbage/empty stored
-  // list still gets a sane, non-empty priority rather than an arbitrary
-  // env-derived order.
-  const priority = source.metadataProviderPriority.filter(isProviderSource)
+  // longer) have credentials for — isProviderSource alone only checks it's
+  // a real MetadataProviderSource *type* (e.g. rejects 'not-a-real-
+  // provider'), not that it's actually configured *here*, so a plain type
+  // guard would wrongly keep a provider whose credentials were since
+  // removed. Then appends any available provider the stored list doesn't
+  // mention — same "newly-available, not yet invisible" behaviour as
+  // orderedProviders() (apps/api/src/providers/priority.ts), and required
+  // here too: this is the only list the Settings UI's reorder controls
+  // ever see, so a provider missing from it can't be discovered or
+  // reordered from the UI at all, only by editing the DB row directly.
+  // Since `available` is always non-empty (guaranteed at boot), the result
+  // is always non-empty too — no separate empty-list fallback needed.
+  const stored = source.metadataProviderPriority.filter(
+    (value): value is MetadataProviderSource => isProviderSource(value) && availableSet.has(value),
+  )
+  const priority = [...stored, ...available.filter((s) => !stored.includes(s))]
   return {
     instanceName: source.instanceName,
     registrationMode: source.registrationMode,
     defaultLocale: isSupportedLocale(source.defaultLocale)
       ? source.defaultLocale
       : DEFAULT_SETTINGS.defaultLocale,
-    metadataProviderPriority:
-      priority.length > 0 ? priority : DEFAULT_SETTINGS.metadataProviderPriority,
+    metadataProviderPriority: priority,
     availableMetadataProviders: available,
     environmentLabel: loadEnv().ENVIRONMENT_LABEL ?? null,
     traktConfigured: Boolean(loadEnv().TRAKT_CLIENT_ID && loadEnv().TRAKT_CLIENT_SECRET),

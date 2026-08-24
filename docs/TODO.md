@@ -31,6 +31,20 @@ Format:
       leading-article rules are a bigger job than this feature needed; left
       as a known simplification.
 
+## Metadata providers
+
+- [ ] **Cross-provider fallback for Trakt import matching** (2026-08-24 12:15 added)\
+      `matchMovie`/`matchShow` (`apps/api/src/import/match.ts`) only ever
+      resolve a title against TMDB — even the existing imdb/tvdb
+      reverse-lookup fallback (`findByExternalId`) looks _into TMDB_, not
+      into TVDB itself (a real second provider now, see
+      [ADR 0006](adr/0006-multi-provider-metadata.md) and
+      `apps/api/src/providers/tvdb.ts`). Confirmed live: re-running a Trakt
+      import after TVDB landed left the same 372 unmatched items unchanged.
+      Would need the matcher to walk `orderedProviders()` and try resolving
+      against each configured provider in turn before giving up, not just
+      reverse-looking-up ids into the primary one.
+
 ## Ratings & watchlist
 
 - [ ] **Explore how ratings should work** (2026-08-23 14:15 added) — M3\

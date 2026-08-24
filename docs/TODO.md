@@ -128,11 +128,6 @@ truth for scope; this is just so a TODO listing is complete.
 - [ ] **OIDC login** (2026-08-23 15:34 added) — M3\
       The `user_credentials` schema was designed for this from M1 — see
       [ADR 0003](adr/0003-auth-model.md).
-- [ ] **Wikidata/TVDB metadata provider alongside TMDB** (2026-08-23 15:36 added) — Not yet scheduled\
-      The second provider itself, not the infrastructure to support
-      one — that plumbing shipped 2026-08-24, see
-      `docs/TODO_ARCHIVE.md`'s "Multi-provider metadata" entry and
-      [ADR 0006](adr/0006-multi-provider-metadata.md).
 - [ ] **Mobile-friendly PWA installability** (2026-08-23 15:37 added) — Not yet scheduled\
       Installable/add-to-home-screen support.
 - [ ] **Public/shareable profile pages** (2026-08-23 15:38 added) — Not yet scheduled\

@@ -1271,6 +1271,28 @@ currently-dropped shows, since a row can have both
       `externalIds[]` migration, deferred until an entity actually exists
       that needs it.
 
+- [x] **Wikidata/TVDB metadata provider alongside TMDB** (2026-08-23 15:36 added, done 2026-08-24)\
+      The second provider itself, on top of the plumbing above. A real
+      `TvdbProvider` against TheTVDB v4 API (`apps/api/src/providers/tvdb.ts`)
+      — JWT auth via `/login`, `/search`, `/movies/{id}/extended`,
+      `/series/{id}/extended`, `/series/{id}/episodes/default`,
+      `/search/remoteid/{id}` for reverse lookups. Found and fixed a real
+      bug along the way: season "aired order" grouping is identified by
+      `show.defaultSeasonType` (an id), not the literal string `'default'`
+      TVDB's docs suggest — that string is only ever a path-segment alias.
+      TVDB deep links + theme-aware attribution logos added to Show/Movie/
+      Season/Episode pages, matching TMDB's existing UI conventions; no
+      rating shown next to TVDB's link, since TVDB has no metric
+      comparable to TMDB's vote average (`score` is a popularity metric,
+      not a rating). Settings' provider-priority list gained working
+      reorder controls now that there's a second provider to reorder.\
+      Wikidata itself not built — TVDB alone covers what the anecdote
+      (Formula 1) needed; Wikidata stays a possible future third provider,
+      not scheduled.\
+      Verified live on dev.rwnd.tv: real TVDB search/detail/season data
+      renders correctly on show, movie, season, and episode pages; the
+      attribution logo switches correctly with the theme toggle.
+
 - [x] **Cross-provider fallback for Trakt import matching** (2026-08-24 12:15 added, done 2026-08-24)\
       `matchMovie`/`matchShow` (`apps/api/src/import/match.ts`) only ever
       resolved a title against TMDB — even the existing imdb/tvdb

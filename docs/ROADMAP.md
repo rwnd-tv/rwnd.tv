@@ -19,7 +19,8 @@ Prove every layer works end to end, running as a real self-hosted deployment.
 - [x] **TV Shows / Movies gallery pages**: a Plex-style poster wall of everything you've watched, with per-show watch progress backed by a cached (not live-fetched) episode-count refresher — see [ADR 0005](adr/0005-metadata-refresh.md). The Shows gallery also has a filter panel (genre include/exclude, a release-year range) and seven sort orders. Pulled forward the same way M2's `ratings`/`watchlist_items` tables were, since the import work made "now go look at what you've watched" the obvious next step.
 - [ ] **Plex/Tautulli webhook ingestion**: watches log themselves as you watch, authenticated via per-user API tokens (already built in M1 for exactly this)
 - [ ] **Full data export** in an open format — one of the project's stated aims from day one
-- [x] **Multi-provider metadata matching**: `MetadataProviderSource` widened off the old TMDB-only literal, a real reverse-lookup fallback (Trakt's `imdb`/`tvdb` ids via TMDB's `/find`) for the common case a `tmdb` id is missing or stale, `METADATA_PROVIDER` env var replaced by credential-derived + admin-configurable priority, and a "Metadata: TMDB" provenance indicator on show/movie pages — see [ADR 0006](adr/0006-multi-provider-metadata.md). Plumbing only, as scoped: the second provider itself (Wikidata/TVDB) is still the separate "Not yet scheduled" item below
+- [x] **Multi-provider metadata matching**: `MetadataProviderSource` widened off the old TMDB-only literal, a real reverse-lookup fallback (Trakt's `imdb`/`tvdb` ids via TMDB's `/find`) for the common case a `tmdb` id is missing or stale, `METADATA_PROVIDER` env var replaced by credential-derived + admin-configurable priority, and a "Metadata: TMDB" provenance indicator on show/movie pages — see [ADR 0006](adr/0006-multi-provider-metadata.md)
+- [x] **TheTVDB as a real second metadata provider**: a full `TvdbProvider` against TheTVDB v4 API, cross-provider fallback for Trakt import matching (so a title TMDB has no entry for under any id, like Formula 1, can still resolve), and TVDB deep links/attribution logos on show/movie/season/episode pages
 
 ## M3 — Make it worth using day to day
 
@@ -32,4 +33,4 @@ Prove every layer works end to end, running as a real self-hosted deployment.
 
 ## Not yet scheduled
 
-Ideas that are in scope for the project eventually but don't have a milestone yet: a Wikidata/TVDB metadata provider alongside TMDB, mobile-friendly PWA installability, public/shareable profile pages.
+Ideas that are in scope for the project eventually but don't have a milestone yet: mobile-friendly PWA installability, public/shareable profile pages.

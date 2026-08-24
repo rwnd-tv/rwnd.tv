@@ -368,7 +368,9 @@
       "registrationInvite": "Invite only",
       "registrationClosed": "Closed — admin creates accounts",
       "save": "Save changes",
-      "environmentLabel": "This instance is labeled \"{{label}}\", set via the ENVIRONMENT_LABEL environment variable — not editable here."
+      "environmentLabel": "This instance is labeled \"{{label}}\", set via the ENVIRONMENT_LABEL environment variable — not editable here.",
+      "metadataProviders": "Metadata providers",
+      "metadataProvidersSingle": "Only one provider is configured on this instance."
     }
   },
   "common": {

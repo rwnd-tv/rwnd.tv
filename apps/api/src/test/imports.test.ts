@@ -24,7 +24,7 @@ import {
   waitFor,
 } from './helpers.js'
 import { loadEnv } from '../env.js'
-import { createMetadataProvider } from '../providers/index.js'
+import { createMetadataProviders } from '../providers/index.js'
 import { runTraktImport } from '../import/trakt.js'
 import type {
   TraktHiddenItem,
@@ -37,7 +37,7 @@ import * as fx from './fixtures/trakt.js'
 const db = testDb()
 const app = testApp()
 const env = loadEnv()
-const provider = createMetadataProvider(env)
+const provider = createMetadataProviders(env)[0]!
 
 async function createUserAndCookie(email = 'importer@example.com') {
   const res = await app.request('/api/v1/setup', {

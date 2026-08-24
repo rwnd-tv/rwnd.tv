@@ -1,13 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { eq } from 'drizzle-orm'
 import { externalIds, movies, seasons, shows } from '@rwnd/db'
-import { createMetadataProvider } from '../providers/index.js'
+import { createMetadataProviders } from '../providers/index.js'
 import { loadEnv } from '../env.js'
 import { runMetadataRefresh } from '../metadata/refresh.js'
 import { resetDb, testDb } from './helpers.js'
 
 const db = testDb()
-const provider = createMetadataProvider(loadEnv())
+const provider = createMetadataProviders(loadEnv())[0]!
 
 function tmdbShowResponse(overrides: {
   id: number

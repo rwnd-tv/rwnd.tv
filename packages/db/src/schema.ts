@@ -138,6 +138,16 @@ export const instanceSettings = pgTable(
     instanceName: text('instance_name').notNull().default('rwnd.tv'),
     registrationMode: registrationModeEnum('registration_mode').notNull().default('closed'),
     defaultLocale: text('default_locale').notNull().default('en-US'),
+    // Ordered list of metadata provider sources, highest priority first.
+    // Plain text[] rather than a pg enum array, following defaultLocale
+    // above — the valid set is an app-level concern (which providers this
+    // instance has credentials for), and an ordered list doesn't fit an
+    // enum's model anyway. Unknown/unconfigured entries are filtered on
+    // read — see apps/api/src/routes/settings.ts's serializeSettings.
+    metadataProviderPriority: text('metadata_provider_priority')
+      .array()
+      .notNull()
+      .default(['tmdb']),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [check('instance_settings_singleton', sql`${table.id} = 1`)],

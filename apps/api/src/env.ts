@@ -22,13 +22,18 @@ const rawEnvSchema = z.object({
   // dev.rwnd.tv) don't get confused for one another. Unset by default —
   // a normal single-instance deployment shows nothing.
   ENVIRONMENT_LABEL: z.string().optional(),
-  METADATA_PROVIDER: z.enum(['tmdb']).default('tmdb'),
+  // Which metadata providers are available is derived from which of these
+  // credentials are actually set (apps/api/src/providers/index.ts) rather
+  // than a separate explicit-choice env var — see docs/adr/0006. At least
+  // one must be set; validated below since Zod can't express "at least one
+  // of these optional fields" declaratively.
   TMDB_API_KEY: z.string().optional(),
   TMDB_API_BASE_URL: z.string().url().default('https://api.themoviedb.org/3'),
   TMDB_IMAGE_BASE_URL: z.string().url().default('https://image.tmdb.org/t/p'),
   // Trakt import (M2). Both optional — a self-hoster who doesn't want Trakt
-  // import just leaves these unset, and the /import UI hides itself (see
-  // METADATA_PROVIDER-style optionality above). Register a free app at
+  // import just leaves these unset, and the /import UI hides itself (same
+  // "optional credential, feature hides itself" pattern as TMDB_API_KEY
+  // above). Register a free app at
   // https://trakt.tv/oauth/applications with redirect URI
   // urn:ietf:wg:oauth:2.0:oob (device flow doesn't use the redirect).
   TRAKT_CLIENT_ID: z.string().optional(),
@@ -69,8 +74,12 @@ export function parseEnv(source: NodeJS.ProcessEnv): Env {
     console.error('Invalid environment configuration:', parsed.error.flatten().fieldErrors)
     throw new Error('Invalid environment configuration')
   }
-  if (parsed.data.METADATA_PROVIDER === 'tmdb' && !parsed.data.TMDB_API_KEY) {
-    throw new Error('TMDB_API_KEY is required when METADATA_PROVIDER=tmdb')
+  // At least one metadata provider's credentials must be configured — grows
+  // into an `||` the day a second provider exists (see
+  // apps/api/src/providers/index.ts's createMetadataProviders, which this
+  // check mirrors).
+  if (!parsed.data.TMDB_API_KEY) {
+    throw new Error('At least one metadata provider must be configured — set TMDB_API_KEY')
   }
   if (parsed.data.TRAKT_CLIENT_ID) {
     if (!parsed.data.TRAKT_CLIENT_SECRET) {

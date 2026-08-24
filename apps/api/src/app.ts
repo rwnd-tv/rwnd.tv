@@ -9,7 +9,7 @@ import { createDatabase, type Database } from '@rwnd/db'
 import type { AppEnv } from './types.js'
 import type { MetadataProvider } from './providers/types.js'
 import { loadEnv } from './env.js'
-import { createMetadataProvider } from './providers/index.js'
+import { createMetadataProviders } from './providers/index.js'
 import { healthRoutes } from './routes/health.js'
 import { setupRoutes } from './routes/setup.js'
 import { authRoutes } from './routes/auth.js'
@@ -24,14 +24,19 @@ import { backupRoutes } from './routes/backups.js'
 
 /**
  * `services` lets index.ts share the same db connection pool and provider
- * instance it builds for import-job restart recovery, instead of this
+ * instances it builds for import-job restart recovery, instead of this
  * function creating a second pool. Tests (testApp()) call createApp() with
  * no argument and get fresh ones, same as before.
  */
-export function createApp(services?: { db: Database; metadataProvider: MetadataProvider }) {
+export function createApp(services?: { db: Database; metadataProviders: MetadataProvider[] }) {
   const env = loadEnv()
   const db = services?.db ?? createDatabase(env.DATABASE_URL)
-  const metadataProvider = services?.metadataProvider ?? createMetadataProvider(env)
+  const metadataProviders = services?.metadataProviders ?? createMetadataProviders(env)
+  // The primary provider — every request path that doesn't yet do
+  // cross-provider fallback (search, resolve, episode/season fetches) uses
+  // this one. Priority-ordered fallback (refresh, import matching) reads
+  // the full `metadataProviders` list instead — see docs/adr/0006.
+  const metadataProvider = metadataProviders[0]!
 
   const app = new OpenAPIHono<AppEnv>()
 
@@ -49,6 +54,7 @@ export function createApp(services?: { db: Database; metadataProvider: MetadataP
   app.use('*', async (c, next) => {
     c.set('db', db)
     c.set('metadataProvider', metadataProvider)
+    c.set('metadataProviders', metadataProviders)
     await next()
   })
 

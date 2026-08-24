@@ -3,14 +3,15 @@ import { eq } from 'drizzle-orm'
 import { createDatabase, importJobs } from '@rwnd/db'
 import { createApp } from './app.js'
 import { loadEnv } from './env.js'
-import { createMetadataProvider } from './providers/index.js'
+import { createMetadataProviders } from './providers/index.js'
 import { runTraktImport } from './import/trakt.js'
 import { scheduleMetadataRefresh } from './metadata/refresh.js'
 
 const env = loadEnv()
 const db = createDatabase(env.DATABASE_URL)
-const metadataProvider = createMetadataProvider(env)
-const app = createApp({ db, metadataProvider })
+const metadataProviders = createMetadataProviders(env)
+const metadataProvider = metadataProviders[0]!
+const app = createApp({ db, metadataProviders })
 
 // Resume import jobs that were mid-flight when the process last stopped.
 // Deliberately not inside createApp() — that runs in every test via

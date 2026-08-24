@@ -1,0 +1,1 @@
+ALTER TABLE "instance_settings" ADD COLUMN "metadata_provider_priority" text[] DEFAULT '{"tmdb"}' NOT NULL;

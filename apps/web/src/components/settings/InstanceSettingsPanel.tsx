@@ -4,6 +4,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import type { RegistrationMode } from '@rwnd/shared'
 import { api } from '../../lib/api-client.js'
 import { usePublicSettings } from '../../lib/use-public-settings.js'
+import { PROVIDER_LABELS } from '../../lib/provider-labels.js'
 import { Card } from '../ui/Card.js'
 import { Field } from '../ui/Field.js'
 import { Button } from '../ui/Button.js'
@@ -62,6 +63,29 @@ export function InstanceSettingsPanel() {
             ))}
           </div>
         </fieldset>
+
+        {data && data.metadataProviderPriority.length > 0 && (
+          <div className="flex flex-col gap-1">
+            <h3 className="text-sm font-medium">{t('settings.instance.metadataProviders')}</h3>
+            <ol className="flex flex-col gap-0.5 text-sm text-[var(--color-fg-muted)]">
+              {data.metadataProviderPriority.map((source, index) => (
+                <li key={source}>
+                  {index + 1}. {PROVIDER_LABELS[source]}
+                </li>
+              ))}
+            </ol>
+            {/* Read-only for now: with only one provider ever configured,
+                there's nothing to reorder, and reorder controls (up/down
+                buttons) can't be meaningfully exercised or tested until a
+                second provider actually exists — see docs/adr/0006. The
+                API already supports patching this as a full ordered list. */}
+            {data.metadataProviderPriority.length === 1 && (
+              <p className="text-xs text-[var(--color-fg-muted)]">
+                {t('settings.instance.metadataProvidersSingle')}
+              </p>
+            )}
+          </div>
+        )}
 
         <div>
           <Button type="submit" isLoading={updateSettings.isPending}>

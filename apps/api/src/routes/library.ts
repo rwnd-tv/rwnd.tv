@@ -33,7 +33,12 @@ import {
   resolveShowEpisodes,
   type ResolvedEpisode,
 } from '../lib/media.js'
-import { pickRefreshTarget, refreshOneMovie, refreshOneShow } from '../metadata/refresh.js'
+import {
+  pickRefreshTarget,
+  pickRefreshTargets,
+  refreshOneMovie,
+  refreshOneShow,
+} from '../metadata/refresh.js'
 import { orderedProviders } from '../providers/priority.js'
 import { isProviderSource } from '../lib/provider-source.js'
 
@@ -331,6 +336,12 @@ interface RecentlyWatchedCandidate {
   slug: string
   title: string
   posterPath: string | null
+  /** Whichever configured provider actually has a recorded id for this
+   * show (priority order — pickRefreshTargets), paired with that id. Not
+   * necessarily the same provider for every candidate: a show resolved
+   * via TVDB (no `tmdb` external_ids row at all) still belongs here, it
+   * just needs episode/season lookups sent to TVDB instead of TMDB. */
+  provider: MetadataProvider
   providerExternalId: string
   /** Highest non-special season number this user has a watch in — where to
    * start scanning forward from (both On Deck and Up Next below want "from
@@ -341,10 +352,9 @@ interface RecentlyWatchedCandidate {
 
 /**
  * Shows the current user watched within `DASHBOARD_ROW_WINDOW_DAYS` days,
- * not dropped, with an external id from `provider` (a show without one
- * can't be resolved against it — excluded rather than kept as a candidate
- * nothing can act on; docs/adr/0006 covers why this stays on the single
- * primary provider rather than trying every configured one). Shared by
+ * not dropped, with an id from *some* configured provider (a show with no
+ * recorded id from any of them can't be resolved against anything —
+ * excluded rather than kept as a candidate nothing can act on). Shared by
  * the On Deck and Up Next routes below: both start from the same "what has
  * this person been watching lately" set, they just look for a different
  * next episode from it.
@@ -352,7 +362,7 @@ interface RecentlyWatchedCandidate {
 async function getRecentlyWatchedCandidates(
   db: Database,
   userId: string,
-  provider: MetadataProvider,
+  providers: MetadataProvider[],
 ): Promise<RecentlyWatchedCandidate[]> {
   const cutoff = new Date(Date.now() - DASHBOARD_ROW_WINDOW_DAYS * 24 * 60 * 60 * 1000)
 
@@ -387,7 +397,6 @@ async function getRecentlyWatchedCandidates(
       slug: shows.slug,
       title: shows.title,
       posterPath: shows.posterPath,
-      providerExternalId: externalIds.externalId,
       maxWatchedSeason: recentWatch.maxWatchedSeason,
       // Null when this user has no droppedShows row at all for this show —
       // same join shape as /library/shows above.
@@ -396,14 +405,6 @@ async function getRecentlyWatchedCandidates(
     })
     .from(recentWatch)
     .innerJoin(shows, eq(shows.id, recentWatch.showId))
-    .innerJoin(
-      externalIds,
-      and(
-        eq(externalIds.entityType, 'show'),
-        eq(externalIds.entityId, shows.id),
-        eq(externalIds.source, provider.source),
-      ),
-    )
     .leftJoin(droppedShows, and(eq(droppedShows.showId, shows.id), eq(droppedShows.userId, userId)))
     // A bare Date doesn't survive being bound as a parameter against a
     // raw-sql-derived CTE column the way it does against a real typed
@@ -413,7 +414,30 @@ async function getRecentlyWatchedCandidates(
     .where(sql`${recentWatch.lastWatchedAt} > ${cutoff.toISOString()}::timestamptz`)
     .orderBy(desc(recentWatch.lastWatchedAt))
 
-  return rows.filter((row) => !(row.manualDropped ?? row.traktDropped ?? false))
+  const undropped = rows.filter((row) => !(row.manualDropped ?? row.traktDropped ?? false))
+  // One query for every candidate's external ids rather than one per show
+  // — same reasoning as the background refresher's own bulk lookup.
+  const targets = await pickRefreshTargets(
+    db,
+    'show',
+    undropped.map((row) => row.id),
+    providers,
+  )
+  return undropped.flatMap((row) => {
+    const target = targets.get(row.id)
+    if (!target) return []
+    return [
+      {
+        id: row.id,
+        slug: row.slug,
+        title: row.title,
+        posterPath: row.posterPath,
+        maxWatchedSeason: row.maxWatchedSeason,
+        provider: target.provider,
+        providerExternalId: target.externalId,
+      },
+    ]
+  })
 }
 
 /**
@@ -421,10 +445,11 @@ async function getRecentlyWatchedCandidates(
  * — one card per recently-watched, non-dropped show that hasn't finished,
  * each pointing at the next episode the viewer hasn't seen yet, sorted by
  * that episode's air date (oldest first — see the sort below).
- * findNextUnwatchedEpisode resolves each candidate's next episode from the
- * provider — that part can't be done in SQL, since an unwatched episode has
- * no local row to query until someone actually resolves it (see
- * resolveEpisode's doc comment).
+ * findNextUnwatchedEpisode resolves each candidate's next episode from
+ * whichever provider actually knows that show (getRecentlyWatchedCandidates'
+ * own `provider` field, not a single fixed one) — that part can't be done
+ * in SQL, since an unwatched episode has no local row to query until
+ * someone actually resolves it (see resolveEpisode's doc comment).
  */
 libraryRoutes.openapi(
   createRoute({
@@ -442,15 +467,15 @@ libraryRoutes.openapi(
   async (c) => {
     const user = c.get('user')!
     const db = c.get('db')
-    const provider = c.get('metadataProvider')
+    const providers = await orderedProviders(db, c.get('metadataProviders'))
 
-    const candidates = await getRecentlyWatchedCandidates(db, user.id, provider)
+    const candidates = await getRecentlyWatchedCandidates(db, user.id, providers)
 
     const shownShows = []
     for (const candidate of candidates) {
       const next = await findNextUnwatchedEpisode(
         db,
-        provider,
+        candidate.provider,
         user.id,
         candidate.id,
         candidate.providerExternalId,
@@ -505,15 +530,15 @@ libraryRoutes.openapi(
   async (c) => {
     const user = c.get('user')!
     const db = c.get('db')
-    const provider = c.get('metadataProvider')
+    const providers = await orderedProviders(db, c.get('metadataProviders'))
 
-    const candidates = await getRecentlyWatchedCandidates(db, user.id, provider)
+    const candidates = await getRecentlyWatchedCandidates(db, user.id, providers)
 
     const shownShows = []
     for (const candidate of candidates) {
       const next = await findNextAiringEpisode(
         db,
-        provider,
+        candidate.provider,
         candidate.id,
         candidate.providerExternalId,
         candidate.maxWatchedSeason ?? 1,
@@ -807,7 +832,7 @@ libraryRoutes.openapi(
     const { slug, seasonNumber } = c.req.valid('param')
     const user = c.get('user')!
     const db = c.get('db')
-    const provider = c.get('metadataProvider')
+    const providers = await orderedProviders(db, c.get('metadataProviders'))
 
     const [show] = await db.select().from(shows).where(eq(shows.slug, slug)).limit(1)
     if (!show) return c.json({ error: 'Show not found' }, 404)
@@ -823,30 +848,27 @@ libraryRoutes.openapi(
       .limit(1)
     if (!seasonRow) return c.json({ error: 'Season not found' }, 404)
 
-    // Looks up this show's id from the same provider that's about to be
-    // asked for the season — not necessarily 'tmdb' as of the
-    // multi-provider plumbing work (docs/adr/0006).
-    const [providerExternalId] = await db
-      .select({ externalId: externalIds.externalId })
-      .from(externalIds)
-      .where(
-        and(
-          eq(externalIds.entityType, 'show'),
-          eq(externalIds.entityId, show.id),
-          eq(externalIds.source, provider.source),
-        ),
-      )
-      .limit(1)
-    if (!providerExternalId) return c.json({ error: 'Season not found' }, 404)
+    // Whichever configured provider actually has a recorded id for this
+    // show — not necessarily the primary/first-priority one (found live:
+    // a show resolved entirely via TVDB, with no `tmdb` external_ids row
+    // at all, 404'd here when this was still hardcoded to the primary
+    // provider — apps/api/src/import/match.ts's cross-provider fallback
+    // means that's now a real, not just theoretical, case).
+    const target = await pickRefreshTarget(db, 'show', show.id, providers)
+    if (!target) return c.json({ error: 'Season not found' }, 404)
 
     // TVDB's own season/episode ids for the "view on TVDB" links —
-    // deliberately independent of `provider` above (still the single
-    // primary provider for the season's actual content, per ADR 0006's
-    // documented seam). A live, best-effort side lookup: only attempted
-    // when TVDB is configured and this show has a recorded `tvdb` external
-    // id, and never lets a failed/slow TVDB call break the rest of the
-    // page — the link is just absent.
-    const tvdbProvider = c.get('metadataProviders').find((p) => p.source === 'tvdb')
+    // deliberately independent of `target` above, which is whichever
+    // provider actually has this show's season/episode *content* (TMDB,
+    // usually) — this is specifically about the TVDB deep link, wanted
+    // even when TVDB isn't the provider serving the page's own data. A
+    // live, best-effort side lookup: only attempted when TVDB is
+    // configured and this show has a recorded `tvdb` external id, and
+    // never lets a failed/slow TVDB call break the rest of the page — the
+    // link is just absent. When `target.provider` already *is* TVDB, this
+    // ends up asking it the same question twice — a minor redundancy, not
+    // worth special-casing away.
+    const tvdbProvider = providers.find((p) => p.source === 'tvdb')
     let tvdbSeasonId: string | null = null
     const tvdbEpisodeIdByNumber = new Map<number, string>()
     if (tvdbProvider) {
@@ -885,7 +907,7 @@ libraryRoutes.openapi(
       overview: seasonOverview,
       voteAverage: seasonVoteAverage,
       episodes: providerEpisodes,
-    } = await provider.getSeason(providerExternalId.externalId, seasonNumber, user.locale)
+    } = await target.provider.getSeason(target.externalId, seasonNumber, user.locale)
 
     // Scoped to the current user in the join condition (not a WHERE
     // clause) so an episode with no plays from this user still gets a row
@@ -1146,7 +1168,7 @@ libraryRoutes.openapi(
     const body = c.req.valid('json')
     const user = c.get('user')!
     const db = c.get('db')
-    const provider = c.get('metadataProvider')
+    const providers = await orderedProviders(db, c.get('metadataProviders'))
 
     // Same backstop as POST /plays — a client-picked "Other date" is
     // already clamped to "now" (WatchDateDialog.tsx), but nothing here
@@ -1158,23 +1180,15 @@ libraryRoutes.openapi(
     const [show] = await db.select().from(shows).where(eq(shows.slug, slug)).limit(1)
     if (!show) return c.json({ error: 'Show not found' }, 404)
 
-    const [providerExternalId] = await db
-      .select({ externalId: externalIds.externalId })
-      .from(externalIds)
-      .where(
-        and(
-          eq(externalIds.entityType, 'show'),
-          eq(externalIds.entityId, show.id),
-          eq(externalIds.source, provider.source),
-        ),
-      )
-      .limit(1)
-    if (!providerExternalId) return c.json({ error: 'Show not found' }, 404)
+    // Same "any configured provider, not just the primary" reasoning as
+    // the season detail route above.
+    const target = await pickRefreshTarget(db, 'show', show.id, providers)
+    if (!target) return c.json({ error: 'Show not found' }, 404)
 
     const resolvedEpisodes = await resolveSeasonEpisodes(
       db,
-      provider,
-      providerExternalId.externalId,
+      target.provider,
+      target.externalId,
       seasonNumber,
       user.locale,
     )
@@ -1400,7 +1414,7 @@ libraryRoutes.openapi(
     const body = c.req.valid('json')
     const user = c.get('user')!
     const db = c.get('db')
-    const provider = c.get('metadataProvider')
+    const providers = await orderedProviders(db, c.get('metadataProviders'))
 
     // Same backstop as POST /plays — a client-picked "Other date" is
     // already clamped to "now" (WatchDateDialog.tsx), but nothing here
@@ -1412,25 +1426,16 @@ libraryRoutes.openapi(
     const [show] = await db.select().from(shows).where(eq(shows.slug, slug)).limit(1)
     if (!show) return c.json({ error: 'Show not found' }, 404)
 
-    // Same reasoning as the season detail route above: without an id from
-    // this provider there's nothing to resolve episodes from.
-    const [providerExternalId] = await db
-      .select({ externalId: externalIds.externalId })
-      .from(externalIds)
-      .where(
-        and(
-          eq(externalIds.entityType, 'show'),
-          eq(externalIds.entityId, show.id),
-          eq(externalIds.source, provider.source),
-        ),
-      )
-      .limit(1)
-    if (!providerExternalId) return c.json({ error: 'Show not found' }, 404)
+    // Same "any configured provider, not just the primary" reasoning as
+    // the season detail route above — without an id from *some* provider
+    // there's nothing to resolve episodes from.
+    const target = await pickRefreshTarget(db, 'show', show.id, providers)
+    if (!target) return c.json({ error: 'Show not found' }, 404)
 
     const resolvedEpisodes = await resolveShowEpisodes(
       db,
-      provider,
-      providerExternalId.externalId,
+      target.provider,
+      target.externalId,
       user.locale,
     )
 

@@ -89,10 +89,13 @@ export async function pickRefreshTarget(
   return null
 }
 
-/** Bulk counterpart of pickRefreshTarget, for the background sweep below —
- * one query for every stale entity's external ids rather than one per
- * entity, since a sweep can cover hundreds of rows. */
-async function pickRefreshTargets(
+/** Bulk counterpart of pickRefreshTarget — one query for every entity's
+ * external ids rather than one per entity. Originally just for the
+ * background sweep below (which can cover hundreds of rows); also used by
+ * the Dashboard's On Deck/Up Next candidate lookup
+ * (apps/api/src/routes/library.ts), which has the same "N shows, one
+ * query" shape. */
+export async function pickRefreshTargets(
   db: Database,
   entityType: 'movie' | 'show',
   entityIds: string[],

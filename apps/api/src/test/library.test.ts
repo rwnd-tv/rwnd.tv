@@ -747,6 +747,64 @@ describe('library', () => {
       expect(body.episodes[0]?.tvdbEpisodeId).toBeNull()
       expect(tvdbGetSeason).not.toHaveBeenCalled()
     })
+
+    it('serves a season for a show with no tmdb external id at all, resolved entirely via a second provider (regression: Formula 1 404)', async () => {
+      // TMDB is still `metadataProviders[0]` (primary), but this show has
+      // no `tmdb` external_ids row — only `tvdb` — same shape as a real
+      // show resolved through match.ts's cross-provider fallback (e.g.
+      // Formula 1, which TMDB has no entry for under any id). Before the
+      // season/watched routes picked *any* configured provider with a
+      // recorded id (pickRefreshTarget) instead of always the primary,
+      // this 404'd with "Season not found" even though the season was
+      // fully cached locally.
+      const cookie = await createUserAndCookie()
+      const [show] = await db
+        .insert(shows)
+        .values({ title: 'TVDB-Only Show', slug: 'tvdb-only-show', metadataSource: 'tvdb' })
+        .returning()
+      if (!show) throw new Error('failed to insert show')
+      await db
+        .insert(externalIds)
+        .values({ entityType: 'show', entityId: show.id, source: 'tvdb', externalId: '9001' })
+      await db.insert(seasons).values({ showId: show.id, seasonNumber: 1, episodeCount: 1 })
+
+      const tmdbGetSeason = vi.fn()
+      const fakeTmdb = { source: 'tmdb', getSeason: tmdbGetSeason } as unknown as MetadataProvider
+      const fakeTvdb = {
+        source: 'tvdb',
+        getSeason: async (externalId: string) => {
+          if (externalId !== '9001') throw new Error(`Unexpected externalId: ${externalId}`)
+          return {
+            overview: 'A season only TVDB knows about',
+            voteAverage: null,
+            externalId: 'fake-tvdb-season',
+            episodes: [
+              {
+                title: 'Ep 1',
+                seasonNumber: 1,
+                episodeNumber: 1,
+                runtimeMinutes: null,
+                firstAired: null,
+                overview: null,
+                stillPath: null,
+                voteAverage: null,
+                externalId: null,
+              },
+            ],
+          }
+        },
+      } as unknown as MetadataProvider
+
+      const customApp = createApp({ db, metadataProviders: [fakeTmdb, fakeTvdb] })
+      const res = await customApp.request(`/api/v1/library/shows/${show.slug}/seasons/1`, {
+        headers: { cookie },
+      })
+      expect(res.status).toBe(200)
+      const body = await json<SeasonDetail>(res)
+      expect(body.overview).toBe('A season only TVDB knows about')
+      expect(body.episodes).toHaveLength(1)
+      expect(tmdbGetSeason).not.toHaveBeenCalled()
+    })
   })
 
   describe('GET/DELETE /library/shows/{slug}/seasons/{seasonNumber}/episodes/{episodeNumber}/plays', () => {

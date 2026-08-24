@@ -1376,7 +1376,7 @@ currently-dropped shows, since a row can have both
       setup a new rwnd.tv account for the managed user." One webhook URL
       per Plex server now serves every account on it: a new
       `webhook_account_links` table maps `(tokenId, source,
-    externalAccountId) → userId`, discovered lazily as accounts are
+externalAccountId) → userId`, discovered lazily as accounts are
       seen and requiring an explicit claim in Settings > API tokens >
       Linked accounts (assignable to _any_ instance user, not just the
       token's owner). The obvious shortcut — auto-link whichever account
@@ -1517,7 +1517,7 @@ currently-dropped shows, since a row can have both
       actually new anywhere — confusing, and the opposite of what a user
       needs to trust the number. Root cause: `processRatingItem`/
       `processWatchlistItem`/`processDroppedItem` (`apps/api/src/import/
-    trakt.ts`) always returned `'imported'` on a successful match,
+trakt.ts`) always returned `'imported'` on a successful match,
       regardless of whether the `onConflictDoUpdate` upsert actually
       changed anything — re-confirming identical Trakt data every run
       counted as "imported" every single time. Fixed with drizzle's

@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { metadataProviderSourceSchema } from './common.js'
 
 /**
  * Per-user backup/restore for the four categories Clear database can also
@@ -7,23 +8,37 @@ import { z } from 'zod'
  * (apps/api/src/routes/backups.ts), not a database row, so a copy can be
  * taken off the server.
  *
- * Entries are identified by TMDB id (plus season/episode number for an
- * episode), never rwnd.tv's own row ids — those are random UUIDs
- * (`defaultRandom()` in packages/db/src/schema.ts) that only exist on the
- * database that generated them, so a backup keyed on them would only ever
- * be restorable onto the exact instance it came from. The metadata needed
- * to resolve a TMDB id back to a local row — title, poster, genres,
- * seasons, episode titles — travels inside the file itself (see
- * `backupMovieSchema`/`backupShowSchema`), so restore never needs a TMDB
- * API call: apps/api/src/lib/media.ts's resolveShow()/resolveEpisode()
- * only ever hit the provider on an `external_ids` miss, and everything
- * after that is plain field-copying from what's already known.
+ * Entries are identified by a provider-tagged external id (plus season/
+ * episode number for an episode), never rwnd.tv's own row ids — those are
+ * random UUIDs (`defaultRandom()` in packages/db/src/schema.ts) that only
+ * exist on the database that generated them, so a backup keyed on them
+ * would only ever be restorable onto the exact instance it came from. The
+ * metadata needed to resolve a ref back to a local row — title, poster,
+ * genres, seasons, episode titles — travels inside the file itself (see
+ * `backupMovieSchema`/`backupShowSchema`), so restore never needs a
+ * provider API call: apps/api/src/lib/media.ts's
+ * resolveShow()/resolveEpisode() only ever hit the provider on an
+ * `external_ids` miss, and everything after that is plain field-copying
+ * from what's already known.
  *
- * An entity with no `tmdb` row in `external_ids` at all (possible for a
- * show matched purely by a backfilled `trakt` id) can't be represented —
- * it's skipped when the file is built, counted in `skipped` rather than
- * silently dropped.
+ * An entity with no id from any configured provider in `external_ids` at
+ * all (possible for a show matched purely by a backfilled `trakt` id)
+ * can't be represented — it's skipped when the file is built, counted in
+ * `skipped` rather than silently dropped.
  */
+
+/** A reference to a movie/show by whichever provider build.ts's
+ * priority-ordered lookup (apps/api/src/providers/priority.ts) had an id
+ * for. Format version 1 kept a bare TMDB id string here — that stopped
+ * being safe once a second provider existed, since a TMDB id and a
+ * same-numbered TVDB id point at unrelated titles; see
+ * apps/api/src/backup/legacy.ts for how an old v1 file's bare id is
+ * up-converted to `{source: 'tmdb', externalId}` on read. */
+export const externalRefSchema = z.object({
+  source: metadataProviderSourceSchema,
+  externalId: z.string(),
+})
+export type ExternalRef = z.infer<typeof externalRefSchema>
 
 // Deliberately no `slug` field, unlike backupShowSchema below — restore
 // always regenerates a movie's slug via generateUniqueMovieSlug() rather
@@ -31,7 +46,7 @@ import { z } from 'zod'
 // here would earn nothing while forcing a BACKUP_FORMAT_VERSION bump that
 // breaks every existing backup file for no gain.
 export const backupMovieSchema = z.object({
-  tmdbId: z.string(),
+  ref: externalRefSchema,
   title: z.string(),
   year: z.number().int().nullable(),
   runtimeMinutes: z.number().int().nullable(),
@@ -63,7 +78,7 @@ export const backupEpisodeSchema = z.object({
 export type BackupEpisode = z.infer<typeof backupEpisodeSchema>
 
 export const backupShowSchema = z.object({
-  tmdbId: z.string(),
+  ref: externalRefSchema,
   slug: z.string(),
   title: z.string(),
   year: z.number().int().nullable(),
@@ -77,7 +92,7 @@ export const backupShowSchema = z.object({
 })
 export type BackupShow = z.infer<typeof backupShowSchema>
 
-const playSourceSchema = z.enum(['manual', 'plex', 'import'])
+export const playSourceSchema = z.enum(['manual', 'plex', 'import'])
 
 /**
  * Points at a movie, or one episode of a show — the same two shapes a
@@ -90,8 +105,8 @@ const playSourceSchema = z.enum(['manual', 'plex', 'import'])
  */
 export const backupWatchSchema = z
   .object({
-    movie: z.string().optional(),
-    show: z.string().optional(),
+    movie: externalRefSchema.optional(),
+    show: externalRefSchema.optional(),
     season: z.number().int().min(0).optional(),
     episode: z.number().int().min(1).optional(),
     watchedAt: z.string().datetime(),
@@ -114,8 +129,8 @@ export type BackupWatch = z.infer<typeof backupWatchSchema>
  */
 export const backupRatingSchema = z
   .object({
-    movie: z.string().optional(),
-    show: z.string().optional(),
+    movie: externalRefSchema.optional(),
+    show: externalRefSchema.optional(),
     season: z.number().int().min(0).optional(),
     episode: z.number().int().min(1).optional(),
     rating: z.number().int().min(1).max(10),
@@ -131,8 +146,8 @@ export type BackupRating = z.infer<typeof backupRatingSchema>
 
 export const backupWatchlistItemSchema = z
   .object({
-    movie: z.string().optional(),
-    show: z.string().optional(),
+    movie: externalRefSchema.optional(),
+    show: externalRefSchema.optional(),
     season: z.number().int().min(0).optional(),
     episode: z.number().int().min(1).optional(),
     listedAt: z.string().datetime(),
@@ -147,7 +162,7 @@ export const backupWatchlistItemSchema = z
 export type BackupWatchlistItem = z.infer<typeof backupWatchlistItemSchema>
 
 export const backupDroppedShowSchema = z.object({
-  show: z.string(),
+  show: externalRefSchema,
   traktDropped: z.boolean().nullable(),
   traktDroppedAt: z.string().datetime().nullable(),
   manualDropped: z.boolean().nullable(),
@@ -167,10 +182,16 @@ export const backupCountsSchema = z.object({
 export type BackupCounts = z.infer<typeof backupCountsSchema>
 
 /** Bumped whenever a change to the shapes above would make an older file
- * unsafe to restore as-is — restore refuses a mismatch outright (see
- * apps/api/src/routes/backups.ts) rather than guessing, since the database
- * is about to be wiped before the file's contents are even parsed. */
-export const BACKUP_FORMAT_VERSION = 1
+ * unsafe to restore or diff as-is. Unlike a version bump in general, this
+ * one specific transition (1 -> 2, bare `tmdbId` strings to provider-tagged
+ * `externalRefSchema` refs) has a safe, lossless up-conversion — every v1
+ * file was necessarily written when TMDB was the only provider, so its ids
+ * are unambiguously `{source: 'tmdb', externalId}` — and
+ * apps/api/src/backup/legacy.ts performs it on read rather than refusing
+ * the file outright. A future format change without an equivalent
+ * up-conversion should still refuse, the same way this file historically
+ * did for any version mismatch. */
+export const BACKUP_FORMAT_VERSION = 2
 
 export const backupFileSchema = z.object({
   formatVersion: z.literal(BACKUP_FORMAT_VERSION),

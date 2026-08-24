@@ -1,16 +1,6 @@
-import { and, eq, inArray } from 'drizzle-orm'
+import { eq, inArray } from 'drizzle-orm'
 import type { Database } from '@rwnd/db'
-import {
-  droppedShows,
-  episodes,
-  externalIds,
-  movies,
-  plays,
-  ratings,
-  seasons,
-  shows,
-  watchlistItems,
-} from '@rwnd/db'
+import { droppedShows, episodes, movies, plays, ratings, seasons, shows, watchlistItems } from '@rwnd/db'
 import {
   BACKUP_FORMAT_VERSION,
   type BackupDroppedShow,
@@ -20,20 +10,25 @@ import {
   type BackupShow,
   type BackupWatch,
   type BackupWatchlistItem,
+  type ExternalRef,
 } from '@rwnd/shared'
+import type { MetadataProvider } from '../providers/types.js'
+import { orderedProviders } from '../providers/priority.js'
+import { pickRefreshTargets } from '../metadata/refresh.js'
 
 /**
  * Snapshots one user's watch history/ratings/watchlist/dropped shows into
  * the portable file format packages/shared/src/schemas/backups.ts defines
- * — see that file's doc comment for why entries are keyed by TMDB id
- * rather than rwnd.tv's own row ids, and why the file carries its own
- * movie/show/season/episode metadata.
+ * — see that file's doc comment for why entries are keyed by a
+ * provider-tagged ref rather than rwnd.tv's own row ids, and why the file
+ * carries its own movie/show/season/episode metadata.
  */
 export async function buildBackupFile(
   db: Database,
   userId: string,
   description: string,
   now: Date,
+  providers: MetadataProvider[],
 ): Promise<BackupFile> {
   const [playRows, ratingRows, watchlistRows, droppedRows] = await Promise.all([
     db.select().from(plays).where(eq(plays.userId, userId)),
@@ -70,7 +65,9 @@ export async function buildBackupFile(
   for (const row of watchlistRows) if (row.entityType === 'show') showIds.add(row.entityId)
   for (const episode of episodeRows) showIds.add(episode.showId)
 
-  const [movieRows, showRows, seasonRows, movieExternalIds, showExternalIds] = await Promise.all([
+  const ordered = await orderedProviders(db, providers)
+
+  const [movieRows, showRows, seasonRows, movieTargets, showTargets] = await Promise.all([
     movieIds.size > 0
       ? db
           .select()
@@ -89,34 +86,22 @@ export async function buildBackupFile(
           .from(seasons)
           .where(inArray(seasons.showId, [...showIds]))
       : [],
-    movieIds.size > 0
-      ? db
-          .select({ entityId: externalIds.entityId, externalId: externalIds.externalId })
-          .from(externalIds)
-          .where(
-            and(
-              eq(externalIds.entityType, 'movie'),
-              eq(externalIds.source, 'tmdb'),
-              inArray(externalIds.entityId, [...movieIds]),
-            ),
-          )
-      : [],
-    showIds.size > 0
-      ? db
-          .select({ entityId: externalIds.entityId, externalId: externalIds.externalId })
-          .from(externalIds)
-          .where(
-            and(
-              eq(externalIds.entityType, 'show'),
-              eq(externalIds.source, 'tmdb'),
-              inArray(externalIds.entityId, [...showIds]),
-            ),
-          )
-      : [],
+    pickRefreshTargets(db, 'movie', [...movieIds], ordered),
+    pickRefreshTargets(db, 'show', [...showIds], ordered),
   ])
 
-  const movieTmdbId = new Map(movieExternalIds.map((row) => [row.entityId, row.externalId]))
-  const showTmdbId = new Map(showExternalIds.map((row) => [row.entityId, row.externalId]))
+  const movieRef = new Map<string, ExternalRef>(
+    [...movieTargets].map(([entityId, target]) => [
+      entityId,
+      { source: target.provider.source, externalId: target.externalId },
+    ]),
+  )
+  const showRef = new Map<string, ExternalRef>(
+    [...showTargets].map(([entityId, target]) => [
+      entityId,
+      { source: target.provider.source, externalId: target.externalId },
+    ]),
+  )
 
   const seasonsByShow = new Map<string, typeof seasonRows>()
   for (const season of seasonRows) {
@@ -133,28 +118,28 @@ export async function buildBackupFile(
 
   let skipped = 0
 
-  /** An episode ref resolved down to its show's TMDB id + season/episode
-   * number, or null if the episode is unknown or its show has no TMDB id
-   * — same "can't be represented" case as a movie/show with no tmdb
-   * external_ids row. */
-  function episodeRef(episodeId: string): { show: string; season: number; episode: number } | null {
+  /** An episode ref resolved down to its show's provider ref + season/
+   * episode number, or null if the episode is unknown or its show has no id
+   * from any configured provider — same "can't be represented" case as a
+   * movie/show with no external_ids row at all. */
+  function episodeRef(episodeId: string): { show: ExternalRef; season: number; episode: number } | null {
     const episode = episodeById.get(episodeId)
     if (!episode) return null
-    const tmdbId = showTmdbId.get(episode.showId)
-    if (!tmdbId) return null
-    return { show: tmdbId, season: episode.seasonNumber, episode: episode.episodeNumber }
+    const showRefValue = showRef.get(episode.showId)
+    if (!showRefValue) return null
+    return { show: showRefValue, season: episode.seasonNumber, episode: episode.episodeNumber }
   }
 
   const watchHistory: BackupWatch[] = []
   for (const row of playRows) {
     if (row.movieId) {
-      const tmdbId = movieTmdbId.get(row.movieId)
-      if (!tmdbId) {
+      const movieRefValue = movieRef.get(row.movieId)
+      if (!movieRefValue) {
         skipped++
         continue
       }
       watchHistory.push({
-        movie: tmdbId,
+        movie: movieRefValue,
         watchedAt: row.watchedAt.toISOString(),
         source: row.source,
         sourceRef: row.sourceRef,
@@ -177,19 +162,27 @@ export async function buildBackupFile(
   const ratingEntries: BackupRating[] = []
   for (const row of ratingRows) {
     if (row.entityType === 'movie') {
-      const tmdbId = movieTmdbId.get(row.entityId)
-      if (!tmdbId) {
+      const movieRefValue = movieRef.get(row.entityId)
+      if (!movieRefValue) {
         skipped++
         continue
       }
-      ratingEntries.push({ movie: tmdbId, rating: row.rating, ratedAt: row.ratedAt.toISOString() })
+      ratingEntries.push({
+        movie: movieRefValue,
+        rating: row.rating,
+        ratedAt: row.ratedAt.toISOString(),
+      })
     } else if (row.entityType === 'show') {
-      const tmdbId = showTmdbId.get(row.entityId)
-      if (!tmdbId) {
+      const showRefValue = showRef.get(row.entityId)
+      if (!showRefValue) {
         skipped++
         continue
       }
-      ratingEntries.push({ show: tmdbId, rating: row.rating, ratedAt: row.ratedAt.toISOString() })
+      ratingEntries.push({
+        show: showRefValue,
+        rating: row.rating,
+        ratedAt: row.ratedAt.toISOString(),
+      })
     } else {
       const ref = episodeRef(row.entityId)
       if (!ref) {
@@ -203,19 +196,23 @@ export async function buildBackupFile(
   const watchlist: BackupWatchlistItem[] = []
   for (const row of watchlistRows) {
     if (row.entityType === 'movie') {
-      const tmdbId = movieTmdbId.get(row.entityId)
-      if (!tmdbId) {
+      const movieRefValue = movieRef.get(row.entityId)
+      if (!movieRefValue) {
         skipped++
         continue
       }
-      watchlist.push({ movie: tmdbId, listedAt: row.listedAt.toISOString(), notes: row.notes })
+      watchlist.push({
+        movie: movieRefValue,
+        listedAt: row.listedAt.toISOString(),
+        notes: row.notes,
+      })
     } else if (row.entityType === 'show') {
-      const tmdbId = showTmdbId.get(row.entityId)
-      if (!tmdbId) {
+      const showRefValue = showRef.get(row.entityId)
+      if (!showRefValue) {
         skipped++
         continue
       }
-      watchlist.push({ show: tmdbId, listedAt: row.listedAt.toISOString(), notes: row.notes })
+      watchlist.push({ show: showRefValue, listedAt: row.listedAt.toISOString(), notes: row.notes })
     } else {
       const ref = episodeRef(row.entityId)
       if (!ref) {
@@ -228,13 +225,13 @@ export async function buildBackupFile(
 
   const droppedShowEntries: BackupDroppedShow[] = []
   for (const row of droppedRows) {
-    const tmdbId = showTmdbId.get(row.showId)
-    if (!tmdbId) {
+    const showRefValue = showRef.get(row.showId)
+    if (!showRefValue) {
       skipped++
       continue
     }
     droppedShowEntries.push({
-      show: tmdbId,
+      show: showRefValue,
       traktDropped: row.traktDropped,
       traktDroppedAt: row.traktDroppedAt?.toISOString() ?? null,
       manualDropped: row.manualDropped,
@@ -244,10 +241,10 @@ export async function buildBackupFile(
 
   const movieEntries: BackupMovie[] = []
   for (const row of movieRows) {
-    const tmdbId = movieTmdbId.get(row.id)
-    if (!tmdbId) continue // no external_ids row — can't be referenced above either, so already excluded there
+    const movieRefValue = movieRef.get(row.id)
+    if (!movieRefValue) continue // no external_ids row from any provider — can't be referenced above either, so already excluded there
     movieEntries.push({
-      tmdbId,
+      ref: movieRefValue,
       title: row.title,
       year: row.year,
       runtimeMinutes: row.runtimeMinutes,
@@ -258,10 +255,10 @@ export async function buildBackupFile(
 
   const showEntries: BackupShow[] = []
   for (const row of showRows) {
-    const tmdbId = showTmdbId.get(row.id)
-    if (!tmdbId) continue
+    const showRefValue = showRef.get(row.id)
+    if (!showRefValue) continue
     showEntries.push({
-      tmdbId,
+      ref: showRefValue,
       slug: row.slug,
       title: row.title,
       year: row.year,

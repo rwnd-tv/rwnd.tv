@@ -35,8 +35,8 @@ async function insertInChunks<T>(rows: T[], insert: (chunk: T[]) => Promise<unkn
  *
  * Any movie/show/episode the file references but this database doesn't
  * already know is created from the file's own metadata section, never
- * fetched from TMDB — see packages/shared/src/schemas/backups.ts's doc
- * comment for why that's possible without a provider call.
+ * fetched from a provider — see packages/shared/src/schemas/backups.ts's
+ * doc comment for why that's possible without a provider call.
  */
 export async function restoreBackupFile(
   db: Database,
@@ -45,46 +45,75 @@ export async function restoreBackupFile(
 ): Promise<BackupCounts> {
   return db.transaction(async (tx) => {
     // --- Resolve every referenced movie/show to a local id, creating rows
-    // from the file's metadata when the tmdb id isn't already known here.
-    const movieTmdbIds = file.movies.map((m) => m.tmdbId)
-    const showTmdbIds = file.shows.map((s) => s.tmdbId)
+    // from the file's metadata when the ref isn't already known here. Keyed
+    // by `${source}:${externalId}` since a bare id alone can't distinguish
+    // a TMDB id from a same-numbered TVDB id (see externalRefSchema's doc
+    // comment in packages/shared/src/schemas/backups.ts).
+    const refKey = (source: string, externalId: string) => `${source}:${externalId}`
+    const movieRefs = file.movies.map((m) => m.ref)
+    const showRefs = file.shows.map((s) => s.ref)
 
     const [existingMovies, existingShows] = await Promise.all([
-      movieTmdbIds.length > 0
+      movieRefs.length > 0
         ? tx
-            .select({ tmdbId: externalIds.externalId, id: externalIds.entityId })
+            .select({
+              source: externalIds.source,
+              externalId: externalIds.externalId,
+              id: externalIds.entityId,
+            })
             .from(externalIds)
             .where(
               and(
                 eq(externalIds.entityType, 'movie'),
-                eq(externalIds.source, 'tmdb'),
-                inArray(externalIds.externalId, movieTmdbIds),
+                inArray(
+                  externalIds.source,
+                  movieRefs.map((r) => r.source),
+                ),
+                inArray(
+                  externalIds.externalId,
+                  movieRefs.map((r) => r.externalId),
+                ),
               ),
             )
         : [],
-      showTmdbIds.length > 0
+      showRefs.length > 0
         ? tx
-            .select({ tmdbId: externalIds.externalId, id: externalIds.entityId })
+            .select({
+              source: externalIds.source,
+              externalId: externalIds.externalId,
+              id: externalIds.entityId,
+            })
             .from(externalIds)
             .where(
               and(
                 eq(externalIds.entityType, 'show'),
-                eq(externalIds.source, 'tmdb'),
-                inArray(externalIds.externalId, showTmdbIds),
+                inArray(
+                  externalIds.source,
+                  showRefs.map((r) => r.source),
+                ),
+                inArray(
+                  externalIds.externalId,
+                  showRefs.map((r) => r.externalId),
+                ),
               ),
             )
         : [],
     ])
 
-    const movieIdByTmdbId = new Map(existingMovies.map((row) => [row.tmdbId, row.id]))
-    const showIdByTmdbId = new Map(existingShows.map((row) => [row.tmdbId, row.id]))
+    const movieIdByRef = new Map(
+      existingMovies.map((row) => [refKey(row.source, row.externalId), row.id]),
+    )
+    const showIdByRef = new Map(
+      existingShows.map((row) => [refKey(row.source, row.externalId), row.id]),
+    )
 
     // Sequential, not parallel — generateUniqueMovieSlug()/
     // generateUniqueShowSlug()'s uniqueness check reads the current table
     // state, so two inserts racing inside the same transaction could both
     // compute the same slug. Applies to movies too now that they have one.
     for (const movie of file.movies) {
-      if (movieIdByTmdbId.has(movie.tmdbId)) continue
+      const key = refKey(movie.ref.source, movie.ref.externalId)
+      if (movieIdByRef.has(key)) continue
       const slug = await generateUniqueMovieSlug(tx, movie.title, movie.year)
       const [inserted] = await tx
         .insert(movies)
@@ -96,28 +125,29 @@ export async function restoreBackupFile(
           overview: movie.overview,
           posterPath: movie.posterPath,
           // Truthful by construction: the row below records the exact same
-          // 'tmdb' source for this entity's external id.
-          metadataSource: 'tmdb',
+          // source for this entity's external id.
+          metadataSource: movie.ref.source,
         })
         .returning({ id: movies.id })
-      if (!inserted) throw new Error(`Failed to insert movie ${movie.tmdbId}`)
+      if (!inserted) throw new Error(`Failed to insert movie ${key}`)
       await tx
         .insert(externalIds)
         .values({
           entityType: 'movie',
           entityId: inserted.id,
-          source: 'tmdb',
-          externalId: movie.tmdbId,
+          source: movie.ref.source,
+          externalId: movie.ref.externalId,
         })
         .onConflictDoNothing()
-      movieIdByTmdbId.set(movie.tmdbId, inserted.id)
+      movieIdByRef.set(key, inserted.id)
     }
 
     // `${showId}:${seasonNumber}:${episodeNumber}` -> local episode id.
     const episodeIdByRef = new Map<string, string>()
 
     for (const show of file.shows) {
-      let showId = showIdByTmdbId.get(show.tmdbId)
+      const key = refKey(show.ref.source, show.ref.externalId)
+      let showId = showIdByRef.get(key)
       if (!showId) {
         const slug = await generateUniqueShowSlug(tx, show.title, show.year)
         const [inserted] = await tx
@@ -132,21 +162,21 @@ export async function restoreBackupFile(
             genres: show.genres,
             voteAverage: show.voteAverage,
             // Same reasoning as the movie insert above.
-            metadataSource: 'tmdb',
+            metadataSource: show.ref.source,
           })
           .returning({ id: shows.id })
-        if (!inserted) throw new Error(`Failed to insert show ${show.tmdbId}`)
+        if (!inserted) throw new Error(`Failed to insert show ${key}`)
         showId = inserted.id
         await tx
           .insert(externalIds)
           .values({
             entityType: 'show',
             entityId: showId,
-            source: 'tmdb',
-            externalId: show.tmdbId,
+            source: show.ref.source,
+            externalId: show.ref.externalId,
           })
           .onConflictDoNothing()
-        showIdByTmdbId.set(show.tmdbId, showId)
+        showIdByRef.set(key, showId)
 
         if (show.seasons.length > 0) {
           // Rebound to a fresh const: `showId` above is a reassigned `let`,
@@ -215,8 +245,12 @@ export async function restoreBackupFile(
       }
     }
 
-    function resolveEpisodeId(tmdbShowId: string, season: number, episode: number): string | null {
-      const showId = showIdByTmdbId.get(tmdbShowId)
+    function resolveEpisodeId(
+      show: { source: string; externalId: string },
+      season: number,
+      episode: number,
+    ): string | null {
+      const showId = showIdByRef.get(refKey(show.source, show.externalId))
       if (!showId) return null
       return episodeIdByRef.get(`${showId}:${season}:${episode}`) ?? null
     }
@@ -230,7 +264,7 @@ export async function restoreBackupFile(
     const playValues = file.watchHistory
       .map((entry) => {
         if (entry.movie) {
-          const movieId = movieIdByTmdbId.get(entry.movie)
+          const movieId = movieIdByRef.get(refKey(entry.movie.source, entry.movie.externalId))
           if (!movieId) return null
           return {
             userId,
@@ -256,7 +290,7 @@ export async function restoreBackupFile(
     const ratingValues = file.ratings
       .map((entry) => {
         if (entry.movie) {
-          const entityId = movieIdByTmdbId.get(entry.movie)
+          const entityId = movieIdByRef.get(refKey(entry.movie.source, entry.movie.externalId))
           if (!entityId) return null
           return {
             userId,
@@ -267,7 +301,7 @@ export async function restoreBackupFile(
           }
         }
         if (entry.season === undefined) {
-          const entityId = showIdByTmdbId.get(entry.show!)
+          const entityId = showIdByRef.get(refKey(entry.show!.source, entry.show!.externalId))
           if (!entityId) return null
           return {
             userId,
@@ -293,7 +327,7 @@ export async function restoreBackupFile(
     const watchlistValues = file.watchlist
       .map((entry) => {
         if (entry.movie) {
-          const entityId = movieIdByTmdbId.get(entry.movie)
+          const entityId = movieIdByRef.get(refKey(entry.movie.source, entry.movie.externalId))
           if (!entityId) return null
           return {
             userId,
@@ -304,7 +338,7 @@ export async function restoreBackupFile(
           }
         }
         if (entry.season === undefined) {
-          const entityId = showIdByTmdbId.get(entry.show!)
+          const entityId = showIdByRef.get(refKey(entry.show!.source, entry.show!.externalId))
           if (!entityId) return null
           return {
             userId,
@@ -329,7 +363,7 @@ export async function restoreBackupFile(
 
     const droppedValues = file.droppedShows
       .map((entry) => {
-        const showId = showIdByTmdbId.get(entry.show)
+        const showId = showIdByRef.get(refKey(entry.show.source, entry.show.externalId))
         if (!showId) return null
         return {
           userId,

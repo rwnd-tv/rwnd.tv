@@ -4,6 +4,7 @@ import { createMiddleware } from 'hono/factory'
 import {
   BACKUP_FORMAT_VERSION,
   backupFileSchema,
+  backupFileSchemaV1,
   backupIdSchema,
   backupSummarySchema,
   createBackupRequestSchema,
@@ -17,6 +18,7 @@ import { loadEnv } from '../env.js'
 import { buildBackupFile } from '../backup/build.js'
 import { restoreBackupFile } from '../backup/restore.js'
 import { computeBackupDiff } from '../backup/diff.js'
+import { migrateLegacyBackupFile } from '../backup/legacy.js'
 import {
   backupFilePath,
   backupUserDir,
@@ -29,7 +31,11 @@ export const backupRoutes = new OpenAPIHono<AppEnv>()
 /** Reads and validates one backup file, shared by the restore and diff
  * routes below — both need the exact same "not found" / "corrupt" /
  * "incompatible version" handling before they can do anything with the
- * file's contents. */
+ * file's contents. A BACKUP_FORMAT_VERSION 1 file parses fine (its bare
+ * TMDB-id shape is still a valid file, just an older one) and is
+ * up-converted via migrateLegacyBackupFile before being handed back — see
+ * that function's doc comment for why 1 -> 2 specifically is safe to do
+ * silently, unlike a version this code doesn't know how to migrate. */
 async function loadBackupFile(
   email: string,
   id: string,
@@ -48,26 +54,28 @@ async function loadBackupFile(
   }
 
   const parsed = backupFileSchema.safeParse(raw)
-  if (!parsed.success) {
-    // A stale/foreign formatVersion is by far the most likely reason this
-    // fails, and the one worth naming — everything else collapses to
-    // "corrupt", same as the JSON.parse failure above. Checked before
-    // reporting the generic error, not instead of full-shape validation.
-    const versionMismatch =
-      typeof raw === 'object' &&
-      raw !== null &&
-      'formatVersion' in raw &&
-      (raw as { formatVersion: unknown }).formatVersion !== BACKUP_FORMAT_VERSION
-    return {
-      ok: false,
-      status: 400,
-      error: versionMismatch
-        ? 'This backup was written by an incompatible version of rwnd.tv'
-        : 'Backup file is corrupt',
-    }
-  }
+  if (parsed.success) return { ok: true, data: parsed.data }
 
-  return { ok: true, data: parsed.data }
+  const legacy = backupFileSchemaV1.safeParse(raw)
+  if (legacy.success) return { ok: true, data: migrateLegacyBackupFile(legacy.data) }
+
+  // A stale/foreign formatVersion is by far the most likely reason both
+  // parses failed, and the one worth naming — everything else collapses to
+  // "corrupt", same as the JSON.parse failure above. Checked before
+  // reporting the generic error, not instead of full-shape validation.
+  const versionMismatch =
+    typeof raw === 'object' &&
+    raw !== null &&
+    'formatVersion' in raw &&
+    (raw as { formatVersion: unknown }).formatVersion !== BACKUP_FORMAT_VERSION &&
+    (raw as { formatVersion: unknown }).formatVersion !== 1
+  return {
+    ok: false,
+    status: 400,
+    error: versionMismatch
+      ? 'This backup was written by an incompatible version of rwnd.tv'
+      : 'Backup file is corrupt',
+  }
 }
 
 /** 404s when the instance has no BACKUP_DIR configured, same reasoning and
@@ -164,7 +172,7 @@ backupRoutes.openapi(
     const db = c.get('db')
     const now = new Date()
 
-    const file = await buildBackupFile(db, user.id, description, now)
+    const file = await buildBackupFile(db, user.id, description, now, c.get('metadataProviders'))
     const id = generateBackupId(now, description)
 
     await mkdir(backupUserDir(user.email), { recursive: true })
@@ -238,7 +246,7 @@ backupRoutes.openapi(
     const loaded = await loadBackupFile(user.email, id)
     if (!loaded.ok) return c.json({ error: loaded.error }, loaded.status)
 
-    const diff = await computeBackupDiff(db, user.id, loaded.data)
+    const diff = await computeBackupDiff(db, user.id, loaded.data, c.get('metadataProviders'))
     return c.json({ diff })
   },
 )

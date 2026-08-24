@@ -1,4 +1,4 @@
-import { rm } from 'node:fs/promises'
+import { mkdir, rm, writeFile } from 'node:fs/promises'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { eq } from 'drizzle-orm'
 import {
@@ -14,6 +14,7 @@ import {
 } from '@rwnd/db'
 import type {
   BackupFile,
+  BackupFileV1,
   BackupSummary,
   DiffBackupResponse,
   ListBackupsResponse,
@@ -24,6 +25,9 @@ import { BACKUP_FORMAT_VERSION } from '@rwnd/shared'
 import { createLocalUser, extractCookie, json, resetDb, testApp, testDb } from './helpers.js'
 import { loadEnv } from '../env.js'
 import { restoreBackupFile } from '../backup/restore.js'
+import { backupFilePath, backupUserDir, generateBackupId } from '../backup/paths.js'
+import { createApp } from '../app.js'
+import type { MetadataProvider } from '../providers/types.js'
 
 const db = testDb()
 const app = testApp()
@@ -254,7 +258,7 @@ describe('backups', () => {
       skipped: 0,
       movies: [
         {
-          tmdbId: '111',
+          ref: { source: 'tmdb', externalId: '111' },
           title: 'Same Name',
           year: 2020,
           runtimeMinutes: 100,
@@ -262,7 +266,7 @@ describe('backups', () => {
           posterPath: null,
         },
         {
-          tmdbId: '222',
+          ref: { source: 'tmdb', externalId: '222' },
           title: 'Same Name',
           year: 2020,
           runtimeMinutes: 100,
@@ -273,13 +277,13 @@ describe('backups', () => {
       shows: [],
       watchHistory: [
         {
-          movie: '111',
+          movie: { source: 'tmdb', externalId: '111' },
           watchedAt: new Date('2026-01-01T00:00:00.000Z').toISOString(),
           source: 'manual',
           sourceRef: null,
         },
         {
-          movie: '222',
+          movie: { source: 'tmdb', externalId: '222' },
           watchedAt: new Date('2026-01-02T00:00:00.000Z').toISOString(),
           source: 'manual',
           sourceRef: null,
@@ -338,6 +342,196 @@ describe('backups', () => {
         droppedShows: { added: 0, removed: 0 },
       },
     })
+  })
+
+  it('represents a TVDB-only show in a backup and its diff (regression: a show with no tmdb id showed no added/removed)', async () => {
+    // Before build.ts learned to pick *any* configured provider's id
+    // (pickRefreshTargets) instead of always querying for `source: 'tmdb'`,
+    // a show like Formula 1 — resolved entirely via TVDB, no tmdb
+    // external_ids row at all — was silently excluded from every backup
+    // file's watchHistory/movies/shows arrays. Since both the saved backup
+    // and the "current" snapshot dropped it identically, diffing showed
+    // 0 added/0 removed even after real new watches were logged.
+    const cookie = await createUserAndCookie('tvdb-only@example.com')
+    const userId = await meId(cookie)
+
+    const [show] = await db
+      .insert(shows)
+      .values({ title: 'Formula 1', slug: 'formula-1-1950', metadataSource: 'tvdb' })
+      .returning()
+    if (!show) throw new Error('failed to insert show')
+    await db
+      .insert(externalIds)
+      .values({ entityType: 'show', entityId: show.id, source: 'tvdb', externalId: '9001' })
+    await db.insert(seasons).values({ showId: show.id, seasonNumber: 2026, episodeCount: 2 })
+    const [episode1, episode2] = await db
+      .insert(episodes)
+      .values([
+        { showId: show.id, seasonNumber: 2026, episodeNumber: 1, title: 'Bahrain Grand Prix' },
+        { showId: show.id, seasonNumber: 2026, episodeNumber: 2, title: 'Saudi Grand Prix' },
+      ])
+      .returning()
+    if (!episode1 || !episode2) throw new Error('failed to insert episodes')
+
+    await db
+      .insert(plays)
+      .values({ userId, episodeId: episode1.id, watchedAt: new Date('2026-03-01T00:00:00.000Z') })
+
+    const fakeTmdb = { source: 'tmdb' } as unknown as MetadataProvider
+    const fakeTvdb = { source: 'tvdb' } as unknown as MetadataProvider
+    const customApp = createApp({ db, metadataProviders: [fakeTmdb, fakeTvdb] })
+
+    const createRes = await customApp.request('/api/v1/backups', {
+      method: 'POST',
+      headers: { cookie, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ description: 'Before more F1 watching' }),
+    })
+    expect(createRes.status).toBe(201)
+    const backup = await json<BackupSummary>(createRes)
+    expect(backup.counts.watchHistory).toBe(1)
+    expect(backup.skipped).toBe(0)
+
+    // Nothing has changed since the backup was taken.
+    const diffRes = await customApp.request(`/api/v1/backups/${backup.id}/diff`, {
+      headers: { cookie },
+    })
+    expect(await json<DiffBackupResponse>(diffRes)).toEqual({
+      diff: {
+        watchHistory: { added: 0, removed: 0 },
+        ratings: { added: 0, removed: 0 },
+        watchlist: { added: 0, removed: 0 },
+        droppedShows: { added: 0, removed: 0 },
+      },
+    })
+
+    // A second watch, logged after the backup — the diff must now see it.
+    await db
+      .insert(plays)
+      .values({ userId, episodeId: episode2.id, watchedAt: new Date('2026-03-08T00:00:00.000Z') })
+    const diffRes2 = await customApp.request(`/api/v1/backups/${backup.id}/diff`, {
+      headers: { cookie },
+    })
+    expect(await json<DiffBackupResponse>(diffRes2)).toEqual({
+      diff: {
+        watchHistory: { added: 1, removed: 0 },
+        ratings: { added: 0, removed: 0 },
+        watchlist: { added: 0, removed: 0 },
+        droppedShows: { added: 0, removed: 0 },
+      },
+    })
+  })
+
+  it('migrates a BACKUP_FORMAT_VERSION 1 file (bare tmdbId) transparently on restore and diff', async () => {
+    const cookie = await createUserAndCookie('legacy@example.com')
+    const userId = await meId(cookie)
+    const { show, episode, movie } = await seedMetadata(db)
+
+    // A v1 file, written directly to disk the way a pre-format-2 version of
+    // rwnd.tv actually would have — never produced via POST /backups, which
+    // now always writes the current format.
+    const legacyFile: BackupFileV1 = {
+      formatVersion: 1,
+      createdAt: new Date('2026-01-01T00:00:00.000Z').toISOString(),
+      description: 'A pre-v2 backup',
+      counts: { watchHistory: 1, ratings: 1, watchlist: 0, droppedShows: 0 },
+      skipped: 0,
+      movies: [
+        {
+          tmdbId: '603',
+          title: 'The Matrix',
+          year: 1999,
+          runtimeMinutes: null,
+          overview: null,
+          posterPath: null,
+        },
+      ],
+      shows: [
+        {
+          tmdbId: '1396',
+          slug: 'breaking-bad',
+          title: 'Breaking Bad',
+          year: 2008,
+          overview: null,
+          posterPath: null,
+          status: null,
+          genres: ['Drama'],
+          voteAverage: null,
+          seasons: [{ seasonNumber: 1, name: 'Season 1', episodeCount: 7, airDate: null, posterPath: null }],
+          episodes: [
+            {
+              seasonNumber: 1,
+              episodeNumber: 1,
+              title: 'Pilot',
+              runtimeMinutes: null,
+              firstAired: null,
+            },
+          ],
+        },
+      ],
+      watchHistory: [
+        {
+          movie: '603',
+          watchedAt: new Date('2026-01-01T00:00:00.000Z').toISOString(),
+          source: 'manual',
+          sourceRef: null,
+        },
+      ],
+      ratings: [
+        { show: '1396', rating: 9, ratedAt: new Date('2026-01-01T00:00:00.000Z').toISOString() },
+      ],
+      watchlist: [],
+      droppedShows: [],
+    }
+
+    const email = 'legacy@example.com'
+    const id = generateBackupId(new Date(legacyFile.createdAt), legacyFile.description)
+    await mkdir(backupUserDir(email), { recursive: true })
+    await writeFile(backupFilePath(email, id), JSON.stringify(legacyFile), 'utf-8')
+
+    // Diffing against it works exactly as it would for a current-format
+    // file — nothing has changed since, except this rating is untouched
+    // while the play referenced by the file has since been removed and a
+    // different one added (proving the migrated refs actually match the
+    // real `show`/`movie` rows the earlier tmdbId-keyed external_ids point
+    // at, not just that the request 200s).
+    await db.insert(ratings).values({
+      userId,
+      entityType: 'show',
+      entityId: show.id,
+      rating: 9,
+      ratedAt: new Date('2026-01-01T00:00:00.000Z'),
+    })
+    await db
+      .insert(plays)
+      .values({ userId, episodeId: episode.id, watchedAt: new Date('2026-02-01T00:00:00.000Z') })
+
+    const diffRes = await app.request(`/api/v1/backups/${id}/diff`, { headers: { cookie } })
+    expect(diffRes.status).toBe(200)
+    expect(await json<DiffBackupResponse>(diffRes)).toEqual({
+      diff: {
+        watchHistory: { added: 1, removed: 1 },
+        ratings: { added: 0, removed: 0 },
+        watchlist: { added: 0, removed: 0 },
+        droppedShows: { added: 0, removed: 0 },
+      },
+    })
+
+    // Restoring it also works, and the resulting external_ids row is
+    // tagged 'tmdb' (not left ambiguous) exactly as the original v1 write
+    // would have recorded it.
+    const restoreRes = await app.request(`/api/v1/backups/${id}/restore`, {
+      method: 'POST',
+      headers: { cookie },
+    })
+    expect(restoreRes.status).toBe(200)
+    expect(await json<RestoreBackupResponse>(restoreRes)).toEqual({
+      counts: { watchHistory: 1, ratings: 1, watchlist: 0, droppedShows: 0 },
+    })
+    const [restoredPlay] = await db
+      .select({ movieId: plays.movieId })
+      .from(plays)
+      .where(eq(plays.userId, userId))
+    expect(restoredPlay?.movieId).toBe(movie.id)
   })
 
   it('falls back to a plain id when the description has nothing sluggable, and truncates a long one', async () => {

@@ -1,5 +1,6 @@
 import type { Database } from '@rwnd/db'
 import type { BackupDiff, BackupFile } from '@rwnd/shared'
+import type { MetadataProvider } from '../providers/types.js'
 import { buildBackupFile } from './build.js'
 
 /** Category keys shared between a BackupFile and the diff result — pulled
@@ -34,17 +35,22 @@ function multisetDiff(
 /** Counts entries added/removed per category between a backup file and the
  * database's current state, by snapshotting the current state through the
  * same `buildBackupFile()` used to write a backup and diffing the two
- * arrays. Entries are compared by their full JSON shape (TMDB-id-keyed
+ * arrays. Entries are compared by their full JSON shape (provider-tagged
  * refs, same as the backup format itself — see backups.ts's schema doc
  * comment) rather than any local row id, since a changed rating/note is
  * naturally "the old entry removed, the new one added" under this model,
- * not a third "changed" bucket the UI doesn't ask for. */
+ * not a third "changed" bucket the UI doesn't ask for. Uses today's
+ * provider priority to build the "current" snapshot regardless of which
+ * provider `backup` itself was keyed by — an entry that only changed which
+ * provider it's tagged with (e.g. a priority reorder) reads as "removed,
+ * then added", same as any other ref change. */
 export async function computeBackupDiff(
   db: Database,
   userId: string,
   backup: BackupFile,
+  providers: MetadataProvider[],
 ): Promise<BackupDiff> {
-  const current = await buildBackupFile(db, userId, '', new Date())
+  const current = await buildBackupFile(db, userId, '', new Date(), providers)
 
   const diff = {} as BackupDiff
   for (const category of CATEGORIES) {

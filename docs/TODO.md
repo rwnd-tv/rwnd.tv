@@ -101,7 +101,7 @@ Format:
 
 ## Import
 
-- [ ] **Investigate importing Trakt's own "Export now" ZIP as an alternative to the OAuth import** (2026-08-24 22:50 added)\
+- [ ] **Build ZIP-upload import from Trakt's own "Export now" file** (2026-08-24 22:50 added, investigated 2026-08-24)\
       James's idea, from researching Trakt's free-vs-VIP situation:
       Settings > Data > "Export now" on trakt.tv gives any account
       (free or VIP — confirmed not gated) a ZIP of separate JSON files,
@@ -111,21 +111,45 @@ Format:
       (confirmed against Trakt's own forum announcement — any app built
       on their public API counts, no exemption for small/self-hosted
       ones) — a free user who already has a different Trakt-connected
-      app (a Plex scrobbler, Kodi
-      plugin, etc.) can't also OAuth-connect rwnd.tv's importer without
-      disconnecting it first or paying for VIP. A file-upload import
-      sidesteps that entirely, since it never touches the Community App
-      connection limit at all.\
-      Needs investigation before design: what's actually inside the ZIP
-      (confirmed grouped-by-category JSON files, but not yet the exact
-      schema per category — likely close to but not necessarily
-      identical to the `/sync/history`, `/sync/ratings`,
-      `/sync/watchlist`, `/users/hidden/dropped` API response shapes
-      `apps/api/src/trakt/types.ts` already models), whether it's a
-      one-time export or can be regenerated/re-uploaded to pick up new
-      history since the last import, and how much of the existing
-      `apps/api/src/import/match.ts` matching logic could be reused
-      as-is versus needing its own parser for a different input shape.
+      app (a Plex scrobbler, Kodi plugin, etc.) can't also OAuth-connect
+      rwnd.tv's importer without disconnecting it first or paying for
+      VIP. A file-upload import sidesteps that entirely, since it never
+      touches the Community App connection limit at all.\
+      **Investigated against a real export** (James's own, `nottjim`,
+      11,261 history items): the shape is a close match for what
+      `apps/api/src/trakt/types.ts` already models, not something
+      needing its own parser from scratch. `watched-history-*.json`
+      (sharded, ~250 items/file) matches `TraktHistoryItem`/
+      `TraktMovie`/`TraktShow`/`TraktEpisode`/`TraktIds` field-for-field
+      — `id`, `watched_at` (including the exact same
+      `1900-01-01T00:00:00.000Z` unknown-date sentinel rwnd.tv already
+      handles), `action`, `type`, and `movie`/`show`/`episode` objects
+      each carrying `title`/`year`/`ids` (`trakt`/`imdb`/`tmdb`/`tvdb`),
+      plus a few harmless extra fields (a nested `plex` id,
+      `aired_episodes`) that would just be ignored.
+      `hidden-progress-watched.json` matches `TraktHiddenItem`
+      similarly (`hidden_at`, `type: 'show'`, `show: {...}`).
+      `ratings-{movies,shows,seasons,episodes}.json`/
+      `lists-watchlist.json` were empty in this particular export (James
+      hasn't used either Trakt feature) so the populated shape isn't
+      directly confirmed, but the consistent per-type file split and
+      Trakt's own schema conventions make a `TraktRatingItem`/
+      `TraktWatchlistItem` match likely. `collection-*.json` (a
+      separate "owned media" feature, no rwnd.tv equivalent) and the
+      empty `comments-*`/`likes-*`/`network-*`/`notes-*.json` files are
+      irrelevant and can be ignored entirely; `user-profile.json`/
+      `user-settings.json` carry account metadata (email, an internal
+      Trakt token) not needed for matching and better left untouched.\
+      Given the shape match, this looks buildable as "one new
+      ZIP-upload entry point that concatenates the `watched-history-*`
+      shards and feeds each item through the same `matchMovie`/
+      `matchEpisode`/`matchTraktMediaItem` functions the OAuth import
+      already uses" — closer to the source-agnostic-parser pattern from
+      the Plex webhook work than a from-scratch feature. Still open
+      before building for real: confirming the ratings/watchlist shape
+      against a populated export (not just inferring it), and deciding
+      whether a re-uploaded newer export should merge with or replace
+      a previous ZIP-sourced import.
 
 ## Auth & accounts
 

@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next'
+import { Link } from 'react-router'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../../lib/api-client.js'
 import { useAuth } from '../../lib/auth-context.js'
@@ -37,7 +38,11 @@ export function HistoryRow() {
 
   return (
     <div className="flex flex-col gap-3">
-      <h1 className="text-2xl font-semibold">{t('dashboard.history.title')}</h1>
+      <h1 className="text-2xl font-semibold">
+        <Link to="/history" className="hover:underline">
+          {t('dashboard.history.title')}
+        </Link>
+      </h1>
       <ul className="flex gap-4 overflow-x-auto pb-1">
         {data.plays.map((play) => {
           const isMovie = play.media.type === 'movie'

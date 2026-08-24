@@ -55,6 +55,24 @@ Format:
       this under M3 — worth deciding whether that's the same feature or a
       separate one when the design pass happens.
 
+## Watches & activity sources
+
+- [ ] **Cross-source duplicate watches (Trakt import vs. direct Plex webhook)** (2026-08-24 19:45 added)\
+      Found live: James runs both Trakt's own Plex scrobbling integration
+      and rwnd.tv's new Plex webhook (see `docs/TODO_ARCHIVE.md`) against
+      the same Plex server — the same real watch can land in Trakt's
+      history _and_ rwnd.tv's own webhook independently, so a later Trakt
+      import inserts a second `plays` row for a watch the webhook already
+      logged directly (different `source`/`sourceRef` per pipeline, so
+      the existing idempotency key doesn't catch it). Confirmed and
+      manually cleaned up for Blue Planet II S1E3-5 on
+      James's account. Needs a design pass, not a quick fix — "same
+      episode, same day, different source" is a reasonable heuristic but
+      not obviously always correct (a genuine same-day rewatch from two
+      different apps is rare but not impossible), and it's not obvious
+      which source should win when they disagree (which one keeps its
+      timestamp, its watched status, etc.).
+
 ## Landing page & branding
 
 - [ ] **Build a real landing page for logged-out visitors** (2026-08-23 14:40 added)\

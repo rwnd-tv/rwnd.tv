@@ -13,6 +13,11 @@ export const setupRequestSchema = z.object({
   email: emailSchema,
   password: passwordSchema,
   displayName: displayNameSchema,
+  /** The browser's detected UI language (i18n.language — already matched
+   * against SUPPORTED_LOCALES, falling back to the default otherwise), sent
+   * so the new account's `locale` starts from what the visitor's browser
+   * actually reported rather than always the server-side default. */
+  locale: localeSchema.optional(),
 })
 export type SetupRequest = z.infer<typeof setupRequestSchema>
 
@@ -27,6 +32,8 @@ export const registerRequestSchema = z.object({
   password: passwordSchema,
   displayName: displayNameSchema,
   inviteCode: z.string().min(1).optional(),
+  /** See setupRequestSchema's `locale` for what this is and why. */
+  locale: localeSchema.optional(),
 })
 export type RegisterRequest = z.infer<typeof registerRequestSchema>
 

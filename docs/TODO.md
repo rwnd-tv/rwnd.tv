@@ -98,23 +98,6 @@ Format:
       generally make the repo read as more current and inviting to
       someone landing on it cold.
 
-## Localization
-
-- [ ] **Seed a new account's locale from the browser, not always en-GB** (2026-08-23 23:10 added)\
-      Split off from the now-shipped "Add en-US locale" work (see
-      `docs/TODO_ARCHIVE.md`) — this part is still open. The
-      browser-language auto-detection (`i18next-browser-languagedetector`,
-      no explicit config in `apps/web/src/i18n/index.ts`) only matches
-      an _exact_ supported code (`navigator` reporting
-      `en-US`/`fr-CA`/etc. falls straight through to the `en-GB`
-      fallback today — now that `en-US` is a real option this at least
-      resolves correctly for it, but anything else still doesn't), and
-      a new account's `locale` column always defaults to `en-GB`
-      regardless of what the browser reported — neither registration
-      (`apps/api/src/routes/auth.ts`) nor setup
-      (`apps/api/src/routes/setup.ts`) seeds it from the detected
-      language. Low priority while there are only two locales.
-
 ## Auth & accounts
 
 - [ ] **Passkey (WebAuthn) support** (2026-08-23 15:45 added)\

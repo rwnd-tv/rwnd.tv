@@ -13,7 +13,7 @@ void i18n
       'en-GB': { common: enGB },
       'en-US': { common: enUS },
     },
-    fallbackLng: 'en-GB',
+    fallbackLng: 'en-US',
     supportedLngs: SUPPORTED_LOCALES,
     defaultNS: 'common',
     interpolation: { escapeValue: false },

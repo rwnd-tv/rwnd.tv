@@ -63,7 +63,13 @@ setupRoutes.openapi(
 
     const [user] = await db
       .insert(users)
-      .values({ email: body.email, displayName: body.displayName, role: 'admin' })
+      .values({
+        email: body.email,
+        displayName: body.displayName,
+        role: 'admin',
+        // See registerRequestSchema's doc comment on `locale`.
+        ...(body.locale ? { locale: body.locale } : {}),
+      })
       .returning()
     if (!user) throw new Error('Failed to create admin user')
 

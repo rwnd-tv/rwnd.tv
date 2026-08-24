@@ -56,7 +56,7 @@ export const users = pgTable('users', {
   id: uuid('id').primaryKey().defaultRandom(),
   email: citext('email').notNull().unique(),
   displayName: text('display_name').notNull(),
-  locale: text('locale').notNull().default('en-GB'),
+  locale: text('locale').notNull().default('en-US'),
   timezone: text('timezone').notNull().default('UTC'),
   theme: themeEnum('theme').notNull().default('system'),
   /** Blurs unwatched episode stills/titles/overviews and not-fully-watched
@@ -137,7 +137,7 @@ export const instanceSettings = pgTable(
     id: smallint('id').primaryKey().default(1),
     instanceName: text('instance_name').notNull().default('rwnd.tv'),
     registrationMode: registrationModeEnum('registration_mode').notNull().default('closed'),
-    defaultLocale: text('default_locale').notNull().default('en-GB'),
+    defaultLocale: text('default_locale').notNull().default('en-US'),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [check('instance_settings_singleton', sql`${table.id} = 1`)],

@@ -124,7 +124,15 @@ authRoutes.openapi(
     const passwordHash = await hashPassword(body.password)
     const [user] = await db
       .insert(users)
-      .values({ email: body.email, displayName: body.displayName, role: 'user' })
+      .values({
+        email: body.email,
+        displayName: body.displayName,
+        role: 'user',
+        // Falls back to the users.locale column default when the browser's
+        // language didn't match a supported locale — see
+        // setupRequestSchema's doc comment on `locale`.
+        ...(body.locale ? { locale: body.locale } : {}),
+      })
       .returning()
     if (!user) throw new Error('Failed to create user')
 

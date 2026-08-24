@@ -15,7 +15,7 @@ export const settingsRoutes = new OpenAPIHono<AppEnv>()
 const DEFAULT_SETTINGS = {
   instanceName: 'rwnd.tv',
   registrationMode: 'closed' as const,
-  defaultLocale: 'en-GB' as const,
+  defaultLocale: 'en-US' as const,
 }
 
 function isSupportedLocale(value: string): value is InstanceSettings['defaultLocale'] {

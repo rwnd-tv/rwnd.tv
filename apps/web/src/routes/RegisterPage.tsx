@@ -5,13 +5,14 @@ import { useQueryClient } from '@tanstack/react-query'
 import { api, ApiError } from '../lib/api-client.js'
 import { usePublicSettings } from '../lib/use-public-settings.js'
 import { useAuth } from '../lib/auth-context.js'
+import { detectedLocale } from '../lib/detected-locale.js'
 import { Card } from '../components/ui/Card.js'
 import { Field } from '../components/ui/Field.js'
 import { Button } from '../components/ui/Button.js'
 import { Spinner } from '../components/ui/Spinner.js'
 
 export function RegisterPage() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { user, isLoading: authLoading } = useAuth()
@@ -56,6 +57,7 @@ export function RegisterPage() {
         email,
         password,
         inviteCode: inviteCode || undefined,
+        locale: detectedLocale(i18n.language),
       })
       await queryClient.invalidateQueries({ queryKey: ['auth', 'me'] })
       navigate('/dashboard')

@@ -4,13 +4,14 @@ import { Navigate, useNavigate } from 'react-router'
 import { useQueryClient } from '@tanstack/react-query'
 import { api, ApiError } from '../lib/api-client.js'
 import { useSetupStatus } from '../lib/use-setup-status.js'
+import { detectedLocale } from '../lib/detected-locale.js'
 import { Card } from '../components/ui/Card.js'
 import { Field } from '../components/ui/Field.js'
 import { Button } from '../components/ui/Button.js'
 import { Spinner } from '../components/ui/Spinner.js'
 
 export function SetupPage() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { data, isLoading } = useSetupStatus()
@@ -38,7 +39,12 @@ export function SetupPage() {
     setError(undefined)
     setSubmitting(true)
     try {
-      await api.setup.create({ displayName, email, password })
+      await api.setup.create({
+        displayName,
+        email,
+        password,
+        locale: detectedLocale(i18n.language),
+      })
       await queryClient.invalidateQueries({ queryKey: ['auth', 'me'] })
       navigate('/dashboard')
     } catch (err) {

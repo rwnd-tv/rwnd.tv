@@ -1196,3 +1196,33 @@ currently-dropped shows, since a row can have both
       Remaining, split into its own TODO: seeding a new account's
       locale from the browser's detected language instead of always
       `en-GB` — see `docs/TODO.md`.
+
+- [x] **Seed a new account's locale from the browser, not always en-GB** (2026-08-23 23:10 added, done 2026-08-24)\
+      Done: `RegisterPage.tsx`/`SetupPage.tsx` now send `i18n.language`
+      (already exact-matched against `SUPPORTED_LOCALES` by
+      `i18next-browser-languagedetector`, falling back otherwise) as an
+      optional `locale` field on `POST /register`/`POST /setup`
+      (`registerRequestSchema`/`setupRequestSchema`), which the routes
+      write onto the new `users` row when present. James also asked to
+      change the fallback itself from `en-GB` to `en-US` while doing
+      this — applied consistently everywhere a locale "default" existed:
+      the `users.locale` and `instance_settings.default_locale` column
+      defaults (migration `0010_even_nick_fury.sql`, column defaults
+      only — doesn't touch existing rows/instances), `i18next`'s
+      `fallbackLng`, `settings.ts`'s `DEFAULT_SETTINGS.defaultLocale`,
+      and `refresh.ts`'s in-code fallback. Deliberately did *not* touch
+      the many per-component `user?.locale ?? 'en-GB'` date-formatting
+      fallbacks scattered across detail pages — those only matter while
+      `useAuth()`'s user is still loading, not a real "default," and
+      touching a dozen unrelated files wasn't part of what was asked.\
+      Verified live on dev.rwnd.tv: temporarily opened registration,
+      registered a throwaway account, and confirmed it correctly seeded
+      `en-GB` (this machine's actual browser language, a supported
+      locale) rather than the new `en-US` default — proving detection
+      is still preferred over the default when there's a real match.
+      Confirmed the default itself separately via `psql` against the
+      dev DB (`users.locale`/`instance_settings.default_locale` both
+      show `'en-US'::text`), since a browser already reporting a
+      supported locale can never exercise the fallback path itself.
+      Cleaned up afterward: deleted the throwaway account and restored
+      registration to `Closed`.

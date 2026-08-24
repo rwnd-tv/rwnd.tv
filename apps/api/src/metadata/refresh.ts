@@ -56,7 +56,7 @@ async function currentLocale(db: Database): Promise<string> {
     .select({ defaultLocale: instanceSettings.defaultLocale })
     .from(instanceSettings)
     .limit(1)
-  return row?.defaultLocale ?? 'en-GB'
+  return row?.defaultLocale ?? 'en-US'
 }
 
 export interface RefreshCandidate {

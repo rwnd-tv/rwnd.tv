@@ -362,6 +362,52 @@ describe('Trakt import', () => {
     expect(allPlaysAfterReimport).toHaveLength(3)
   })
 
+  it("skips a history item that already has a 'plex' play for the same movie on the same day (cross-source dedup)", async () => {
+    vi.stubGlobal('fetch', createFetchStub({ historyItems: [fx.matrixHistoryItem] }))
+
+    const cookie = await createUserAndCookie()
+    const me = await json<User>(await app.request('/api/v1/auth/me', { headers: { cookie } }))
+    await createTraktConnection(db, me.id)
+
+    // First pass resolves and creates the movie locally (and its own
+    // 'import' play) — deleted afterward so the *second* pass below is a
+    // genuinely fresh attempt at this exact history item, isolating the
+    // cross-source check from plays_user_source_ref_idx's own same-source
+    // dedup, which would otherwise mask it.
+    const [job1] = await db
+      .insert(importJobs)
+      .values({ userId: me.id, includeRatings: false, includeWatchlist: false })
+      .returning()
+    await runTraktImport(db, providers, env, job1!.id)
+    const [movie] = await db.select().from(movies).where(eq(movies.title, 'The Matrix')).limit(1)
+    await db.delete(plays).where(eq(plays.userId, me.id))
+
+    // Simulates Trakt's own separate Plex scrobbling already having logged
+    // this same real watch via rwnd.tv's direct webhook, same day.
+    await db.insert(plays).values({
+      userId: me.id,
+      movieId: movie!.id,
+      watchedAt: new Date('2024-01-01T09:00:00.000Z'),
+      source: 'plex',
+      sourceRef: '5001:2024-01-01',
+    })
+
+    const [job2] = await db
+      .insert(importJobs)
+      .values({ userId: me.id, includeRatings: false, includeWatchlist: false })
+      .returning()
+    await runTraktImport(db, providers, env, job2!.id)
+
+    const [finished] = await db.select().from(importJobs).where(eq(importJobs.id, job2!.id)).limit(1)
+    expect(finished?.status).toBe('completed')
+    expect(finished?.itemsImported).toBe(0)
+    expect(finished?.itemsSkipped).toBe(1)
+
+    const allPlays = await db.select().from(plays).where(eq(plays.userId, me.id))
+    expect(allPlays).toHaveLength(1)
+    expect(allPlays[0]?.source).toBe('plex')
+  })
+
   it('backfills a missing tvdb id on re-import even for an already-resolved show', async () => {
     const cookie = await createUserAndCookie()
     const me = await json<User>(await app.request('/api/v1/auth/me', { headers: { cookie } }))

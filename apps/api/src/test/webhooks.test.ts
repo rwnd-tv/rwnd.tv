@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { eq } from 'drizzle-orm'
-import { episodes, pendingWebhookEvents, plays, shows, webhookAccountLinks } from '@rwnd/db'
+import { episodes, movies, pendingWebhookEvents, plays, shows, webhookAccountLinks } from '@rwnd/db'
 import type { CreateApiTokenResponse } from '@rwnd/shared'
 import { createLocalUser, extractCookie, json, resetDb, testDb } from './helpers.js'
 import { createApp } from '../app.js'
@@ -249,6 +249,38 @@ describe('POST /webhooks/plex/:token', () => {
 
     const [show] = await db.select().from(shows).where(eq(shows.title, 'Breaking Bad'))
     expect(show).toBeDefined()
+  })
+
+  it("skips logging a movie watch that already has an 'import' play for the same movie on the same day (cross-source dedup)", async () => {
+    const app = createApp({ db, metadataProviders: [fakeTmdb()] })
+    const { cookie, token } = await createClaimedTokenAndCookie(app)
+    const meRes = await app.request('/api/v1/auth/me', { headers: { cookie } })
+    const { id: userId } = await json<{ id: string }>(meRes)
+
+    // First delivery resolves and creates the movie locally, then is
+    // deleted — isolates the cross-source check from the webhook's own
+    // sourceRef-based idempotency, which would otherwise mask it.
+    await postWebhook(app, token, plexMoviePayload())
+    const [movie] = await db.select().from(movies).where(eq(movies.title, 'The Matrix')).limit(1)
+    await db.delete(plays).where(eq(plays.userId, userId))
+
+    // Simulates Trakt's own separate Plex scrobbling already having
+    // logged this same real watch via a Trakt import, same day.
+    await db.insert(plays).values({
+      userId,
+      movieId: movie!.id,
+      watchedAt: new Date(),
+      source: 'import',
+      sourceRef: 'trakt-history-item-1',
+    })
+
+    const res = await postWebhook(app, token, plexMoviePayload())
+    expect(res.status).toBe(200)
+
+    const historyRes = await app.request('/api/v1/plays', { headers: { cookie } })
+    const { plays: history } = await json<{ plays: Array<{ source: string }> }>(historyRes)
+    expect(history).toHaveLength(1)
+    expect(history[0]?.source).toBe('import')
   })
 
   it('resolves a show whose own native id actually identifies one of its episodes (TVDB id-space collision regression)', async () => {

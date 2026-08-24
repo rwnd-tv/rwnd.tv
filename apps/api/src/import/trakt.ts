@@ -14,6 +14,7 @@ import type { Env } from '../env.js'
 import type { MetadataProvider } from '../providers/types.js'
 import { orderedProviders } from '../providers/priority.js'
 import { decryptSecret, encryptSecret } from '../lib/crypto.js'
+import { hasCrossSourceDuplicate } from '../lib/plays.js'
 import { TraktClient, type PagedResult } from '../trakt/client.js'
 import { refreshAccessToken } from '../trakt/auth.js'
 import type {
@@ -229,16 +230,20 @@ export async function runTraktImport(
       pushFailure('history', match)
       return 'skipped'
     }
+    const watchedAt = new Date(item.watched_at)
+    const entityRef =
+      match.entityType === 'movie' ? { movieId: match.entityId } : { episodeId: match.entityId }
+    if (await hasCrossSourceDuplicate(db, userId, entityRef, watchedAt, 'import')) {
+      return 'skipped'
+    }
     const inserted = await db
       .insert(plays)
       .values({
         userId,
-        watchedAt: new Date(item.watched_at),
+        watchedAt,
         source: 'import',
         sourceRef: String(item.id),
-        ...(match.entityType === 'movie'
-          ? { movieId: match.entityId }
-          : { episodeId: match.entityId }),
+        ...entityRef,
       })
       .onConflictDoNothing()
       .returning({ id: plays.id })

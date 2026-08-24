@@ -1481,3 +1481,32 @@ currently-dropped shows, since a row can have both
       wrapping each replay attempt in its own try/catch, logged
       server-side on failure, matching the same "log and move on"
       convention `logWebhookPlay` already uses for a soft no-match.
+
+- [x] **Fixed: cross-source duplicate watches (Trakt import vs. direct Plex webhook)** (2026-08-24 19:45 added, done 2026-08-24) — M2\
+      Found live: James runs both Trakt's own Plex scrobbling integration
+      and rwnd.tv's new Plex webhook against the same Plex server, so the
+      same real watch could land in Trakt's history _and_ rwnd.tv's own
+      webhook independently — a later Trakt import inserted a second
+      `plays` row for a watch the webhook had already logged directly,
+      since the two pipelines' `sourceRef`s differ and
+      `plays_user_source_ref_idx`'s uniqueness is scoped per-source.
+      Confirmed and manually cleaned up for Blue Planet II S1E3-5 on
+      James's account before the fix.\
+      New `apps/api/src/lib/plays.ts`'s `hasCrossSourceDuplicate`, called
+      before every `import`/`plex` `plays` insert
+      (`apps/api/src/import/trakt.ts`'s `processHistoryItem`,
+      `apps/api/src/lib/webhook-plays.ts`'s `logWebhookPlay`): skips the
+      insert if a play already exists for the same user/entity/calendar
+      day (UTC) from the *other* automated source. Deliberately scoped to
+      `import`/`plex` only — a `manual` watch is the user's own explicit
+      action, not a scrobble, and can legitimately coexist with (or
+      precede) an automated one the same day without being a duplicate.
+      "Same calendar day, different automated source" is an accepted,
+      imperfect heuristic, not a full merge/reconciliation: first writer
+      wins outright (the later one is simply dropped, nothing is
+      updated), and a genuine same-day rewatch caught once by each
+      pipeline — rare but possible — would be silently treated as a
+      duplicate too. Judged an acceptable tradeoff against the
+      alternative (every dual-pipeline watch double-counted), and not
+      worth the added complexity of picking a "winner" between sources
+      that disagree, which the original TODO had flagged as unresolved.

@@ -8,6 +8,7 @@ import {
   resolveMovieFromExternalIds,
   resolveShowFromExternalIds,
 } from './external-match.js'
+import { hasCrossSourceDuplicate } from './plays.js'
 
 /** `${ratingKey}:${date}` — Plex hands over no stable per-delivery event
  * id, so this is a deliberate, imperfect compromise: it collapses
@@ -52,6 +53,9 @@ export async function logWebhookPlay(
       console.error(`Plex webhook: no configured provider matched a movie`, event.ids)
       return
     }
+    if (await hasCrossSourceDuplicate(db, user.id, { movieId: movie.id }, watchedAt, 'plex')) {
+      return
+    }
     await db
       .insert(plays)
       .values({ userId: user.id, movieId: movie.id, watchedAt, source: 'plex', sourceRef })
@@ -78,6 +82,9 @@ export async function logWebhookPlay(
     console.error(
       `Plex webhook: "${show.title}" S${event.media.seasonNumber}E${event.media.episodeNumber} not found via ${show.provider.source.toUpperCase()}`,
     )
+    return
+  }
+  if (await hasCrossSourceDuplicate(db, user.id, { episodeId: episode.id }, watchedAt, 'plex')) {
     return
   }
   await db

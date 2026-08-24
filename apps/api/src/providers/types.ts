@@ -29,6 +29,23 @@ export interface MetadataProvider {
    * redundant calls for shows with many watched episodes.
    */
   getSeason(showExternalId: string, seasonNumber: number, locale: string): Promise<ProviderSeason>
+  /**
+   * This provider's own id for an entity known only by another system's id
+   * — Trakt hands out imdb/tvdb ids alongside tmdb ones, and its tmdb field
+   * is frequently null or stale even when this provider does hold a
+   * matching entry (apps/api/src/import/match.ts). Returns the provider's
+   * id string, not a full entity, so callers hand straight off to
+   * resolveMovie/resolveShow rather than duplicating their
+   * insert-and-link logic. Null when this provider has no reverse lookup
+   * for the given source, or genuinely has no match — callers can't and
+   * shouldn't tell those apart.
+   */
+  findByExternalId(
+    entityType: 'movie' | 'show',
+    source: 'imdb' | 'tvdb',
+    externalId: string,
+    locale: string,
+  ): Promise<string | null>
 }
 
 export interface ProviderSeason {

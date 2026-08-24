@@ -93,6 +93,25 @@ interface TmdbSeason {
   // 0 is treated as "no rating" outright (see getSeason() below).
   vote_average?: number | null
 }
+// /find only returns id + media-type-specific fields we don't need — every
+// other field on findByExternalId's two result arrays is ignored.
+interface TmdbFindResponse {
+  movie_results: { id: number }[]
+  tv_results: { id: number }[]
+}
+
+/** Thrown by request() for any non-2xx TMDB response. Carries the HTTP
+ * status so callers that need to tell "not found" apart from other failures
+ * (findByExternalId below) don't have to string-match the message. */
+export class TmdbHttpError extends Error {
+  constructor(
+    readonly status: number,
+    message: string,
+  ) {
+    super(message)
+    this.name = 'TmdbHttpError'
+  }
+}
 
 /**
  * TMDB terms require attribution (see README/UI footer) and forbid caching
@@ -145,7 +164,10 @@ export class TmdbProvider implements MetadataProvider {
     }
 
     if (!res.ok) {
-      throw new Error(`TMDB request failed: ${res.status} ${res.statusText} (${path})`)
+      throw new TmdbHttpError(
+        res.status,
+        `TMDB request failed: ${res.status} ${res.statusText} (${path})`,
+      )
     }
     return (await res.json()) as T
   }
@@ -250,5 +272,29 @@ export class TmdbProvider implements MetadataProvider {
         voteAverage: e.vote_average ? e.vote_average : null,
       })),
     }
+  }
+
+  async findByExternalId(
+    entityType: 'movie' | 'show',
+    source: 'imdb' | 'tvdb',
+    externalId: string,
+    locale: string,
+  ): Promise<string | null> {
+    let data: TmdbFindResponse
+    try {
+      data = await this.request<TmdbFindResponse>(`/find/${externalId}`, locale, {
+        external_source: source === 'imdb' ? 'imdb_id' : 'tvdb_id',
+      })
+    } catch (err) {
+      // TMDB 404s a malformed or unrecognised external id rather than
+      // returning empty result arrays — a per-item "no match" here, not a
+      // request failure worth surfacing the way any other provider error is
+      // (see request()'s own throw, and matchMovie/matchShow's handling of
+      // it in apps/api/src/import/match.ts).
+      if (err instanceof TmdbHttpError && err.status === 404) return null
+      throw err
+    }
+    const results = entityType === 'movie' ? data.movie_results : data.tv_results
+    return results[0] ? String(results[0].id) : null
   }
 }

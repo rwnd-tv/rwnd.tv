@@ -182,6 +182,101 @@ export const unmatchedHistoryItem: TraktHistoryItem = {
   },
 }
 
+/**
+ * Trakt's own `tmdb` field is null, but its `imdb` id resolves via TMDB's
+ * `/find` endpoint (see docs/adr/0006) — the general case the Formula-1
+ * anecdote in docs/TODO.md motivated fixing, for a title the provider does
+ * actually have (unlike Formula 1 itself, which has no TMDB entry under
+ * any id). Reuses `tt0133093` (The Matrix's real imdb id, already stubbed
+ * to resolve to `MATRIX_TMDB_ID`) so it exercises the same downstream
+ * `getMovie` fixture as `matrixHistoryItem`.
+ */
+export const noTmdbIdMovieHistoryItem: TraktHistoryItem = {
+  id: 109,
+  watched_at: '2024-01-11T12:00:00.000Z',
+  action: 'watch',
+  type: 'movie',
+  movie: {
+    title: 'The Matrix (found via imdb)',
+    year: 1999,
+    ids: { trakt: 9, slug: 'matrix-via-imdb', imdb: 'tt0133093', tmdb: null },
+  },
+}
+
+/** Show counterpart of `noTmdbIdMovieHistoryItem` — no `tmdb` id, but an
+ * `imdb` id that resolves via `/find` to Breaking Bad's real tmdb id, after
+ * which its episode resolves through the normal `getSeason` path exactly
+ * as `pilotHistoryItem`'s does. */
+export const NO_TMDB_ID_SHOW_IMDB_ID = 'tt0903747'
+const showFoundViaImdb: TraktShow = {
+  title: 'Breaking Bad (found via imdb)',
+  year: 2008,
+  ids: {
+    trakt: 10,
+    slug: 'breaking-bad-via-imdb',
+    imdb: NO_TMDB_ID_SHOW_IMDB_ID,
+    tmdb: null,
+    tvdb: BREAKING_BAD_SHOW_TVDB_ID,
+  },
+}
+export const showFoundViaImdbHistoryItem: TraktHistoryItem = {
+  id: 110,
+  watched_at: '2024-01-12T12:00:00.000Z',
+  action: 'watch',
+  type: 'episode',
+  show: showFoundViaImdb,
+  episode: { season: 1, number: 1, title: 'Pilot', ids: { trakt: 1001, imdb: null, tmdb: null } },
+}
+
+/**
+ * An `imdb` id that TMDB's `/find` genuinely has no match for — unlike
+ * `TMDB_DELETED_SHOW_ID` (a `tmdb` id that 404s), this exercises the
+ * find-and-fail path rather than the resolve-and-fail path. Two episodes
+ * sharing the same show object assert `findViaAlternateIds` is only called
+ * once per show per job, same "N episodes, one lookup" guarantee
+ * `showFailures` already gives the tmdb-based failure case (see
+ * `undeadShowHistoryItem1`/`2` above).
+ */
+export const UNFINDABLE_SHOW_IMDB_ID = 'tt0000001'
+const unfindableShow: TraktShow = {
+  title: 'A Show Nothing Can Find',
+  year: 2017,
+  ids: { trakt: 11, slug: 'unfindable-show', imdb: UNFINDABLE_SHOW_IMDB_ID, tmdb: null },
+}
+export const unfindableShowHistoryItem1: TraktHistoryItem = {
+  id: 111,
+  watched_at: '2024-01-13T12:00:00.000Z',
+  action: 'watch',
+  type: 'episode',
+  show: unfindableShow,
+  episode: { season: 1, number: 1, title: null, ids: { trakt: 1101, imdb: null, tmdb: null } },
+}
+export const unfindableShowHistoryItem2: TraktHistoryItem = {
+  id: 112,
+  watched_at: '2024-01-14T12:00:00.000Z',
+  action: 'watch',
+  type: 'episode',
+  show: unfindableShow,
+  episode: { season: 1, number: 2, title: null, ids: { trakt: 1102, imdb: null, tmdb: null } },
+}
+
+/** Trakt's `tmdb` id 404s, same as `TMDB_DELETED_MOVIE_ID` does — but
+ * unlike `tmdbDeletedMovieHistoryItem`, this one's `imdb` id *does*
+ * resolve via `/find`. The "stale tmdb id, but the provider still has the
+ * title under a different id" case, which must succeed rather than
+ * reporting a failure. */
+export const staleTmdbButFindableMovieHistoryItem: TraktHistoryItem = {
+  id: 113,
+  watched_at: '2024-01-15T12:00:00.000Z',
+  action: 'watch',
+  type: 'movie',
+  movie: {
+    title: 'A Title TMDB Moved',
+    year: 1999,
+    ids: { trakt: 12, slug: 'tmdb-moved', imdb: 'tt0133093', tmdb: TMDB_DELETED_MOVIE_ID },
+  },
+}
+
 export function matrixRatingItem(rating: number): TraktRatingItem {
   return {
     rated_at: '2024-01-01T00:00:00.000Z',

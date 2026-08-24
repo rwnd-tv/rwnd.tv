@@ -47,3 +47,87 @@ describe('TmdbProvider 429 handling', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 })
+
+describe('TmdbProvider.findByExternalId', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  const findResponse = (body: Record<string, unknown>) =>
+    new Response(JSON.stringify(body), { status: 200 })
+
+  it('resolves a movie id from movie_results', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(findResponse({ movie_results: [{ id: 603 }], tv_results: [] }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const id = await provider().findByExternalId('movie', 'imdb', 'tt0133093', 'en-GB')
+    expect(id).toBe('603')
+  })
+
+  it('resolves a show id from tv_results', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(findResponse({ movie_results: [], tv_results: [{ id: 1399 }] }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const id = await provider().findByExternalId('show', 'tvdb', '121361', 'en-GB')
+    expect(id).toBe('1399')
+  })
+
+  it('returns null when both result arrays are empty', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(findResponse({ movie_results: [], tv_results: [] }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const id = await provider().findByExternalId('movie', 'imdb', 'tt9999999', 'en-GB')
+    expect(id).toBeNull()
+  })
+
+  it('returns null rather than throwing on a 404 (an unrecognised external id)', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 404 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const id = await provider().findByExternalId('movie', 'imdb', 'tt0000000', 'en-GB')
+    expect(id).toBeNull()
+  })
+
+  it('still surfaces a non-404 failure rather than swallowing it as "no match"', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 500 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(provider().findByExternalId('movie', 'imdb', 'tt0133093', 'en-GB')).rejects.toThrow(
+      /500/,
+    )
+  })
+
+  it('sends external_source=imdb_id vs tvdb_id depending on the requested source', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockImplementation(async () => findResponse({ movie_results: [], tv_results: [] }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await provider().findByExternalId('movie', 'imdb', 'tt0133093', 'en-GB')
+    await provider().findByExternalId('show', 'tvdb', '121361', 'en-GB')
+
+    const [firstCall, secondCall] = fetchMock.mock.calls as [URL][]
+    const [firstUrl] = firstCall!
+    const [secondUrl] = secondCall!
+    expect(firstUrl.pathname).toBe('/3/find/tt0133093')
+    expect(firstUrl.searchParams.get('external_source')).toBe('imdb_id')
+    expect(secondUrl.pathname).toBe('/3/find/121361')
+    expect(secondUrl.searchParams.get('external_source')).toBe('tvdb_id')
+  })
+
+  it('inherits the 429 retry', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(null, { status: 429, headers: { 'Retry-After': '0' } }))
+      .mockResolvedValueOnce(findResponse({ movie_results: [{ id: 603 }], tv_results: [] }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const id = await provider().findByExternalId('movie', 'imdb', 'tt0133093', 'en-GB')
+    expect(id).toBe('603')
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+})

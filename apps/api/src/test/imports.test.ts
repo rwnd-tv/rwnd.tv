@@ -66,7 +66,9 @@ function jsonResponse(body: unknown, headers: Record<string, string> = {}): Resp
  * `seasonCalls`/`showCalls`, when passed, count /tv/{id}/season/{n} and
  * /tv/{id} requests respectively, so tests can assert provider.getSeason()
  * and resolveShow() are only called once per season/show, not once per
- * episode.
+ * episode. `findCalls` similarly counts /find/{externalId} requests, for
+ * the same "cached, not once per episode" assertion on the imdb/tvdb
+ * reverse-lookup fallback (apps/api/src/import/match.ts).
  */
 function createFetchStub(
   opts: {
@@ -76,6 +78,7 @@ function createFetchStub(
     droppedItems?: TraktHiddenItem[]
     seasonCalls?: { count: number }
     showCalls?: { count: number }
+    findCalls?: { count: number }
   } = {},
 ) {
   const {
@@ -85,6 +88,7 @@ function createFetchStub(
     droppedItems = [],
     seasonCalls,
     showCalls,
+    findCalls,
   } = opts
 
   return vi.fn(async (input: string | URL) => {
@@ -103,6 +107,28 @@ function createFetchStub(
       if (url.pathname === '/3/tv/1396/season/1') {
         if (seasonCalls) seasonCalls.count += 1
         return jsonResponse(fx.tmdbBreakingBadSeason1)
+      }
+      if (url.pathname.startsWith('/3/find/')) {
+        if (findCalls) findCalls.count += 1
+        const externalId = url.pathname.slice('/3/find/'.length)
+        // Real TMDB /find returns both arrays regardless of what the id
+        // turns out to be — the caller (TmdbProvider.findByExternalId)
+        // picks movie_results vs tv_results based on entityType, so the
+        // stub only needs to know which known id maps to which hit, not
+        // which array the caller asked for.
+        if (externalId === 'tt0133093') {
+          return jsonResponse({ movie_results: [{ id: fx.MATRIX_TMDB_ID }], tv_results: [] })
+        }
+        if (externalId === fx.NO_TMDB_ID_SHOW_IMDB_ID) {
+          return jsonResponse({
+            movie_results: [],
+            tv_results: [{ id: fx.BREAKING_BAD_SHOW_TMDB_ID }],
+          })
+        }
+        // Any other id (e.g. UNFINDABLE_SHOW_IMDB_ID) genuinely has no
+        // match — the real endpoint's actual behaviour for an id it
+        // doesn't recognise as belonging to anything.
+        return jsonResponse({ movie_results: [], tv_results: [] })
       }
       throw new Error(`Unexpected TMDB fetch in test: ${url}`)
     }
@@ -374,6 +400,128 @@ describe('Trakt import', () => {
       expect(failure.show).toBe('A Show TMDB No Longer Has')
       expect(failure.season).toBe(1)
     }
+  })
+
+  it('imports a movie whose tmdb id is null by resolving its imdb id via TMDB /find', async () => {
+    vi.stubGlobal('fetch', createFetchStub({ historyItems: [fx.noTmdbIdMovieHistoryItem] }))
+
+    const cookie = await createUserAndCookie()
+    const me = await json<User>(await app.request('/api/v1/auth/me', { headers: { cookie } }))
+    await createTraktConnection(db, me.id)
+
+    const [job] = await db
+      .insert(importJobs)
+      .values({ userId: me.id, includeRatings: false, includeWatchlist: false })
+      .returning()
+    await runTraktImport(db, provider, env, job!.id)
+
+    const [finished] = await db.select().from(importJobs).where(eq(importJobs.id, job!.id)).limit(1)
+    expect(finished?.status).toBe('completed')
+    expect(finished?.itemsImported).toBe(1)
+    expect(finished?.itemsSkipped).toBe(0)
+
+    // Resolved via /find to MATRIX_TMDB_ID, then through the normal
+    // getMovie fixture — the local row should carry the real tmdb id, not
+    // just the imdb one it was found by.
+    const [movie] = await db.select().from(movies).where(eq(movies.title, 'The Matrix')).limit(1)
+    expect(movie).toBeDefined()
+    const ids = await db
+      .select()
+      .from(externalIds)
+      .where(and(eq(externalIds.entityType, 'movie'), eq(externalIds.entityId, movie!.id)))
+    expect(ids.map((r) => `${r.source}:${r.externalId}`).sort()).toEqual([
+      `imdb:tt0133093`,
+      `tmdb:${fx.MATRIX_TMDB_ID}`,
+      'trakt:9',
+    ])
+  })
+
+  it('imports a show whose tmdb id is null by resolving its imdb id via TMDB /find, then resolves its episode normally', async () => {
+    vi.stubGlobal('fetch', createFetchStub({ historyItems: [fx.showFoundViaImdbHistoryItem] }))
+
+    const cookie = await createUserAndCookie()
+    const me = await json<User>(await app.request('/api/v1/auth/me', { headers: { cookie } }))
+    await createTraktConnection(db, me.id)
+
+    const [job] = await db
+      .insert(importJobs)
+      .values({ userId: me.id, includeRatings: false, includeWatchlist: false })
+      .returning()
+    await runTraktImport(db, provider, env, job!.id)
+
+    const [finished] = await db.select().from(importJobs).where(eq(importJobs.id, job!.id)).limit(1)
+    expect(finished?.status).toBe('completed')
+    expect(finished?.itemsImported).toBe(1)
+    expect(finished?.itemsSkipped).toBe(0)
+
+    const [showRow] = await db.select().from(shows).where(eq(shows.title, 'Breaking Bad')).limit(1)
+    expect(showRow).toBeDefined()
+    const episodeRows = await db
+      .select()
+      .from(episodes)
+      .where(and(eq(episodes.showId, showRow!.id), eq(episodes.seasonNumber, 1)))
+    // getSeason's fixture inserts both of Breaking Bad's season-1 episodes,
+    // same as the normal (tmdb-id-present) path does — only one was
+    // actually watched, but resolving a season resolves it whole.
+    expect(episodeRows).toHaveLength(2)
+  })
+
+  it('falls through to the imdb lookup when Trakt\'s own tmdb id 404s, rather than reporting a failure', async () => {
+    vi.stubGlobal(
+      'fetch',
+      createFetchStub({ historyItems: [fx.staleTmdbButFindableMovieHistoryItem] }),
+    )
+
+    const cookie = await createUserAndCookie()
+    const me = await json<User>(await app.request('/api/v1/auth/me', { headers: { cookie } }))
+    await createTraktConnection(db, me.id)
+
+    const [job] = await db
+      .insert(importJobs)
+      .values({ userId: me.id, includeRatings: false, includeWatchlist: false })
+      .returning()
+    await runTraktImport(db, provider, env, job!.id)
+
+    const [finished] = await db.select().from(importJobs).where(eq(importJobs.id, job!.id)).limit(1)
+    expect(finished?.status).toBe('completed')
+    expect(finished?.itemsImported).toBe(1)
+    expect(finished?.itemsSkipped).toBe(0)
+    expect(finished?.failures).toHaveLength(0)
+  })
+
+  it('makes exactly one /find call across multiple watched episodes of a show nothing can find', async () => {
+    const findCalls = { count: 0 }
+    vi.stubGlobal(
+      'fetch',
+      createFetchStub({
+        historyItems: [fx.unfindableShowHistoryItem1, fx.unfindableShowHistoryItem2],
+        findCalls,
+      }),
+    )
+
+    const cookie = await createUserAndCookie()
+    const me = await json<User>(await app.request('/api/v1/auth/me', { headers: { cookie } }))
+    await createTraktConnection(db, me.id)
+
+    const [job] = await db
+      .insert(importJobs)
+      .values({ userId: me.id, includeRatings: false, includeWatchlist: false })
+      .returning()
+    await runTraktImport(db, provider, env, job!.id)
+
+    const [finished] = await db.select().from(importJobs).where(eq(importJobs.id, job!.id)).limit(1)
+    expect(finished?.status).toBe('completed')
+    expect(finished?.itemsSkipped).toBe(2)
+    expect(finished?.failures).toHaveLength(2)
+    for (const failure of finished?.failures ?? []) {
+      expect(failure.reason).toMatch(/No TMDB match for this show/)
+    }
+
+    // The regression this guards: without caching the "no candidate id
+    // found at all" outcome in showFailures (not just a thrown resolve
+    // error), a show with N watched episodes makes N redundant /find
+    // calls instead of one.
+    expect(findCalls.count).toBe(1)
   })
 
   it('survives an unexpected per-item error instead of losing the rest of the page', async () => {

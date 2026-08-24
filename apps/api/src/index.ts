@@ -10,7 +10,6 @@ import { scheduleMetadataRefresh } from './metadata/refresh.js'
 const env = loadEnv()
 const db = createDatabase(env.DATABASE_URL)
 const metadataProviders = createMetadataProviders(env)
-const metadataProvider = metadataProviders[0]!
 const app = createApp({ db, metadataProviders })
 
 // Resume import jobs that were mid-flight when the process last stopped.
@@ -27,7 +26,7 @@ async function resumeInterruptedImports() {
     .where(eq(importJobs.status, 'running'))
     .returning({ id: importJobs.id })
   for (const job of interrupted) {
-    void runTraktImport(db, metadataProvider, env, job.id).catch((err: unknown) =>
+    void runTraktImport(db, metadataProviders, env, job.id).catch((err: unknown) =>
       console.error(`Failed to resume import job ${job.id}:`, err),
     )
   }

@@ -277,6 +277,56 @@ export const staleTmdbButFindableMovieHistoryItem: TraktHistoryItem = {
   },
 }
 
+/** No `tmdb` id and no `imdb` id at all — TMDB has nothing to try, not even
+ * a reverse lookup — but a `tvdb` id is present. Exercises match.ts's
+ * cross-provider fallback (docs/TODO.md's "Cross-provider fallback for
+ * Trakt import matching"): TMDB is tried and fully exhausted first, then
+ * the next configured provider (TVDB, in the tests that use this) resolves
+ * it via its own id. */
+export const TVDB_ONLY_MOVIE_TVDB_ID = 555001
+export const tvdbOnlyMovieHistoryItem: TraktHistoryItem = {
+  id: 114,
+  watched_at: '2024-01-16T12:00:00.000Z',
+  action: 'watch',
+  type: 'movie',
+  movie: {
+    title: 'A Title Only TVDB Has',
+    year: 2019,
+    ids: {
+      trakt: 13,
+      slug: 'tvdb-only-movie',
+      imdb: null,
+      tmdb: null,
+      tvdb: TVDB_ONLY_MOVIE_TVDB_ID,
+    },
+  },
+}
+
+/** Show counterpart of `tvdbOnlyMovieHistoryItem` — no `tmdb`/`imdb` id,
+ * only `tvdb`. Its episode then exercises matchEpisode's own use of
+ * whichever provider actually resolved the show (TVDB, not the primary
+ * TMDB), not just matchShow/matchMovie's simpler cross-provider path. */
+export const TVDB_ONLY_SHOW_TVDB_ID = 555002
+const tvdbOnlyShow: TraktShow = {
+  title: 'A Show Only TVDB Has',
+  year: 2020,
+  ids: {
+    trakt: 14,
+    slug: 'tvdb-only-show',
+    imdb: null,
+    tmdb: null,
+    tvdb: TVDB_ONLY_SHOW_TVDB_ID,
+  },
+}
+export const tvdbOnlyShowHistoryItem: TraktHistoryItem = {
+  id: 115,
+  watched_at: '2024-01-17T12:00:00.000Z',
+  action: 'watch',
+  type: 'episode',
+  show: tvdbOnlyShow,
+  episode: { season: 1, number: 1, title: 'Pilot', ids: { trakt: 1201, imdb: null, tmdb: null } },
+}
+
 export function matrixRatingItem(rating: number): TraktRatingItem {
   return {
     rated_at: '2024-01-01T00:00:00.000Z',

@@ -12,6 +12,7 @@ import {
 } from '@rwnd/db'
 import type { Env } from '../env.js'
 import type { MetadataProvider } from '../providers/types.js'
+import { orderedProviders } from '../providers/priority.js'
 import { decryptSecret, encryptSecret } from '../lib/crypto.js'
 import { TraktClient, type PagedResult } from '../trakt/client.js'
 import { refreshAccessToken } from '../trakt/auth.js'
@@ -129,7 +130,7 @@ async function ensureFreshAccessToken(db: Database, env: Env, userId: string): P
 
 export async function runTraktImport(
   db: Database,
-  provider: MetadataProvider,
+  metadataProviders: MetadataProvider[],
   env: Env,
   jobId: string,
 ): Promise<void> {
@@ -144,6 +145,11 @@ export async function runTraktImport(
   const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1)
   if (!user) throw new Error('Import job references a user that no longer exists')
   const locale = user.locale
+
+  // Resolved once per job, not once per item — a priority change takes
+  // effect on the next import, same convention as the metadata refresher's
+  // own sweep (apps/api/src/metadata/refresh.ts).
+  const providers = await orderedProviders(db, metadataProviders)
 
   const enabledPhases = PHASES.filter(
     (phase) =>
@@ -170,8 +176,8 @@ export async function runTraktImport(
 
   // Per-job caches: a show with many watched/rated/listed episodes should
   // only trigger one provider.getSeason() call per season, and a show
-  // that fails to resolve at all should only be tried against TMDB once
-  // — not once per episode. See import/match.ts.
+  // that fails to resolve at all should only be tried against every
+  // configured provider once — not once per episode. See import/match.ts.
   const caches: ImportCaches = { seasons: new Map(), showFailures: new Map() }
 
   const state = {
@@ -213,9 +219,9 @@ export async function runTraktImport(
   async function processHistoryItem(item: TraktHistoryItem): Promise<'imported' | 'skipped'> {
     let match: MatchOutcome
     if (item.type === 'movie' && item.movie) {
-      match = await matchMovie(db, provider, item.movie, locale)
+      match = await matchMovie(db, providers, item.movie, locale)
     } else if (item.type === 'episode' && item.show && item.episode) {
-      match = await matchEpisode(db, provider, item.show, item.episode, locale, caches)
+      match = await matchEpisode(db, providers, item.show, item.episode, locale, caches)
     } else {
       match = { ok: false, reason: `Unsupported history item type: ${item.type}` }
     }
@@ -240,7 +246,7 @@ export async function runTraktImport(
   }
 
   async function processRatingItem(item: TraktRatingItem): Promise<'imported' | 'skipped'> {
-    const match = await matchTraktMediaItem(db, provider, item, locale, caches)
+    const match = await matchTraktMediaItem(db, providers, item, locale, caches)
     if (!match.ok) {
       pushFailure('ratings', match)
       return 'skipped'
@@ -262,7 +268,7 @@ export async function runTraktImport(
   }
 
   async function processWatchlistItem(item: TraktWatchlistItem): Promise<'imported' | 'skipped'> {
-    const match = await matchTraktMediaItem(db, provider, item, locale, caches)
+    const match = await matchTraktMediaItem(db, providers, item, locale, caches)
     if (!match.ok) {
       pushFailure('watchlist', match)
       return 'skipped'
@@ -286,7 +292,7 @@ export async function runTraktImport(
     // matchTraktMediaItem already handles `type: 'show'` items structurally
     // (it doesn't care that this came from /users/hidden rather than
     // /sync/ratings or /sync/watchlist) — no changes needed in match.ts.
-    const match = await matchTraktMediaItem(db, provider, item, locale, caches)
+    const match = await matchTraktMediaItem(db, providers, item, locale, caches)
     if (!match.ok) {
       pushFailure('dropped', match)
       return 'skipped'

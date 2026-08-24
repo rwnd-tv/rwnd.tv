@@ -1210,7 +1210,7 @@ currently-dropped shows, since a row can have both
       defaults (migration `0010_even_nick_fury.sql`, column defaults
       only — doesn't touch existing rows/instances), `i18next`'s
       `fallbackLng`, `settings.ts`'s `DEFAULT_SETTINGS.defaultLocale`,
-      and `refresh.ts`'s in-code fallback. Deliberately did *not* touch
+      and `refresh.ts`'s in-code fallback. Deliberately did _not_ touch
       the many per-component `user?.locale ?? 'en-GB'` date-formatting
       fallbacks scattered across detail pages — those only matter while
       `useAuth()`'s user is still loading, not a real "default," and
@@ -1270,3 +1270,37 @@ currently-dropped shows, since a row can have both
       still "not yet scheduled" — and the backup format's `tmdbId` ->
       `externalIds[]` migration, deferred until an entity actually exists
       that needs it.
+
+- [x] **Cross-provider fallback for Trakt import matching** (2026-08-24 12:15 added, done 2026-08-24)\
+      `matchMovie`/`matchShow` (`apps/api/src/import/match.ts`) only ever
+      resolved a title against TMDB — even the existing imdb/tvdb
+      reverse-lookup fallback (`findByExternalId`) looked _into TMDB_, not
+      into TVDB itself. Done: `resolveViaProvider` now walks every
+      configured provider in priority order, trying each one's own Trakt
+      id first (`ids.tmdb` for TMDB, `ids.tvdb` for TVDB) then its
+      imdb/other-provider reverse lookup, before moving to the next
+      provider — `findViaAlternateIds` also skips reverse-looking-up a
+      provider against its own id source now (asking TVDB to resolve a
+      tvdb id was a pointless self-referential call once TVDB could
+      actually appear in the loop). `ShowMatch` carries the _winning_
+      provider instance alongside its id, reusing `pickRefreshTarget`
+      (`apps/api/src/metadata/refresh.ts`) for the already-resolved-
+      locally fast path, so `matchEpisode`'s season/episode lookups land
+      on whichever provider actually knows the show, not always the
+      primary one. `runTraktImport` resolves `orderedProviders()` once
+      per job (same convention as the metadata refresher's sweep) and
+      threads the array through instead of a single provider.\
+      Found and fixed a real bug along the way while live-verifying (not
+      part of this TODO item, but caught by the same live re-import used
+      to verify it): `TvdbProvider`'s season-type matching filtered on a
+      literal type string (`'default'`) that doesn't exist in TVDB's
+      actual data — the real "aired order" grouping is identified by
+      _id_ (`show.defaultSeasonType`), not that string, which is only
+      ever a path-segment alias on the episodes endpoint. This was
+      silently leaving a TVDB-refreshed show's season list unwritten.\
+      Verified live on dev.rwnd.tv: re-running a full Trakt re-import
+      (11,279 items) dropped unmatched items from 372 to 5 — every
+      remaining failure is a narrow per-episode numbering mismatch
+      (mostly season-0 specials, one two-parter finale) inside an
+      already-resolved show, not a show/movie the importer couldn't find
+      at all.

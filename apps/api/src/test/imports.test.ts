@@ -25,6 +25,7 @@ import {
 } from './helpers.js'
 import { loadEnv } from '../env.js'
 import { createMetadataProviders } from '../providers/index.js'
+import type { MetadataProvider } from '../providers/types.js'
 import { runTraktImport } from '../import/trakt.js'
 import type {
   TraktHiddenItem,
@@ -37,7 +38,87 @@ import * as fx from './fixtures/trakt.js'
 const db = testDb()
 const app = testApp()
 const env = loadEnv()
-const provider = createMetadataProviders(env)[0]!
+const providers = createMetadataProviders(env)
+
+/**
+ * A fake second provider for the cross-provider fallback tests below — the
+ * test env only ever configures TMDB_API_KEY (same as every other test in
+ * this suite), so exercising a real second provider means constructing one
+ * directly rather than through env/createMetadataProviders. Only
+ * getMovie/getShow/getSeason are implemented (findByExternalId always
+ * returns null, same as a provider genuinely having no reverse-lookup
+ * match) — this is about match.ts's own cross-provider walk, not TVDB's
+ * real API shapes, which apps/api/src/providers/tvdb.test.ts already
+ * covers.
+ */
+function fakeTvdbProvider(): MetadataProvider {
+  return {
+    source: 'tvdb',
+    async searchMulti() {
+      return []
+    },
+    async getMovie(externalId) {
+      if (externalId !== String(fx.TVDB_ONLY_MOVIE_TVDB_ID)) {
+        throw new Error(`Unexpected fake TVDB movie lookup: ${externalId}`)
+      }
+      return {
+        externalId,
+        title: 'A Title Only TVDB Has',
+        year: 2019,
+        runtimeMinutes: null,
+        overview: null,
+        posterPath: null,
+        genres: [],
+        voteAverage: null,
+      }
+    },
+    async getShow(externalId) {
+      if (externalId !== String(fx.TVDB_ONLY_SHOW_TVDB_ID)) {
+        throw new Error(`Unexpected fake TVDB show lookup: ${externalId}`)
+      }
+      return {
+        externalId,
+        title: 'A Show Only TVDB Has',
+        year: 2020,
+        overview: null,
+        posterPath: null,
+        status: null,
+        genres: [],
+        voteAverage: null,
+        seasons: [],
+      }
+    },
+    async getEpisode() {
+      throw new Error('Not used by these tests — matchEpisode resolves via getSeason')
+    },
+    async getSeason(externalId, seasonNumber) {
+      if (externalId !== String(fx.TVDB_ONLY_SHOW_TVDB_ID) || seasonNumber !== 1) {
+        throw new Error(`Unexpected fake TVDB season lookup: ${externalId} season ${seasonNumber}`)
+      }
+      return {
+        overview: null,
+        voteAverage: null,
+        externalId: 'fake-tvdb-season-1',
+        episodes: [
+          {
+            title: 'Pilot',
+            seasonNumber: 1,
+            episodeNumber: 1,
+            runtimeMinutes: 55,
+            firstAired: '2020-01-01',
+            overview: null,
+            stillPath: null,
+            voteAverage: null,
+            externalId: 'fake-tvdb-episode-1',
+          },
+        ],
+      }
+    },
+    async findByExternalId() {
+      return null
+    },
+  }
+}
 
 async function createUserAndCookie(email = 'importer@example.com') {
   const res = await app.request('/api/v1/setup', {
@@ -229,14 +310,14 @@ describe('Trakt import', () => {
       .insert(importJobs)
       .values({ userId: me.id, includeRatings: false, includeWatchlist: false })
       .returning()
-    await runTraktImport(db, provider, env, job!.id)
+    await runTraktImport(db, providers, env, job!.id)
 
     const [finished] = await db.select().from(importJobs).where(eq(importJobs.id, job!.id)).limit(1)
     expect(finished?.status).toBe('completed')
     expect(finished?.itemsImported).toBe(3)
     expect(finished?.itemsSkipped).toBe(1)
     expect(finished?.failures).toHaveLength(1)
-    expect(finished?.failures[0]?.reason).toMatch(/No TMDB id/)
+    expect(finished?.failures[0]?.reason).toMatch(/No match for this movie from any configured metadata provider/)
 
     const allPlays = await db.select().from(plays).where(eq(plays.userId, me.id))
     expect(allPlays).toHaveLength(3)
@@ -273,7 +354,7 @@ describe('Trakt import', () => {
       .insert(importJobs)
       .values({ userId: me.id, includeRatings: false, includeWatchlist: false })
       .returning()
-    await runTraktImport(db, provider, env, job2!.id)
+    await runTraktImport(db, providers, env, job2!.id)
 
     const allPlaysAfterReimport = await db.select().from(plays).where(eq(plays.userId, me.id))
     expect(allPlaysAfterReimport).toHaveLength(3)
@@ -296,7 +377,7 @@ describe('Trakt import', () => {
       .insert(importJobs)
       .values({ userId: me.id, includeRatings: false, includeWatchlist: false })
       .returning()
-    await runTraktImport(db, provider, env, job1!.id)
+    await runTraktImport(db, providers, env, job1!.id)
 
     const [showRow] = await db.select().from(shows).where(eq(shows.title, 'Breaking Bad')).limit(1)
     const firstPassIds = await db
@@ -312,7 +393,7 @@ describe('Trakt import', () => {
       .insert(importJobs)
       .values({ userId: me.id, includeRatings: false, includeWatchlist: false })
       .returning()
-    await runTraktImport(db, provider, env, job2!.id)
+    await runTraktImport(db, providers, env, job2!.id)
 
     const secondPassIds = await db
       .select()
@@ -339,7 +420,7 @@ describe('Trakt import', () => {
       .insert(importJobs)
       .values({ userId: me.id, includeRatings: false, includeWatchlist: false })
       .returning()
-    await runTraktImport(db, provider, env, job!.id)
+    await runTraktImport(db, providers, env, job!.id)
 
     const [finished] = await db.select().from(importJobs).where(eq(importJobs.id, job!.id)).limit(1)
     expect(finished?.status).toBe('completed')
@@ -371,7 +452,7 @@ describe('Trakt import', () => {
       .insert(importJobs)
       .values({ userId: me.id, includeRatings: false, includeWatchlist: false })
       .returning()
-    await runTraktImport(db, provider, env, job!.id)
+    await runTraktImport(db, providers, env, job!.id)
 
     const [finished] = await db.select().from(importJobs).where(eq(importJobs.id, job!.id)).limit(1)
     expect(finished?.status).toBe('completed')
@@ -413,7 +494,7 @@ describe('Trakt import', () => {
       .insert(importJobs)
       .values({ userId: me.id, includeRatings: false, includeWatchlist: false })
       .returning()
-    await runTraktImport(db, provider, env, job!.id)
+    await runTraktImport(db, providers, env, job!.id)
 
     const [finished] = await db.select().from(importJobs).where(eq(importJobs.id, job!.id)).limit(1)
     expect(finished?.status).toBe('completed')
@@ -447,7 +528,7 @@ describe('Trakt import', () => {
       .insert(importJobs)
       .values({ userId: me.id, includeRatings: false, includeWatchlist: false })
       .returning()
-    await runTraktImport(db, provider, env, job!.id)
+    await runTraktImport(db, providers, env, job!.id)
 
     const [finished] = await db.select().from(importJobs).where(eq(importJobs.id, job!.id)).limit(1)
     expect(finished?.status).toBe('completed')
@@ -466,7 +547,7 @@ describe('Trakt import', () => {
     expect(episodeRows).toHaveLength(2)
   })
 
-  it('falls through to the imdb lookup when Trakt\'s own tmdb id 404s, rather than reporting a failure', async () => {
+  it("falls through to the imdb lookup when Trakt's own tmdb id 404s, rather than reporting a failure", async () => {
     vi.stubGlobal(
       'fetch',
       createFetchStub({ historyItems: [fx.staleTmdbButFindableMovieHistoryItem] }),
@@ -480,13 +561,89 @@ describe('Trakt import', () => {
       .insert(importJobs)
       .values({ userId: me.id, includeRatings: false, includeWatchlist: false })
       .returning()
-    await runTraktImport(db, provider, env, job!.id)
+    await runTraktImport(db, providers, env, job!.id)
 
     const [finished] = await db.select().from(importJobs).where(eq(importJobs.id, job!.id)).limit(1)
     expect(finished?.status).toBe('completed')
     expect(finished?.itemsImported).toBe(1)
     expect(finished?.itemsSkipped).toBe(0)
     expect(finished?.failures).toHaveLength(0)
+  })
+
+  it('falls through to a second configured provider when the primary one has no id at all for a movie', async () => {
+    vi.stubGlobal('fetch', createFetchStub({ historyItems: [fx.tvdbOnlyMovieHistoryItem] }))
+
+    const cookie = await createUserAndCookie()
+    const me = await json<User>(await app.request('/api/v1/auth/me', { headers: { cookie } }))
+    await createTraktConnection(db, me.id)
+
+    const [job] = await db
+      .insert(importJobs)
+      .values({ userId: me.id, includeRatings: false, includeWatchlist: false })
+      .returning()
+    // TMDB (real, HTTP-stubbed) first, then the fake TVDB provider — TMDB
+    // has no tmdb/imdb id to try at all, so this only succeeds if match.ts
+    // actually moves on to the next provider rather than giving up.
+    await runTraktImport(db, [providers[0]!, fakeTvdbProvider()], env, job!.id)
+
+    const [finished] = await db.select().from(importJobs).where(eq(importJobs.id, job!.id)).limit(1)
+    expect(finished?.status).toBe('completed')
+    expect(finished?.itemsImported).toBe(1)
+    expect(finished?.itemsSkipped).toBe(0)
+    expect(finished?.failures).toHaveLength(0)
+
+    const [movie] = await db
+      .select()
+      .from(movies)
+      .where(eq(movies.title, 'A Title Only TVDB Has'))
+      .limit(1)
+    expect(movie).toBeDefined()
+    expect(movie?.metadataSource).toBe('tvdb')
+    const ids = await db
+      .select()
+      .from(externalIds)
+      .where(and(eq(externalIds.entityType, 'movie'), eq(externalIds.entityId, movie!.id)))
+    expect(ids.map((r) => `${r.source}:${r.externalId}`).sort()).toEqual([
+      `trakt:13`,
+      `tvdb:${fx.TVDB_ONLY_MOVIE_TVDB_ID}`,
+    ])
+  })
+
+  it('falls through to a second configured provider for a show, then resolves its episode via that same provider', async () => {
+    vi.stubGlobal('fetch', createFetchStub({ historyItems: [fx.tvdbOnlyShowHistoryItem] }))
+
+    const cookie = await createUserAndCookie()
+    const me = await json<User>(await app.request('/api/v1/auth/me', { headers: { cookie } }))
+    await createTraktConnection(db, me.id)
+
+    const [job] = await db
+      .insert(importJobs)
+      .values({ userId: me.id, includeRatings: false, includeWatchlist: false })
+      .returning()
+    await runTraktImport(db, [providers[0]!, fakeTvdbProvider()], env, job!.id)
+
+    const [finished] = await db.select().from(importJobs).where(eq(importJobs.id, job!.id)).limit(1)
+    expect(finished?.status).toBe('completed')
+    expect(finished?.itemsImported).toBe(1)
+    expect(finished?.itemsSkipped).toBe(0)
+    expect(finished?.failures).toHaveLength(0)
+
+    const [showRow] = await db
+      .select()
+      .from(shows)
+      .where(eq(shows.title, 'A Show Only TVDB Has'))
+      .limit(1)
+    expect(showRow).toBeDefined()
+    expect(showRow?.metadataSource).toBe('tvdb')
+    // Resolved via the fake provider's getSeason, not TMDB's — proves
+    // matchEpisode used the provider matchShow actually resolved the show
+    // through, not the primary/TMDB one.
+    const [episodeRow] = await db
+      .select()
+      .from(episodes)
+      .where(and(eq(episodes.showId, showRow!.id), eq(episodes.seasonNumber, 1)))
+    expect(episodeRow?.title).toBe('Pilot')
+    expect(episodeRow?.runtimeMinutes).toBe(55)
   })
 
   it('makes exactly one /find call across multiple watched episodes of a show nothing can find', async () => {
@@ -507,14 +664,14 @@ describe('Trakt import', () => {
       .insert(importJobs)
       .values({ userId: me.id, includeRatings: false, includeWatchlist: false })
       .returning()
-    await runTraktImport(db, provider, env, job!.id)
+    await runTraktImport(db, providers, env, job!.id)
 
     const [finished] = await db.select().from(importJobs).where(eq(importJobs.id, job!.id)).limit(1)
     expect(finished?.status).toBe('completed')
     expect(finished?.itemsSkipped).toBe(2)
     expect(finished?.failures).toHaveLength(2)
     for (const failure of finished?.failures ?? []) {
-      expect(failure.reason).toMatch(/No TMDB match for this show/)
+      expect(failure.reason).toMatch(/No match for this show from any configured metadata provider/)
     }
 
     // The regression this guards: without caching the "no candidate id
@@ -544,7 +701,7 @@ describe('Trakt import', () => {
       .insert(importJobs)
       .values({ userId: me.id, includeRatings: false, includeWatchlist: false })
       .returning()
-    await runTraktImport(db, provider, env, job!.id)
+    await runTraktImport(db, providers, env, job!.id)
 
     const [finished] = await db.select().from(importJobs).where(eq(importJobs.id, job!.id)).limit(1)
     expect(finished?.status).toBe('completed')
@@ -567,7 +724,7 @@ describe('Trakt import', () => {
       .insert(importJobs)
       .values({ userId: me.id, includeHistory: false, includeWatchlist: false })
       .returning()
-    await runTraktImport(db, provider, env, job1!.id)
+    await runTraktImport(db, providers, env, job1!.id)
 
     const firstPass = await db.select().from(ratings).where(eq(ratings.userId, me.id))
     expect(firstPass).toHaveLength(1)
@@ -578,7 +735,7 @@ describe('Trakt import', () => {
       .insert(importJobs)
       .values({ userId: me.id, includeHistory: false, includeWatchlist: false })
       .returning()
-    await runTraktImport(db, provider, env, job2!.id)
+    await runTraktImport(db, providers, env, job2!.id)
 
     const secondPass = await db.select().from(ratings).where(eq(ratings.userId, me.id))
     expect(secondPass).toHaveLength(1)
@@ -603,7 +760,7 @@ describe('Trakt import', () => {
         includeWatchlist: false,
       })
       .returning()
-    await runTraktImport(db, provider, env, job1!.id)
+    await runTraktImport(db, providers, env, job1!.id)
 
     const firstPass = await db.select().from(droppedShows).where(eq(droppedShows.userId, me.id))
     expect(firstPass).toHaveLength(1)
@@ -622,7 +779,7 @@ describe('Trakt import', () => {
         includeWatchlist: false,
       })
       .returning()
-    await runTraktImport(db, provider, env, job2!.id)
+    await runTraktImport(db, providers, env, job2!.id)
 
     const secondPass = await db.select().from(droppedShows).where(eq(droppedShows.userId, me.id))
     expect(secondPass).toHaveLength(1)
@@ -649,7 +806,7 @@ describe('Trakt import', () => {
         includeWatchlist: false,
       })
       .returning()
-    await runTraktImport(db, provider, env, job1!.id)
+    await runTraktImport(db, providers, env, job1!.id)
 
     const [row] = await db.select().from(droppedShows).where(eq(droppedShows.userId, me.id))
     expect(row?.traktDropped).toBe(true)
@@ -679,7 +836,7 @@ describe('Trakt import', () => {
         includeWatchlist: false,
       })
       .returning()
-    await runTraktImport(db, provider, env, job2!.id)
+    await runTraktImport(db, providers, env, job2!.id)
 
     const [after] = await db.select().from(droppedShows).where(eq(droppedShows.userId, me.id))
     expect(after?.traktDropped).toBe(true)
@@ -705,7 +862,7 @@ describe('Trakt import', () => {
       .insert(importJobs)
       .values({ userId: me.id, includeRatings: false, includeWatchlist: false })
       .returning()
-    await runTraktImport(db, provider, env, job1!.id)
+    await runTraktImport(db, providers, env, job1!.id)
     const [show] = await db.select().from(shows).where(eq(shows.title, 'Breaking Bad')).limit(1)
     if (!show) throw new Error('history import did not create the show')
 
@@ -729,7 +886,7 @@ describe('Trakt import', () => {
         includeWatchlist: false,
       })
       .returning()
-    await runTraktImport(db, provider, env, job2!.id)
+    await runTraktImport(db, providers, env, job2!.id)
 
     const [after] = await db.select().from(droppedShows).where(eq(droppedShows.userId, me.id))
     expect(after?.traktDropped).toBe(true)
@@ -752,7 +909,7 @@ describe('Trakt import', () => {
       .insert(importJobs)
       .values({ userId: me.id, includeHistory: false, includeRatings: false })
       .returning()
-    await runTraktImport(db, provider, env, job!.id)
+    await runTraktImport(db, providers, env, job!.id)
 
     const [finished] = await db.select().from(importJobs).where(eq(importJobs.id, job!.id)).limit(1)
     expect(finished?.status).toBe('completed')
@@ -776,7 +933,7 @@ describe('Trakt import', () => {
     vi.stubGlobal('fetch', createFetchStub())
 
     const [job] = await db.insert(importJobs).values({ userId: meA.id }).returning()
-    await runTraktImport(db, provider, env, job!.id)
+    await runTraktImport(db, providers, env, job!.id)
 
     await createLocalUser(db, 'other-importer@example.com', 'correct-horse-battery-staple')
     const loginB = await app.request('/api/v1/auth/login', {

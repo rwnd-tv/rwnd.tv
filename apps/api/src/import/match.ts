@@ -2,6 +2,7 @@ import { and, eq } from 'drizzle-orm'
 import type { Database } from '@rwnd/db'
 import { episodes, externalIds, movies, shows } from '@rwnd/db'
 import type { MetadataProvider } from '../providers/types.js'
+import { pickRefreshTarget } from '../metadata/refresh.js'
 import { resolveMovie, resolveShow } from '../lib/media.js'
 import type { TraktEpisode, TraktIds, TraktMovie, TraktSeason, TraktShow } from '../trakt/types.js'
 
@@ -9,22 +10,25 @@ import type { TraktEpisode, TraktIds, TraktMovie, TraktSeason, TraktShow } from 
  * Matches Trakt-sourced items against rwnd.tv's local records, via
  * `external_ids` — this is the mechanism ADR 0002 was designed for. A hit
  * against a `trakt` row means a previous import already resolved this item
- * (no network call); otherwise it falls back to the item's `tmdb` id and
- * goes through the same resolveMovie/resolveShow path search already uses
- * (apps/api/src/lib/media.ts). If Trakt's own `tmdb` id is missing, or the
- * provider no longer recognises it (merged/deleted/wrong id), this falls
- * through to a reverse lookup on Trakt's `imdb`/`tvdb` ids via
- * `provider.findByExternalId` (see docs/adr/0006) before giving up — the
- * fix for the common case where Trakt's own tmdb field is null or stale but
- * the provider does hold a matching entry. It does **not** help when the
- * provider genuinely has no entry for a title under any id (Formula 1 via
- * Trakt is the motivating example — TMDB doesn't carry it at all). Either
+ * (no network call); otherwise it tries each configured provider in
+ * priority order (docs/adr/0006), and for each one: that provider's own
+ * field on Trakt's `ids` (e.g. `ids.tmdb` for TMDB, `ids.tvdb` for TVDB)
+ * first, then — if that's absent, or present but rejected by the provider
+ * (merged/deleted/wrong id) — a reverse lookup on Trakt's `imdb`/other-
+ * provider id via `provider.findByExternalId`. Only once every configured
+ * provider has been tried this way is the item reported unmatched. Either
  * way, every id Trakt handed us gets backfilled (`trakt`, plus `imdb`/`tvdb`
  * when present) so the next import — or a webhook — hits the fast path.
  * Trakt's `slug` isn't stored: it's an alternate identifier *within*
  * Trakt's own system, not a separate external source, so it doesn't fit
  * `external_id_source`'s model of "which other system does this id belong
  * to."
+ *
+ * Cross-provider fallback fixes the common case where the item's primary-
+ * provider id is missing or stale but a *different* configured provider
+ * does hold a matching entry — it does **not** help when a title genuinely
+ * has no entry under any id, on any configured provider (Formula 1 via
+ * Trakt is the motivating example — neither TMDB nor TVDB carry it at all).
  *
  * Anything that can't be matched (no id resolvable by any means and no
  * prior local match, or a Trakt item type rwnd.tv has no local entity for)
@@ -48,21 +52,28 @@ export type MatchOutcome =
 interface ShowMatch {
   id: string
   title: string
-  /** Needed to call provider.getSeason(); null if this show has no known id
-   * from `provider` (e.g. it was matched purely by a previously-backfilled
-   * trakt id and the provider never had a match for it under any id), in
-   * which case episodes under it can't be resolved. */
+  /** The provider (and its own id for this show) episode-level lookups
+   * should use — the one whose id actually resolved the show, or (for a
+   * show that was already resolved by a prior import) the highest-priority
+   * configured provider with a recorded id for it, same convention as
+   * pickRefreshTarget (apps/api/src/metadata/refresh.ts). Null if no
+   * configured provider has a findable id for this show at all — e.g. it
+   * was matched purely by a previously-backfilled trakt id and no provider
+   * ever had a match for it under any id — in which case episodes under it
+   * can't be resolved. */
+  provider: MetadataProvider | null
   providerExternalId: string | null
 }
 
 /**
  * Per-job caches so a show with many watched/rated/listed episodes only
- * triggers one TMDB request per show and per season, not one per episode.
- * Both cache failures as well as successes — a show whose TMDB lookup
- * 404s fails identically for every episode under it, so without
- * `showFailures` a show with N watched episodes makes N redundant failing
- * requests instead of one (found live: a single unresolvable show
- * accounted for 200+ consecutive failures on a real import).
+ * triggers one provider request per show and per season, not one per
+ * episode. Both cache failures as well as successes — a show whose lookup
+ * fails against every configured provider fails identically for every
+ * episode under it, so without `showFailures` a show with N watched
+ * episodes makes N redundant failing request sequences instead of one
+ * (found live: a single unresolvable show accounted for 200+ consecutive
+ * failures on a real import).
  */
 export interface ImportCaches {
   /** `${localShowId}:${seasonNumber}` -> null once fetched successfully,
@@ -75,8 +86,9 @@ export interface ImportCaches {
   showFailures: Map<number, string>
 }
 
-function describeProviderError(err: unknown): string {
-  return err instanceof Error ? `TMDB lookup failed: ${err.message}` : 'TMDB lookup failed'
+function describeProviderError(provider: MetadataProvider | null, err: unknown): string {
+  const label = provider ? provider.source.toUpperCase() : 'Metadata'
+  return err instanceof Error ? `${label} lookup failed: ${err.message}` : `${label} lookup failed`
 }
 
 async function lookupLocalIdByExternalId(
@@ -99,31 +111,21 @@ async function lookupLocalIdByExternalId(
   return row?.id ?? null
 }
 
-async function lookupProviderExternalId(
-  db: Database,
-  entityType: 'movie' | 'show' | 'episode',
-  entityId: string,
-  source: MetadataProvider['source'],
-): Promise<string | null> {
-  const [row] = await db
-    .select({ externalId: externalIds.externalId })
-    .from(externalIds)
-    .where(
-      and(
-        eq(externalIds.entityType, entityType),
-        eq(externalIds.entityId, entityId),
-        eq(externalIds.source, source),
-      ),
-    )
-    .limit(1)
-  return row?.externalId ?? null
+/** This provider's own field on a Trakt id bundle — `ids.tmdb` for TMDB,
+ * `ids.tvdb` for TVDB — distinct from the *other* ids `findViaAlternateIds`
+ * below tries as a same-provider reverse-lookup fallback. */
+function ownTraktId(provider: MetadataProvider, ids: TraktIds): string | null {
+  const id = ids[provider.source]
+  return id ? String(id) : null
 }
 
-/** Tries Trakt's `imdb` id then its `tvdb` id against
- * `provider.findByExternalId`, returning the first hit. `imdb` covers both
- * movies and shows; `tvdb` is TV-only in practice, but there's no harm
- * asking either provider method for either entity type — the provider
- * itself returns null for a source it can't reverse-lookup. */
+/** Tries Trakt's `imdb` id, then its `tvdb` id (skipped when `provider`
+ * *is* TVDB — reverse-looking-up a TVDB id against TVDB itself would be a
+ * pointless self-referential call, already covered by `ownTraktId` above),
+ * against `provider.findByExternalId`, returning the first hit. `imdb`
+ * covers both movies and shows; `tvdb` is TV-only in practice, but there's
+ * no harm asking either provider method for either entity type — the
+ * provider itself returns null for a source it can't reverse-lookup. */
 async function findViaAlternateIds(
   provider: MetadataProvider,
   entityType: 'movie' | 'show',
@@ -134,7 +136,7 @@ async function findViaAlternateIds(
     const found = await provider.findByExternalId(entityType, 'imdb', ids.imdb, locale)
     if (found) return found
   }
-  if (ids.tvdb) {
+  if (ids.tvdb && provider.source !== 'tvdb') {
     const found = await provider.findByExternalId(entityType, 'tvdb', String(ids.tvdb), locale)
     if (found) return found
   }
@@ -142,39 +144,56 @@ async function findViaAlternateIds(
 }
 
 /**
- * Shared by matchMovie/matchShow: tries `resolve` against Trakt's own
- * `tmdb` id first (when present), then — whether `tmdb` was absent, or
- * present but rejected by the provider (merged/deleted/wrong id) — against
- * whatever `findViaAlternateIds` turns up. The `findByExternalId` call is
- * only made when it's actually needed (no eager lookup on the common path
- * where Trakt's own tmdb id just works), since it's a live provider
- * request. `error` is the most recent attempt's failure, or null if no
- * candidate id was ever found to try.
+ * Shared by matchMovie/matchShow: walks `providers` in priority order and,
+ * for each one, tries `resolve` against that provider's own Trakt id first
+ * (`ownTraktId`), then — whether that was absent, or present but rejected
+ * by the provider (merged/deleted/wrong id) — whatever
+ * `findViaAlternateIds` turns up for that same provider. Moves on to the
+ * next provider only once the current one has been fully exhausted. The
+ * `findByExternalId` call is only made when it's actually needed (no eager
+ * lookup on the common path where a provider's own id just works), since
+ * it's a live provider request. `error`/`provider` describe the *last*
+ * attempt made, or are null if no candidate id was ever found to try
+ * against any provider.
  */
 async function resolveViaProvider<T>(
-  resolve: (providerExternalId: string) => Promise<T>,
-  provider: MetadataProvider,
+  resolve: (provider: MetadataProvider, providerExternalId: string) => Promise<T>,
+  providers: MetadataProvider[],
   entityType: 'movie' | 'show',
   ids: TraktIds,
   locale: string,
-): Promise<{ ok: true; value: T } | { ok: false; error: unknown }> {
+): Promise<
+  | { ok: true; value: T; provider: MetadataProvider; externalId: string }
+  | { ok: false; error: unknown; provider: MetadataProvider | null }
+> {
   let lastError: unknown = null
-  if (ids.tmdb) {
-    try {
-      return { ok: true, value: await resolve(String(ids.tmdb)) }
-    } catch (err) {
-      lastError = err
+  let lastProvider: MetadataProvider | null = null
+  for (const provider of providers) {
+    const ownId = ownTraktId(provider, ids)
+    if (ownId) {
+      lastProvider = provider
+      try {
+        return { ok: true, value: await resolve(provider, ownId), provider, externalId: ownId }
+      } catch (err) {
+        lastError = err
+      }
+    }
+    const alternateId = await findViaAlternateIds(provider, entityType, ids, locale)
+    if (alternateId) {
+      lastProvider = provider
+      try {
+        return {
+          ok: true,
+          value: await resolve(provider, alternateId),
+          provider,
+          externalId: alternateId,
+        }
+      } catch (err) {
+        lastError = err
+      }
     }
   }
-  const alternateId = await findViaAlternateIds(provider, entityType, ids, locale)
-  if (alternateId) {
-    try {
-      return { ok: true, value: await resolve(alternateId) }
-    } catch (err) {
-      lastError = err
-    }
-  }
-  return { ok: false, error: lastError }
+  return { ok: false, error: lastError, provider: lastProvider }
 }
 
 async function backfillExternalIds(
@@ -194,9 +213,14 @@ async function backfillExternalIds(
   await db.insert(externalIds).values(rows).onConflictDoNothing()
 }
 
+function noMatchReason(kind: 'movie' | 'show', providers: MetadataProvider[]): string {
+  const tried = providers.map((p) => p.source).join(', ')
+  return `No match for this ${kind} from any configured metadata provider (tried: ${tried})`
+}
+
 export async function matchMovie(
   db: Database,
-  provider: MetadataProvider,
+  providers: MetadataProvider[],
   traktMovie: TraktMovie,
   locale: string,
 ): Promise<MatchOutcome> {
@@ -219,21 +243,21 @@ export async function matchMovie(
   }
 
   const result = await resolveViaProvider(
-    (externalId) => resolveMovie(db, provider, externalId, locale),
-    provider,
+    (provider, externalId) => resolveMovie(db, provider, externalId, locale),
+    providers,
     'movie',
     traktMovie.ids,
     locale,
   )
   if (!result.ok) {
-    // Either no id resolvable by any means, or the provider rejected every
-    // candidate it was given (merged/deleted/wrong id) — either way, a
-    // per-item failure, not a reason to abort the whole import.
+    // Either no id resolvable by any means, or every provider rejected
+    // every candidate id it was given (merged/deleted/wrong id) — either
+    // way, a per-item failure, not a reason to abort the whole import.
     return {
       ok: false,
       reason: result.error
-        ? describeProviderError(result.error)
-        : 'No TMDB match for this movie (tried tmdb, imdb and tvdb ids)',
+        ? describeProviderError(result.provider, result.error)
+        : noMatchReason('movie', providers),
       title: traktMovie.title,
     }
   }
@@ -244,7 +268,7 @@ export async function matchMovie(
 
 async function matchShow(
   db: Database,
-  provider: MetadataProvider,
+  providers: MetadataProvider[],
   traktShow: TraktShow,
   locale: string,
   caches: ImportCaches,
@@ -258,44 +282,54 @@ async function matchShow(
   if (localId) {
     const [show] = await db.select().from(shows).where(eq(shows.id, localId)).limit(1)
     if (show) {
-      // Same-request Trakt payload avoids a DB round trip only when it
-      // actually names an id for the provider we're using — a hypothetical
-      // non-tmdb provider can't be shortcut through Trakt's own tmdb field.
-      const providerExternalId =
-        traktShow.ids.tmdb && provider.source === 'tmdb'
-          ? String(traktShow.ids.tmdb)
-          : await lookupProviderExternalId(db, 'show', show.id, provider.source)
+      // Highest-priority configured provider with a recorded id for this
+      // show — same convention pickRefreshTarget uses for the background
+      // refresher, so episode-level lookups below land on a provider this
+      // show is actually known to.
+      const target = await pickRefreshTarget(db, 'show', show.id, providers)
       // Same reasoning as matchMovie's fast path above.
       await backfillExternalIds(db, 'show', show.id, traktShow.ids)
-      return { ok: true, show: { id: show.id, title: show.title, providerExternalId } }
+      return {
+        ok: true,
+        show: {
+          id: show.id,
+          title: show.title,
+          provider: target?.provider ?? null,
+          providerExternalId: target?.externalId ?? null,
+        },
+      }
     }
   }
 
   const result = await resolveViaProvider(
-    (externalId) => resolveShow(db, provider, externalId, locale),
-    provider,
+    (provider, externalId) => resolveShow(db, provider, externalId, locale),
+    providers,
     'show',
     traktShow.ids,
     locale,
   )
   if (!result.ok) {
     const reason = result.error
-      ? describeProviderError(result.error)
-      : 'No TMDB match for this show (tried tmdb, imdb and tvdb ids)'
+      ? describeProviderError(result.provider, result.error)
+      : noMatchReason('show', providers)
     // Cached even for the no-candidate-id case, not just a thrown resolve
     // error — a show with no findable id fails identically for every
     // watched episode under it, so without this a show with N episodes
-    // makes N redundant findViaAlternateIds calls instead of one.
+    // makes N redundant resolution attempts instead of one.
     caches.showFailures.set(traktShow.ids.trakt, reason)
     return { ok: false, reason, title: traktShow.title }
   }
   const show = result.value
   await backfillExternalIds(db, 'show', show.id, traktShow.ids)
-  // Whichever candidate id actually resolved it, resolveShow has already
-  // written the provider-keyed external_ids row — read it back rather than
-  // threading the winning candidate id out of resolveViaProvider.
-  const providerExternalId = await lookupProviderExternalId(db, 'show', show.id, provider.source)
-  return { ok: true, show: { id: show.id, title: show.title, providerExternalId } }
+  return {
+    ok: true,
+    show: {
+      id: show.id,
+      title: show.title,
+      provider: result.provider,
+      providerExternalId: result.externalId,
+    },
+  }
 }
 
 async function findLocalEpisode(db: Database, showId: string, season: number, number: number) {
@@ -315,7 +349,7 @@ async function findLocalEpisode(db: Database, showId: string, season: number, nu
 
 export async function matchEpisode(
   db: Database,
-  provider: MetadataProvider,
+  providers: MetadataProvider[],
   traktShow: TraktShow,
   traktEpisode: TraktEpisode,
   locale: string,
@@ -338,7 +372,7 @@ export async function matchEpisode(
     episode: traktEpisode.number,
   })
 
-  const showResult = await matchShow(db, provider, traktShow, locale, caches)
+  const showResult = await matchShow(db, providers, traktShow, locale, caches)
   if (!showResult.ok) return episodeFailure(showResult.reason)
   const { show } = showResult
 
@@ -348,15 +382,16 @@ export async function matchEpisode(
     return { ok: true, entityType: 'episode', entityId: existing.id, title: label }
   }
 
-  if (!show.providerExternalId) {
-    return episodeFailure('Show has no id from this provider, cannot resolve episode')
+  if (!show.provider || !show.providerExternalId) {
+    return episodeFailure('Show has no id from any configured provider, cannot resolve episode')
   }
+  const { provider, providerExternalId } = show
 
   const seasonKey = `${show.id}:${traktEpisode.season}`
   if (!caches.seasons.has(seasonKey)) {
     try {
       const { episodes: seasonEpisodes } = await provider.getSeason(
-        show.providerExternalId,
+        providerExternalId,
         traktEpisode.season,
         locale,
       )
@@ -378,8 +413,9 @@ export async function matchEpisode(
       caches.seasons.set(seasonKey, null)
     } catch (err) {
       // Cached so every other episode in this same broken season fails
-      // fast instead of re-hitting TMDB for a season it's already 404'd on.
-      caches.seasons.set(seasonKey, describeProviderError(err))
+      // fast instead of re-hitting the provider for a season it's already
+      // failed on.
+      caches.seasons.set(seasonKey, describeProviderError(provider, err))
     }
   }
 
@@ -390,7 +426,7 @@ export async function matchEpisode(
 
   const resolved = await findLocalEpisode(db, show.id, traktEpisode.season, traktEpisode.number)
   if (!resolved) {
-    return episodeFailure('Episode not found in TMDB season data')
+    return episodeFailure(`Episode not found in ${provider.source.toUpperCase()} season data`)
   }
   await backfillExternalIds(db, 'episode', resolved.id, traktEpisode.ids)
   return { ok: true, entityType: 'episode', entityId: resolved.id, title: label }
@@ -404,7 +440,7 @@ export async function matchEpisode(
  */
 export async function matchTraktMediaItem(
   db: Database,
-  provider: MetadataProvider,
+  providers: MetadataProvider[],
   item: {
     type: string
     movie?: TraktMovie
@@ -418,16 +454,16 @@ export async function matchTraktMediaItem(
   switch (item.type) {
     case 'movie':
       if (!item.movie) return { ok: false, reason: 'Missing movie payload' }
-      return matchMovie(db, provider, item.movie, locale)
+      return matchMovie(db, providers, item.movie, locale)
     case 'show': {
       if (!item.show) return { ok: false, reason: 'Missing show payload' }
-      const result = await matchShow(db, provider, item.show, locale, caches)
+      const result = await matchShow(db, providers, item.show, locale, caches)
       if (!result.ok) return result
       return { ok: true, entityType: 'show', entityId: result.show.id, title: result.show.title }
     }
     case 'episode':
       if (!item.show || !item.episode) return { ok: false, reason: 'Missing episode payload' }
-      return matchEpisode(db, provider, item.show, item.episode, locale, caches)
+      return matchEpisode(db, providers, item.show, item.episode, locale, caches)
     case 'season':
       return {
         ok: false,

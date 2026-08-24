@@ -272,7 +272,7 @@ importRoutes.openapi(
   async (c) => {
     const body = c.req.valid('json')
     const db = c.get('db')
-    const provider = c.get('metadataProvider')
+    const metadataProviders = c.get('metadataProviders')
     const env = loadEnv()
     const userId = c.get('user')!.id
 
@@ -309,7 +309,7 @@ importRoutes.openapi(
       .returning()
     if (!job) throw new Error('Failed to create import job')
 
-    void runTraktImport(db, provider, env, job.id).catch((err: unknown) =>
+    void runTraktImport(db, metadataProviders, env, job.id).catch((err: unknown) =>
       console.error('Trakt import failed:', err),
     )
 

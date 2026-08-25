@@ -2093,3 +2093,98 @@ DATABASE` ×2) — zero residue.\
       in each table afterward) while leaving the shared `movies`/`shows`
       rows themselves untouched, confirming the cascade is scoped to the
       user and doesn't reach into shared library data.
+
+## Import
+
+- [x] **Build ZIP-upload import from Trakt's own "Export now" file** (2026-08-24 22:50 added, investigated 2026-08-24, done 2026-08-25) — M2\
+      James's idea, from researching Trakt's free-vs-VIP situation:
+      Settings > Data > "Export now" on trakt.tv gives any account
+      (free or VIP) a ZIP of separate JSON files, no API/OAuth connection
+      needed. Real motivation, not just convenience: Trakt's 2026
+      "Community App" policy caps free accounts at _one_ connected
+      third-party OAuth app at a time — a free user who already has a
+      different Trakt-connected app (a Plex scrobbler, Kodi plugin, etc.)
+      can't also OAuth-connect rwnd.tv's importer without disconnecting it
+      first or paying for VIP. A file-upload import sidesteps that
+      entirely.\
+      **Scoped deliberately in two passes** rather than guessing at
+      unverified shapes: the first investigation (James's own export,
+      11,261 history items) found the per-type ratings files and the
+      watchlist file empty (James hadn't used either Trakt feature), so
+      the first build shipped history + dropped shows only, verified
+      against that real data, with ratings/watchlist explicitly deferred
+      rather than built against a guessed shape. James then added real
+      ratings and watchlist entries on trakt.tv and re-exported; that
+      second export confirmed the ratings/watchlist files match
+      `TraktRatingItem`/`TraktWatchlistItem` field-for-field (plus a few
+      harmless extra fields — `rank`, `id`, `notes`, `my_rating` on
+      watchlist entries — already ignored, same convention as history's
+      extra `plex`/`aired_episodes` fields), so ratings/watchlist support
+      was added the same session.\
+      **Architecture**: refactored the OAuth importer
+      (`apps/api/src/import/trakt.ts`) so its paging/matching engine
+      (`runImportJob`) is shared between both entry points rather than
+      duplicated — `runTraktImport` (OAuth) and the new
+      `runTraktZipImport` each only supply a `PageFetcher` (Trakt API
+      pages vs. slices of an already-parsed export), while dedup,
+      backfill, and failure tracking are identical either way. New
+      `apps/api/src/import/trakt-zip-parse.ts` unzips the export (via
+      `fflate`) and concatenates the numbered `watched-history-*.json`
+      shards plus the four ratings files. New plain (non-`.openapi()`)
+      route `POST /import/trakt/zip` (multipart upload, same convention as
+      `PUT /auth/me/avatar`) — deliberately not gated behind
+      `requireTraktConfigured`, since the whole point is working without
+      an OAuth app configured on the instance at all. `import_jobs.source`
+      gained a `trakt_zip` enum value (migration 0019) so
+      `apps/api/src/index.ts`'s server-restart job recovery can tell the
+      two apart: an OAuth job resumes from its Trakt-side cursor as
+      before, but a ZIP job caught `running` mid-flight is marked
+      `failed` (asking the user to re-upload) rather than resumed, since
+      the parsed export only ever lived in that one request's memory, not
+      persisted anywhere.\
+      **UI**: `TraktZipImportCard.tsx` added alongside the existing
+      `TraktConnectCard.tsx` on `ImportPage.tsx`, shown even when
+      `!traktConfigured`. James asked for the two cards to read as
+      consistent, parallel options rather than differently-shaped UI —
+      final shape: each card leads with a description, then an unlabeled
+      "set up the source" step (Connect account / Choose file), then a
+      divider, then a "Start an import" step with matching phrasing
+      ("Choose what to bring in from Trakt"/"...from the file. Re-running
+      an import is safe — it won't create duplicates.") and the same four
+      checkboxes where applicable. The file card's "Start an import" step
+      stays hidden until a file is actually chosen, matching the OAuth
+      card's own "hidden until connected" behaviour.\
+      **Verified against real data, twice**, via a throwaway account on
+      `dev.rwnd.tv` each time (never against James's own real account
+      data) — first pass: 11,410 real items (11,261 history + 149
+      dropped), 11,392 imported, 16 genuine failures, ~3m15s; second pass
+      (ratings/watchlist added): 11,426 items, all 7 real episode ratings
+      and all 5 real watchlist entries landed correctly (checked directly
+      via `psql`). Full 255-test API suite passing throughout, including
+      8 new ZIP-specific tests (success, malformed/missing file, size
+      cap, 409-on-concurrent-job, idempotent re-upload, include toggles,
+      cross-user access). Each throwaway test account was deleted by
+      James afterward, since importing his real data into a scratch
+      account for testing purposes isn't something to leave lying
+      around.\
+      **Found along the way, both now documented rather than fixed**:
+      (1) Trakt's dropped-shows data can be _season-level_, not just
+      whole-show (e.g. hiding just one season of "Doctor Who" separately
+      from another) — `droppedShows`'s schema has no per-season concept,
+      so these report cleanly as "Season-level entries are not yet
+      supported" failures rather than crashing or misapplying; fixing the
+      misleading old wording ("...ratings/watchlist entries...", from
+      when `matchTraktMediaItem` only served those two phases) was a
+      quick follow-up once the dropped phase started hitting the same
+      code path. (2) Comparing the same real Trakt account's dropped-show
+      count between the OAuth path (99 shows) and the ZIP path (138
+      shows, on a fresh account, re-confirmed with a second live OAuth
+      re-import an hour later — still 99, ruling out a timing artifact)
+      surfaced that the live `GET /users/hidden/dropped` endpoint silently
+      omits a large, stable set of genuinely-still-dropped shows. A web
+      search turned up a Trakt forum thread reporting the exact same
+      behaviour (reproduced live by another user, staff-acknowledged,
+      still unresolved as of its last reply) — confirmed as an external,
+      unfixed Trakt API bug rather than anything on rwnd.tv's side, so
+      left as a documented limitation rather than something to work
+      around.

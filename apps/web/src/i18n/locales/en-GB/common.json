@@ -473,6 +473,9 @@
     "loading": "Loading…",
     "cancel": "Cancel",
     "close": "Close",
-    "somethingWentWrong": "Something went wrong. Please try again."
+    "somethingWentWrong": "Something went wrong. Please try again.",
+    "today": "Today",
+    "yesterday": "Yesterday",
+    "tomorrow": "Tomorrow"
   }
 }

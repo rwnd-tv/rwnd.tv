@@ -120,6 +120,37 @@ export function clampDate(date: Date, min: Date | null, max: Date): Date {
   return date
 }
 
+/**
+ * Human-friendly label for a Dashboard tile's date caption (Continue
+ * Watching/Upcoming/History rows — OnDeckRow.tsx/UpNextRow.tsx/
+ * HistoryRow.tsx) — "Today"/"Yesterday"/"Tomorrow" in place of a bare
+ * day/month for the immediate cases (James, 2026-08-25). `weekdayWithinDays`
+ * is 0 by default (History/Continue Watching never show a date beyond
+ * today, so there's nothing for it to do); Upcoming passes 7, so a date
+ * more than a day out but still within the coming week renders as a
+ * weekday name ("Wednesday") rather than "27 Aug", falling back to the
+ * existing day/month format beyond that window.
+ */
+export function formatDashboardDate(
+  date: Date,
+  locale: string,
+  t: (key: string) => string,
+  weekdayWithinDays = 0,
+): string {
+  const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate())
+  const dayDiff = Math.round(
+    (startOfDay(date).getTime() - startOfDay(new Date()).getTime()) / 86_400_000,
+  )
+
+  if (dayDiff === 0) return t('common.today')
+  if (dayDiff === -1) return t('common.yesterday')
+  if (dayDiff === 1) return t('common.tomorrow')
+  if (weekdayWithinDays > 0 && dayDiff > 1 && dayDiff <= weekdayWithinDays) {
+    return date.toLocaleDateString(locale, { weekday: 'long' })
+  }
+  return date.toLocaleDateString(locale, { day: 'numeric', month: 'short' })
+}
+
 /** `YYYY-MM-DD` in local time, for a native `<input type="date">` value. */
 export function toDateInputValue(date: Date): string {
   const year = String(date.getFullYear()).padStart(4, '0')

@@ -2,7 +2,12 @@ import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../../lib/api-client.js'
 import { useAuth } from '../../lib/auth-context.js'
+import { formatDashboardDate } from '../../lib/date.js'
 import { PosterTile } from './PosterTile.js'
+
+/** Beyond Today/Tomorrow, an Upcoming date within this many days renders as
+ * a weekday name ("Wednesday") instead of "27 Aug" — James, 2026-08-25. */
+const UPCOMING_WEEKDAY_WINDOW_DAYS = 7
 import { RowSkeleton } from './RowSkeleton.js'
 
 /**
@@ -49,10 +54,12 @@ export function UpNextRow() {
               {t('dashboard.upNext.episodeLabel', {
                 season: show.seasonNumber,
                 episode: show.episodeNumber,
-                date: new Date(show.firstAired).toLocaleDateString(locale, {
-                  day: 'numeric',
-                  month: 'short',
-                }),
+                date: formatDashboardDate(
+                  new Date(show.firstAired),
+                  locale,
+                  t,
+                  UPCOMING_WEEKDAY_WINDOW_DAYS,
+                ),
               })}
             </p>
           </PosterTile>

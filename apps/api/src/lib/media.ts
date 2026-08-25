@@ -377,17 +377,22 @@ export async function findNextUnwatchedEpisode(
 }
 
 /**
- * The next *upcoming* (not yet aired) episode of a show a user is
- * following, from `startSeasonNumber` onward — or null if nothing's
+ * The next *upcoming* (not yet available to watch) episode of a show a user
+ * is following, from `startSeasonNumber` onward — or null if nothing's
  * scheduled yet. Powers the Dashboard's Up Next row
- * (apps/api/src/routes/library.ts). No watched-status check needed here,
- * unlike findNextUnwatchedEpisode above: an episode that hasn't aired yet
- * can't have a logged watch (POST /plays rejects one — see plays.ts),
- * so every unaired episode already qualifies.
+ * (apps/api/src/routes/library.ts). Includes an episode airing *today*
+ * (`firstAired` is date-only, with no time-of-day — see schema.ts — so
+ * "today" is the earliest point the app can call an episode available at
+ * all, same convention findNextUnwatchedEpisode/`POST /plays` already use
+ * for the opposite question of what's loggable), which means, unlike a
+ * strictly-future episode, it *can* already have a logged watch — so this
+ * needs the same watched-status check findNextUnwatchedEpisode does, unlike
+ * before this included today.
  */
 export async function findNextAiringEpisode(
   db: Database,
   provider: MetadataProvider,
+  userId: string,
   showId: string,
   showExternalId: string,
   startSeasonNumber: number,
@@ -400,17 +405,35 @@ export async function findNextAiringEpisode(
     .orderBy(seasons.seasonNumber)
 
   const now = new Date()
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
 
   for (const { seasonNumber } of seasonRows) {
     const resolved = await resolveSeason(db, provider, showId, showExternalId, seasonNumber, locale)
     if (resolved.length === 0) continue
+
+    const watchedIds = new Set(
+      (
+        await db
+          .select({ episodeId: plays.episodeId })
+          .from(plays)
+          .where(
+            and(
+              eq(plays.userId, userId),
+              inArray(
+                plays.episodeId,
+                resolved.map((e) => e.id),
+              ),
+            ),
+          )
+      ).map((row) => row.episodeId),
+    )
 
     const next = resolved
       .slice()
       .sort((a, b) => a.episodeNumber - b.episodeNumber)
       .find(
         (e): e is ResolvedEpisode & { firstAired: string } =>
-          e.firstAired !== null && new Date(e.firstAired) > now,
+          e.firstAired !== null && new Date(e.firstAired) >= startOfToday && !watchedIds.has(e.id),
       )
     if (next)
       return { seasonNumber, episodeNumber: next.episodeNumber, firstAired: next.firstAired }

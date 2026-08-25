@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../../lib/api-client.js'
 import { useAuth } from '../../lib/auth-context.js'
+import { formatDashboardDate } from '../../lib/date.js'
 import { PosterTile } from './PosterTile.js'
 import { RowSkeleton } from './RowSkeleton.js'
 
@@ -58,10 +59,7 @@ export function OnDeckRow() {
               {t('dashboard.onDeck.episodeLabel', {
                 season: show.seasonNumber,
                 episode: show.episodeNumber,
-                date: new Date(show.firstAired).toLocaleDateString(locale, {
-                  day: 'numeric',
-                  month: 'short',
-                }),
+                date: formatDashboardDate(new Date(show.firstAired), locale, t),
               })}
             </p>
           </PosterTile>

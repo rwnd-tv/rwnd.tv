@@ -131,6 +131,76 @@ Format:
       whether a re-uploaded newer export should merge with or replace
       a previous ZIP-sourced import.
 
+## Metadata
+
+- [ ] **`seasons.airedEpisodeCount` can be wrong for the currently-airing season** (2026-08-25 15:39 added)\
+      Found live: Silo's Season 3 row has `aired_episode_count = 10`
+      (i.e. "fully aired") while Episode 10 itself actually airs
+      2026-09-03 — still in the future. Likely cause, from
+      `refreshOneShow` (`apps/api/src/metadata/refresh.ts:266-303`):
+      it treats whichever season has the highest `seasonNumber` in the
+      provider's own season list as "the latest, possibly-still-airing
+      one" and only does the extra per-episode fetch for that one —
+      every other season gets `airedEpisodeCount = episodeCount`
+      outright, on the assumption that a past season "has necessarily
+      aired in full." That assumption breaks if TMDB has already listed
+      an announced-but-empty future season (Silo's own `seasons` table
+      has a Season 4 row with `episode_count = 0`, `air_date` null) —
+      that placeholder becomes `latestSeasonNumber` instead of the
+      actually-still-airing Season 3, so Season 3 falls into the
+      "must be fully aired" branch even though it isn't. Not yet
+      confirmed against the real TMDB response shape (whether an
+      announced-but-dateless season is really what's throwing this
+      off, or something else) — worth checking directly against the
+      provider before changing the logic itself.\
+      User-facing effect: a show in exactly this state won't appear on
+      the Dashboard's Upcoming row for its true next episode, and (per
+      the doc comment on `airedEpisodes` in `showDetailSchema`) the show
+      page's own aired-episode count would read wrong too.
+
+- [ ] **Per-episode data is never resolved proactively — only as a side effect of specific actions** (2026-08-25 15:42 added)\
+      James: concerned that episode-level data only shows up once
+      someone happens to look at the season page. Actually worse than
+      that, found while investigating: viewing a season/episode page
+      doesn't persist anything at all — `GET /library/shows/{slug}/seasons/{seasonNumber}`
+      (`apps/api/src/routes/library.ts`) fetches straight from the
+      provider to render the page and throws that away once the
+      response is sent. The _only_ thing that ever writes a row into
+      the local `episodes` table is `resolveSeason()`
+      (`apps/api/src/lib/media.ts`), and that only runs from: the
+      show/season page's "Mark watched" bulk actions
+      (`resolveShowEpisodes`/`resolveSeasonEpisodes`), Continue
+      Watching/Upcoming's own next-episode lookup (`findNextUnwatchedEpisode`/
+      `findNextAiringEpisode` — themselves gated behind the 30-day
+      recency window, see `DASHBOARD_ROW_WINDOW_DAYS`), or Trakt import
+      matching. The background metadata refresher
+      (`refreshOneShow`, same file as the bug above) doesn't call it
+      either — it fetches the latest season's episode list from the
+      provider just to compute a count for `airedEpisodeCount`, then
+      discards the actual episodes.\
+      Net effect: a show nobody's interacted with recently — outside
+      the 30-day window, no "Watched" button pressed, no import — never
+      gets its per-episode data saved locally at all, no matter how long
+      it's been out or how many times its pages get viewed. Confirmed
+      live: Silo Season 3 (see the bug above) had zero rows in
+      `episodes` even right after loading its episode detail page,
+      which had rendered the correct air date by fetching it live.\
+      Wants the background refresher to proactively resolve (persist,
+      not just fetch-and-discard) episode data for at least the
+      currently-airing season of any show whose status is still
+      airing, on the same sweep `refreshOneShow` already runs — likely
+      by having it call `resolveSeason()` (or equivalent) instead of
+      `provider.getSeason()` directly. Worth doing together with the
+      `airedEpisodeCount` bug above: if real per-episode `firstAired`
+      rows exist locally, `airedEpisodeCount` could be computed from
+      them directly instead of the current "assume every season but the
+      detected latest one is fully aired" heuristic, which is what's
+      actually wrong there. Exact scope still open — every season of
+      every show a self-hoster might have watched once, long ago, is a
+      lot more provider traffic than just the currently-airing one;
+      needs a design pass on how far to proactively resolve versus
+      leaving older/finished shows lazy as they are today.
+
 ## Auth & accounts
 
 - [ ] **Passkey (WebAuthn) support** (2026-08-23 15:45 added)\

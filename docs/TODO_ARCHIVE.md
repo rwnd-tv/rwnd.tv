@@ -1137,6 +1137,44 @@ currently-dropped shows, since a row can have both
       the fix: all three rows occupy their final position from first
       paint, nothing moves as each resolves into real content.
 
+- [x] **Upcoming row excluded today's episodes, and human-friendly relative dates** (2026-08-25 added and done)\
+      James noticed Upcoming looked like it only ever showed episodes from
+      tomorrow onward, never today's — correct: `findNextAiringEpisode`
+      (`apps/api/src/lib/media.ts`) compared an episode's date-only
+      `firstAired` (see `schema.ts` — no time-of-day) against the current
+      _instant_, so "today" parsed as midnight today, which is never
+      later than "now" once any time has passed. Fixed by comparing
+      against the start of today instead. That alone would have let an
+      already-watched today's episode keep showing as "upcoming" though
+      — unlike a strictly-future episode, today's can already have a
+      logged watch (`POST /plays`/`findNextUnwatchedEpisode` both already
+      treat "today" as watchable) — so `findNextAiringEpisode` picked up
+      the same watched-status exclusion `findNextUnwatchedEpisode` already
+      had, which needed threading `userId` through to it from
+      `GET /library/up-next`.\
+      Same session, James's follow-up idea: replace the bare "24 Aug"-
+      style date on the Dashboard's Continue Watching/Upcoming/History
+      tiles with "Yesterday"/"Today"/"Tomorrow" where applicable, and,
+      just for Upcoming, a weekday name ("Wednesday") for a date more
+      than a day out but still within the coming week, falling back to
+      the existing day/month format beyond that. New
+      `formatDashboardDate()` (`apps/web/src/lib/date.ts`) — a day-diff
+      against local midnight, `Today`/`Yesterday`/`Tomorrow` from new
+      `common.today`/`yesterday`/`tomorrow` i18n keys, an optional
+      `weekdayWithinDays` window (0 for History/Continue Watching, which
+      never show a future date; 7 for Upcoming) for the weekday case —
+      used by all three row components (`HistoryRow.tsx`, `OnDeckRow.tsx`,
+      `UpNextRow.tsx`) in place of their previously-duplicated inline
+      `toLocaleDateString` call.\
+      Verified live on dev.rwnd.tv, both pieces together: Upcoming now
+      shows two shows' next episodes dated "Today", one "Tomorrow", one
+      two days out correctly as "Thursday", and one ten days out correctly
+      still as "4 Sept" (past the 7-day window); History correctly shows
+      "Today"/"Yesterday" for today's and yesterday's plays and falls back
+      to "24 Aug"-style dates further back; Continue Watching, unaffected
+      by the weekday window, still falls back to the day/month format for
+      its (always past, often more-than-a-day-old) dates.
+
 ## Movies
 
 - [x] **Bring Movies up to parity with TV Shows, where appropriate — Phase 1** (2026-08-23 15:05 added, done 2026-08-23)\

@@ -581,6 +581,7 @@ libraryRoutes.openapi(
       const next = await findNextAiringEpisode(
         db,
         candidate.provider,
+        user.id,
         candidate.id,
         candidate.providerExternalId,
         candidate.maxWatchedSeason ?? 1,

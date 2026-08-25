@@ -3,6 +3,7 @@ import { Link } from 'react-router'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../../lib/api-client.js'
 import { useAuth } from '../../lib/auth-context.js'
+import { formatDashboardDate } from '../../lib/date.js'
 import { PosterTile } from './PosterTile.js'
 import { RowSkeleton } from './RowSkeleton.js'
 
@@ -56,10 +57,7 @@ export function HistoryRow() {
             : play.media.showSlug
               ? `/shows/${play.media.showSlug}/season/${play.media.seasonNumber}/episode/${play.media.episodeNumber}`
               : undefined
-          const watchedDate = new Date(play.watchedAt).toLocaleDateString(locale, {
-            day: 'numeric',
-            month: 'short',
-          })
+          const watchedDate = formatDashboardDate(new Date(play.watchedAt), locale, t)
 
           return (
             <PosterTile

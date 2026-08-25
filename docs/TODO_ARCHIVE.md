@@ -695,6 +695,47 @@ currently-dropped shows, since a row can have both
       backup in the list untouched, and confirming actually deletes it
       and refreshes the list.
 
+- [x] **Profile pictures** (2026-08-24 21:15 added, done 2026-08-25) — M2\
+      James's ask, from real multi-account use (switching between his own
+      "James Bulman" account and the managed-user "Carol Bulman" account
+      while testing Plex webhook attribution): easy to lose track of
+      which account you're currently on with nothing but a display name
+      in the sidebar/settings to go on.\
+      Design pass, James's picks: upload (not generated-only), stored as
+      raw bytes directly in `users.avatar_image`/`avatar_mime_type`/
+      `avatar_updated_at` (new nullable `bytea`/`text`/`timestamptz`
+      columns) rather than a new `BACKUP_DIR`-style volume-mounted
+      directory — no new env var, no new bind mount, nothing to configure
+      for a self-hoster. 2MB/JPEG-PNG-WebP cap decided unilaterally (no
+      image-processing dependency in this codebase to resize/compress
+      instead), stated plainly rather than asked about.\
+      Three new plain (non-`.openapi()`) routes on `auth.ts`, same
+      reasoning as `webhooks.ts`'s existing Plex route: `PUT /auth/me/avatar`
+      (multipart, `c.req.parseBody()`), `DELETE /auth/me/avatar`, and
+      `GET /auth/me/avatar` (streams the bytes with the stored
+      Content-Type, `Cache-Control: immutable` — safe since the frontend
+      always requests it through a `?v=avatarUpdatedAt`-suffixed URL, so a
+      new upload is a new URL rather than a stale cache hit). `userSchema`
+      only ever carries `avatarUpdatedAt`, never the bytes/mimetype
+      themselves — it's both the "has an avatar?" flag and the cache-bust
+      key.\
+      New `Avatar.tsx` (Sidebar.tsx + ProfileForm.tsx) renders the
+      uploaded image when set, otherwise a generated fallback — same "no
+      image → fall back to something derived from the title/name" shape
+      as `PosterTile.tsx`'s poster fallback, but circular (not
+      `PosterTile`'s fixed 2:3) and with a colour drawn from a small
+      curated palette (hashed from the user's id) rather than
+      `PosterTile`'s always-the-same grey, since the colour is itself part
+      of what makes two accounts distinguishable at a glance. Sidebar.tsx
+      had no user-identity element at all before this — added a new row
+      above the main nav list (avatar + display name, linking to
+      Settings), collapsing to just the avatar circle when the sidebar's
+      collapsed to its icon rail.\
+      Verified live on `dev.rwnd.tv`: uploaded a real image, saw it appear
+      immediately in both Settings and the Sidebar (including the
+      collapsed icon-rail state) once the query invalidated, removed it
+      and confirmed both fell back cleanly to the initials avatar.
+
 ## TV Show pages
 
 - [x] **Previous/next season navigation on the season page** (2026-08-21 23:00 added)\

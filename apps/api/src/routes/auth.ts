@@ -209,3 +209,77 @@ authRoutes.openapi(
     return c.json(serializeUser(updated), 200)
   },
 )
+
+/** 2MB — generous for a profile photo (most phone camera apps' own
+ * "share"/messaging-size export already lands well under this) without
+ * risking an unbounded row in `users.avatar_image`. No resizing/compression
+ * happens server-side (no image-processing dependency in this codebase),
+ * so this is the only real cap on stored size. */
+const MAX_AVATAR_BYTES = 2 * 1024 * 1024
+const ALLOWED_AVATAR_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp'])
+
+/**
+ * Plain routes, not `.openapi()` — same reasoning as
+ * `apps/api/src/routes/webhooks.ts`'s Plex route: a `multipart/form-data`
+ * upload and a raw-binary response don't fit the typed-JSON-body/response
+ * convention every other route here uses.
+ */
+authRoutes.put('/auth/me/avatar', requireAuth, async (c) => {
+  let form: Awaited<ReturnType<typeof c.req.parseBody>>
+  try {
+    form = await c.req.parseBody()
+  } catch {
+    return c.json({ error: 'Malformed request body' }, 400)
+  }
+  const file = form.file
+  if (!(file instanceof File)) {
+    return c.json({ error: 'Missing file field' }, 400)
+  }
+  if (!ALLOWED_AVATAR_TYPES.has(file.type)) {
+    return c.json({ error: 'Unsupported image type — use JPEG, PNG, or WebP' }, 400)
+  }
+  if (file.size > MAX_AVATAR_BYTES) {
+    return c.json({ error: 'Image is too large — 2MB maximum' }, 400)
+  }
+
+  const db = c.get('db')
+  const buffer = Buffer.from(await file.arrayBuffer())
+  const [updated] = await db
+    .update(users)
+    .set({ avatarImage: buffer, avatarMimeType: file.type, avatarUpdatedAt: new Date() })
+    .where(eq(users.id, c.get('user')!.id))
+    .returning()
+  if (!updated) throw new Error('Failed to update user')
+  return c.json(serializeUser(updated), 200)
+})
+
+authRoutes.delete('/auth/me/avatar', requireAuth, async (c) => {
+  const db = c.get('db')
+  const [updated] = await db
+    .update(users)
+    .set({ avatarImage: null, avatarMimeType: null, avatarUpdatedAt: null })
+    .where(eq(users.id, c.get('user')!.id))
+    .returning()
+  if (!updated) throw new Error('Failed to update user')
+  return c.json(serializeUser(updated), 200)
+})
+
+authRoutes.get('/auth/me/avatar', requireAuth, async (c) => {
+  const db = c.get('db')
+  const [row] = await db
+    .select({ avatarImage: users.avatarImage, avatarMimeType: users.avatarMimeType })
+    .from(users)
+    .where(eq(users.id, c.get('user')!.id))
+    .limit(1)
+  if (!row?.avatarImage || !row.avatarMimeType) {
+    return c.json({ error: 'No avatar set' }, 404)
+  }
+  // Safe to cache aggressively: the frontend always requests this through
+  // a `?v=avatarUpdatedAt`-suffixed URL (Avatar.tsx), so a new upload is a
+  // new URL, never a stale cache hit.
+  c.header('Content-Type', row.avatarMimeType)
+  c.header('Cache-Control', 'private, max-age=31536000, immutable')
+  // Node's Buffer (ArrayBufferLike-backed) isn't assignable to Hono's
+  // Data type (Uint8Array<ArrayBuffer>-backed) — copy into a plain one.
+  return c.body(Uint8Array.from(row.avatarImage))
+})

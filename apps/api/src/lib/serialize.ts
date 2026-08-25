@@ -12,6 +12,7 @@ export function serializeUser(user: UserRecord): User {
     spoilerProtectionEnabled: user.spoilerProtectionEnabled,
     onDeckFillGaps: user.onDeckFillGaps,
     role: user.role,
+    avatarUpdatedAt: user.avatarUpdatedAt?.toISOString() ?? null,
     createdAt: user.createdAt.toISOString(),
   }
 }

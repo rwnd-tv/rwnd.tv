@@ -56,10 +56,13 @@ export class ApiError extends Error {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  // A FormData body needs the browser to set its own multipart boundary in
+  // Content-Type — forcing 'application/json' here would break that.
+  const isFormData = init?.body instanceof FormData
   const res = await fetch(`/api/v1${path}`, {
     ...init,
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json', ...init?.headers },
+    headers: isFormData ? init?.headers : { 'Content-Type': 'application/json', ...init?.headers },
   })
 
   if (res.status === 204) return undefined as T
@@ -78,6 +81,7 @@ const patch = <T>(path: string, body: unknown) =>
   request<T>(path, { method: 'PATCH', body: JSON.stringify(body) })
 const del = <T>(path: string, body?: unknown) =>
   request<T>(path, { method: 'DELETE', body: body ? JSON.stringify(body) : undefined })
+const putForm = <T>(path: string, form: FormData) => request<T>(path, { method: 'PUT', body: form })
 
 export const api = {
   account: {
@@ -102,6 +106,17 @@ export const api = {
     logout: () => post<void>('/auth/logout'),
     me: () => get<User>('/auth/me'),
     updateMe: (body: UpdateProfileRequest) => patch<User>('/auth/me', body),
+    uploadAvatar: (file: File) => {
+      const form = new FormData()
+      form.set('file', file)
+      return putForm<User>('/auth/me/avatar', form)
+    },
+    deleteAvatar: () => del<User>('/auth/me/avatar'),
+    /** Not fetched through api-client's own request() — this is used
+     * directly as an <img> src, so it needs a plain URL rather than a
+     * function that awaits a parsed JSON body. */
+    avatarUrl: (avatarUpdatedAt: string) =>
+      `/api/v1/auth/me/avatar?v=${encodeURIComponent(avatarUpdatedAt)}`,
   },
   tokens: {
     list: () => get<{ tokens: ApiToken[] }>('/tokens'),

@@ -1,10 +1,11 @@
 import type { ReactNode } from 'react'
-import { NavLink } from 'react-router'
+import { Link, NavLink } from 'react-router'
 import { useTranslation } from 'react-i18next'
 import { useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../lib/auth-context.js'
 import { api } from '../lib/api-client.js'
 import { usePublicSettings } from '../lib/use-public-settings.js'
+import { Avatar } from './Avatar.js'
 import {
   DashboardIcon,
   HistoryIcon,
@@ -118,6 +119,22 @@ export function Sidebar({ collapsed, onNavigate }: { collapsed: boolean; onNavig
           : 'fixed left-0 top-16 z-30 flex h-[calc(100dvh-4rem)] w-56 flex-shrink-0 flex-col border-r border-[var(--color-border)] bg-[var(--color-bg)] transition-[width] duration-200 sm:sticky sm:z-auto'
       }
     >
+      {/* Which account is active — James's ask from real multi-account use
+          (switching between his own account and a managed "Carol Bulman"
+          account while testing Plex webhook attribution): nothing here
+          showed identity at all before this, so it was easy to lose track
+          of which account a shared browser was currently on. Links to
+          Settings (ProfileForm.tsx), where the avatar itself is changed. */}
+      {user && (
+        <Link
+          to="/settings"
+          title={collapsed ? user.displayName : undefined}
+          className="flex items-center gap-3 border-b border-[var(--color-border)] px-3.5 py-3 text-sm font-medium hover:bg-[var(--color-surface)]"
+        >
+          <Avatar user={user} size={32} />
+          {!collapsed && <span className="min-w-0 truncate">{user.displayName}</span>}
+        </Link>
+      )}
       <ul className="flex flex-1 flex-col gap-1 overflow-y-auto px-2 py-2">
         <SidebarLink
           to="/dashboard"

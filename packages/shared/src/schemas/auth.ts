@@ -50,6 +50,10 @@ export const userSchema = z.object({
    * right after the latest one watched, not an earlier skipped one. */
   onDeckFillGaps: z.boolean(),
   role: userRoleSchema,
+  /** Null if no avatar is set. Never the image bytes/mimetype themselves —
+   * just enough to build the image URL (GET /auth/me/avatar) and cache-bust
+   * it after a new upload. */
+  avatarUpdatedAt: z.string().datetime().nullable(),
   createdAt: z.string().datetime(),
 })
 export type User = z.infer<typeof userSchema>

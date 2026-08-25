@@ -28,6 +28,15 @@ const citext = customType<{ data: string }>({
   },
 })
 
+/** Raw binary, for an uploaded profile picture (users.avatarImage) — stored
+ * inline rather than on a volume-mounted directory (unlike BACKUP_DIR), so
+ * self-hosting an avatar needs no new env var or bind mount. */
+const bytea = customType<{ data: Buffer }>({
+  dataType() {
+    return 'bytea'
+  },
+})
+
 // ---------------------------------------------------------------------------
 // Enums
 // ---------------------------------------------------------------------------
@@ -72,6 +81,17 @@ export const users = pgTable('users', {
    * watching it strictly in order. */
   onDeckFillGaps: boolean('on_deck_fill_gaps').notNull().default(false),
   role: userRoleEnum('role').notNull().default('user'),
+  // Uploaded profile picture — all three null until one is uploaded, all
+  // three cleared together on removal (apps/api/src/routes/auth.ts). No
+  // resizing/compression on upload (no image-processing dependency in this
+  // codebase yet); `POST /auth/me/avatar` caps the raw upload size instead.
+  // avatarMimeType is what the serving route sends as Content-Type;
+  // avatarUpdatedAt is what the frontend uses both as a "has an avatar?"
+  // flag (via serializeUser, which never sends the bytes/mimetype
+  // themselves) and as a cache-busting query param on the image URL.
+  avatarImage: bytea('avatar_image'),
+  avatarMimeType: text('avatar_mime_type'),
+  avatarUpdatedAt: timestamp('avatar_updated_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 })
 

@@ -316,6 +316,11 @@
     "title": "Settings",
     "profile": {
       "title": "Profile",
+      "avatar": "Photo",
+      "avatarUpload": "Upload photo",
+      "avatarRemove": "Remove",
+      "avatarInvalidType": "Unsupported image type — use JPEG, PNG, or WebP.",
+      "avatarTooLarge": "Image is too large — 2MB maximum.",
       "displayName": "Display name",
       "locale": "Language",
       "theme": "Theme",

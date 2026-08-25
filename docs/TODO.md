@@ -81,7 +81,7 @@ Format:
 
 ## Import
 
-- [ ] **Build ZIP-upload import from Trakt's own "Export now" file** (2026-08-24 22:50 added, investigated 2026-08-24)\
+- [ ] **Build ZIP-upload import from Trakt's own "Export now" file** (2026-08-24 22:50 added, investigated 2026-08-24) — M2\
       James's idea, from researching Trakt's free-vs-VIP situation:
       Settings > Data > "Export now" on trakt.tv gives any account
       (free or VIP — confirmed not gated) a ZIP of separate JSON files,
@@ -133,18 +133,6 @@ Format:
 
 ## Auth & accounts
 
-- [ ] **Profile pictures** (2026-08-24 21:15 added)\
-      James's ask, from real multi-account use (switching between his own
-      "James Bulman" account and the managed-user "Carol Bulman" account
-      while testing Plex webhook attribution): easy to lose track of which
-      account you're currently on with nothing but a display name in the
-      sidebar/settings to go on. An avatar (uploaded image, or at least a
-      generated fallback — initials/color, matching the poster-fallback
-      convention the gallery already uses for a show/movie with no poster)
-      shown in the sidebar and Settings would make the active account
-      obvious at a glance. Needs a design pass: upload vs. generated-only
-      for v1, where the image is stored (a new `BACKUP_DIR`-style optional
-      volume, or inline in Postgres), and any size/type limits.
 - [ ] **Passkey (WebAuthn) support** (2026-08-23 15:45 added)\
       Another `user_credentials` adapter type alongside `local`/`oidc`
       (see [ADR 0003](adr/0003-auth-model.md)) — sign in/register with a
@@ -152,7 +140,7 @@ Format:
       naturally with the OIDC login item below since both plug into the
       same credentials schema, but it's its own protocol (WebAuthn, no
       external identity provider or redirect involved).
-- [ ] **"Forgot password" / account recovery** (2026-08-23 15:46 added)\
+- [ ] **"Forgot password" / account recovery** (2026-08-23 15:46 added) — M2\
       No password-reset flow exists for local accounts today — a locked-
       out user has no self-service way back in. Needs outbound email
       (nothing sends email yet) and a reset-token flow. Not related to

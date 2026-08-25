@@ -38,6 +38,19 @@ jobs:
       TRAKT_CLIENT_ID: ci-placeholder-client-id
       TRAKT_CLIENT_SECRET: ci-placeholder-client-secret
       ENCRYPTION_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+      # Not a real relay — every test's user-creation helper goes through
+      # POST /setup or /auth/register (see apps/api/src/test/helpers.ts),
+      # both of which now require SMTP to be configured at all (2026-08-25,
+      # see docs/TODO_ARCHIVE.md). localhost with nothing listening gives
+      # an immediate ECONNREFUSED rather than a real host's slower connect
+      # timeout, so the one code path that does try to send (registration's
+      # best-effort verification email) fails fast inside its own try/catch
+      # instead of risking a hang.
+      SMTP_HOST: localhost
+      SMTP_USER: ci
+      SMTP_PASS: ci-placeholder
+      SMTP_FROM: rwnd.tv <ci@example.com>
+      APP_URL: http://localhost:3000
 
     steps:
       - uses: actions/checkout@v7

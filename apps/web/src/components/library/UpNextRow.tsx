@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { api } from '../../lib/api-client.js'
 import { useAuth } from '../../lib/auth-context.js'
 import { PosterTile } from './PosterTile.js'
+import { RowSkeleton } from './RowSkeleton.js'
 
 /**
  * Dashboard's "coming up" row (DashboardPage.tsx) — one card per show the
@@ -13,9 +14,9 @@ import { PosterTile } from './PosterTile.js'
  * something upcoming at the same time, so a show can appear in both rows
  * at once rather than this one excluding whatever On Deck already covers.
  *
- * Same "renders nothing, not even its own heading, while loading or with
- * zero shows" and horizontal-scroll-row shape as OnDeckRow.tsx, for the
- * same reasons — see that component's doc comment. Also an `<h1>`, same as
+ * Same RowSkeleton.tsx-while-loading, renders-nothing-once-empty, and
+ * horizontal-scroll-row shape as OnDeckRow.tsx, for the same reasons — see
+ * that component's doc comment. Also an `<h1>`, same as
  * that row (James, 2026-08-23) — neither row is really "the" page title
  * over the other, they're peers, so the Dashboard just has two.
  */
@@ -28,7 +29,8 @@ export function UpNextRow() {
     queryFn: () => api.library.upNext(),
   })
 
-  if (isLoading || !data || data.shows.length === 0) return null
+  if (isLoading || !data) return <RowSkeleton />
+  if (data.shows.length === 0) return null
 
   return (
     <div className="flex flex-col gap-3">

@@ -18,26 +18,6 @@ Format:
       `typescript-eslint` doesn't support TS 7 yet; leave any TS 7.0
       Dependabot bump open until it does.
 
-## Dashboard
-
-- [ ] **Loading-order layout shift on Dashboard** (2026-08-24 22:35 added)\
-      James's observation, live: History appears at the top of the page
-      first, then gets shoved down a moment later once Continue Watching
-      and Upcoming pop in above it. Root cause is in `DashboardPage.tsx`'s
-      three row components (`OnDeckRow.tsx`, `UpNextRow.tsx`,
-      `HistoryRow.tsx`) — each deliberately `return null`s while its own
-      query is loading or empty (see their shared doc comment), and
-      `GET /plays` (History's query) is a plain single-table read that
-      resolves much faster than `/library/on-deck`/`/up-next` (per-show
-      next-episode resolution, `findNextUnwatchedEpisode`/
-      `findNextAiringEpisode` in `apps/api/src/lib/media.ts`), so History
-      routinely finishes first despite being rendered last in the JSX.
-      Needs a design call, not just a fetch-order tweak: reserve History's
-      final position with a skeleton/placeholder until all three rows
-      have settled, or hold the whole row group's render until every
-      query is done — either fixes the visible shift, but changes the
-      page's perceived load speed differently.
-
 ## TV Shows / Movies gallery follow-ups
 
 - [ ] **Virtualize the gallery grid if libraries grow** (2026-08-19 15:25)\

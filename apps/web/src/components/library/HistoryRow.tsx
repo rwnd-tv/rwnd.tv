@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { api } from '../../lib/api-client.js'
 import { useAuth } from '../../lib/auth-context.js'
 import { PosterTile } from './PosterTile.js'
+import { RowSkeleton } from './RowSkeleton.js'
 
 /** How many recent plays the Dashboard's History row shows — a horizontal
  * row, not the paginated History page (HistoryPage.tsx), so a fixed cap
@@ -21,9 +22,9 @@ const HISTORY_ROW_LIMIT = 8
  * endpoint HistoryPage.tsx pages through) rather than a new endpoint — it
  * already returns exactly this, newest first.
  *
- * Same "renders nothing, not even its own heading, while loading or with
- * zero plays" and horizontal-scroll-row shape as OnDeckRow.tsx/UpNextRow.tsx,
- * for the same reasons — see those components' doc comments.
+ * Same RowSkeleton.tsx-while-loading, renders-nothing-once-empty, and
+ * horizontal-scroll-row shape as OnDeckRow.tsx/UpNextRow.tsx, for the same
+ * reasons — see those components' doc comments.
  */
 export function HistoryRow() {
   const { t } = useTranslation()
@@ -34,7 +35,8 @@ export function HistoryRow() {
     queryFn: () => api.plays.list(undefined, HISTORY_ROW_LIMIT),
   })
 
-  if (isLoading || !data || data.plays.length === 0) return null
+  if (isLoading || !data) return <RowSkeleton />
+  if (data.plays.length === 0) return null
 
   return (
     <div className="flex flex-col gap-3">

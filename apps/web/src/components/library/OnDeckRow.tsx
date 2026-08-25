@@ -3,17 +3,19 @@ import { useQuery } from '@tanstack/react-query'
 import { api } from '../../lib/api-client.js'
 import { useAuth } from '../../lib/auth-context.js'
 import { PosterTile } from './PosterTile.js'
+import { RowSkeleton } from './RowSkeleton.js'
 
 /**
  * Dashboard's "continue watching" row (DashboardPage.tsx) — one card per
  * show the user watched in the last 30 days and hasn't finished, each
  * linking straight to the next episode they haven't seen yet (see
  * GET /library/on-deck's doc comment in apps/api/src/routes/library.ts for
- * how "next" is decided). Renders nothing at all — not even the "On Deck"
- * heading — while loading or once loaded with zero shows, rather than
- * showing an empty section: unlike the TV Shows/Movies gallery, there's no
- * "you don't have anything yet" empty state worth having here, since a
- * user with no recent activity just doesn't get this row. Its own heading
+ * how "next" is decided). Shows RowSkeleton.tsx while loading (see that
+ * component's doc comment for why), then renders nothing at all — not even
+ * the "On Deck" heading — once loaded with zero shows, rather than showing
+ * an empty section: unlike the TV Shows/Movies gallery, there's no "you
+ * don't have anything yet" empty state worth having here, since a user
+ * with no recent activity just doesn't get this row. Its own heading
  * doubles as a Dashboard page title (James: drop the generic "Dashboard"
  * h1 and promote this one instead) — DashboardPage.tsx has no h1 of its
  * own, so the page is titleless if both this and UpNextRow.tsx are empty
@@ -36,7 +38,8 @@ export function OnDeckRow() {
     queryFn: () => api.library.onDeck(),
   })
 
-  if (isLoading || !data || data.shows.length === 0) return null
+  if (isLoading || !data) return <RowSkeleton />
+  if (data.shows.length === 0) return null
 
   return (
     <div className="flex flex-col gap-3">

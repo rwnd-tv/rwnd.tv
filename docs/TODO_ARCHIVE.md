@@ -1037,6 +1037,28 @@ currently-dropped shows, since a row can have both
       show appearing in both rows at once with different episode numbers
       in each, confirming they really are independent.
 
+- [x] **Loading-order layout shift on Dashboard** (2026-08-24 22:35 added, done 2026-08-25)\
+      James's observation, live: History appeared at the top of the page
+      first, then got shoved down a moment later once Continue Watching
+      and Upcoming popped in above it — root cause was `OnDeckRow.tsx`/
+      `UpNextRow.tsx` returning `null` while loading (per-show
+      next-episode resolution is slow) while History's plain `GET /plays`
+      query resolved fast and rendered alone at the top, despite being
+      last in `DashboardPage.tsx`'s JSX.\
+      Done, James's pick between the two options this TODO left open:
+      skeleton placeholders (`RowSkeleton.tsx`) reserving each row's final
+      position from first paint, rather than holding the whole group's
+      render until every query settles. First pass under-reserved height
+      — one placeholder line below the poster box instead of two — since
+      `PosterTile.tsx` always renders both its own title `<h2>` and
+      whatever's passed as `children` (the caption every Dashboard row
+      uses), each separated by `PosterTile`'s own `gap-2`; James caught
+      the residual jump from a real before/after screenshot comparison on
+      dev.rwnd.tv, fixed by giving the skeleton two placeholder lines
+      matching that exact structure. Verified live on dev.rwnd.tv after
+      the fix: all three rows occupy their final position from first
+      paint, nothing moves as each resolves into real content.
+
 ## Movies
 
 - [x] **Bring Movies up to parity with TV Shows, where appropriate — Phase 1** (2026-08-23 15:05 added, done 2026-08-23)\

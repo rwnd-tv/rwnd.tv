@@ -32,17 +32,20 @@ import {
 } from './match.js'
 
 /**
- * Runs (or resumes) one Trakt import job to completion. Exported so tests
- * can `await` it directly instead of racing the fire-and-forget call the
- * route handler makes, and so apps/api/src/index.ts can resume a job that
- * was mid-flight when the process last stopped.
+ * Shared engine behind both `runTraktImport` (OAuth-connected account) and
+ * `runTraktZipImport` (uploaded "Export now" ZIP, docs/TODO.md) — matching,
+ * dedup, failure tracking, and cursor persistence are identical either way;
+ * the only thing that differs is *where a page of items for a given phase
+ * comes from*, captured in the `PageFetcher` type each entry point supplies
+ * its own implementation of, further down this file.
  *
  * Phases run in order history -> ratings -> watchlist -> dropped (history
  * first means the later phases mostly hit shows/episodes this job — or a
  * previous one — already resolved). Progress (counters + a {phase, page}
- * cursor) is
- * persisted after every page, which is both what drives the UI's progress
- * bar and what makes resuming after a restart possible.
+ * cursor) is persisted after every page, which is both what drives the UI's
+ * progress bar and what makes resuming after a restart possible (for the
+ * OAuth path — see runTraktZipImport's own doc comment for why that doesn't
+ * carry over to the ZIP path).
  */
 
 const PAGE_LIMIT = 1000
@@ -129,11 +132,27 @@ async function ensureFreshAccessToken(db: Database, env: Env, userId: string): P
   return token.access_token
 }
 
-export async function runTraktImport(
+/**
+ * Fetches one page of a phase's items, given the job's own userId (needed
+ * for the OAuth path's per-job access token) — the one thing that differs
+ * between "ask Trakt's API for page N" (`runTraktImport`, below) and "slice
+ * page N out of an already-fully-parsed export" (`runTraktZipImport`,
+ * further down). Everything else — matching, dedup, failure tracking,
+ * cursor persistence, cancellation — is identical either way and lives in
+ * `runImportJob`.
+ */
+type PageFetcher = (
+  userId: string,
+  phase: Phase,
+  page: number,
+  limit: number,
+) => Promise<PagedResult<TraktHistoryItem | TraktRatingItem | TraktWatchlistItem | TraktHiddenItem>>
+
+async function runImportJob(
   db: Database,
   metadataProviders: MetadataProvider[],
-  env: Env,
   jobId: string,
+  fetchPage: PageFetcher,
 ): Promise<void> {
   const job = await loadJob(db, jobId)
   if (!job || job.status === 'cancelled') return
@@ -354,20 +373,7 @@ export async function runTraktImport(
   async function runPhase(phase: Phase, fromPage: number): Promise<boolean> {
     let page = fromPage
     for (;;) {
-      const accessToken = await ensureFreshAccessToken(db, env, userId)
-      const client = new TraktClient({
-        apiBaseUrl: env.TRAKT_API_BASE_URL,
-        clientId: env.TRAKT_CLIENT_ID!,
-        accessToken,
-      })
-
-      let result: PagedResult<
-        TraktHistoryItem | TraktRatingItem | TraktWatchlistItem | TraktHiddenItem
-      >
-      if (phase === 'history') result = await client.getHistoryPage(page, PAGE_LIMIT)
-      else if (phase === 'ratings') result = await client.getRatingsPage(page, PAGE_LIMIT)
-      else if (phase === 'watchlist') result = await client.getWatchlistPage(page, PAGE_LIMIT)
-      else result = await client.getHiddenPage('dropped', page, PAGE_LIMIT)
+      const result = await fetchPage(userId, phase, page, PAGE_LIMIT)
 
       if (page === 1 && result.itemCount != null) {
         state.itemsTotal = (state.itemsTotal ?? 0) + result.itemCount
@@ -432,4 +438,73 @@ export async function runTraktImport(
       })
       .where(eq(importJobs.id, jobId))
   }
+}
+
+/**
+ * Runs (or resumes) one Trakt import job to completion via the OAuth-
+ * connected account's own API access — see runImportJob's doc comment for
+ * what's shared with runTraktZipImport below. Exported so tests can `await`
+ * it directly, and so apps/api/src/index.ts can resume a job that was
+ * mid-flight when the process last stopped.
+ */
+export async function runTraktImport(
+  db: Database,
+  metadataProviders: MetadataProvider[],
+  env: Env,
+  jobId: string,
+): Promise<void> {
+  const fetchPage: PageFetcher = async (userId, phase, page, limit) => {
+    const accessToken = await ensureFreshAccessToken(db, env, userId)
+    const client = new TraktClient({
+      apiBaseUrl: env.TRAKT_API_BASE_URL,
+      clientId: env.TRAKT_CLIENT_ID!,
+      accessToken,
+    })
+    if (phase === 'history') return client.getHistoryPage(page, limit)
+    if (phase === 'ratings') return client.getRatingsPage(page, limit)
+    if (phase === 'watchlist') return client.getWatchlistPage(page, limit)
+    return client.getHiddenPage('dropped', page, limit)
+  }
+  return runImportJob(db, metadataProviders, jobId, fetchPage)
+}
+
+/**
+ * Runs one ZIP-upload import job (docs/TODO.md's "ZIP-upload import from
+ * Trakt's own 'Export now' file") to completion, against `data` — already
+ * fully parsed by apps/api/src/import/trakt-zip-parse.ts before this is
+ * called. Unlike runTraktImport, there's no live Trakt API to resume a
+ * partway-through job from after a server restart (the parsed export isn't
+ * persisted anywhere) — see apps/api/src/index.ts's resumeInterruptedImports
+ * for how a `trakt_zip` job left `running` at that point is handled instead
+ * (failed, asking the user to re-upload, rather than resumed).
+ */
+export async function runTraktZipImport(
+  db: Database,
+  metadataProviders: MetadataProvider[],
+  jobId: string,
+  data: {
+    history: TraktHistoryItem[]
+    dropped: TraktHiddenItem[]
+    ratings: TraktRatingItem[]
+    watchlist: TraktWatchlistItem[]
+  },
+): Promise<void> {
+  const fetchPage: PageFetcher = async (_userId, phase, page, limit) => {
+    const items =
+      phase === 'history'
+        ? data.history
+        : phase === 'dropped'
+          ? data.dropped
+          : phase === 'ratings'
+            ? data.ratings
+            : data.watchlist
+    const start = (page - 1) * limit
+    return {
+      items: items.slice(start, start + limit),
+      page,
+      pageCount: Math.max(1, Math.ceil(items.length / limit)),
+      itemCount: items.length,
+    }
+  }
+  return runImportJob(db, metadataProviders, jobId, fetchPage)
 }

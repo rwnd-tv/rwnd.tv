@@ -131,6 +131,57 @@ Format:
       whether a re-uploaded newer export should merge with or replace
       a previous ZIP-sourced import.
 
+- [ ] **OAuth Trakt import's "dropped" phase returns far fewer shows than the ZIP export's equivalent file** (2026-08-25 23:15 added, confirmed reproducible 2026-08-25)\
+      Found while building/testing ZIP-upload import's ratings/watchlist
+      support against a real, populated Trakt export. The ZIP path's
+      dropped-shows phase reports some entries as unmatched ("Season-level
+      entries are not yet supported" — Trakt can hide just one season of a
+      show, e.g. Doctor Who S11 separately from S12, which `droppedShows`'s
+      whole-show-only model can't represent; see
+      `matchTraktMediaItem`'s doc comment in
+      `apps/api/src/import/match.ts`). Comparing dropped-show counts for
+      the same real Trakt account against two throwaway rwnd.tv accounts —
+      one imported via the live OAuth API (`runTraktImport`), one via a ZIP
+      export of the same account (`runTraktZipImport`) — surfaced a bigger
+      problem: the OAuth path (`GET /users/hidden/dropped`, per-account
+      settings) produced only 99 dropped shows and zero season-level
+      failures, while the ZIP export's `hidden-progress-watched.json`
+      produced 138 dropped shows plus 13 season-level failures. 59 shows
+      (Doctor Who, Attack on Titan, The Crown, Formula 1, RWBY, and more)
+      present in the export are simply absent from what the live API
+      returns — not just the season-level ones.\
+      **Confirmed not just a timing artifact:** the OAuth import
+      (`runTraktImport`) and the export were originally taken about 1.5
+      hours apart, raising the obvious "the account's drop list just
+      changed in between" explanation. Ruled out by re-running James's own
+      real OAuth import an hour later (a fresh, live re-sync of the same
+      Trakt account, James's real `james.bulman@rwnd.tv` instance user):
+      still exactly 99 dropped shows, with the identical 59-show diff
+      against the export. The live API's undercount is stable and
+      reproducible, not drift between two snapshots.\
+      This looks like a real gap in the already-shipped OAuth import path
+      itself, not something specific to the new ZIP path.\
+      **This is Trakt's own bug, not rwnd.tv's** — confirmed via a web
+      search (2026-08-25): a Trakt forum thread, [\"Dropped shows API is
+      not retrieving all items if more than 10 items are
+      dropped\"](https://forums.trakt.tv/t/dropped-shows-api-is-not-retrieving-all-items-if-more-than-10-items-are-dropped/92928)
+      (Dec 2025–Jan 2026), reports exactly this: `GET /users/hidden/dropped`
+      randomly omits shows that are genuinely still dropped, reproduced
+      live by the poster (added a show, then it didn't appear in the very
+      next fetch). They explicitly ruled out pagination as the cause —
+      enabling `limit`/`page` didn't fix it. Trakt staff acknowledged the
+      report and asked for logs / a GitHub issue, but the thread is still
+      open with no fix confirmed; other reports of dropped shows misbehaving
+      via Trakt's API/calendar continue as recently as July 2026, so this
+      looks like an ongoing, unresolved issue on Trakt's side rather than
+      something already fixed since. Nothing to change in
+      `TraktClient.getHiddenPage` itself — no known workaround exists
+      (per the forum thread) short of periodically cross-checking against
+      an export, which isn't worth building until Trakt actually fixes the
+      endpoint. Left open here as a documented, external limitation to
+      point to if a user notices their dropped-shows list looking
+      incomplete after a normal (OAuth) import.
+
 ## Metadata
 
 - [ ] **`seasons.airedEpisodeCount` can be wrong for the currently-airing season** (2026-08-25 15:39 added)\

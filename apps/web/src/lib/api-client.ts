@@ -89,6 +89,8 @@ const patch = <T>(path: string, body: unknown) =>
 const del = <T>(path: string, body?: unknown) =>
   request<T>(path, { method: 'DELETE', body: body ? JSON.stringify(body) : undefined })
 const putForm = <T>(path: string, form: FormData) => request<T>(path, { method: 'PUT', body: form })
+const postForm = <T>(path: string, form: FormData) =>
+  request<T>(path, { method: 'POST', body: form })
 
 export const api = {
   account: {
@@ -216,6 +218,18 @@ export const api = {
     startPairing: () => post<TraktDevicePairing>('/import/trakt/device'),
     disconnect: () => del<void>('/import/trakt/connection'),
     start: (body: CreateImportJobRequest) => post<ImportJob>('/import/trakt', body),
+    uploadZip: (
+      file: File,
+      opts: { history: boolean; ratings: boolean; watchlist: boolean; dropped: boolean },
+    ) => {
+      const form = new FormData()
+      form.set('file', file)
+      form.set('history', String(opts.history))
+      form.set('ratings', String(opts.ratings))
+      form.set('watchlist', String(opts.watchlist))
+      form.set('dropped', String(opts.dropped))
+      return postForm<ImportJob>('/import/trakt/zip', form)
+    },
     jobs: () => get<ListImportJobsResponse>('/import/jobs'),
     job: (id: string) => get<ImportJob>(`/import/jobs/${id}`),
     cancel: (id: string) => post<ImportJob>(`/import/jobs/${id}/cancel`),

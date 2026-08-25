@@ -9,6 +9,14 @@ export const importJobStatusSchema = z.enum([
 ])
 export type ImportJobStatus = z.infer<typeof importJobStatusSchema>
 
+/** `trakt` is the OAuth device-flow import (TraktConnectCard.tsx); `trakt_zip`
+ * is the file-upload alternative (TraktZipImportCard.tsx) — see
+ * docs/TODO.md's "Build ZIP-upload import from Trakt's own 'Export now'
+ * file". Surfaced on `ImportJob` so the UI can label which path a job came
+ * through. */
+export const importJobSourceSchema = z.enum(['trakt', 'trakt_zip'])
+export type ImportJobSource = z.infer<typeof importJobSourceSchema>
+
 /** What the user sees while pairing — never the device_code or any token. */
 export const traktDevicePairingSchema = z.object({
   userCode: z.string(),
@@ -63,6 +71,7 @@ export type ImportJobFailure = z.infer<typeof importJobFailureSchema>
 
 export const importJobSchema = z.object({
   id: z.string().uuid(),
+  source: importJobSourceSchema,
   status: importJobStatusSchema,
   includeHistory: z.boolean(),
   includeRatings: z.boolean(),

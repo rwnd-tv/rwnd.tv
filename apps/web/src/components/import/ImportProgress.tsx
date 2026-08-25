@@ -193,7 +193,11 @@ export function ImportProgress() {
     <Card>
       <h2 className="mb-1 text-lg font-semibold">{t('import.progress.title')}</h2>
       <div className="mb-1 flex items-baseline justify-between gap-4 text-sm text-[var(--color-fg-muted)]">
-        <span>{t(`import.progress.status.${latest.status}`)}</span>
+        <span>
+          {t(`import.progress.status.${latest.status}`)}
+          {' · '}
+          {t(`import.progress.source.${latest.source}`)}
+        </span>
         {elapsedSeconds != null && (
           <span className="text-right">
             {t('import.progress.elapsed', { duration: formatDuration(elapsedSeconds) })}

@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { strToU8, zipSync } from 'fflate'
 import { and, eq } from 'drizzle-orm'
 import {
   droppedShows,
@@ -1075,6 +1076,234 @@ describe('Trakt import', () => {
     const cookieB = extractCookie(loginB)!
 
     const res = await app.request(`/api/v1/import/jobs/${job!.id}`, {
+      headers: { cookie: cookieB },
+    })
+    expect(res.status).toBe(404)
+  })
+})
+
+describe('Trakt ZIP-upload import (POST /import/trakt/zip)', () => {
+  beforeEach(() => resetDb(db))
+  afterEach(() => vi.unstubAllGlobals())
+
+  /** Builds a synthetic "Export now" ZIP from `{ filename: parsedJsonBody }`
+   * — real shard/dropped-file names in, JSON re-encoded and zipped, same
+   * shape apps/api/src/import/trakt-zip-parse.ts expects to unzip back out. */
+  function buildZipFile(files: Record<string, unknown>): File {
+    const entries: Record<string, Uint8Array> = {}
+    for (const [name, content] of Object.entries(files)) {
+      entries[name] = strToU8(JSON.stringify(content))
+    }
+    return new File([zipSync(entries)], 'trakt-export.zip', { type: 'application/zip' })
+  }
+
+  function postZip(
+    cookie: string,
+    files: Record<string, unknown> | null,
+    opts: { history?: boolean; ratings?: boolean; watchlist?: boolean; dropped?: boolean } = {},
+  ) {
+    const form = new FormData()
+    if (files) form.set('file', buildZipFile(files))
+    if (opts.history !== undefined) form.set('history', String(opts.history))
+    if (opts.ratings !== undefined) form.set('ratings', String(opts.ratings))
+    if (opts.watchlist !== undefined) form.set('watchlist', String(opts.watchlist))
+    if (opts.dropped !== undefined) form.set('dropped', String(opts.dropped))
+    return app.request('/api/v1/import/trakt/zip', {
+      method: 'POST',
+      headers: { cookie },
+      body: form,
+    })
+  }
+
+  async function waitForCompletion(cookie: string, jobId: string) {
+    return waitFor(async () => {
+      const res = await app.request(`/api/v1/import/jobs/${jobId}`, { headers: { cookie } })
+      const body = await json<{ status: string }>(res)
+      return body.status === 'completed' ? body : undefined
+    })
+  }
+
+  it('imports watch history and dropped shows end to end from an uploaded export, without needing a Trakt connection', async () => {
+    vi.stubGlobal('fetch', createFetchStub())
+    const cookie = await createUserAndCookie()
+
+    const res = await postZip(cookie, {
+      'watched-history-1.json': [fx.matrixHistoryItem, fx.pilotHistoryItem],
+      'watched-history-2.json': [fx.secondEpisodeHistoryItem],
+      'hidden-progress-watched.json': [fx.breakingBadDroppedItem('2024-02-01T00:00:00.000Z')],
+    })
+    expect(res.status).toBe(202)
+    const job = await json<{ id: string; source: string }>(res)
+    expect(job.source).toBe('trakt_zip')
+
+    await waitForCompletion(cookie, job.id)
+
+    const me = await json<User>(await app.request('/api/v1/auth/me', { headers: { cookie } }))
+    const allPlays = await db.select().from(plays).where(eq(plays.userId, me.id))
+    expect(allPlays).toHaveLength(3)
+    expect(allPlays.every((p) => p.source === 'import')).toBe(true)
+
+    const dropped = await db.select().from(droppedShows).where(eq(droppedShows.userId, me.id))
+    expect(dropped).toHaveLength(1)
+    expect(dropped[0]?.traktDropped).toBe(true)
+  })
+
+  it('imports ratings (concatenated across the per-type files) and watchlist end to end from an uploaded export', async () => {
+    vi.stubGlobal('fetch', createFetchStub())
+    const cookie = await createUserAndCookie()
+    const me = await json<User>(await app.request('/api/v1/auth/me', { headers: { cookie } }))
+
+    // Confirmed 2026-08-25 against a real populated export: an episode
+    // rating lives in ratings-episodes.json, same TraktRatingItem shape as
+    // a movie rating in ratings-movies.json — this exercises both files
+    // being read and concatenated into one list.
+    const episodeRating: TraktRatingItem = {
+      rated_at: '2024-01-20T00:00:00.000Z',
+      rating: 8,
+      type: 'episode',
+      show: fx.pilotHistoryItem.show,
+      episode: fx.pilotHistoryItem.episode,
+    }
+
+    const res = await postZip(cookie, {
+      'watched-history-1.json': [],
+      'ratings-movies.json': [fx.matrixRatingItem(7)],
+      'ratings-episodes.json': [episodeRating],
+      'lists-watchlist.json': [fx.matrixWatchlistItem],
+    })
+    const job = await json<{ id: string }>(res)
+    await waitForCompletion(cookie, job.id)
+
+    const ratingRows = await db.select().from(ratings).where(eq(ratings.userId, me.id))
+    expect(ratingRows.map((r) => r.rating).sort()).toEqual([7, 8])
+
+    const watchlistRows = await db
+      .select()
+      .from(watchlistItems)
+      .where(eq(watchlistItems.userId, me.id))
+    expect(watchlistRows).toHaveLength(1)
+  })
+
+  it('respects the ratings/watchlist include toggles', async () => {
+    vi.stubGlobal('fetch', createFetchStub())
+    const cookie = await createUserAndCookie()
+    const me = await json<User>(await app.request('/api/v1/auth/me', { headers: { cookie } }))
+
+    const res = await postZip(
+      cookie,
+      {
+        'watched-history-1.json': [],
+        'ratings-movies.json': [fx.matrixRatingItem(7)],
+        'lists-watchlist.json': [fx.matrixWatchlistItem],
+      },
+      { ratings: false, watchlist: true },
+    )
+    const job = await json<{ id: string }>(res)
+    await waitForCompletion(cookie, job.id)
+
+    const ratingRows = await db.select().from(ratings).where(eq(ratings.userId, me.id))
+    expect(ratingRows).toHaveLength(0)
+    const watchlistRows = await db
+      .select()
+      .from(watchlistItems)
+      .where(eq(watchlistItems.userId, me.id))
+    expect(watchlistRows).toHaveLength(1)
+  })
+
+  it('rejects a non-ZIP upload', async () => {
+    const cookie = await createUserAndCookie()
+    const form = new FormData()
+    form.set('file', new File([strToU8('not a zip')], 'notes.txt', { type: 'text/plain' }))
+    const res = await app.request('/api/v1/import/trakt/zip', {
+      method: 'POST',
+      headers: { cookie },
+      body: form,
+    })
+    expect(res.status).toBe(400)
+  })
+
+  it('rejects an upload missing the file field', async () => {
+    const cookie = await createUserAndCookie()
+    const res = await postZip(cookie, null)
+    expect(res.status).toBe(400)
+  })
+
+  it("rejects an export ZIP with no watched-history-*.json files — it doesn't look like a real export", async () => {
+    const cookie = await createUserAndCookie()
+    const res = await postZip(cookie, { 'user-profile.json': { username: 'nobody' } })
+    expect(res.status).toBe(400)
+    const body = await json<{ error: string }>(res)
+    expect(body.error).toMatch(/watched-history/)
+  })
+
+  it('rejects starting a second import while one is already in progress', async () => {
+    vi.stubGlobal('fetch', createFetchStub())
+    const cookie = await createUserAndCookie()
+    const first = await postZip(cookie, { 'watched-history-1.json': [fx.matrixHistoryItem] })
+    expect(first.status).toBe(202)
+
+    const second = await postZip(cookie, { 'watched-history-1.json': [fx.pilotHistoryItem] })
+    expect(second.status).toBe(409)
+  })
+
+  it('is idempotent on re-upload of the same export, same as the OAuth import path', async () => {
+    vi.stubGlobal('fetch', createFetchStub())
+    const cookie = await createUserAndCookie()
+    const me = await json<User>(await app.request('/api/v1/auth/me', { headers: { cookie } }))
+    const files = { 'watched-history-1.json': [fx.matrixHistoryItem] }
+
+    const first = await postZip(cookie, files)
+    const firstJob = await json<{ id: string }>(first)
+    await waitForCompletion(cookie, firstJob.id)
+
+    const second = await postZip(cookie, files)
+    const secondJob = await json<{ id: string }>(second)
+    await waitForCompletion(cookie, secondJob.id)
+
+    const allPlays = await db.select().from(plays).where(eq(plays.userId, me.id))
+    expect(allPlays).toHaveLength(1)
+  })
+
+  it('respects the history/dropped include toggles', async () => {
+    vi.stubGlobal('fetch', createFetchStub())
+    const cookie = await createUserAndCookie()
+    const me = await json<User>(await app.request('/api/v1/auth/me', { headers: { cookie } }))
+
+    const res = await postZip(
+      cookie,
+      {
+        'watched-history-1.json': [fx.matrixHistoryItem],
+        'hidden-progress-watched.json': [fx.breakingBadDroppedItem('2024-02-01T00:00:00.000Z')],
+      },
+      { history: false, dropped: true },
+    )
+    const job = await json<{ id: string }>(res)
+    await waitForCompletion(cookie, job.id)
+
+    const allPlays = await db.select().from(plays).where(eq(plays.userId, me.id))
+    expect(allPlays).toHaveLength(0)
+    const dropped = await db.select().from(droppedShows).where(eq(droppedShows.userId, me.id))
+    expect(dropped).toHaveLength(1)
+  })
+
+  it("does not let a user read another user's ZIP import job", async () => {
+    vi.stubGlobal('fetch', createFetchStub())
+    const cookieA = await createUserAndCookie('zip-owner@example.com')
+    const resA = await postZip(cookieA, { 'watched-history-1.json': [fx.matrixHistoryItem] })
+    const jobA = await json<{ id: string }>(resA)
+
+    await createLocalUser(db, 'zip-other@example.com', 'correct-horse-battery-staple')
+    const loginB = await app.request('/api/v1/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: 'zip-other@example.com',
+        password: 'correct-horse-battery-staple',
+      }),
+    })
+    const cookieB = extractCookie(loginB)!
+
+    const res = await app.request(`/api/v1/import/jobs/${jobA.id}`, {
       headers: { cookie: cookieB },
     })
     expect(res.status).toBe(404)

@@ -16,7 +16,8 @@ import { loadEnv } from '../env.js'
 import { encryptSecret } from '../lib/crypto.js'
 import { pollDeviceToken, requestDeviceCode } from '../trakt/auth.js'
 import { TraktClient } from '../trakt/client.js'
-import { runTraktImport } from '../import/trakt.js'
+import { runTraktImport, runTraktZipImport } from '../import/trakt.js'
+import { TraktZipParseError, parseTraktZip } from '../import/trakt-zip-parse.js'
 
 export const importRoutes = new OpenAPIHono<AppEnv>()
 
@@ -228,12 +229,96 @@ importRoutes.openapi(
 )
 
 // ---------------------------------------------------------------------------
+// ZIP-upload import (docs/TODO.md's "Build ZIP-upload import from Trakt's
+// own 'Export now' file") — a file-based alternative to the OAuth device
+// flow above, for the case that can't use it at all: Trakt's 2026
+// "Community App" policy caps a free account at one connected third-party
+// OAuth app at a time, so a free user with a different Trakt-connected app
+// (a Plex scrobbler, Kodi plugin, etc.) can't also pair rwnd.tv without
+// disconnecting it first or paying for VIP. Deliberately not behind
+// requireTraktConfigured — unlike device pairing, this needs no
+// TRAKT_CLIENT_ID/SECRET on this instance at all.
+// ---------------------------------------------------------------------------
+
+/** Trakt's own export is plain JSON inside a ZIP — a real 11,261-item, many-
+ * years history compresses to ~1.1MB, so this leaves generous headroom
+ * without risking an unbounded in-memory unzip. */
+const MAX_ZIP_UPLOAD_BYTES = 25 * 1024 * 1024
+
+/**
+ * Plain route, not `.openapi()` — same multipart-upload reasoning as
+ * `PUT /auth/me/avatar` (apps/api/src/routes/auth.ts): a `multipart/form-
+ * data` upload doesn't fit the typed-JSON-body convention every other route
+ * here uses. `history`/`ratings`/`watchlist`/`dropped` mirror
+ * createImportJobRequestSchema's own fields (sent as `'true'`/`'false'` form
+ * values, not JSON booleans, since this is a form).
+ */
+importRoutes.post('/import/trakt/zip', requireAuth, async (c) => {
+  const db = c.get('db')
+  const metadataProviders = c.get('metadataProviders')
+  const userId = c.get('user')!.id
+
+  let form: Awaited<ReturnType<typeof c.req.parseBody>>
+  try {
+    form = await c.req.parseBody()
+  } catch {
+    return c.json({ error: 'Malformed request body' }, 400)
+  }
+  const file = form.file
+  if (!(file instanceof File)) {
+    return c.json({ error: 'Missing file field' }, 400)
+  }
+  if (file.size > MAX_ZIP_UPLOAD_BYTES) {
+    return c.json({ error: 'File is too large — 25MB maximum' }, 400)
+  }
+
+  // Same reasoning as POST /import/trakt's own check above — a clean 409
+  // instead of a raw constraint-violation 500 from import_jobs_user_active_idx.
+  const [existingActive] = await db
+    .select({ id: importJobs.id })
+    .from(importJobs)
+    .where(and(eq(importJobs.userId, userId), inArray(importJobs.status, ['pending', 'running'])))
+    .limit(1)
+  if (existingActive) {
+    return c.json({ error: 'An import is already in progress' }, 409)
+  }
+
+  let parsed: ReturnType<typeof parseTraktZip>
+  try {
+    parsed = parseTraktZip(new Uint8Array(await file.arrayBuffer()))
+  } catch (err) {
+    if (err instanceof TraktZipParseError) return c.json({ error: err.message }, 400)
+    throw err
+  }
+
+  const [job] = await db
+    .insert(importJobs)
+    .values({
+      userId,
+      source: 'trakt_zip',
+      includeHistory: form.history !== 'false',
+      includeRatings: form.ratings !== 'false',
+      includeWatchlist: form.watchlist !== 'false',
+      includeDropped: form.dropped !== 'false',
+    })
+    .returning()
+  if (!job) throw new Error('Failed to create import job')
+
+  void runTraktZipImport(db, metadataProviders, job.id, parsed).catch((err: unknown) =>
+    console.error('Trakt ZIP import failed:', err),
+  )
+
+  return c.json(serializeJob(job), 202)
+})
+
+// ---------------------------------------------------------------------------
 // Import jobs
 // ---------------------------------------------------------------------------
 
 function serializeJob(row: typeof importJobs.$inferSelect): ImportJob {
   return {
     id: row.id,
+    source: row.source,
     status: row.status,
     includeHistory: row.includeHistory,
     includeRatings: row.includeRatings,

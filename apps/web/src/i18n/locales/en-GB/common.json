@@ -301,10 +301,11 @@
   },
   "import": {
     "title": "Import",
-    "notConfigured": "Trakt import isn't set up on this instance — the admin needs to set TRAKT_CLIENT_ID and TRAKT_CLIENT_SECRET.",
+    "notConfigured": "Connecting a Trakt account isn't set up on this instance — the admin needs to set TRAKT_CLIENT_ID and TRAKT_CLIENT_SECRET. You can still import from a Trakt export file below.",
     "trakt": {
-      "title": "Trakt",
+      "sectionTitle": "Import from a Trakt account",
       "description": "Connect a Trakt account to import your watch history, ratings, and watchlist.",
+      "connectStepTitle": "Connect account",
       "connect": "Connect to Trakt",
       "connectedAs": "Connected as {{username}}.",
       "disconnect": "Disconnect",
@@ -312,6 +313,16 @@
       "retryPairing": "Try again",
       "denied": "Pairing was denied on Trakt. You can try again.",
       "expired": "This code expired before it was used. You can try again."
+    },
+    "zip": {
+      "title": "Import from a Trakt export file",
+      "description": "On trakt.tv, go to Settings → Data → \"Export now\" to download a ZIP of your data, then upload it here.",
+      "chooseStepTitle": "Choose file",
+      "chooseFile": "Choose file…",
+      "noFileChosen": "No file chosen",
+      "invalidType": "Please choose the .zip file Trakt's \"Export now\" downloaded.",
+      "tooLarge": "File is too large — 25MB maximum.",
+      "startDescription": "Choose what to bring in from the file. Re-running an import is safe — it won't create duplicates."
     },
     "start": {
       "title": "Start an import",
@@ -349,6 +360,10 @@
         "ratings": "Rating",
         "watchlist": "Watchlist",
         "dropped": "Dropped"
+      },
+      "source": {
+        "trakt": "via Trakt",
+        "trakt_zip": "via export file"
       }
     }
   },

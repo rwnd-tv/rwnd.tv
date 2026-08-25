@@ -351,10 +351,18 @@ export async function matchEpisode(
 }
 
 /**
- * Dispatches a ratings/watchlist item (which, unlike history, can be any of
- * movie/show/season/episode) to the right matcher. `season`-type entries
- * have no local entity (`metadata_entity_type` has no 'season' value) and
- * are always reported unmatched.
+ * Dispatches a ratings/watchlist/dropped-show item (which, unlike history,
+ * can be any of movie/show/season/episode) to the right matcher. `season`-
+ * type entries have no local entity (`metadata_entity_type` has no 'season'
+ * value) and are always reported unmatched — for ratings/watchlist that's a
+ * per-season rating/watchlist entry, and (found live via the ZIP-upload
+ * import path, 2026-08-25 — a real Doctor Who export) it also covers a
+ * per-season Trakt "hidden from progress" (dropped) entry: Trakt lets an
+ * account hide just one season of a show rather than the whole thing, which
+ * rwnd.tv's `droppedShows` table has no way to represent (whole-show only).
+ * The reason string below is deliberately category-agnostic (not "…ratings/
+ * watchlist entries…") since it's shown for all three phases — the UI's own
+ * per-failure phase chip (ImportProgress.tsx) already says which one.
  */
 export async function matchTraktMediaItem(
   db: Database,
@@ -385,7 +393,7 @@ export async function matchTraktMediaItem(
     case 'season':
       return {
         ok: false,
-        reason: 'Season-level ratings/watchlist entries are not yet supported',
+        reason: 'Season-level entries are not yet supported',
         title: item.show?.title,
         show: item.show?.title,
         season: item.season?.number,

@@ -36,6 +36,30 @@ function groupByDay(plays: Play[], locale: string) {
   return groups
 }
 
+/** Whether `play` carries Trakt's "I don't remember when" sentinel — see
+ * UNKNOWN_DATE_KEY above. A time of day makes no sense for these, so
+ * formatWatchedMeta below omits it rather than rendering a bogus midnight. */
+function isUnknownWatchedAt(play: Play) {
+  return new Date(play.watchedAt).getUTCFullYear() === 1900
+}
+
+/** "{{time}} · {{source}}" line under each entry's title — the time this
+ * specific watch happened at (day is already the section heading above),
+ * and how it got logged (manual entry, Plex scrobble, or an import). */
+function formatWatchedMeta(
+  play: Play,
+  locale: string,
+  t: (key: string, opts?: Record<string, unknown>) => string,
+) {
+  const sourceLabel = t(`history.sourceLabel.${play.source}`)
+  if (isUnknownWatchedAt(play)) return sourceLabel
+  const time = new Date(play.watchedAt).toLocaleTimeString(locale, {
+    hour: 'numeric',
+    minute: '2-digit',
+  })
+  return `${time} · ${sourceLabel}`
+}
+
 function playTitle(play: Play, t: (key: string, opts?: Record<string, unknown>) => string) {
   if (play.media.type === 'movie') return play.media.title
   const label = t('history.episodeLabelShort', {
@@ -100,6 +124,7 @@ export function HistoryPage() {
               <ul className="flex flex-col gap-2">
                 {plays.map((play) => {
                   const href = playHref(play)
+                  const meta = formatWatchedMeta(play, locale, t)
                   return (
                     <li
                       key={play.id}
@@ -120,7 +145,12 @@ export function HistoryPage() {
                                 className="h-[60px] w-10 shrink-0 rounded object-cover"
                               />
                             )}
-                            <span className="truncate">{playTitle(play, t)}</span>
+                            <div className="flex min-w-0 flex-col">
+                              <span className="truncate">{playTitle(play, t)}</span>
+                              <span className="truncate text-xs text-[var(--color-fg-muted)]">
+                                {meta}
+                              </span>
+                            </div>
                           </Link>
                         ) : (
                           <>
@@ -133,7 +163,12 @@ export function HistoryPage() {
                                 className="h-[60px] w-10 shrink-0 rounded object-cover"
                               />
                             )}
-                            <span className="truncate">{playTitle(play, t)}</span>
+                            <div className="flex min-w-0 flex-col">
+                              <span className="truncate">{playTitle(play, t)}</span>
+                              <span className="truncate text-xs text-[var(--color-fg-muted)]">
+                                {meta}
+                              </span>
+                            </div>
                           </>
                         )}
                       </div>

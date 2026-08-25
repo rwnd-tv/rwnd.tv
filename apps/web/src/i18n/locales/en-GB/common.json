@@ -292,7 +292,12 @@
     "remove": "Remove",
     "episodeLabelShort": "S{{season}} E{{episode}}",
     "episodeLabelLong": "Season {{season}} Episode {{episode}}",
-    "unknownDate": "Unknown date"
+    "unknownDate": "Unknown date",
+    "sourceLabel": {
+      "manual": "Manual",
+      "plex": "Scrobbled",
+      "import": "Imported"
+    }
   },
   "import": {
     "title": "Import",

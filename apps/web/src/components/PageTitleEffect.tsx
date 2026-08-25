@@ -18,6 +18,7 @@ const SECTION_KEYS: Record<string, string> = {
   '/history': 'nav.history',
   '/import': 'nav.import',
   '/settings': 'nav.settings',
+  '/profile': 'nav.profile',
 }
 
 /**

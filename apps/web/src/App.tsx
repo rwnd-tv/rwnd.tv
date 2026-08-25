@@ -15,6 +15,7 @@ import { MoviesPage } from './routes/MoviesPage.js'
 import { MovieDetailPage } from './routes/MovieDetailPage.js'
 import { ImportPage } from './routes/ImportPage.js'
 import { SettingsPage } from './routes/SettingsPage.js'
+import { ProfilePage } from './routes/ProfilePage.js'
 import { NotFoundPage } from './routes/NotFoundPage.js'
 
 // Gallery pages render full-viewport-width (see Layout.tsx) rather than the
@@ -54,6 +55,7 @@ const router = createBrowserRouter([
           { path: '/history', element: <HistoryPage /> },
           { path: '/import', element: <ImportPage /> },
           { path: '/settings', element: <SettingsPage /> },
+          { path: '/profile', element: <ProfilePage /> },
         ],
       },
     ],

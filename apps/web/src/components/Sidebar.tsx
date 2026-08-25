@@ -1,16 +1,13 @@
 import type { ReactNode } from 'react'
 import { Link, NavLink } from 'react-router'
 import { useTranslation } from 'react-i18next'
-import { useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../lib/auth-context.js'
-import { api } from '../lib/api-client.js'
 import { usePublicSettings } from '../lib/use-public-settings.js'
 import { Avatar } from './Avatar.js'
 import {
   DashboardIcon,
   HistoryIcon,
   ImportIcon,
-  LogoutIcon,
   MoviesIcon,
   SettingsIcon,
   ShowsIcon,
@@ -57,13 +54,13 @@ function SidebarLink({
  * `vh`: on mobile Chrome/Safari, `100vh` is the *largest* possible viewport
  * (as if the address bar were already hidden), so with `vh` this nav
  * rendered taller than what was actually on screen whenever the address bar
- * was showing, pushing Import/Settings/Log out off the bottom until the bar
+ * was showing, pushing Import/Settings/Profile off the bottom until the bar
  * auto-hid on scroll (found live on Android Chrome, 2026-08-21).
  *
  * `svh` (pinned to the smallest possible viewport) was tried in between —
  * no mid-scroll jank, since the nav never resizes, but that also means it's
  * *permanently* short by the address bar's height once the bar auto-hides,
- * leaving Import/Settings/Log out sitting above a dead gap the rest of the
+ * leaving Import/Settings/Profile sitting above a dead gap the rest of the
  * time (James, 2026-08-21: prefers `dvh`'s momentary jank while the address
  * bar is actively animating over `svh`'s permanently-wrong resting state —
  * being correct once the scroll settles matters more than being stable
@@ -86,29 +83,7 @@ function SidebarLink({
 export function Sidebar({ collapsed, onNavigate }: { collapsed: boolean; onNavigate: () => void }) {
   const { t } = useTranslation()
   const { user } = useAuth()
-  const queryClient = useQueryClient()
   const { data: settings } = usePublicSettings()
-
-  async function handleLogout() {
-    await api.auth.logout()
-    // Drop every OTHER cached query (library, history, on-deck, show/
-    // episode pages, ...) — all keyed without a userId, so the next login
-    // (a different account, same browser/session) would otherwise see
-    // this account's data until each query's own staleTime lapsed.
-    // Deliberately NOT queryClient.clear() here: that also destroys
-    // auth/me's own query object, and clear() + an immediate
-    // invalidate/refetch of that same key race against React
-    // re-subscribing AuthProvider's observer — the refetch call can find
-    // nothing to refetch and silently no-op, leaving `user` stuck until a
-    // hard refresh (live-verified 2026-08-24: exactly this, on dev only —
-    // confirmed via an A/B test against prod's plain-invalidate version,
-    // which has never had this problem). Removing every *other* query
-    // leaves auth/me's own observer untouched, so the plain invalidate
-    // below refetches it the same reliable way it always has.
-    queryClient.removeQueries({ predicate: (query) => query.queryKey[0] !== 'auth' })
-    await queryClient.invalidateQueries({ queryKey: ['auth', 'me'] })
-    onNavigate()
-  }
 
   return (
     <nav
@@ -119,22 +94,6 @@ export function Sidebar({ collapsed, onNavigate }: { collapsed: boolean; onNavig
           : 'fixed left-0 top-16 z-30 flex h-[calc(100dvh-4rem)] w-56 flex-shrink-0 flex-col border-r border-[var(--color-border)] bg-[var(--color-bg)] transition-[width] duration-200 sm:sticky sm:z-auto'
       }
     >
-      {/* Which account is active — James's ask from real multi-account use
-          (switching between his own account and a managed "Carol Bulman"
-          account while testing Plex webhook attribution): nothing here
-          showed identity at all before this, so it was easy to lose track
-          of which account a shared browser was currently on. Links to
-          Settings (ProfileForm.tsx), where the avatar itself is changed. */}
-      {user && (
-        <Link
-          to="/settings"
-          title={collapsed ? user.displayName : undefined}
-          className="flex items-center gap-3 border-b border-[var(--color-border)] px-3.5 py-3 text-sm font-medium hover:bg-[var(--color-surface)]"
-        >
-          <Avatar user={user} size={32} />
-          {!collapsed && <span className="min-w-0 truncate">{user.displayName}</span>}
-        </Link>
-      )}
       <ul className="flex flex-1 flex-col gap-1 overflow-y-auto px-2 py-2">
         <SidebarLink
           to="/dashboard"
@@ -183,20 +142,28 @@ export function Sidebar({ collapsed, onNavigate }: { collapsed: boolean; onNavig
           collapsed={collapsed}
           onNavigate={onNavigate}
         />
-        {user && (
-          <li>
-            <button
-              type="button"
-              onClick={handleLogout}
-              title={collapsed ? t('nav.logout') : undefined}
-              className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-[var(--color-fg)] hover:bg-[var(--color-surface)]"
-            >
-              <LogoutIcon />
-              {!collapsed && <span className="truncate">{t('nav.logout')}</span>}
-            </button>
-          </li>
-        )}
       </ul>
+
+      {/* Which account is active — James's ask from real multi-account use
+          (switching between his own account and a managed "Carol Bulman"
+          account while testing Plex webhook attribution): nothing here
+          showed identity at all before this, so it was easy to lose track
+          of which account a shared browser was currently on. Links to
+          ProfilePage.tsx, where the avatar itself is changed and — since
+          2026-08-25 — Log out now lives (this used to be a separate
+          standalone Log out button here; James: once the Profile page had
+          its own, the sidebar's copy was redundant with this row). */}
+      {user && (
+        <Link
+          to="/profile"
+          title={collapsed ? user.displayName : undefined}
+          onClick={onNavigate}
+          className="flex items-center gap-3 border-t border-[var(--color-border)] px-3.5 py-3 text-sm font-medium hover:bg-[var(--color-surface)]"
+        >
+          <Avatar user={user} size={32} />
+          {!collapsed && <span className="min-w-0 truncate">{user.displayName}</span>}
+        </Link>
+      )}
     </nav>
   )
 }

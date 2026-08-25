@@ -59,11 +59,11 @@ export function ProfileForm() {
     if (!file) return
     setAvatarError(null)
     if (!ALLOWED_AVATAR_TYPES.has(file.type)) {
-      setAvatarError(t('settings.profile.avatarInvalidType'))
+      setAvatarError(t('profile.avatarInvalidType'))
       return
     }
     if (file.size > MAX_AVATAR_BYTES) {
-      setAvatarError(t('settings.profile.avatarTooLarge'))
+      setAvatarError(t('profile.avatarTooLarge'))
       return
     }
     uploadAvatar.mutate(file)
@@ -71,10 +71,8 @@ export function ProfileForm() {
 
   return (
     <Card>
-      <h2 className="text-lg font-semibold">{t('settings.profile.title')}</h2>
-      <div className="mb-4 mt-1 border-t border-[var(--color-border)]" />
       <div className="flex flex-col gap-2">
-        <span className="text-sm font-medium">{t('settings.profile.avatar')}</span>
+        <span className="text-sm font-medium">{t('profile.avatar')}</span>
         <div className="flex items-center gap-4">
           {user && <Avatar user={user} size={64} />}
           <div className="flex gap-2">
@@ -84,7 +82,7 @@ export function ProfileForm() {
               isLoading={uploadAvatar.isPending}
               onClick={() => fileInputRef.current?.click()}
             >
-              {t('settings.profile.avatarUpload')}
+              {t('profile.avatarUpload')}
             </Button>
             {user?.avatarUpdatedAt && (
               <Button
@@ -93,7 +91,7 @@ export function ProfileForm() {
                 isLoading={deleteAvatar.isPending}
                 onClick={() => deleteAvatar.mutate()}
               >
-                {t('settings.profile.avatarRemove')}
+                {t('profile.avatarRemove')}
               </Button>
             )}
           </div>
@@ -114,7 +112,7 @@ export function ProfileForm() {
       <div className="mb-4 mt-4 border-t border-[var(--color-border)]" />
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <Field
-          label={t('settings.profile.displayName')}
+          label={t('profile.displayName')}
           value={displayName}
           onChange={(e) => setDisplayName(e.target.value)}
           required
@@ -122,7 +120,7 @@ export function ProfileForm() {
 
         <div className="flex flex-col gap-1">
           <label htmlFor="locale-select" className="text-sm font-medium">
-            {t('settings.profile.locale')}
+            {t('profile.locale')}
           </label>
           <select
             id="locale-select"
@@ -139,7 +137,7 @@ export function ProfileForm() {
         </div>
 
         <fieldset className="flex flex-col gap-1">
-          <legend className="text-sm font-medium">{t('settings.profile.theme')}</legend>
+          <legend className="text-sm font-medium">{t('profile.theme')}</legend>
           <div className="flex gap-4">
             {(['system', 'light', 'dark'] as const).map((option) => (
               <label key={option} className="flex items-center gap-2 text-sm">
@@ -150,7 +148,7 @@ export function ProfileForm() {
                   checked={theme === option}
                   onChange={() => setTheme(option)}
                 />
-                {t(`settings.profile.theme${option[0]!.toUpperCase()}${option.slice(1)}`)}
+                {t(`profile.theme${option[0]!.toUpperCase()}${option.slice(1)}`)}
               </label>
             ))}
           </div>
@@ -163,10 +161,10 @@ export function ProfileForm() {
               checked={spoilerProtectionEnabled}
               onChange={(e) => setSpoilerProtectionEnabled(e.target.checked)}
             />
-            {t('settings.profile.spoilerProtection')}
+            {t('profile.spoilerProtection')}
           </label>
           <p className="text-xs text-[var(--color-fg-muted)]">
-            {t('settings.profile.spoilerProtectionDescription')}
+            {t('profile.spoilerProtectionDescription')}
           </p>
         </div>
 
@@ -177,21 +175,19 @@ export function ProfileForm() {
               checked={onDeckFillGaps}
               onChange={(e) => setOnDeckFillGaps(e.target.checked)}
             />
-            {t('settings.profile.onDeckFillGaps')}
+            {t('profile.onDeckFillGaps')}
           </label>
           <p className="text-xs text-[var(--color-fg-muted)]">
-            {t('settings.profile.onDeckFillGapsDescription')}
+            {t('profile.onDeckFillGapsDescription')}
           </p>
         </div>
 
         <div className="flex items-center gap-3">
           <Button type="submit" isLoading={updateProfile.isPending}>
-            {t('settings.profile.save')}
+            {t('profile.save')}
           </Button>
           {updateProfile.isSuccess && (
-            <span className="text-sm text-[var(--color-fg-muted)]">
-              {t('settings.profile.saved')}
-            </span>
+            <span className="text-sm text-[var(--color-fg-muted)]">{t('profile.saved')}</span>
           )}
         </div>
       </form>

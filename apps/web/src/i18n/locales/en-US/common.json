@@ -13,6 +13,7 @@
     "history": "History",
     "import": "Import",
     "settings": "Settings",
+    "profile": "Profile",
     "logout": "Log out"
   },
   "setup": {
@@ -314,26 +315,6 @@
   },
   "settings": {
     "title": "Settings",
-    "profile": {
-      "title": "Profile",
-      "avatar": "Photo",
-      "avatarUpload": "Upload photo",
-      "avatarRemove": "Remove",
-      "avatarInvalidType": "Unsupported image type — use JPEG, PNG, or WebP.",
-      "avatarTooLarge": "Image is too large — 2MB maximum.",
-      "displayName": "Display name",
-      "locale": "Language",
-      "theme": "Theme",
-      "themeSystem": "Match system",
-      "themeLight": "Light",
-      "themeDark": "Dark",
-      "spoilerProtection": "Hide spoilers for unwatched episodes",
-      "spoilerProtectionDescription": "Blurs episode stills, titles, and overviews you haven't watched yet, and show/season descriptions until fully watched. Click any blurred item to reveal it just for that view.",
-      "onDeckFillGaps": "Fill gaps in Continue Watching",
-      "onDeckFillGapsDescription": "Continue Watching normally only shows the episode right after the latest one you've watched. Turn this on to also surface an earlier episode you skipped.",
-      "save": "Save changes",
-      "saved": "Saved."
-    },
     "tokens": {
       "title": "API tokens",
       "description": "Use API tokens to let other apps (like Plex scrobblers) log watches on your behalf.",
@@ -401,6 +382,26 @@
       "metadataProviderMoveUp": "Move {{provider}} up",
       "metadataProviderMoveDown": "Move {{provider}} down"
     }
+  },
+  "profile": {
+    "title": "Profile",
+    "avatar": "Photo",
+    "avatarUpload": "Upload photo",
+    "avatarRemove": "Remove",
+    "avatarInvalidType": "Unsupported image type — use JPEG, PNG, or WebP.",
+    "avatarTooLarge": "Image is too large — 2MB maximum.",
+    "displayName": "Display name",
+    "locale": "Language",
+    "theme": "Theme",
+    "themeSystem": "Match system",
+    "themeLight": "Light",
+    "themeDark": "Dark",
+    "spoilerProtection": "Hide spoilers for unwatched episodes",
+    "spoilerProtectionDescription": "Blurs episode stills, titles, and overviews you haven't watched yet, and show/season descriptions until fully watched. Click any blurred item to reveal it just for that view.",
+    "onDeckFillGaps": "Fill gaps in Continue Watching",
+    "onDeckFillGapsDescription": "Continue Watching normally only shows the episode right after the latest one you've watched. Turn this on to also surface an earlier episode you skipped.",
+    "save": "Save changes",
+    "saved": "Saved."
   },
   "metadata": {
     "source": "Metadata: {{provider}}",

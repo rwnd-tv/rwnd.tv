@@ -728,13 +728,50 @@ currently-dropped shows, since a row can have both
       `PosterTile`'s always-the-same grey, since the colour is itself part
       of what makes two accounts distinguishable at a glance. Sidebar.tsx
       had no user-identity element at all before this — added a new row
-      above the main nav list (avatar + display name, linking to
-      Settings), collapsing to just the avatar circle when the sidebar's
-      collapsed to its icon rail.\
+      (avatar + display name, linking to Settings — later Profile, see
+      below), collapsing to just the avatar circle when the sidebar's
+      collapsed to its icon rail. Placed below Log out, at the very bottom
+      of the nav, not above the main nav list where it first shipped
+      (James, 2026-08-25 — refers to it as "the Profile item").\
       Verified live on `dev.rwnd.tv`: uploaded a real image, saw it appear
       immediately in both Settings and the Sidebar (including the
       collapsed icon-rail state) once the query invalidated, removed it
-      and confirmed both fell back cleanly to the initials avatar.
+      and confirmed both fell back cleanly to the initials avatar; the
+      later reposition below Log out verified live too.
+
+- [x] **Split Settings into a Profile page and a Settings page** (2026-08-25 added and done)\
+      James's ask, immediately after "the Profile item" landed at the
+      bottom of the sidebar (previous entry): rather than that row linking
+      into the same page as API tokens/Database/Instance settings, give it
+      its own Profile page, and move Log out onto it too.\
+      New `ProfilePage.tsx` (`/profile`) renders `ProfileForm.tsx` (moved
+      from `components/settings/` to a new `components/profile/`, since
+      it's no longer shared with Settings) plus a new `LogoutCard.tsx` —
+      the query-invalidation logic straight out of Sidebar.tsx's old
+      `handleLogout` (the hard-won `removeQueries` + `invalidateQueries`
+      fix from 2026-08-24, unchanged). `SettingsPage.tsx` now only renders
+      `TokensPanel`/`DatabasePanel`/`InstanceSettingsPanel`. Sidebar.tsx's
+      standalone Log out button was removed outright rather than kept
+      alongside the new one — James's pick between the two options this
+      was asked as: once the Profile item links straight to a page with
+      its own Log out, a second copy in the sidebar was redundant, not
+      worth keeping for quicker access.\
+      i18n: `settings.profile.*` moved to a new top-level `profile.*`
+      namespace in both locales (`profile.title` etc.), matching the
+      existing convention every other top-level page follows (its own
+      namespace, not nested under another page's); added `nav.profile`
+      for the sidebar/breadcrumb label, reusing the existing `nav.logout`
+      value for the new page's button text rather than adding a duplicate
+      key. `ProfileForm.tsx`'s own `<h2>Profile</h2>` card heading was
+      dropped — redundant now that the page's own `<h1>` says the same
+      thing, the same "page h1, Card sections keep their own differently-
+      worded h2" shape `ImportPage.tsx` already uses. `PageTitleEffect.tsx`
+      picked up `/profile` in its breadcrumb map alongside the existing
+      static sections.\
+      Verified live on `dev.rwnd.tv`: `/profile` shows the profile form
+      and a Log out button, `/settings` no longer shows the profile form,
+      the sidebar's Profile item links to `/profile` not `/settings`, and
+      clicking Log out there actually logs out (redirects to `/login`).
 
 ## TV Show pages
 

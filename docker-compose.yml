@@ -16,6 +16,15 @@ services:
       TRAKT_CLIENT_ID: ${TRAKT_CLIENT_ID:-}
       TRAKT_CLIENT_SECRET: ${TRAKT_CLIENT_SECRET:-}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY:-}
+      # Optional, same "set the group or leave the whole group unset" shape
+      # as the TRAKT_* vars above — enables account verification and
+      # "Forgot password?" emails. See .env.example for what each does.
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+      APP_URL: ${APP_URL:-}
       # Uncomment to enable Settings > Database's per-user backup/restore —
       # BACKUP_DIR must match the mount path on the right of the volume
       # line below. Leave both commented out and that section just doesn't

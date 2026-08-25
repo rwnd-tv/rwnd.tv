@@ -1,7 +1,6 @@
 import { useRef, useState, type ChangeEvent, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { SUPPORTED_LOCALES, type Theme } from '@rwnd/shared'
 import { api, ApiError } from '../../lib/api-client.js'
 import { useAuth } from '../../lib/auth-context.js'
 import { Avatar } from '../Avatar.js'
@@ -15,23 +14,23 @@ import { Button } from '../ui/Button.js'
 const MAX_AVATAR_BYTES = 2 * 1024 * 1024
 const ALLOWED_AVATAR_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp'])
 
-export function ProfileForm() {
+/** Photo + display name — saves independently of PreferencesCard.tsx/
+ * AdvancedPreferencesCard.tsx even though all three go through the same
+ * `PATCH /auth/me` (every field on updateProfileRequestSchema is already
+ * optional, so each card just sends its own subset) — three separate
+ * "Save changes" actions for three separately-headed sections, rather
+ * than one giant cross-card form, was the layout James asked for
+ * (2026-08-25). */
+export function ProfileCard() {
   const { t } = useTranslation()
   const { user } = useAuth()
   const queryClient = useQueryClient()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [avatarError, setAvatarError] = useState<string | null>(null)
   const [displayName, setDisplayName] = useState(user?.displayName ?? '')
-  const [locale, setLocale] = useState(user?.locale ?? 'en-GB')
-  const [theme, setTheme] = useState<Theme>(user?.theme ?? 'system')
-  const [spoilerProtectionEnabled, setSpoilerProtectionEnabled] = useState(
-    user?.spoilerProtectionEnabled ?? true,
-  )
-  const [onDeckFillGaps, setOnDeckFillGaps] = useState(user?.onDeckFillGaps ?? false)
 
   const updateProfile = useMutation({
-    mutationFn: () =>
-      api.auth.updateMe({ displayName, locale, theme, spoilerProtectionEnabled, onDeckFillGaps }),
+    mutationFn: () => api.auth.updateMe({ displayName }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['auth', 'me'] }),
   })
 
@@ -59,11 +58,11 @@ export function ProfileForm() {
     if (!file) return
     setAvatarError(null)
     if (!ALLOWED_AVATAR_TYPES.has(file.type)) {
-      setAvatarError(t('profile.avatarInvalidType'))
+      setAvatarError(t('account.avatarInvalidType'))
       return
     }
     if (file.size > MAX_AVATAR_BYTES) {
-      setAvatarError(t('profile.avatarTooLarge'))
+      setAvatarError(t('account.avatarTooLarge'))
       return
     }
     uploadAvatar.mutate(file)
@@ -71,8 +70,10 @@ export function ProfileForm() {
 
   return (
     <Card>
+      <h2 className="text-lg font-semibold">{t('account.profileTitle')}</h2>
+      <div className="mb-4 mt-1 border-t border-[var(--color-border)]" />
       <div className="flex flex-col gap-2">
-        <span className="text-sm font-medium">{t('profile.avatar')}</span>
+        <span className="text-sm font-medium">{t('account.avatar')}</span>
         <div className="flex items-center gap-4">
           {user && <Avatar user={user} size={64} />}
           <div className="flex gap-2">
@@ -82,7 +83,7 @@ export function ProfileForm() {
               isLoading={uploadAvatar.isPending}
               onClick={() => fileInputRef.current?.click()}
             >
-              {t('profile.avatarUpload')}
+              {t('account.avatarUpload')}
             </Button>
             {user?.avatarUpdatedAt && (
               <Button
@@ -91,7 +92,7 @@ export function ProfileForm() {
                 isLoading={deleteAvatar.isPending}
                 onClick={() => deleteAvatar.mutate()}
               >
-                {t('profile.avatarRemove')}
+                {t('account.avatarRemove')}
               </Button>
             )}
           </div>
@@ -112,82 +113,17 @@ export function ProfileForm() {
       <div className="mb-4 mt-4 border-t border-[var(--color-border)]" />
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <Field
-          label={t('profile.displayName')}
+          label={t('account.displayName')}
           value={displayName}
           onChange={(e) => setDisplayName(e.target.value)}
           required
         />
-
-        <div className="flex flex-col gap-1">
-          <label htmlFor="locale-select" className="text-sm font-medium">
-            {t('profile.locale')}
-          </label>
-          <select
-            id="locale-select"
-            value={locale}
-            onChange={(e) => setLocale(e.target.value as (typeof SUPPORTED_LOCALES)[number])}
-            className="rounded-md border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2 text-sm"
-          >
-            {SUPPORTED_LOCALES.map((l) => (
-              <option key={l} value={l}>
-                {l}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <fieldset className="flex flex-col gap-1">
-          <legend className="text-sm font-medium">{t('profile.theme')}</legend>
-          <div className="flex gap-4">
-            {(['system', 'light', 'dark'] as const).map((option) => (
-              <label key={option} className="flex items-center gap-2 text-sm">
-                <input
-                  type="radio"
-                  name="theme"
-                  value={option}
-                  checked={theme === option}
-                  onChange={() => setTheme(option)}
-                />
-                {t(`profile.theme${option[0]!.toUpperCase()}${option.slice(1)}`)}
-              </label>
-            ))}
-          </div>
-        </fieldset>
-
-        <div className="flex flex-col gap-1">
-          <label className="flex items-center gap-2 text-sm font-medium">
-            <input
-              type="checkbox"
-              checked={spoilerProtectionEnabled}
-              onChange={(e) => setSpoilerProtectionEnabled(e.target.checked)}
-            />
-            {t('profile.spoilerProtection')}
-          </label>
-          <p className="text-xs text-[var(--color-fg-muted)]">
-            {t('profile.spoilerProtectionDescription')}
-          </p>
-        </div>
-
-        <div className="flex flex-col gap-1">
-          <label className="flex items-center gap-2 text-sm font-medium">
-            <input
-              type="checkbox"
-              checked={onDeckFillGaps}
-              onChange={(e) => setOnDeckFillGaps(e.target.checked)}
-            />
-            {t('profile.onDeckFillGaps')}
-          </label>
-          <p className="text-xs text-[var(--color-fg-muted)]">
-            {t('profile.onDeckFillGapsDescription')}
-          </p>
-        </div>
-
         <div className="flex items-center gap-3">
           <Button type="submit" isLoading={updateProfile.isPending}>
-            {t('profile.save')}
+            {t('account.save')}
           </Button>
           {updateProfile.isSuccess && (
-            <span className="text-sm text-[var(--color-fg-muted)]">{t('profile.saved')}</span>
+            <span className="text-sm text-[var(--color-fg-muted)]">{t('account.saved')}</span>
           )}
         </div>
       </form>

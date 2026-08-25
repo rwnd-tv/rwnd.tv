@@ -37,6 +37,12 @@ All configuration is environment variables, set in `.env` (see `.env.example` fo
 | `TRAKT_CLIENT_SECRET` | Only if `TRAKT_CLIENT_ID` is set | Paired with the client id above                                                    |
 | `ENCRYPTION_KEY`      | Only if `TRAKT_CLIENT_ID` is set | 32 bytes, base64 (`openssl rand -base64 32`) — encrypts stored Trakt tokens        |
 | `BACKUP_DIR`          | No                               | Enables per-user backup/restore (Settings > Database) — see Backups below          |
+| `SMTP_HOST`           | No                               | Enables account verification and "Forgot password?" emails — see Email below       |
+| `SMTP_PORT`           | Only if `SMTP_HOST` is set       | Defaults to `587`                                                                  |
+| `SMTP_USER`           | Only if `SMTP_HOST` is set       | Mail relay username                                                                |
+| `SMTP_PASS`           | Only if `SMTP_HOST` is set       | Mail relay password (e.g. a Gmail App Password)                                    |
+| `SMTP_FROM`           | Only if `SMTP_HOST` is set       | Sender shown on outgoing mail, e.g. `"rwnd.tv <noreply@example.com>"`              |
+| `APP_URL`             | Only if `SMTP_HOST` is set       | This instance's own public URL — what verification/reset links point at            |
 
 ## Putting it behind a reverse proxy
 
@@ -71,3 +77,9 @@ volumes:
 ```
 
 Then `docker compose up -d`. The container runs as an unprivileged user, so `./backups` needs to be writable by it — if you hit permission errors, `chown` the host directory to match rather than loosening it further. Leave both commented out (the default) and the Backups section of the Database panel just doesn't appear.
+
+## Email
+
+Set `SMTP_HOST` (and its four companion variables above) to enable account verification emails on registration and the "Forgot password?" link on the login page. Off by default — leave `SMTP_HOST` unset and those hide themselves entirely rather than erroring; accounts created before email was ever configured are treated as already-verified, so turning this on later doesn't retroactively ask existing users to reverify.
+
+Plain SMTP, not a specific provider's SDK — point it at whatever mail relay you already have: a Gmail account with an [App Password](https://myaccount.google.com/apppasswords) (`smtp.gmail.com`, port `587`), a transactional-email provider's own SMTP endpoint (Brevo, Resend, Mailgun, ...), or a mail server you run yourself. Fine to change later — nothing about the setup locks you into whichever relay you start with.

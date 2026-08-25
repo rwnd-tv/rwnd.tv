@@ -5,6 +5,10 @@ import type { RouteHandle } from './lib/route-handle.js'
 import { SetupPage } from './routes/SetupPage.js'
 import { LoginPage } from './routes/LoginPage.js'
 import { RegisterPage } from './routes/RegisterPage.js'
+import { ForgotPasswordPage } from './routes/ForgotPasswordPage.js'
+import { ResetPasswordPage } from './routes/ResetPasswordPage.js'
+import { VerifyEmailPage } from './routes/VerifyEmailPage.js'
+import { ConfirmEmailChangePage } from './routes/ConfirmEmailChangePage.js'
 import { DashboardPage } from './routes/DashboardPage.js'
 import { HistoryPage } from './routes/HistoryPage.js'
 import { ShowsPage } from './routes/ShowsPage.js'
@@ -15,7 +19,7 @@ import { MoviesPage } from './routes/MoviesPage.js'
 import { MovieDetailPage } from './routes/MovieDetailPage.js'
 import { ImportPage } from './routes/ImportPage.js'
 import { SettingsPage } from './routes/SettingsPage.js'
-import { ProfilePage } from './routes/ProfilePage.js'
+import { AccountPage } from './routes/AccountPage.js'
 import { NotFoundPage } from './routes/NotFoundPage.js'
 
 // Gallery pages render full-viewport-width (see Layout.tsx) rather than the
@@ -27,6 +31,10 @@ const router = createBrowserRouter([
   { path: '/setup', element: <SetupPage /> },
   { path: '/login', element: <LoginPage /> },
   { path: '/register', element: <RegisterPage /> },
+  { path: '/forgot-password', element: <ForgotPasswordPage /> },
+  { path: '/reset-password', element: <ResetPasswordPage /> },
+  { path: '/verify-email', element: <VerifyEmailPage /> },
+  { path: '/confirm-email-change', element: <ConfirmEmailChangePage /> },
   {
     element: <ProtectedRoute />,
     children: [
@@ -55,7 +63,7 @@ const router = createBrowserRouter([
           { path: '/history', element: <HistoryPage /> },
           { path: '/import', element: <ImportPage /> },
           { path: '/settings', element: <SettingsPage /> },
-          { path: '/profile', element: <ProfilePage /> },
+          { path: '/account', element: <AccountPage /> },
         ],
       },
     ],

@@ -47,6 +47,23 @@ export function RegisterPage() {
     )
   }
 
+  // Registration needs to send a verification email, so it can't actually
+  // be used until SMTP is configured — independent of registrationMode.
+  if (settings && !settings.emailConfigured) {
+    return (
+      <div className="flex min-h-screen items-center justify-center px-4">
+        <Card className="w-full max-w-sm text-center">
+          <p className="font-semibold text-[var(--color-danger)]">
+            {t('register.emailNotConfigured')}
+          </p>
+          <Link to="/login" className="mt-4 inline-block text-[var(--color-primary)] underline">
+            {t('register.loginLink')}
+          </Link>
+        </Card>
+      </div>
+    )
+  }
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
     setError(undefined)

@@ -140,12 +140,6 @@ Format:
       naturally with the OIDC login item below since both plug into the
       same credentials schema, but it's its own protocol (WebAuthn, no
       external identity provider or redirect involved).
-- [ ] **"Forgot password" / account recovery** (2026-08-23 15:46 added) — M2\
-      No password-reset flow exists for local accounts today — a locked-
-      out user has no self-service way back in. Needs outbound email
-      (nothing sends email yet) and a reset-token flow. Not related to
-      OIDC/passkeys architecturally — this is a gap in the existing
-      `local` credential type, not a new adapter.
 - [ ] **Explore OAuth device-flow login (for a future TV app)** (2026-08-23 16:00 added)\
       The RFC 8628 device authorization grant — the "enter this code on
       your phone" / QR flow BBC iPlayer, Disney+, and `gh auth login`

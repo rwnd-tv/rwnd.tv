@@ -1745,3 +1745,313 @@ query.queryKey[0] !== 'auth' })` — drops every _other_ cached query
       worked reliably before any of this. Live-verified on dev: login and
       logout both update immediately, and switching between James's and
       Carol's accounts no longer needs a refresh to show correct content.
+
+## Auth & accounts
+
+- [x] **"Forgot password" / account recovery, and email verification** (2026-08-23 15:46 added, done 2026-08-25) — M2\
+      No password-reset flow existed for local accounts — a locked-out
+      user had no self-service way back in. James, mid-build: fold in
+      email verification too, since it needs the exact same outbound-email
+      groundwork.\
+      **Design pass before building** — the real decision was email
+      transport. Considered SMTP vs. a transactional-email API (Resend,
+      Postmark, etc.); went with plain SMTP deliberately, matching this
+      project's existing "bring your own credentials" pattern (TMDB/TVDB/
+      Trakt) rather than taking a dependency on one vendor's SDK — any
+      self-hoster's own mail relay works (Gmail with an App Password, a
+      transactional provider's own SMTP endpoint, a self-run server).
+      James is running it against Gmail SMTP with a dedicated App Password
+      for `james.bulman@rwnd.tv`.\
+      **Schema**: `users.emailVerifiedAt` (nullable timestamp) plus two new
+      single-use hashed-opaque-token tables, `password_reset_tokens` and
+      `email_verification_tokens` — same `generateSecret`/`hashSecret`
+      pair sessions/API tokens already use, deleted on redemption whether
+      valid or not (no `usedBy` accountability need like `invites` has).
+      Migration 0017 backfills `emailVerifiedAt = createdAt` for every
+      account that existed before this shipped — already-in-use accounts
+      aren't retroactively asked to reverify an address that was working
+      fine; only accounts registered from here on start out unverified.
+      The first-run admin account (`POST /setup`) is pre-verified too,
+      not sent an email — that's the person deploying the instance, not
+      someone whose address needs confirming.\
+      **New env vars** (`apps/api/src/env.ts`): `SMTP_HOST`/`PORT`/`USER`/
+      `PASS`/`FROM` + `APP_URL` (needed to build the actual links a sent
+      email points at — no reliable way to derive a public URL from a
+      request's own Host header behind an arbitrary reverse-proxy setup).
+      All required together once `SMTP_HOST` is set, same "optional
+      group, feature hides itself when unset" pattern as `TRAKT_CLIENT_ID`/
+      `BACKUP_DIR`. New `instanceSettingsSchema.emailConfigured` flag
+      (`GET /settings`) gates LoginPage's "Forgot password?" link and
+      ProfilePage's resend-verification action — redeeming a token you
+      already have (`POST /auth/reset-password`, `POST /auth/verify-email`)
+      isn't gated the same way, since that only needs the token to still
+      be valid, not SMTP to be configured right now.\
+      **New routes** (`apps/api/src/routes/auth.ts`): `POST
+/auth/forgot-password` (always 204 regardless of whether the email
+      matched an account — anti-enumeration, same reasoning as login's
+      generic "invalid email or password"), `POST /auth/reset-password`
+      (redeems the token, updates the `local` credential, then
+      `revokeAllSessions` — new session.ts helper — the standard
+      "changing your password logs out everyone else" practice), `POST
+/auth/verify-email`, `POST /auth/resend-verification` (drops any
+      previously-issued token for the user first). Registration
+      (`POST /auth/register`) now also sends a verification email,
+      best-effort — a broken SMTP relay logs server-side but doesn't fail
+      the registration itself, since the account was already created.\
+      **New frontend pages**: `ForgotPasswordPage.tsx`, `ResetPasswordPage.tsx`,
+      `VerifyEmailPage.tsx` (public routes, same shape as LoginPage/
+      RegisterPage). `VerifyEmailPage.tsx` fires its `POST` via `useQuery`
+      on mount rather than an imperative `useMutation` in a `useEffect` —
+      React Query dedupes an identical in-flight query across a
+      StrictMode double-mount, so the single-use token only actually gets
+      redeemed once; the equivalent effect+mutation would consume it
+      twice in dev.\
+      **Found live while testing, built the same session**: no way to
+      change a password while already logged in — the reset flow was the
+      _only_ path to a new password, even for someone who already knew
+      their current one. Added `POST /auth/me/password` (current-password
+      check via `verifyPassword`, then the same credential-update code
+      reset-password uses) plus a new `revokeOtherSessions` session.ts
+      helper — deliberately keeps the session making the request alive
+      (unlike reset's `revokeAllSessions`), since proving you know both
+      the current and new password isn't the same situation as an
+      anonymous reset.\
+      **Profile → Account, same day, then two quick follow-up tweaks**:
+      James asked for the page (still `/profile` at the time) to be
+      renamed "Account" and laid out as named sections. Final shape,
+      after two more small asks the same session: page title "Account"
+      with Log out inline on the same row, top-right (started as its own
+      bottom-of-page section, moved here since James wanted it reachable
+      without scrolling past everything else); then Profile (photo,
+      display name — moved to lead the page after first landing lower
+      down); then Email + Change Password with no section heading of
+      their own (the page's own "Account" title already says what they
+      are); then Preferences (language, theme); then Advanced Preferences
+      (spoiler protection, on-deck fill-gaps — collapsed by default, a
+      native `<details>` rather than bespoke show/hide state, for free
+      keyboard support). Route moved `/profile` → `/account`;
+      `ProfilePage.tsx`/`ProfileForm.tsx`/`components/profile/` all
+      renamed/split into `AccountPage.tsx` and `components/account/`'s
+      `EmailCard.tsx`/`ChangePasswordCard.tsx`/`ProfileCard.tsx`/
+      `PreferencesCard.tsx`/`AdvancedPreferencesCard.tsx`/
+      `LogoutButton.tsx` (a plain button once it stopped being its own
+      section, no `Card` wrapper) — Profile/Preferences/Advanced
+      Preferences each save independently (`updateProfileRequestSchema`'s
+      fields are already all optional, so each card's mutation just
+      sends its own subset) rather than one cross-card form, matching
+      the section split visually. `profile.*` i18n namespace renamed to
+      `account.*` in both locales, plus three new section-title keys;
+      `nav.profile` → `nav.account`.\
+      **A real incident during testing, not just a design note**: asked
+      James to test SMTP delivery against his own real account early on;
+      he confirmed the email arrived but I never redeemed that link.
+      Later, testing the _separate_ throwaway test account's reset flow,
+      he pasted that older real-account email's link by mistake (both
+      emails share the identical subject line) — I redeemed it without
+      realizing, which actually changed his real account's password and
+      revoked its sessions. Caught immediately via direct DB verification
+      (argon2 `verify()` against the stored hash, run inside the
+      container) once the throwaway account's own login unexpectedly
+      failed with the "right" password. Told James immediately with the
+      actual temporary password so he could get back in, rather than
+      quietly investigating first — he confirmed logging back in worked.
+      Net result was a real (if unintended) live confirmation that
+      redemption, credential update, and session revocation all work
+      correctly end to end.\
+      **Verified live on `dev.rwnd.tv`**, throughout, including some
+      unintentionally: SMTP-unconfigured default state (no login link, a
+      clean "Email is not configured" error rather than a bad failure);
+      real Gmail SMTP delivery for both verification and reset emails
+      (with a real From-header gotcha found and fixed along the way —
+      Gmail's SMTP silently rewrites an unverified From address to the
+      authenticated account's own, since `SMTP_FROM` wasn't yet a
+      verified "Send mail as" alias); verification click-through and its
+      single-use enforcement (replaying the same link correctly shows
+      "invalid or has expired"); full reset-password completion including
+      session revocation (proven, if by accident, against a real
+      account); change-password's wrong-password rejection, the updated
+      password taking effect, and the initiating session staying alive
+      while the old password stopped working; and, after the Account
+      rename, the final page layout itself — every section in the right
+      place, Advanced Preferences collapsed by default and expanding on
+      click.
+
+- [x] **Change email address (with verification before it takes effect)** (2026-08-25 added and done)\
+      James, naming this and Delete account (see TODO.md) the remaining
+      holes in account management once the rest of Account had shipped.
+      Explicit requirement: the new address has to be verified _before_
+      the change is allowed, not after — so `users.email` isn't touched
+      at all until a confirmation link sent to the _new_ address is
+      actually clicked.\
+      New `email_change_tokens` table (migration 0018) — same hashed-
+      opaque-token/deleted-on-redemption shape as `password_reset_tokens`/
+      `email_verification_tokens`, but also carries the candidate
+      `newEmail` itself (as `citext`, matching `users.email`'s case-
+      insensitive uniqueness), since nothing on the user row changes
+      until redemption. Deliberately a separate table rather than
+      reusing `email_verification_tokens` with an implicit "does this
+      user have a pending address?" branch — see its doc comment in
+      schema.ts.\
+      `POST /auth/me/email` (requireAuth + requireEmailConfigured —
+      pointless without SMTP to deliver the confirmation) re-proves the
+      current password first (same reasoning as `POST /auth/me/password`:
+      a stolen session cookie alone shouldn't be able to redirect where
+      account-recovery mail goes), rejects an unchanged address and one
+      already claimed by another account, then creates the token and
+      emails the _new_ address via a new `sendEmailChangeVerification`
+      (never the current address — confirming ownership of the new one
+      is the whole point). `POST /auth/confirm-email-change` (public, no
+      auth — same reasoning as `/auth/verify-email`/`/auth/reset-password`:
+      redeeming a token you already have doesn't need you logged in as
+      anyone) redeems the token, re-checks the address is still free
+      (someone else could have claimed it since the token was issued),
+      then writes `users.email`/`emailVerifiedAt` together — the
+      confirmation click itself is what proves ownership, so the new
+      address is already verified the instant it's set, same as a
+      fresh registration link.\
+      `EmailCard.tsx` grew a "Change email" toggle (gated on
+      `emailConfigured`, same as the resend-verification action) that
+      reveals a small new-email/current-password form; new
+      `ConfirmEmailChangePage.tsx` (`/confirm-email-change`) mirrors
+      `VerifyEmailPage.tsx`'s `useQuery`-on-mount shape for the same
+      StrictMode-double-mount reason.\
+      **Verified live on `dev.rwnd.tv`** against the throwaway test
+      account (not James's real one, learning from the earlier reset-
+      link mix-up): wrong-current-password rejected, changing to an
+      address already in use (James's real account) rejected, a real
+      Gmail-delivered confirmation email (once located — Gmail was
+      silently applying a filter that skipped the inbox and marked it
+      read, unrelated to delivery itself, which still succeeded every
+      time), confirming actually swaps the email and marks it verified,
+      logging in with the old address stops working while the new one
+      works immediately, replaying the same confirmation link correctly
+      shows "invalid or expired", and the "Change email"/Cancel toggle
+      in the UI itself.
+
+- [x] **Delete account** (2026-08-25 added and done)\
+      James, naming this and change-email (done, above) as the remaining
+      holes in account management. Specific asks: bottom of the Account
+      page, a warning plus a red button (not just the button), and a
+      confirmation dialog requiring the account's email and current
+      password re-entered.\
+      `DELETE /auth/me` (requireAuth): re-verifies the current password
+      first (same "prove you know it" reasoning as change-password/
+      change-email), then checks the typed email matches the account's
+      actual one — that check isn't itself a security gate (the password
+      is), just a deliberate extra step against an accidental click, the
+      same "type the repo name to confirm" pattern GitHub uses. No new
+      migration needed — every table referencing `users` already
+      cascade-deletes on the FK (`plays`, `ratings`, `watchlist_items`,
+      `dropped_shows`, `sessions`, `api_tokens` and in turn its own
+      `webhook_account_links`/`pending_webhook_events`,
+      `user_credentials`, `trakt_connections`, `import_jobs`, and the
+      three account-token tables), so `DELETE FROM users` alone does the
+      whole job.\
+      First cut, unilaterally rather than asked about: an admin who's the
+      instance's _only_ admin can't delete their own account — no route
+      exists yet to promote another user to admin, so blocking felt like
+      the safer failure mode versus an instance permanently losing access
+      to Settings > Instance for everyone. James, same session, wanted
+      something simpler as a first step instead while he thinks through
+      what "more sophisticated" should actually look like: **no admin
+      account can delete itself at all**, full stop, not just a sole
+      admin — both server-side (`DELETE /auth/me` 403s any admin,
+      checked first, before even looking at the password/email fields)
+      and in the UI (`DeleteAccountCard.tsx`'s button disabled with an
+      explanatory note, rather than the whole card hidden — same "still
+      visible, just not usable, with a stated reason" shape as Clear
+      database's own disabled state in DatabasePanel.tsx). The server
+      check is what actually matters; the disabled button is only ever a
+      UX convenience layered on top.\
+      New `DeleteAccountCard.tsx`, last on AccountPage.tsx, deliberately
+      — the most destructive action on the page shouldn't compete for
+      attention with everything above it. Red `<h2>` title (not just the
+      button), a warning paragraph, then the dialog (built on the
+      existing `Dialog.tsx`, same component DatabasePanel.tsx's own
+      destructive-action confirmations already use) with email +
+      password fields and a red submit button.\
+      **Verified live on `dev.rwnd.tv`**, in two passes. Against the
+      throwaway test account (conveniently retiring it at the same time
+      — the one thing still outstanding from earlier in the session):
+      wrong-password and mismatched-email both correctly rejected;
+      temporarily promoting the test account to a second admin and
+      deleting it still succeeded at the time (the original sole-admin-
+      only rule, before the same-session revision above) without being
+      blocked; the account, and everything under it, fully gone from the
+      database afterward with no orphaned rows or FK errors, and its old
+      credentials immediately stopped working for login. After the
+      revision to a blanket admin block: called `DELETE /auth/me`
+      directly against James's real (admin) session with deliberately
+      wrong email/password, confirmed a 403 "Admin accounts can't be
+      deleted" came back before either confirmation field was even
+      checked, and confirmed his account was completely untouched
+      afterward (`GET /auth/me` unchanged) — proving the block runs
+      first and is unconditional, not something a self-hoster could
+      route around by knowing the right password. Disabled-button UI
+      state (faded button + "Admin accounts can't be deleted yet." note)
+      confirmed visually against James's real account too.
+
+- [x] **Require SMTP before registration/setup can be open, and validate the account-management pathways end to end** (2026-08-25 added and done)\
+      James: SMTP being configured should be a hard prerequisite for
+      opening account creation at all — including `/setup`'s first-admin
+      creation, not just ordinary `/register` — since the first admin's
+      address needs the same verification machinery as everyone else's.
+      When it isn't configured, the landing/setup/register page should
+      show a bold warning rather than offering a form that can't actually
+      work.\
+      `POST /setup` and `POST /auth/register` both now 403 with
+      `isEmailConfigured()` checked first — for register, ahead of the
+      existing `registrationMode` check, so it blocks even when an admin
+      has explicitly set registration to "open". `SetupPage.tsx` replaces
+      its form entirely with a bold red warning card
+      (`setup.emailRequiredTitle`/`emailRequiredBody`) when
+      `usePublicSettings().emailConfigured` is false and setup is still
+      required; `RegisterPage.tsx` gets an equivalent blocked card
+      (`register.emailNotConfigured`) alongside its existing
+      registration-closed one; `LoginPage.tsx`'s "Register" prompt now
+      also checks `emailConfigured`, on top of the existing
+      `registrationMode` check, so it doesn't link somewhere that would
+      just bounce. Login itself is untouched by any of this — an
+      instance with existing accounts keeps working normally even if
+      SMTP later goes away; only _creating_ an account needs it.\
+      **Verified live**, on a genuinely separate throwaway instance
+      rather than `dev.rwnd.tv` (registration completing/deleting
+      accounts there would be indistinguishable from real usage): a
+      sibling Postgres database on `rwnd-tv-dev-postgres`
+      (`rwnd_setup_test`, later a second one, `rwnd_setup_test2`, for the
+      no-admin-yet case), and a throwaway container from the same
+      already-built `rwnd-tv-dev:local` image, `--env-file` pointing at a
+      copy of the real dev env with only `DATABASE_URL`/`SMTP_HOST`
+      overridden (generated with `sed` entirely server-side so no
+      credential ever appeared in a command or its output), on the same
+      `docker_default` network so it could reach Postgres by container
+      name. Both fully removed afterward (`docker rm -f`, `DROP
+DATABASE` ×2) — zero residue.\
+      Covered, across three container runs on that instance: (1) SMTP
+      configured, no admin yet — `/setup`'s real form renders and
+      completing it works exactly as before, admin created
+      pre-verified; (2) same database (admin now exists), SMTP stripped
+      — `/register` returns the new blocked message via the API even
+      with `registrationMode` explicitly set to `open`, the "Register"
+      link disappears from `/login`, and logging in as the existing
+      admin still succeeds normally; (3) a brand-new empty database,
+      SMTP stripped from the start — `/setup` shows the bold warning
+      card with no form, and `POST /setup` called directly (bypassing
+      the UI entirely) still 403s, proving the block is real
+      server-side enforcement and not just a hidden form.\
+      Also covered, against that same instance's admin/second-user
+      accounts, the four other pathways James asked to have validated
+      rather than just reasoned about: submitting your own current
+      address to `POST /auth/me/email` is rejected with "That's already
+      your email address" (a genuinely different address still
+      succeeds, 204); changing your password from one logged-in session
+      revokes a second, separate session for the same account (401 on
+      its next request) while the session that made the change stays
+      alive (200); and deleting an account that actually has data
+      attached — a movie play, an episode play, a rating, a watchlist
+      entry, and a dropped show, seeded directly via SQL rather than a
+      real TMDB lookup, since only the FK cascade was under test —
+      removes the user row and every one of those rows cleanly (0 left
+      in each table afterward) while leaving the shared `movies`/`shows`
+      rows themselves untouched, confirming the cascade is scoped to the
+      user and doesn't reach into shared library data.

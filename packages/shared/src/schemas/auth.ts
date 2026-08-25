@@ -54,6 +54,9 @@ export const userSchema = z.object({
    * just enough to build the image URL (GET /auth/me/avatar) and cache-bust
    * it after a new upload. */
   avatarUpdatedAt: z.string().datetime().nullable(),
+  /** Null if the address hasn't been confirmed via a verification link —
+   * see packages/db/src/schema.ts's doc comment on this column. */
+  emailVerifiedAt: z.string().datetime().nullable(),
   createdAt: z.string().datetime(),
 })
 export type User = z.infer<typeof userSchema>
@@ -67,3 +70,47 @@ export const updateProfileRequestSchema = z.object({
   onDeckFillGaps: z.boolean().optional(),
 })
 export type UpdateProfileRequest = z.infer<typeof updateProfileRequestSchema>
+
+export const forgotPasswordRequestSchema = z.object({
+  email: emailSchema,
+})
+export type ForgotPasswordRequest = z.infer<typeof forgotPasswordRequestSchema>
+
+export const resetPasswordRequestSchema = z.object({
+  token: z.string().min(1),
+  password: passwordSchema,
+})
+export type ResetPasswordRequest = z.infer<typeof resetPasswordRequestSchema>
+
+export const verifyEmailRequestSchema = z.object({
+  token: z.string().min(1),
+})
+export type VerifyEmailRequest = z.infer<typeof verifyEmailRequestSchema>
+
+export const changePasswordRequestSchema = z.object({
+  currentPassword: z.string().min(1).max(256),
+  newPassword: passwordSchema,
+})
+export type ChangePasswordRequest = z.infer<typeof changePasswordRequestSchema>
+
+export const changeEmailRequestSchema = z.object({
+  newEmail: emailSchema,
+  currentPassword: z.string().min(1).max(256),
+})
+export type ChangeEmailRequest = z.infer<typeof changeEmailRequestSchema>
+
+export const confirmEmailChangeRequestSchema = z.object({
+  token: z.string().min(1),
+})
+export type ConfirmEmailChangeRequest = z.infer<typeof confirmEmailChangeRequestSchema>
+
+/** `email` is the "type your email to confirm" step DeleteAccountCard.tsx
+ * asks for — not itself proof of anything (typing the current password
+ * is what actually authorizes the delete), just a deliberate extra step
+ * against an accidental click, the same reasoning services like GitHub's
+ * "type the repo name" confirmation use. */
+export const deleteAccountRequestSchema = z.object({
+  email: emailSchema,
+  currentPassword: z.string().min(1).max(256),
+})
+export type DeleteAccountRequest = z.infer<typeof deleteAccountRequestSchema>

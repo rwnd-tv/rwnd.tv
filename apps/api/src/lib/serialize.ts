@@ -13,6 +13,7 @@ export function serializeUser(user: UserRecord): User {
     onDeckFillGaps: user.onDeckFillGaps,
     role: user.role,
     avatarUpdatedAt: user.avatarUpdatedAt?.toISOString() ?? null,
+    emailVerifiedAt: user.emailVerifiedAt?.toISOString() ?? null,
     createdAt: user.createdAt.toISOString(),
   }
 }

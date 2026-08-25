@@ -76,11 +76,19 @@ export function LoginPage() {
             autoComplete="current-password"
             error={error}
           />
+          {settings?.emailConfigured && (
+            <Link
+              to="/forgot-password"
+              className="self-start text-sm text-[var(--color-primary)] underline"
+            >
+              {t('login.forgotPasswordLink')}
+            </Link>
+          )}
           <Button type="submit" isLoading={submitting}>
             {t('login.submit')}
           </Button>
         </form>
-        {settings && settings.registrationMode !== 'closed' && (
+        {settings && settings.registrationMode !== 'closed' && settings.emailConfigured && (
           <p className="mt-4 text-sm text-[var(--color-fg-muted)]">
             {t('login.registerPrompt')}{' '}
             <Link to="/register" className="text-[var(--color-primary)] underline">

@@ -32,6 +32,16 @@ export const instanceSettingsSchema = z.object({
   // traktConfigured above. The web app hides the Backups section of the
   // Database panel when false, since /backups has nowhere to write.
   backupsConfigured: z.boolean(),
+  // True when this instance has SMTP_HOST (+ its required companions —
+  // apps/api/src/env.ts) configured. Gates the two routes that actually
+  // send mail (POST /auth/forgot-password, POST /auth/resend-verification
+  // — both 404 when false, apps/api/src/routes/auth.ts's
+  // requireEmailConfigured) and, on the web app, LoginPage's "Forgot
+  // password?" link and ProfilePage's resend-verification action.
+  // Redeeming a token you already have (POST /auth/reset-password,
+  // POST /auth/verify-email) isn't gated by this — that only needs the
+  // token to still be valid, not SMTP to be configured right now.
+  emailConfigured: z.boolean(),
 })
 export type InstanceSettings = z.infer<typeof instanceSettingsSchema>
 
@@ -41,6 +51,7 @@ export const updateInstanceSettingsRequestSchema = instanceSettingsSchema
     environmentLabel: true,
     traktConfigured: true,
     backupsConfigured: true,
+    emailConfigured: true,
   })
   .partial()
 export type UpdateInstanceSettingsRequest = z.infer<typeof updateInstanceSettingsRequestSchema>

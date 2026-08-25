@@ -13,7 +13,7 @@
     "history": "History",
     "import": "Import",
     "settings": "Settings",
-    "profile": "Profile",
+    "account": "Account",
     "logout": "Log out"
   },
   "setup": {
@@ -22,13 +22,16 @@
     "displayName": "Display name",
     "email": "Email",
     "password": "Password",
-    "submit": "Create admin account"
+    "submit": "Create admin account",
+    "emailRequiredTitle": "Email must be configured",
+    "emailRequiredBody": "This instance can't be set up until SMTP is configured, so the admin account's email address can be verified like any other. Set the SMTP_* environment variables, then reload this page."
   },
   "login": {
     "title": "Log in",
     "email": "Email",
     "password": "Password",
     "submit": "Log in",
+    "forgotPasswordLink": "Forgot password?",
     "registerPrompt": "Don't have an account?",
     "registerLink": "Register"
   },
@@ -41,7 +44,38 @@
     "submit": "Register",
     "loginPrompt": "Already have an account?",
     "loginLink": "Log in",
-    "closed": "Registration is not currently open on this instance."
+    "closed": "Registration is not currently open on this instance.",
+    "emailNotConfigured": "Registration requires email to be configured on this instance."
+  },
+  "forgotPassword": {
+    "title": "Forgot password?",
+    "email": "Email",
+    "submit": "Send reset link",
+    "success": "If an account exists for that email, we've sent a link to reset your password.",
+    "loginLink": "Back to log in"
+  },
+  "resetPassword": {
+    "title": "Reset your password",
+    "password": "New password",
+    "submit": "Reset password",
+    "success": "Your password has been reset.",
+    "loginLink": "Log in",
+    "invalidLink": "This reset link is invalid or has expired.",
+    "requestNewLink": "Request a new link"
+  },
+  "verifyEmail": {
+    "title": "Verify your email",
+    "verifying": "Verifying your email address…",
+    "success": "Your email address has been verified.",
+    "invalidLink": "This verification link is invalid or has expired.",
+    "continue": "Continue to rwnd.tv"
+  },
+  "confirmEmailChange": {
+    "title": "Confirm email change",
+    "verifying": "Confirming your new email address…",
+    "success": "Your email address has been updated.",
+    "invalidLink": "This confirmation link is invalid or has expired.",
+    "continue": "Continue to rwnd.tv"
   },
   "dashboard": {
     "onDeck": {
@@ -383,25 +417,52 @@
       "metadataProviderMoveDown": "Move {{provider}} down"
     }
   },
-  "profile": {
-    "title": "Profile",
+  "account": {
+    "title": "Account",
+    "email": "Email",
+    "emailVerified": "Verified",
+    "emailUnverified": "Not verified",
+    "resendVerification": "Resend verification email",
+    "resendVerificationSent": "Sent!",
+    "changeEmailButton": "Change email",
+    "changeEmailNew": "New email address",
+    "changeEmailPassword": "Current password",
+    "changeEmailSubmit": "Send verification email",
+    "changeEmailCancel": "Cancel",
+    "changeEmailSuccess": "Verification email sent to {{email}} — click the link there to confirm the change.",
+    "changePasswordTitle": "Change password",
+    "changePasswordCurrent": "Current password",
+    "changePasswordNew": "New password",
+    "changePasswordSubmit": "Change password",
+    "changePasswordSuccess": "Password changed.",
+    "profileTitle": "Profile",
     "avatar": "Photo",
     "avatarUpload": "Upload photo",
     "avatarRemove": "Remove",
     "avatarInvalidType": "Unsupported image type — use JPEG, PNG, or WebP.",
     "avatarTooLarge": "Image is too large — 2MB maximum.",
     "displayName": "Display name",
+    "preferencesTitle": "Preferences",
     "locale": "Language",
     "theme": "Theme",
     "themeSystem": "Match system",
     "themeLight": "Light",
     "themeDark": "Dark",
+    "advancedPreferencesTitle": "Advanced Preferences",
     "spoilerProtection": "Hide spoilers for unwatched episodes",
     "spoilerProtectionDescription": "Blurs episode stills, titles, and overviews you haven't watched yet, and show/season descriptions until fully watched. Click any blurred item to reveal it just for that view.",
     "onDeckFillGaps": "Fill gaps in Continue Watching",
     "onDeckFillGapsDescription": "Continue Watching normally only shows the episode right after the latest one you've watched. Turn this on to also surface an earlier episode you skipped.",
     "save": "Save changes",
-    "saved": "Saved."
+    "saved": "Saved.",
+    "deleteTitle": "Delete account",
+    "deleteWarning": "Permanently delete your account and everything in it — watch history, ratings, watchlist, dropped shows, API tokens, and any connected services. This can't be undone.",
+    "deleteButton": "Delete account",
+    "deleteConfirmTitle": "Delete your account?",
+    "deleteConfirmBody": "This will permanently delete your account and everything in it. This can't be undone. To confirm, type your email address ({{email}}) and current password below.",
+    "deleteConfirmEmail": "Email address",
+    "deleteConfirmPassword": "Current password",
+    "deleteAdminBlocked": "Admin accounts can't be deleted yet."
   },
   "metadata": {
     "source": "Metadata: {{provider}}",

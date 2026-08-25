@@ -8,6 +8,7 @@ import { hashPassword } from '../lib/password.js'
 import { createSession } from '../lib/session.js'
 import { setSessionCookie } from '../lib/cookies.js'
 import { serializeUser } from '../lib/serialize.js'
+import { isEmailConfigured } from '../lib/email.js'
 
 export const setupRoutes = new OpenAPIHono<AppEnv>()
 
@@ -49,6 +50,7 @@ setupRoutes.openapi(
         description: 'Admin account created',
         content: { 'application/json': { schema: userSchema } },
       },
+      403: { description: 'Email is not configured on this instance' },
       409: { description: 'Setup has already been completed' },
     },
   }),
@@ -56,6 +58,14 @@ setupRoutes.openapi(
     const db = c.get('db')
     if (await adminExists(db)) {
       return c.json({ error: 'Setup has already been completed' }, 409)
+    }
+
+    // The first admin's address goes through the same account-management
+    // machinery as everyone else's (change-email, password reset), all of
+    // which needs SMTP — so this instance can't be set up at all without
+    // it, rather than quietly leaving the admin's own email unconfirmable.
+    if (!isEmailConfigured()) {
+      return c.json({ error: 'Email must be configured before this instance can be set up' }, 403)
     }
 
     const body = c.req.valid('json')
@@ -67,6 +77,12 @@ setupRoutes.openapi(
         email: body.email,
         displayName: body.displayName,
         role: 'admin',
+        // Pre-verified rather than sent a verification email like a normal
+        // registration (auth.ts's /auth/register) would — this is the
+        // person physically deploying/configuring the instance, not
+        // someone whose address needs confirming, and SMTP likely isn't
+        // even configured yet at this point in a fresh deployment anyway.
+        emailVerifiedAt: new Date(),
         // See registerRequestSchema's doc comment on `locale`.
         ...(body.locale ? { locale: body.locale } : {}),
       })

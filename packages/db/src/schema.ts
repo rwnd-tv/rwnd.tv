@@ -92,6 +92,15 @@ export const users = pgTable('users', {
   avatarImage: bytea('avatar_image'),
   avatarMimeType: text('avatar_mime_type'),
   avatarUpdatedAt: timestamp('avatar_updated_at', { withTimezone: true }),
+  // Null until the address is confirmed via a clicked emailVerificationTokens
+  // link (apps/api/src/routes/auth.ts). Every row that existed before this
+  // column was added is backfilled to its own createdAt by migration 0017 —
+  // already-in-use accounts aren't retroactively asked to reverify something
+  // that was working fine. Doesn't gate login/use of the app (a self-hoster
+  // without SMTP configured at all would otherwise have no way to ever
+  // clear it) — informational only today (shown on ProfilePage.tsx with a
+  // resend option), not enforced anywhere.
+  emailVerifiedAt: timestamp('email_verified_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 })
 
@@ -274,6 +283,62 @@ export const invites = pgTable('invites', {
     .notNull()
     .references(() => users.id, { onDelete: 'cascade' }),
   usedBy: uuid('used_by').references(() => users.id, { onDelete: 'set null' }),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+})
+
+/** One-shot password reset link (Settings/ProfilePage's "Forgot password?"
+ * flow, apps/api/src/routes/auth.ts). Unlike `invites` above, there's no
+ * `usedBy`/accountability need for this — the row is just deleted once
+ * redeemed (same as sessions/apiTokens on revoke), rather than kept around
+ * marked used. `tokenHash` is the same generateSecret()/hashSecret() pair
+ * sessions and API tokens use — the raw token only ever exists in the
+ * emailed link, never stored. */
+export const passwordResetTokens = pgTable('password_reset_tokens', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id')
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  tokenHash: text('token_hash').notNull().unique(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+})
+
+/** One-shot email-verification link (`users.emailVerifiedAt` above) — same
+ * shape and reasoning as `passwordResetTokens` immediately above (deleted
+ * on redemption, hashed-opaque-token). A user can have more than one of
+ * these outstanding at once isn't prevented at the schema level, but
+ * `POST /auth/resend-verification` deletes any existing row for the user
+ * before issuing a new one, so in practice there's only ever one live. */
+export const emailVerificationTokens = pgTable('email_verification_tokens', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id')
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  tokenHash: text('token_hash').notNull().unique(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+})
+
+/** One-shot email-*change* confirmation link — deliberately a separate
+ * table from `emailVerificationTokens` above rather than reusing it with
+ * an implicit "does this user have a pending new address?" branch: same
+ * hashed-opaque-token/deleted-on-redemption shape, but this one also
+ * carries the candidate `newEmail` itself, since `users.email` isn't
+ * touched until the link is actually clicked (apps/api/src/routes/auth.ts
+ * — POST /auth/me/email creates the row and emails *newEmail*, not the
+ * account's current address; POST /auth/confirm-email-change redeems it
+ * and only then updates `users.email`/`emailVerifiedAt`). `newEmail` is
+ * `citext` to match `users.email`'s case-insensitive uniqueness — the
+ * confirm route re-checks it's still free at redemption time, in case
+ * someone else claimed it in the meantime. */
+export const emailChangeTokens = pgTable('email_change_tokens', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id')
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  newEmail: citext('new_email').notNull(),
+  tokenHash: text('token_hash').notNull().unique(),
   expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 })

@@ -4,6 +4,7 @@ import { Navigate, useNavigate } from 'react-router'
 import { useQueryClient } from '@tanstack/react-query'
 import { api, ApiError } from '../lib/api-client.js'
 import { useSetupStatus } from '../lib/use-setup-status.js'
+import { usePublicSettings } from '../lib/use-public-settings.js'
 import { detectedLocale } from '../lib/detected-locale.js'
 import { Card } from '../components/ui/Card.js'
 import { Field } from '../components/ui/Field.js'
@@ -15,13 +16,14 @@ export function SetupPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { data, isLoading } = useSetupStatus()
+  const { data: settings, isLoading: settingsLoading } = usePublicSettings()
   const [displayName, setDisplayName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string>()
   const [submitting, setSubmitting] = useState(false)
 
-  if (isLoading) {
+  if (isLoading || settingsLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <Spinner label={t('common.loading')} />
@@ -32,6 +34,24 @@ export function SetupPage() {
   // Setup has already run — don't let it be repeated.
   if (data && !data.required) {
     return <Navigate to="/login" replace />
+  }
+
+  // The first admin's email has to be handled by the same machinery as
+  // everyone else's, so setup can't proceed until SMTP is configured —
+  // there's nothing useful to offer here yet (no admin exists to log in
+  // as, and creating one would leave its address unconfirmable), so this
+  // replaces the form entirely rather than just disabling submit.
+  if (settings && !settings.emailConfigured) {
+    return (
+      <div className="flex min-h-screen items-center justify-center px-4">
+        <Card className="w-full max-w-sm">
+          <h1 className="mb-1 text-xl font-semibold text-[var(--color-danger)]">
+            {t('setup.emailRequiredTitle')}
+          </h1>
+          <p className="text-sm text-[var(--color-fg-muted)]">{t('setup.emailRequiredBody')}</p>
+        </Card>
+      </div>
+    )
   }
 
   async function handleSubmit(e: FormEvent) {

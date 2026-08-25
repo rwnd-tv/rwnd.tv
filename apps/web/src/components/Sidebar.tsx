@@ -54,13 +54,13 @@ function SidebarLink({
  * `vh`: on mobile Chrome/Safari, `100vh` is the *largest* possible viewport
  * (as if the address bar were already hidden), so with `vh` this nav
  * rendered taller than what was actually on screen whenever the address bar
- * was showing, pushing Import/Settings/Profile off the bottom until the bar
+ * was showing, pushing Import/Settings/Account off the bottom until the bar
  * auto-hid on scroll (found live on Android Chrome, 2026-08-21).
  *
  * `svh` (pinned to the smallest possible viewport) was tried in between —
  * no mid-scroll jank, since the nav never resizes, but that also means it's
  * *permanently* short by the address bar's height once the bar auto-hides,
- * leaving Import/Settings/Profile sitting above a dead gap the rest of the
+ * leaving Import/Settings/Account sitting above a dead gap the rest of the
  * time (James, 2026-08-21: prefers `dvh`'s momentary jank while the address
  * bar is actively animating over `svh`'s permanently-wrong resting state —
  * being correct once the scroll settles matters more than being stable
@@ -149,13 +149,15 @@ export function Sidebar({ collapsed, onNavigate }: { collapsed: boolean; onNavig
           account while testing Plex webhook attribution): nothing here
           showed identity at all before this, so it was easy to lose track
           of which account a shared browser was currently on. Links to
-          ProfilePage.tsx, where the avatar itself is changed and — since
-          2026-08-25 — Log out now lives (this used to be a separate
-          standalone Log out button here; James: once the Profile page had
-          its own, the sidebar's copy was redundant with this row). */}
+          AccountPage.tsx (Profile at first, renamed the same day — James:
+          once Change Password landed, the page covered more than just
+          "Profile" identity bits), where the avatar itself is changed and
+          Log out now lives (this used to be a separate standalone Log out
+          button here; James: once the page had its own, the sidebar's
+          copy was redundant with this row). */}
       {user && (
         <Link
-          to="/profile"
+          to="/account"
           title={collapsed ? user.displayName : undefined}
           onClick={onNavigate}
           className="flex items-center gap-3 border-t border-[var(--color-border)] px-3.5 py-3 text-sm font-medium hover:bg-[var(--color-surface)]"

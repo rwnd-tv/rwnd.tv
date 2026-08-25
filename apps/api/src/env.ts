@@ -65,6 +65,28 @@ const rawEnvSchema = z.object({
   // (see Dockerfile) can write to; apps/api/src/backup/paths.ts creates the
   // per-user subdirectory under it on first use, but not this root itself.
   BACKUP_DIR: z.string().optional(),
+  // Outbound email (account verification, password reset —
+  // apps/api/src/lib/email.ts). Optional as a group, same "unset means the
+  // feature hides itself" pattern as TRAKT_CLIENT_ID/BACKUP_DIR above —
+  // SMTP_HOST is what actually gates it (see instanceSettingsSchema's
+  // emailConfigured); the other four are required whenever it's set, since
+  // a half-configured SMTP setup can't send anything. Plain SMTP, not a
+  // specific provider's API, deliberately — see docs/self-hosting.md, any
+  // self-hoster's own mail relay (Gmail with an App Password, a
+  // transactional-email provider's SMTP endpoint, a self-run mail server,
+  // ...) works without rwnd.tv taking a dependency on one vendor's SDK.
+  SMTP_HOST: z.string().optional(),
+  SMTP_PORT: z.coerce.number().int().positive().default(587),
+  SMTP_USER: z.string().optional(),
+  SMTP_PASS: z.string().optional(),
+  // Shown as the message's From header — e.g. '"rwnd.tv" <noreply@example.com>'.
+  SMTP_FROM: z.string().optional(),
+  // This instance's own public base URL, e.g. 'https://rwnd.tv' — required
+  // alongside SMTP_HOST to build the verification/reset links a sent email
+  // actually points at (there's no reliable way to derive this from a
+  // request's own Host header behind an arbitrary reverse proxy setup, so
+  // it's explicit rather than guessed). No trailing slash.
+  APP_URL: z.string().url().optional(),
 })
 
 const envSchema = rawEnvSchema.transform((data) => ({
@@ -107,6 +129,16 @@ export function parseEnv(source: NodeJS.ProcessEnv): Env {
     if (keyBytes.length !== 32) {
       throw new Error(
         'ENCRYPTION_KEY must decode to exactly 32 bytes (e.g. `openssl rand -base64 32`)',
+      )
+    }
+  }
+  if (parsed.data.SMTP_HOST) {
+    const missing = (['SMTP_USER', 'SMTP_PASS', 'SMTP_FROM', 'APP_URL'] as const).filter(
+      (key) => !parsed.data[key],
+    )
+    if (missing.length > 0) {
+      throw new Error(
+        `${missing.join(', ')} ${missing.length > 1 ? 'are' : 'is'} required when SMTP_HOST is set`,
       )
     }
   }

@@ -16,7 +16,7 @@
   "dependencies": {
     "@hono/node-server": "^2.1.1",
     "@hono/swagger-ui": "^0.6.1",
-    "@hono/zod-openapi": "^1.5.3",
+    "@hono/zod-openapi": "^1.6.1",
     "@node-rs/argon2": "^2.1.0",
     "@rwnd/db": "workspace:*",
     "@rwnd/shared": "workspace:*",

@@ -2232,3 +2232,17 @@ DATABASE` ×2) — zero residue.\
       unfixed Trakt API bug rather than anything on rwnd.tv's side, so
       left as a documented limitation rather than something to work
       around.
+
+## Self-hosting & deployment
+
+- [x] **`docker-compose.yml` never passes through `TVDB_API_KEY`/`TVDB_PIN`/`ENVIRONMENT_LABEL`** (2026-08-26 added, done 2026-08-26) — M3\
+      `.env.example` and `docs/self-hosting.md`'s config table both
+      documented these as real options, but the self-hoster-facing
+      `docker-compose.yml`'s `app` service `environment:` block only
+      wired `DATABASE_URL`, `TMDB_API_KEY`, `COOKIE_SECURE`, `TRAKT_*`,
+      `SMTP_*`, and `APP_URL` through to the container — a self-hoster
+      who set `TVDB_API_KEY` in `.env` and ran `docker compose up` got
+      nothing, no error anywhere. Fix: added the three missing lines,
+      same `${VAR:-}` pattern already used for the other optional vars.
+      Validated with `docker compose config` against a dummy `.env` —
+      all three now resolve correctly in the rendered config.

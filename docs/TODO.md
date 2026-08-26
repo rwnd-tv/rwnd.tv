@@ -103,18 +103,6 @@ Format:
 
 ## Self-hosting & deployment
 
-- [ ] **`docker-compose.yml` never passes through `TVDB_API_KEY`/`TVDB_PIN`/`ENVIRONMENT_LABEL`** (2026-08-26 added) — M3\
-      Found during the M3 readiness review: `.env.example` and
-      `docs/self-hosting.md`'s config table both document these as real
-      options, but the self-hoster-facing `docker-compose.yml`'s `app`
-      service `environment:` block only wires `DATABASE_URL`,
-      `TMDB_API_KEY`, `COOKIE_SECURE`, `TRAKT_*`, `SMTP_*`, and `APP_URL`
-      through to the container. A self-hoster who sets `TVDB_API_KEY` in
-      `.env` and runs `docker compose up` gets nothing — TheTVDB silently
-      never activates, no error anywhere. Fix: add the three missing
-      lines to the `environment:` block, same `${VAR:-}` pattern already
-      used for the optional ones.
-
 - [ ] **Cut the first tagged release** (2026-08-26 added) — M3\
       `SECURITY.md` says rwnd.tv is "pre-1.0... until the first stable
       release," and `docker-compose.yml`'s own comment already

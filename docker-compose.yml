@@ -12,10 +12,13 @@ services:
     environment:
       DATABASE_URL: ${DATABASE_URL}
       TMDB_API_KEY: ${TMDB_API_KEY}
+      TVDB_API_KEY: ${TVDB_API_KEY:-}
+      TVDB_PIN: ${TVDB_PIN:-}
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
       TRAKT_CLIENT_ID: ${TRAKT_CLIENT_ID:-}
       TRAKT_CLIENT_SECRET: ${TRAKT_CLIENT_SECRET:-}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY:-}
+      ENVIRONMENT_LABEL: ${ENVIRONMENT_LABEL:-}
       # Optional, same "set the group or leave the whole group unset" shape
       # as the TRAKT_* vars above — enables account verification and
       # "Forgot password?" emails. See .env.example for what each does.

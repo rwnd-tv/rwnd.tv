@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { eq } from 'drizzle-orm'
-import { externalIds, movies, seasons, shows } from '@rwnd/db'
+import { and, eq } from 'drizzle-orm'
+import { episodes, externalIds, movies, seasons, shows } from '@rwnd/db'
 import { createMetadataProviders } from '../providers/index.js'
 import { loadEnv } from '../env.js'
 import { runMetadataRefresh } from '../metadata/refresh.js'
@@ -39,13 +39,20 @@ function tmdbShowResponse(overrides: {
 }
 
 // Only hit for an airing show's current season — see refreshOneShow's doc
-// comment in apps/api/src/metadata/refresh.ts.
-function tmdbSeasonResponse(episodes: Array<{ episode_number: number; air_date?: string }>) {
+// comment in apps/api/src/metadata/refresh.ts. `seasonNumber` must match the
+// season actually requested — refreshOneShow now persists these episodes via
+// resolveSeason (apps/api/src/lib/media.ts), which stores/looks them up by
+// season number, so a mismatch here silently makes them vanish from the
+// query rather than just being an unused field.
+function tmdbSeasonResponse(
+  seasonNumber: number,
+  episodes: Array<{ episode_number: number; air_date?: string }>,
+) {
   return JSON.stringify({
     overview: 'A season overview.',
     episodes: episodes.map((e) => ({
       name: `Episode ${e.episode_number}`,
-      season_number: 1,
+      season_number: seasonNumber,
       episode_number: e.episode_number,
       air_date: e.air_date,
     })),
@@ -260,7 +267,7 @@ describe('metadata refresh', () => {
         if (url.pathname === '/3/tv/3/season/1') {
           // 2 aired, 1 not yet — this show is still airing.
           return new Response(
-            tmdbSeasonResponse([
+            tmdbSeasonResponse(1, [
               { episode_number: 1, air_date: '2020-01-01' },
               { episode_number: 2, air_date: '2020-01-08' },
               { episode_number: 3, air_date: '2099-01-01' },
@@ -288,6 +295,56 @@ describe('metadata refresh', () => {
     expect(showSeasons[0]?.episodeCount).toBe(9)
     // Only 2 of the season's (eventual) 9 episodes have actually aired.
     expect(showSeasons[0]?.airedEpisodeCount).toBe(2)
+  })
+
+  // The point of routing the airedEpisodeCount fetch through resolveSeason
+  // (apps/api/src/lib/media.ts) rather than calling provider.getSeason()
+  // directly: a show nobody's opened a season/episode page for recently used
+  // to never get per-episode rows persisted at all, no matter how long it
+  // aired for (docs/TODO_ARCHIVE.md). Confirms the sweep itself now leaves
+  // real `episodes` rows behind, not just a season-level count.
+  it('persists per-episode rows for the currently-airing season during the background sweep', async () => {
+    const show = await insertShow({
+      tmdbId: 11,
+      status: 'Returning Series',
+      metadataRefreshedAt: new Date(Date.now() - 10 * DAY_MS),
+      withSeasons: false,
+    })
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: string | URL) => {
+        const url = new URL(input)
+        if (url.pathname === '/3/tv/11/season/1') {
+          return new Response(
+            tmdbSeasonResponse(1, [
+              { episode_number: 1, air_date: '2020-01-01' },
+              { episode_number: 2, air_date: '2099-01-01' },
+            ]),
+            { status: 200 },
+          )
+        }
+        return new Response(
+          tmdbShowResponse({
+            id: 11,
+            status: 'Returning Series',
+            seasons: [{ season_number: 1, episode_count: 2 }],
+          }),
+          { status: 200 },
+        )
+      }),
+    )
+
+    const result = await runMetadataRefresh(db, [provider])
+    expect(result.showsRefreshed).toBe(1)
+
+    const showEpisodes = await db
+      .select()
+      .from(episodes)
+      .where(and(eq(episodes.showId, show.id), eq(episodes.seasonNumber, 1)))
+    expect(showEpisodes).toHaveLength(2)
+    const byNumber = new Map(showEpisodes.map((e) => [e.episodeNumber, e]))
+    expect(byNumber.get(1)?.firstAired).toBe('2020-01-01')
+    expect(byNumber.get(2)?.firstAired).toBe('2099-01-01')
   })
 
   it('sets airedEpisodeCount to the full episodeCount for a finished show, without an extra season fetch', async () => {
@@ -341,7 +398,7 @@ describe('metadata refresh', () => {
         const url = new URL(input)
         if (url.pathname === '/3/tv/8/season/2') {
           return new Response(
-            tmdbSeasonResponse([
+            tmdbSeasonResponse(2, [
               { episode_number: 1, air_date: '2026-01-01' },
               { episode_number: 2, air_date: '2099-01-01' },
             ]),
@@ -395,7 +452,7 @@ describe('metadata refresh', () => {
         const url = new URL(input)
         if (url.pathname === '/3/tv/10/season/3') {
           return new Response(
-            tmdbSeasonResponse([
+            tmdbSeasonResponse(3, [
               { episode_number: 1, air_date: '2020-01-01' },
               { episode_number: 2, air_date: '2099-01-01' },
             ]),

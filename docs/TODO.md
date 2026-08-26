@@ -79,50 +79,6 @@ Format:
       generally make the repo read as more current and inviting to
       someone landing on it cold.
 
-## Metadata
-
-- [ ] **Per-episode data is never resolved proactively — only as a side effect of specific actions** (2026-08-25 15:42 added) — M3\
-      James: concerned that episode-level data only shows up once
-      someone happens to look at the season page. Actually worse than
-      that, found while investigating: viewing a season/episode page
-      doesn't persist anything at all — `GET /library/shows/{slug}/seasons/{seasonNumber}`
-      (`apps/api/src/routes/library.ts`) fetches straight from the
-      provider to render the page and throws that away once the
-      response is sent. The _only_ thing that ever writes a row into
-      the local `episodes` table is `resolveSeason()`
-      (`apps/api/src/lib/media.ts`), and that only runs from: the
-      show/season page's "Mark watched" bulk actions
-      (`resolveShowEpisodes`/`resolveSeasonEpisodes`), Continue
-      Watching/Upcoming's own next-episode lookup (`findNextUnwatchedEpisode`/
-      `findNextAiringEpisode` — themselves gated behind the 30-day
-      recency window, see `DASHBOARD_ROW_WINDOW_DAYS`), or Trakt import
-      matching. The background metadata refresher
-      (`refreshOneShow`, same file as the `airedEpisodeCount` fix in
-      `docs/TODO_ARCHIVE.md`) doesn't call it either — it fetches the
-      latest season's episode list from the provider just to compute a
-      count for `airedEpisodeCount`, then discards the actual episodes.\
-      Net effect: a show nobody's interacted with recently — outside
-      the 30-day window, no "Watched" button pressed, no import — never
-      gets its per-episode data saved locally at all, no matter how long
-      it's been out or how many times its pages get viewed. Confirmed
-      live: Silo Season 3 had zero rows in `episodes` even right after
-      loading its episode detail page, which had rendered the correct
-      air date by fetching it live.\
-      Wants the background refresher to proactively resolve (persist,
-      not just fetch-and-discard) episode data for at least the
-      currently-airing season of any show whose status is still
-      airing, on the same sweep `refreshOneShow` already runs — likely
-      by having it call `resolveSeason()` (or equivalent) instead of
-      `provider.getSeason()` directly. Worth doing together with
-      `airedEpisodeCount`: if real per-episode `firstAired` rows exist
-      locally, `airedEpisodeCount` could be computed from them directly
-      instead of the current per-season heuristic. Exact scope still
-      open — every season of every show a self-hoster might have
-      watched once, long ago, is a lot more provider traffic than just
-      the currently-airing one; needs a design pass on how far to
-      proactively resolve versus leaving older/finished shows lazy as
-      they are today.
-
 ## Auth & accounts
 
 - [ ] **Passkey (WebAuthn) support** (2026-08-23 15:45 added)\

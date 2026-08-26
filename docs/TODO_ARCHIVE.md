@@ -1483,6 +1483,32 @@ currently-dropped shows, since a row can have both
       exact shape (a real season plus an empty placeholder one season
       number higher) to `apps/api/src/test/metadata-refresh.test.ts`.
 
+- [x] **Per-episode data is never resolved proactively — only as a side effect of specific actions** (2026-08-25 15:42 added, done 2026-08-26)\
+      Fix: `refreshOneShow`'s (`apps/api/src/metadata/refresh.ts`)
+      extra per-episode fetch for a still-airing show's latest season
+      now goes through `resolveSeason()` (`apps/api/src/lib/media.ts`)
+      instead of calling `provider.getSeason()` directly — the same
+      change the `airedEpisodeCount` fix above already suggested. The
+      `airedEpisodeCount` count itself is computed from
+      `resolveSeason`'s return value (the same rows just persisted into
+      `episodes`), rather than from the raw provider response, so the
+      one extra fetch the sweep already made now does double duty.\
+      Scope kept deliberately narrow, per the item's own "needs a design
+      pass" caveat: only the currently-airing season of an airing show
+      gets resolved this way, on the sweep's existing cadence — no
+      change to older/finished seasons, which stay lazy (resolved only
+      on a "Mark watched" action, Continue Watching/Upcoming lookup, or
+      Trakt import, as before).\
+      Added a regression test asserting real `episodes` rows land in
+      the database after a sweep, not just a season-level count
+      (`apps/api/src/test/metadata-refresh.test.ts`); also fixed a
+      latent bug in that file's `tmdbSeasonResponse` test helper, which
+      hardcoded `season_number: 1` in every episode regardless of which
+      season was actually requested — harmless before this change (the
+      season-number field was never read), but silently broke two
+      existing tests once the aired-count computation started depending
+      on episodes actually landing in the right season.
+
 ## Webhooks & scrobbling
 
 - [x] **Plex webhook ingestion** (2026-08-23 15:30 added, done 2026-08-24) — M2\

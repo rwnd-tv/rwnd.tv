@@ -3,6 +3,7 @@ import type { Database } from '@rwnd/db'
 import { externalIds, instanceSettings, movies, seasons, shows } from '@rwnd/db'
 import type { MetadataProvider } from '../providers/types.js'
 import { orderedProviders } from '../providers/priority.js'
+import { resolveSeason } from '../lib/media.js'
 
 /**
  * Keeps cached show/movie metadata (apps/api/src/lib/media.ts's
@@ -283,9 +284,18 @@ export async function refreshOneShow(
     // airing show might have unaired episodes left, so that's the one case
     // worth an extra per-episode fetch for (see showDetailSchema's
     // `airedEpisodes` doc comment for why this number exists at all).
+    // Goes through resolveSeason (apps/api/src/lib/media.ts) rather than
+    // calling provider.getSeason() directly so this data actually lands in
+    // the local `episodes` table instead of being fetched and discarded —
+    // otherwise a show nobody's opened a season/episode page for recently
+    // never gets per-episode rows at all, no matter how long it airs for
+    // (see docs/TODO_ARCHIVE.md).
     let latestSeasonAiredCount: number | null = null
     if (isAiring && latestSeasonNumber !== null) {
-      const { episodes: latestEpisodes } = await provider.getSeason(
+      const latestEpisodes = await resolveSeason(
+        db,
+        provider,
+        candidate.id,
         candidate.externalId,
         latestSeasonNumber,
         locale,

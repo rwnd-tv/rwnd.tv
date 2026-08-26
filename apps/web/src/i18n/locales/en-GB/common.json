@@ -153,6 +153,7 @@
   "showDetail": {
     "notFound": "This TV show couldn't be found.",
     "seasonsTitle": "Seasons",
+    "episodesTitle": "Episodes",
     "specials": "Specials",
     "seasonProgressAria": "{{season}}: {{watched}} of {{total}} episodes watched",
     "watchedPeriod": "Watched {{range}}",
@@ -227,6 +228,15 @@
       "runtime": "{{minutes}} min",
       "previousEpisode": "Previous episode",
       "nextEpisode": "Next episode"
+    },
+    "historyTable": {
+      "title": "History",
+      "dateColumn": "Date",
+      "timeColumn": "Time",
+      "typeColumn": "Type",
+      "seasonColumn": "Season",
+      "episodeColumn": "Episode",
+      "deleteSelectedWatches": "Delete selected episodes"
     }
   },
   "movies": {

@@ -38,8 +38,10 @@ import {
   type RestoreBackupResponse,
   type SearchResponse,
   type SeasonDetail,
+  type SeasonWatches,
   type SetupRequest,
   type ShowDetail,
+  type ShowWatches,
   type TraktConnectionStatus,
   type TraktDevicePairing,
   type UpdateInstanceSettingsRequest,
@@ -176,6 +178,12 @@ export const api = {
       post<MarkShowWatchedResponse>(`/library/shows/${encodeURIComponent(slug)}/watched`, body),
     removeShowWatches: (slug: string) =>
       del<RemoveShowWatchesResponse>(`/library/shows/${encodeURIComponent(slug)}/watched`),
+    showWatches: (slug: string) =>
+      get<ShowWatches>(`/library/shows/${encodeURIComponent(slug)}/plays`),
+    removeShowWatchesByIds: (slug: string, ids: string[]) =>
+      del<RemoveShowWatchesResponse>(`/library/shows/${encodeURIComponent(slug)}/plays`, {
+        ids,
+      } satisfies RemoveWatchesRequest),
     season: (slug: string, seasonNumber: number) =>
       get<SeasonDetail>(`/library/shows/${encodeURIComponent(slug)}/seasons/${seasonNumber}`),
     markSeasonWatched: (slug: string, seasonNumber: number, body: MarkShowWatchedRequest) =>
@@ -195,6 +203,15 @@ export const api = {
     episodeWatches: (slug: string, seasonNumber: number, episodeNumber: number) =>
       get<Watches>(
         `/library/shows/${encodeURIComponent(slug)}/seasons/${seasonNumber}/episodes/${episodeNumber}/plays`,
+      ),
+    seasonWatches: (slug: string, seasonNumber: number) =>
+      get<SeasonWatches>(
+        `/library/shows/${encodeURIComponent(slug)}/seasons/${seasonNumber}/plays`,
+      ),
+    removeSeasonWatchesByIds: (slug: string, seasonNumber: number, ids: string[]) =>
+      del<RemoveShowWatchesResponse>(
+        `/library/shows/${encodeURIComponent(slug)}/seasons/${seasonNumber}/plays`,
+        { ids } satisfies RemoveWatchesRequest,
       ),
     movies: () => get<ListLibraryMoviesResponse>('/library/movies'),
     resolveMovie: (body: ResolveMediaRequest) =>

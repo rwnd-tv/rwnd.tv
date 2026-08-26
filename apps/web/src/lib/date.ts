@@ -131,16 +131,21 @@ export function clampDate(date: Date, min: Date | null, max: Date): Date {
  * weekday name ("Wednesday") rather than "27 Aug", falling back to the
  * existing day/month format beyond that window.
  */
+/** Whole calendar days between `date` and today (local time), negative for
+ * the past — shared by formatDashboardDate/formatHistoryDate below so both
+ * "how many days away is this" checks stay in sync. */
+function daysFromToday(date: Date): number {
+  const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate())
+  return Math.round((startOfDay(date).getTime() - startOfDay(new Date()).getTime()) / 86_400_000)
+}
+
 export function formatDashboardDate(
   date: Date,
   locale: string,
   t: (key: string) => string,
   weekdayWithinDays = 0,
 ): string {
-  const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate())
-  const dayDiff = Math.round(
-    (startOfDay(date).getTime() - startOfDay(new Date()).getTime()) / 86_400_000,
-  )
+  const dayDiff = daysFromToday(date)
 
   if (dayDiff === 0) return t('common.today')
   if (dayDiff === -1) return t('common.yesterday')
@@ -149,6 +154,21 @@ export function formatDashboardDate(
     return date.toLocaleDateString(locale, { weekday: 'long' })
   }
   return date.toLocaleDateString(locale, { day: 'numeric', month: 'short' })
+}
+
+/**
+ * Same "Today"/"Yesterday" treatment as formatDashboardDate above, but for
+ * a date that's always in the past (a logged watch) rather than a near-term
+ * window — falls back to a full `dateStyle: 'medium'` date (year included)
+ * instead of formatDashboardDate's day/month-only fallback, since a watch's
+ * date can be years old (e.g. Trakt-imported history) where the year
+ * matters.
+ */
+export function formatHistoryDate(date: Date, locale: string, t: (key: string) => string): string {
+  const dayDiff = daysFromToday(date)
+  if (dayDiff === 0) return t('common.today')
+  if (dayDiff === -1) return t('common.yesterday')
+  return date.toLocaleDateString(locale, { dateStyle: 'medium' })
 }
 
 /** `YYYY-MM-DD` in local time, for a native `<input type="date">` value. */

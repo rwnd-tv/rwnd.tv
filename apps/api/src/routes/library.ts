@@ -5,6 +5,8 @@ import {
   droppedStatusSchema,
   watchedStatusSchema,
   watchesSchema,
+  seasonWatchesSchema,
+  showWatchesSchema,
   listLibraryMoviesResponseSchema,
   listLibraryShowsResponseSchema,
   markShowWatchedRequestSchema,
@@ -1083,13 +1085,17 @@ libraryRoutes.openapi(
     // this list being stable across repeated fetches of the same data —
     // an unstable order looks like "the list changed" to it.
     const rows = await db
-      .select({ id: plays.id, watchedAt: plays.watchedAt })
+      .select({ id: plays.id, watchedAt: plays.watchedAt, source: plays.source })
       .from(plays)
       .where(and(eq(plays.userId, userId), eq(plays.episodeId, episodeRow.id)))
       .orderBy(desc(plays.watchedAt), asc(plays.id))
 
     return c.json({
-      watches: rows.map((row) => ({ id: row.id, watchedAt: row.watchedAt.toISOString() })),
+      watches: rows.map((row) => ({
+        id: row.id,
+        watchedAt: row.watchedAt.toISOString(),
+        source: row.source,
+      })),
     })
   },
 )
@@ -1176,6 +1182,265 @@ libraryRoutes.openapi(
       watchedCount: remaining.length,
       lastWatchedAt: remaining[0] ? remaining[0].watchedAt.toISOString() : null,
     })
+  },
+)
+
+/**
+ * Every one of the current user's individual watches across a whole season
+ * (SeasonDetailPage.tsx's own History table) — the season-scoped
+ * counterpart of the per-episode plays-list route above. Joins through
+ * `episodes` (rather than filtering by a single episode id) so one query
+ * covers every episode of the season at once; `episodeTitle` comes along
+ * for the ride since the History table needs to name which episode each
+ * row belongs to.
+ */
+libraryRoutes.openapi(
+  createRoute({
+    method: 'get',
+    path: '/library/shows/{slug}/seasons/{seasonNumber}/plays',
+    summary: "List the current user's individual watches for one season",
+    middleware: [requireAuth] as const,
+    request: {
+      params: z.object({ slug: z.string(), seasonNumber: z.coerce.number().int().min(0) }),
+    },
+    responses: {
+      200: {
+        description: 'Watches, newest first',
+        content: { 'application/json': { schema: seasonWatchesSchema } },
+      },
+      404: { description: 'Show not found' },
+    },
+  }),
+  async (c) => {
+    const { slug, seasonNumber } = c.req.valid('param')
+    const userId = c.get('user')!.id
+    const db = c.get('db')
+
+    const [show] = await db
+      .select({ id: shows.id })
+      .from(shows)
+      .where(eq(shows.slug, slug))
+      .limit(1)
+    if (!show) return c.json({ error: 'Show not found' }, 404)
+
+    const rows = await db
+      .select({
+        id: plays.id,
+        watchedAt: plays.watchedAt,
+        source: plays.source,
+        episodeNumber: episodes.episodeNumber,
+        episodeTitle: episodes.title,
+      })
+      .from(plays)
+      .innerJoin(episodes, eq(plays.episodeId, episodes.id))
+      .where(
+        and(
+          eq(plays.userId, userId),
+          eq(episodes.showId, show.id),
+          eq(episodes.seasonNumber, seasonNumber),
+        ),
+      )
+      .orderBy(desc(plays.watchedAt), asc(plays.id))
+
+    return c.json({
+      watches: rows.map((row) => ({
+        id: row.id,
+        watchedAt: row.watchedAt.toISOString(),
+        source: row.source,
+        episodeNumber: row.episodeNumber,
+        episodeTitle: row.episodeTitle,
+      })),
+    })
+  },
+)
+
+/**
+ * Remove some of the current user's watches across a whole season
+ * (SeasonDetailPage.tsx's History table lets you tick watches spanning
+ * several episodes at once, unlike the per-episode UnwatchConfirmDialog
+ * flow) — same "ids scoped regardless of what the caller sends" safety as
+ * the per-episode DELETE route above, just scoped to every episode of the
+ * season instead of one.
+ */
+libraryRoutes.openapi(
+  createRoute({
+    method: 'delete',
+    path: '/library/shows/{slug}/seasons/{seasonNumber}/plays',
+    summary: "Remove some of the current user's watches for one season",
+    middleware: [requireAuth] as const,
+    request: {
+      params: z.object({ slug: z.string(), seasonNumber: z.coerce.number().int().min(0) }),
+      body: { content: { 'application/json': { schema: removeWatchesRequestSchema } } },
+    },
+    responses: {
+      200: {
+        description: 'Watches removed',
+        content: { 'application/json': { schema: removeShowWatchesResponseSchema } },
+      },
+      404: { description: 'Show not found' },
+    },
+  }),
+  async (c) => {
+    const { slug, seasonNumber } = c.req.valid('param')
+    const { ids } = c.req.valid('json')
+    const userId = c.get('user')!.id
+    const db = c.get('db')
+
+    const [show] = await db
+      .select({ id: shows.id })
+      .from(shows)
+      .where(eq(shows.slug, slug))
+      .limit(1)
+    if (!show) return c.json({ error: 'Show not found' }, 404)
+
+    const episodeRows = await db
+      .select({ id: episodes.id })
+      .from(episodes)
+      .where(and(eq(episodes.showId, show.id), eq(episodes.seasonNumber, seasonNumber)))
+    const episodeIds = episodeRows.map((row) => row.id)
+
+    let count = 0
+    if (episodeIds.length > 0) {
+      const removed = await db
+        .delete(plays)
+        .where(
+          and(
+            eq(plays.userId, userId),
+            inArray(plays.episodeId, episodeIds),
+            inArray(plays.id, ids),
+          ),
+        )
+        .returning({ id: plays.id })
+      count = removed.length
+    }
+
+    return c.json({ count })
+  },
+)
+
+/**
+ * Every one of the current user's individual watches across a whole show
+ * (every season, not just one) — ShowDetailPage.tsx's own History table,
+ * the show-scoped counterpart of the season plays-list route above. Same
+ * join-through-episodes shape, just without the seasonNumber filter;
+ * `seasonNumber` comes along in the response since the table needs to name
+ * which season each row belongs to, not just which episode.
+ */
+libraryRoutes.openapi(
+  createRoute({
+    method: 'get',
+    path: '/library/shows/{slug}/plays',
+    summary: "List the current user's individual watches for a whole show",
+    middleware: [requireAuth] as const,
+    request: { params: z.object({ slug: z.string() }) },
+    responses: {
+      200: {
+        description: 'Watches, newest first',
+        content: { 'application/json': { schema: showWatchesSchema } },
+      },
+      404: { description: 'Show not found' },
+    },
+  }),
+  async (c) => {
+    const { slug } = c.req.valid('param')
+    const userId = c.get('user')!.id
+    const db = c.get('db')
+
+    const [show] = await db
+      .select({ id: shows.id })
+      .from(shows)
+      .where(eq(shows.slug, slug))
+      .limit(1)
+    if (!show) return c.json({ error: 'Show not found' }, 404)
+
+    const rows = await db
+      .select({
+        id: plays.id,
+        watchedAt: plays.watchedAt,
+        source: plays.source,
+        seasonNumber: episodes.seasonNumber,
+        episodeNumber: episodes.episodeNumber,
+        episodeTitle: episodes.title,
+      })
+      .from(plays)
+      .innerJoin(episodes, eq(plays.episodeId, episodes.id))
+      .where(and(eq(plays.userId, userId), eq(episodes.showId, show.id)))
+      .orderBy(desc(plays.watchedAt), asc(plays.id))
+
+    return c.json({
+      watches: rows.map((row) => ({
+        id: row.id,
+        watchedAt: row.watchedAt.toISOString(),
+        source: row.source,
+        seasonNumber: row.seasonNumber,
+        episodeNumber: row.episodeNumber,
+        episodeTitle: row.episodeTitle,
+      })),
+    })
+  },
+)
+
+/**
+ * Remove some of the current user's watches across a whole show
+ * (ShowDetailPage.tsx's History table lets you tick watches spanning
+ * several seasons at once) — same "ids scoped regardless of what the
+ * caller sends" safety as the season-scoped DELETE route above, just
+ * scoped to every episode of the show (specials included, same reasoning
+ * as showWatchesSchema's own doc comment) instead of one season.
+ */
+libraryRoutes.openapi(
+  createRoute({
+    method: 'delete',
+    path: '/library/shows/{slug}/plays',
+    summary: "Remove some of the current user's watches for a whole show",
+    middleware: [requireAuth] as const,
+    request: {
+      params: z.object({ slug: z.string() }),
+      body: { content: { 'application/json': { schema: removeWatchesRequestSchema } } },
+    },
+    responses: {
+      200: {
+        description: 'Watches removed',
+        content: { 'application/json': { schema: removeShowWatchesResponseSchema } },
+      },
+      404: { description: 'Show not found' },
+    },
+  }),
+  async (c) => {
+    const { slug } = c.req.valid('param')
+    const { ids } = c.req.valid('json')
+    const userId = c.get('user')!.id
+    const db = c.get('db')
+
+    const [show] = await db
+      .select({ id: shows.id })
+      .from(shows)
+      .where(eq(shows.slug, slug))
+      .limit(1)
+    if (!show) return c.json({ error: 'Show not found' }, 404)
+
+    const episodeRows = await db
+      .select({ id: episodes.id })
+      .from(episodes)
+      .where(eq(episodes.showId, show.id))
+    const episodeIds = episodeRows.map((row) => row.id)
+
+    let count = 0
+    if (episodeIds.length > 0) {
+      const removed = await db
+        .delete(plays)
+        .where(
+          and(
+            eq(plays.userId, userId),
+            inArray(plays.episodeId, episodeIds),
+            inArray(plays.id, ids),
+          ),
+        )
+        .returning({ id: plays.id })
+      count = removed.length
+    }
+
+    return c.json({ count })
   },
 )
 
@@ -1780,13 +2045,17 @@ libraryRoutes.openapi(
     // — UnwatchConfirmDialog.tsx relies on this list being stable across
     // repeated fetches of the same data.
     const rows = await db
-      .select({ id: plays.id, watchedAt: plays.watchedAt })
+      .select({ id: plays.id, watchedAt: plays.watchedAt, source: plays.source })
       .from(plays)
       .where(and(eq(plays.userId, userId), eq(plays.movieId, movie.id)))
       .orderBy(desc(plays.watchedAt), asc(plays.id))
 
     return c.json({
-      watches: rows.map((row) => ({ id: row.id, watchedAt: row.watchedAt.toISOString() })),
+      watches: rows.map((row) => ({
+        id: row.id,
+        watchedAt: row.watchedAt.toISOString(),
+        source: row.source,
+      })),
     })
   },
 )

@@ -4,6 +4,7 @@ import { Link, useNavigate, useParams } from 'react-router'
 import { useQuery } from '@tanstack/react-query'
 import { api, ApiError } from '../lib/api-client.js'
 import { useAuth } from '../lib/auth-context.js'
+import { UNKNOWN_WATCHED_AT, formatHistoryDate } from '../lib/date.js'
 import { useEpisodeWatchActions } from '../lib/use-episode-watch-actions.js'
 import { TVDB_LOGO_DARK_BG_URL, TVDB_LOGO_LIGHT_BG_URL, tvdbEpisodeUrl } from '../lib/tvdb.js'
 import { MetadataAttribution } from '../components/library/MetadataAttribution.js'
@@ -11,6 +12,7 @@ import { SpoilerGuard } from '../components/library/SpoilerGuard.js'
 import { WatchDateDialog } from '../components/library/WatchDateDialog.js'
 import { UnwatchConfirmDialog } from '../components/library/UnwatchConfirmDialog.js'
 import { Button } from '../components/ui/Button.js'
+import { Dialog } from '../components/ui/Dialog.js'
 import { Spinner } from '../components/ui/Spinner.js'
 
 /** Duplicated from SeasonDetailPage.tsx rather than shared, matching that
@@ -114,6 +116,8 @@ export function EpisodeDetailPage() {
   const episodeNumber = Number(episodeNumberParam)
   const paramsValid = Number.isInteger(seasonNumber) && Number.isInteger(episodeNumber)
   const [spoilersRevealed, setSpoilersRevealed] = useState(false)
+  const [selectedWatchIds, setSelectedWatchIds] = useState<Set<string>>(new Set())
+  const [deleteSelectedConfirmOpen, setDeleteSelectedConfirmOpen] = useState(false)
 
   const { data: show } = useQuery({
     queryKey: ['show', slug],
@@ -139,6 +143,29 @@ export function EpisodeDetailPage() {
     episode,
     show?.tmdbId ?? null,
   )
+
+  // Same queryKey useEpisodeWatchActions' own watchesData query uses (see
+  // that hook's doc comment) — that one only fetches while the unwatch
+  // dialog is open, since the season grid mounts one of these per episode
+  // and fetching every episode's watch list up front would be wasteful
+  // there. This page only ever renders one episode, so it's fine to fetch
+  // unconditionally once there's at least one watch to show; sharing the
+  // queryKey means the two consumers share one cached fetch rather than
+  // duplicating it.
+  const { data: watchesData } = useQuery({
+    queryKey: ['show', slug, 'season', seasonNumber, 'episode', episode?.episodeNumber, 'watches'],
+    queryFn: () => api.library.episodeWatches(slug!, seasonNumber, episode!.episodeNumber),
+    enabled: Boolean(slug) && paramsValid && Boolean(episode) && episode!.watchedCount > 0,
+  })
+
+  function toggleWatchSelected(id: string) {
+    setSelectedWatchIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
 
   if (isLoading) return <Spinner label={t('common.loading')} />
 
@@ -236,8 +263,19 @@ export function EpisodeDetailPage() {
         </div>
       </div>
 
-      <div className="flex flex-col gap-6 sm:flex-row">
-        <div className="aspect-video w-full flex-shrink-0 overflow-hidden rounded-lg bg-[var(--color-surface)] sm:w-96">
+      {/* lg:items-start is load-bearing, not decorative: flex's default
+          align-items:stretch forces the aspect-video box below to match
+          the (often taller) text column's height once they sit side by
+          side, and object-cover then crops the still to fill that
+          stretched box instead of its real 16:9 shape — happens at any
+          row-layout width, not just an in-between one, whenever the text
+          column is taller than a true 16:9 image (an episode with a
+          longer overview, for instance). items-start lets each column
+          size to its own content instead. lg, not sm, so the switch to
+          row layout itself only happens once there's enough width for
+          the text column to comfortably fit next to a full-height image. */}
+      <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
+        <div className="aspect-video w-full max-w-96 flex-shrink-0 overflow-hidden rounded-lg bg-[var(--color-surface)]">
           <SpoilerGuard
             hidden={spoilerHidden}
             revealed={spoilersRevealed}
@@ -339,10 +377,9 @@ export function EpisodeDetailPage() {
               onReveal={() => setSpoilersRevealed(true)}
               revealLabel={t('spoiler.reveal')}
               blurClassName="blur-sm"
-              className="max-w-2xl"
               overlayClassName="rounded-md border border-[var(--color-border)] bg-[var(--color-surface)]/90 text-[var(--color-fg)] hover:bg-[var(--color-surface)]"
             >
-              <p className="text-sm">{episode.overview}</p>
+              <p className="max-w-2xl text-sm">{episode.overview}</p>
             </SpoilerGuard>
           )}
           {show?.metadataSource && (
@@ -387,6 +424,114 @@ export function EpisodeDetailPage() {
           </div>
         </div>
       </div>
+
+      {episode.watchedCount > 0 && (
+        // Native <details>/<summary> — same collapsible pattern used by the
+        // Filters panel (GenreFilterPanel.tsx etc.) and ImportProgress.tsx's
+        // failure list: a real disclosure triangle for free, closed by
+        // default, no extra state to manage.
+        <details>
+          <summary className="cursor-pointer text-lg font-semibold">
+            {t('showDetail.historyTable.title')}
+          </summary>
+          {watchesData === undefined ? (
+            <Spinner label={t('common.loading')} />
+          ) : (
+            <div className="mt-3 flex flex-col gap-3">
+              <div className="max-w-2xl overflow-x-auto">
+                <table className="w-full text-left text-sm">
+                  <thead>
+                    <tr className="text-[var(--color-fg-muted)]">
+                      <th className="w-8 py-1.5" />
+                      <th className="py-1.5 pr-4 font-medium">
+                        {t('showDetail.historyTable.dateColumn')}
+                      </th>
+                      <th className="py-1.5 pr-4 font-medium">
+                        {t('showDetail.historyTable.timeColumn')}
+                      </th>
+                      <th className="py-1.5 font-medium">
+                        {t('showDetail.historyTable.typeColumn')}
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {watchesData.watches.map((watch) => {
+                      const isUnknown = watch.watchedAt === UNKNOWN_WATCHED_AT
+                      const watchedAt = new Date(watch.watchedAt)
+                      return (
+                        <tr key={watch.id} className="border-t border-[var(--color-border)]">
+                          <td className="py-2">
+                            <input
+                              type="checkbox"
+                              checked={selectedWatchIds.has(watch.id)}
+                              onChange={() => toggleWatchSelected(watch.id)}
+                              aria-label={t('showDetail.unwatchDialog.remove')}
+                            />
+                          </td>
+                          <td className="py-2 pr-4">
+                            {isUnknown
+                              ? t('history.unknownDate')
+                              : formatHistoryDate(watchedAt, locale, t)}
+                          </td>
+                          <td className="py-2 pr-4">
+                            {isUnknown
+                              ? ''
+                              : watchedAt.toLocaleTimeString(locale, {
+                                  hour: 'numeric',
+                                  minute: '2-digit',
+                                })}
+                          </td>
+                          <td className="py-2">{t(`history.sourceLabel.${watch.source}`)}</td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <Button
+                type="button"
+                variant="danger"
+                className="w-fit"
+                disabled={selectedWatchIds.size === 0}
+                onClick={() => setDeleteSelectedConfirmOpen(true)}
+              >
+                {t('showDetail.historyTable.deleteSelectedWatches')}
+              </Button>
+            </div>
+          )}
+        </details>
+      )}
+
+      <Dialog
+        open={deleteSelectedConfirmOpen}
+        onClose={() => setDeleteSelectedConfirmOpen(false)}
+        title={t('showDetail.unwatchDialog.titleSelected')}
+      >
+        <div className="mt-6 flex justify-end gap-2">
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => setDeleteSelectedConfirmOpen(false)}
+          >
+            {t('showDetail.watchDialog.cancel')}
+          </Button>
+          <Button
+            type="button"
+            variant="danger"
+            isLoading={watchActions.unwatch.isPending}
+            onClick={() =>
+              watchActions.unwatch.mutate([...selectedWatchIds], {
+                onSuccess: () => {
+                  setDeleteSelectedConfirmOpen(false)
+                  setSelectedWatchIds(new Set())
+                },
+              })
+            }
+          >
+            {t('showDetail.unwatchDialog.removeSelected')}
+          </Button>
+        </div>
+      </Dialog>
 
       <WatchDateDialog
         open={watchActions.dialogOpen}

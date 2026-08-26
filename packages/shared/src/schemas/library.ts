@@ -325,10 +325,57 @@ export const watchesSchema = z.object({
     z.object({
       id: z.string().uuid(),
       watchedAt: z.string().datetime(),
+      source: z.enum(['manual', 'plex', 'import']),
     }),
   ),
 })
 export type Watches = z.infer<typeof watchesSchema>
+
+/**
+ * Every one of the current user's individual watches across a whole season
+ * (every episode, not just one) — the season page's own History table
+ * counterpart of watchesSchema above. `episodeNumber`/`episodeTitle` name
+ * which episode each watch belongs to, since a season can have dozens;
+ * `episodeTitle` is nullable the same way seasonEpisodeSchema's `title` is
+ * (never resolved for an episode nobody's looked at — see
+ * `docs/TODO.md`'s "Per-episode data is never resolved proactively" item).
+ */
+export const seasonWatchesSchema = z.object({
+  watches: z.array(
+    z.object({
+      id: z.string().uuid(),
+      watchedAt: z.string().datetime(),
+      source: z.enum(['manual', 'plex', 'import']),
+      episodeNumber: z.number().int(),
+      episodeTitle: z.string().nullable(),
+    }),
+  ),
+})
+export type SeasonWatches = z.infer<typeof seasonWatchesSchema>
+
+/**
+ * Every one of the current user's individual watches across a whole show
+ * (every season, not just one) — the show page's own History table
+ * counterpart of seasonWatchesSchema above. Adds `seasonNumber` alongside
+ * `episodeNumber`/`episodeTitle` since a show can span several seasons,
+ * where the season-scoped table only needed the episode. Includes specials
+ * (season 0) — unlike the show-level "Watched" button's bulk actions, this
+ * is a plain listing/removal tool, not a "mark the whole show watched"
+ * one, so there's no reason to exclude them here.
+ */
+export const showWatchesSchema = z.object({
+  watches: z.array(
+    z.object({
+      id: z.string().uuid(),
+      watchedAt: z.string().datetime(),
+      source: z.enum(['manual', 'plex', 'import']),
+      seasonNumber: z.number().int(),
+      episodeNumber: z.number().int(),
+      episodeTitle: z.string().nullable(),
+    }),
+  ),
+})
+export type ShowWatches = z.infer<typeof showWatchesSchema>
 
 /**
  * Request body for DELETE .../plays (episode or movie —

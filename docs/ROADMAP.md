@@ -46,6 +46,7 @@ genuinely production-ready.
 - [ ] Self-hosting readiness pass — confirm `docker-compose.yml`/`.env.example`/self-hosting.md actually work end to end for a real self-hoster (see TODO.md)
 - [ ] Full security review (see TODO.md)
 - [ ] Cut the first tagged release, moving `:latest` off tracking `:edge` (see TODO.md)
+- [ ] Redesign the History page as a full-width grid, matching the Shows/Movies gallery treatment (see TODO.md)
 
 ## Not yet scheduled
 

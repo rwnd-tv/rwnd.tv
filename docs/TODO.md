@@ -128,6 +128,55 @@ Format:
       (`ENCRYPTION_KEY`, SMTP/OAuth credentials), and dependency
       vulnerabilities, before scheduling the work itself.
 
+## History page
+
+- [ ] **Redesign the History page as a full-width grid of watch tiles, with filter/sort/multi-select** (2026-08-26 added) — M3\
+      James: the current `HistoryPage.tsx` was M1's first pass at this —
+      no criticism of it, just due for the same gallery-page treatment
+      Shows/Movies got in M2. Wants it (currently a single-column list,
+      already grouped by day via its own `groupByDay`) reshaped to match
+      the TV Shows/Movies gallery's framing instead of its current bespoke
+      layout. Full width, like `ShowsPage.tsx`/`MoviesPage.tsx` already opt
+      into via `handle: { width: 'full' }` on the route (`App.tsx`, read by
+      `Layout.tsx`) — `HistoryPage`'s route doesn't set this today. A grid
+      of watch tiles, not the current list — each tile like the
+      Dashboard's History row (`HistoryRow.tsx`), which already renders
+      `PosterTile.tsx` (poster + title + a date/episode caption) in a
+      horizontal scroll row; this wants the same tile inside
+      `PosterGrid.tsx` instead, the same building blocks
+      `ShowsPage`/`MoviesPage` already use. The same filter/sort header as
+      `ShowsPage`/`MoviesPage`: a "Filter by title…" text box, a
+      "Filters…" button, and a Sort dropdown — already packaged as
+      `LibraryControls.tsx`/`FiltersPanel.tsx`, reused rather than
+      rebuilt.\
+      When sorted chronologically, tiles should group by the day they were
+      watched, sorted appropriately within that group. `HistoryPage.tsx`'s
+      `groupByDay` already does this grouping today (including handling
+      Trakt's 1900-01-01 "unknown date" sentinel as its own bucket) — needs
+      adapting from list sections to grid sections, and only applying under
+      a chronological sort (worth deciding what a non-chronological sort,
+      e.g. by title, does to the day headings — presumably drops them
+      entirely). Also wants multi-select with bulk delete — today's
+      `DELETE /plays/{id}` (`apps/api/src/routes/plays.ts`) only removes
+      one play at a time, so either the UI loops it per selected id or a
+      bulk-delete route is worth adding — and a way to edit a single
+      selected watch's date/time, which no endpoint supports today
+      (`POST /plays` only creates, `DELETE /plays/{id}` only removes,
+      same file) — needs a new `PATCH /plays/{id}` (or similar), with
+      `WatchDateDialog.tsx` (the existing date/time picker used when
+      logging a new watch) as the natural UI to reuse for editing an
+      existing one's `watchedAt`. Editing a play's date/time must flip its
+      `source` (the `plays` table's `source` column —
+      `'manual' | 'plex' | 'import'`, see
+      `packages/shared/src/schemas/plays.ts`) to `'manual'` if it wasn't
+      already, since the edited timestamp no longer reflects what Plex's
+      scrobble or the Trakt import actually reported.\
+      Needs a design pass before building — this bundles a layout change,
+      new filter/sort state (worth deciding whether it reuses the same
+      cookie-backed pattern as `use-sort-cookie.ts`/
+      `use-genre-filter-cookie.ts`), a new backend edit endpoint, and a new
+      bulk-delete mechanism into one feature.
+
 ## Roadmap
 
 Every open item from [ROADMAP.md](ROADMAP.md) that doesn't already have a

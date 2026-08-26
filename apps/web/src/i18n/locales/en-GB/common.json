@@ -311,7 +311,7 @@
   },
   "import": {
     "title": "Import",
-    "notConfigured": "Connecting a Trakt account isn't set up on this instance — the admin needs to set TRAKT_CLIENT_ID and TRAKT_CLIENT_SECRET. You can still import from a Trakt export file below.",
+    "notConfigured": "Connecting a Trakt account isn't set up on this instance — the admin needs to set TRAKT_CLIENT_ID and TRAKT_CLIENT_SECRET. You can still import from a Trakt export file or an rwnd.tv export file below.",
     "trakt": {
       "sectionTitle": "Import from a Trakt account",
       "description": "Connect a Trakt account to import your watch history, ratings, and watchlist.",
@@ -383,7 +383,7 @@
       },
       "source": {
         "trakt": "via Trakt",
-        "trakt_zip": "via export file",
+        "trakt_zip": "via Trakt export file",
         "csv": "via rwnd.tv export file"
       }
     }

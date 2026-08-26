@@ -192,9 +192,6 @@ truth for scope; this is just so a TODO listing is complete.
       passing as future work, not as a separate required checkbox, so
       this was over-tagged M2 when first added. Left unmilestoned rather
       than reassigned to M3 — no strong reason it belongs there either.
-- [ ] **Full data export** (2026-08-23 15:31 added) — M2\
-      An open-format export of everything — one of the project's stated
-      aims since day one.
 - [ ] **Stats and insights** (2026-08-23 15:32 added) — M3\
       The reason to log anything in the first place, per the roadmap's
       own framing of M3.

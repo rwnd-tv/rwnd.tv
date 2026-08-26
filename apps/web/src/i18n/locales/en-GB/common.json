@@ -334,6 +334,16 @@
       "tooLarge": "File is too large — 25MB maximum.",
       "startDescription": "Choose what to bring in from the file. Re-running an import is safe — it won't create duplicates."
     },
+    "csv": {
+      "title": "Import from an rwnd.tv export file",
+      "description": "Upload a data export downloaded from Settings → Database → Export data (this instance or another one) to bring its watch history, ratings, watchlist, and dropped TV shows in here.",
+      "chooseStepTitle": "Choose file",
+      "chooseFile": "Choose file…",
+      "noFileChosen": "No file chosen",
+      "invalidType": "Please choose the .zip file downloaded from Export data.",
+      "tooLarge": "File is too large — 25MB maximum.",
+      "startDescription": "Choose what to bring in from the file. Re-running an import is safe — it won't create duplicates."
+    },
     "start": {
       "title": "Start an import",
       "description": "Choose what to bring in from Trakt. Re-running an import is safe — it won't create duplicates.",
@@ -373,7 +383,8 @@
       },
       "source": {
         "trakt": "via Trakt",
-        "trakt_zip": "via export file"
+        "trakt_zip": "via export file",
+        "csv": "via rwnd.tv export file"
       }
     }
   },
@@ -434,7 +445,8 @@
       "export": {
         "title": "Export data",
         "description": "Download your watch history, ratings, watchlist, and dropped TV shows as CSV files — an open format you can open in a spreadsheet or take to another tool.",
-        "button": "Download export"
+        "button": "Download export",
+        "importLink": "To bring this into another rwnd.tv instance, use Import."
       }
     },
     "instance": {

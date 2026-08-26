@@ -252,6 +252,18 @@ export const api = {
       form.set('dropped', String(opts.dropped))
       return postForm<ImportJob>('/import/trakt/zip', form)
     },
+    uploadCsv: (
+      file: File,
+      opts: { history: boolean; ratings: boolean; watchlist: boolean; dropped: boolean },
+    ) => {
+      const form = new FormData()
+      form.set('file', file)
+      form.set('history', String(opts.history))
+      form.set('ratings', String(opts.ratings))
+      form.set('watchlist', String(opts.watchlist))
+      form.set('dropped', String(opts.dropped))
+      return postForm<ImportJob>('/import/csv', form)
+    },
     jobs: () => get<ListImportJobsResponse>('/import/jobs'),
     job: (id: string) => get<ImportJob>(`/import/jobs/${id}`),
     cancel: (id: string) => post<ImportJob>(`/import/jobs/${id}/cancel`),

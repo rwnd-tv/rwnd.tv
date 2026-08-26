@@ -18,6 +18,8 @@ import { pollDeviceToken, requestDeviceCode } from '../trakt/auth.js'
 import { TraktClient } from '../trakt/client.js'
 import { runTraktImport, runTraktZipImport } from '../import/trakt.js'
 import { TraktZipParseError, parseTraktZip } from '../import/trakt-zip-parse.js'
+import { runCsvImport } from '../import/csv.js'
+import { CsvZipParseError, parseCsvZip } from '../import/csv-zip-parse.js'
 
 export const importRoutes = new OpenAPIHono<AppEnv>()
 
@@ -306,6 +308,82 @@ importRoutes.post('/import/trakt/zip', requireAuth, async (c) => {
 
   void runTraktZipImport(db, metadataProviders, job.id, parsed).catch((err: unknown) =>
     console.error('Trakt ZIP import failed:', err),
+  )
+
+  return c.json(serializeJob(job), 202)
+})
+
+// ---------------------------------------------------------------------------
+// CSV import — the round-trip path for rwnd.tv's own data export
+// (Settings > Database > Export data, apps/api/src/export/build.ts). Lets a
+// user re-import that same zip, either back into this instance or into a
+// fresh one — see apps/api/src/import/csv-match.ts's doc comment for why
+// this doesn't share the Trakt engine above. Same "not behind any
+// requireXConfigured gate" reasoning as the Trakt ZIP route: needs no
+// external service configured on this instance at all, only the metadata
+// providers already configured for everything else.
+// ---------------------------------------------------------------------------
+
+/** Same cap as the Trakt ZIP upload — rwnd.tv's own export is far smaller
+ * in practice (a real ~11,300-item export zips to ~230KB), but there's no
+ * reason to give this a different ceiling. */
+const MAX_CSV_ZIP_UPLOAD_BYTES = 25 * 1024 * 1024
+
+/**
+ * Plain route, not `.openapi()` — same multipart-upload reasoning as
+ * `POST /import/trakt/zip` above.
+ */
+importRoutes.post('/import/csv', requireAuth, async (c) => {
+  const db = c.get('db')
+  const metadataProviders = c.get('metadataProviders')
+  const userId = c.get('user')!.id
+
+  let form: Awaited<ReturnType<typeof c.req.parseBody>>
+  try {
+    form = await c.req.parseBody()
+  } catch {
+    return c.json({ error: 'Malformed request body' }, 400)
+  }
+  const file = form.file
+  if (!(file instanceof File)) {
+    return c.json({ error: 'Missing file field' }, 400)
+  }
+  if (file.size > MAX_CSV_ZIP_UPLOAD_BYTES) {
+    return c.json({ error: 'File is too large — 25MB maximum' }, 400)
+  }
+
+  const [existingActive] = await db
+    .select({ id: importJobs.id })
+    .from(importJobs)
+    .where(and(eq(importJobs.userId, userId), inArray(importJobs.status, ['pending', 'running'])))
+    .limit(1)
+  if (existingActive) {
+    return c.json({ error: 'An import is already in progress' }, 409)
+  }
+
+  let parsed: ReturnType<typeof parseCsvZip>
+  try {
+    parsed = parseCsvZip(new Uint8Array(await file.arrayBuffer()))
+  } catch (err) {
+    if (err instanceof CsvZipParseError) return c.json({ error: err.message }, 400)
+    throw err
+  }
+
+  const [job] = await db
+    .insert(importJobs)
+    .values({
+      userId,
+      source: 'csv',
+      includeHistory: form.history !== 'false',
+      includeRatings: form.ratings !== 'false',
+      includeWatchlist: form.watchlist !== 'false',
+      includeDropped: form.dropped !== 'false',
+    })
+    .returning()
+  if (!job) throw new Error('Failed to create import job')
+
+  void runCsvImport(db, metadataProviders, job.id, parsed).catch((err: unknown) =>
+    console.error('CSV import failed:', err),
   )
 
   return c.json(serializeJob(job), 202)

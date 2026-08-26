@@ -1309,3 +1309,410 @@ describe('Trakt ZIP-upload import (POST /import/trakt/zip)', () => {
     expect(res.status).toBe(404)
   })
 })
+
+describe('CSV import (POST /import/csv)', () => {
+  beforeEach(() => resetDb(db))
+  afterEach(() => vi.unstubAllGlobals())
+
+  type CsvRow = Record<string, string>
+
+  const HISTORY_HEADER = [
+    'type',
+    'title',
+    'show_title',
+    'season_number',
+    'episode_number',
+    'watched_at',
+    'source',
+    'tmdb_id',
+    'tvdb_id',
+  ]
+  const RATINGS_HEADER = [
+    'type',
+    'title',
+    'show_title',
+    'season_number',
+    'episode_number',
+    'rating',
+    'rated_at',
+    'tmdb_id',
+    'tvdb_id',
+  ]
+  const WATCHLIST_HEADER = [
+    'type',
+    'title',
+    'show_title',
+    'season_number',
+    'episode_number',
+    'listed_at',
+    'notes',
+    'tmdb_id',
+    'tvdb_id',
+  ]
+  const DROPPED_HEADER = ['show_title', 'tmdb_id', 'tvdb_id', 'dropped_at']
+
+  /** Builds one CSV file's text — real RFC 4180 shape (BOM, CRLF), same as
+   * apps/api/src/lib/csv.ts's own writeCsv, so this exercises the real
+   * parser rather than a simplified stand-in. */
+  function buildCsv(header: string[], rows: CsvRow[]): string {
+    const lines = [
+      header.join(','),
+      ...rows.map((row) => header.map((column) => row[column] ?? '').join(',')),
+    ]
+    return '﻿' + lines.join('\r\n') + '\r\n'
+  }
+
+  function buildCsvZipFile(
+    files: {
+      history?: CsvRow[]
+      ratings?: CsvRow[]
+      watchlist?: CsvRow[]
+      dropped?: CsvRow[]
+    } = {},
+  ): File {
+    const entries: Record<string, Uint8Array> = {
+      'history.csv': strToU8(buildCsv(HISTORY_HEADER, files.history ?? [])),
+      'ratings.csv': strToU8(buildCsv(RATINGS_HEADER, files.ratings ?? [])),
+      'watchlist.csv': strToU8(buildCsv(WATCHLIST_HEADER, files.watchlist ?? [])),
+      'dropped-shows.csv': strToU8(buildCsv(DROPPED_HEADER, files.dropped ?? [])),
+    }
+    return new File([zipSync(entries)], 'rwnd-tv-export.zip', { type: 'application/zip' })
+  }
+
+  function postCsv(
+    cookie: string,
+    files: Parameters<typeof buildCsvZipFile>[0] | null,
+    opts: { history?: boolean; ratings?: boolean; watchlist?: boolean; dropped?: boolean } = {},
+  ) {
+    const form = new FormData()
+    if (files) form.set('file', buildCsvZipFile(files))
+    if (opts.history !== undefined) form.set('history', String(opts.history))
+    if (opts.ratings !== undefined) form.set('ratings', String(opts.ratings))
+    if (opts.watchlist !== undefined) form.set('watchlist', String(opts.watchlist))
+    if (opts.dropped !== undefined) form.set('dropped', String(opts.dropped))
+    return app.request('/api/v1/import/csv', {
+      method: 'POST',
+      headers: { cookie },
+      body: form,
+    })
+  }
+
+  async function waitForCompletion(cookie: string, jobId: string) {
+    return waitFor(async () => {
+      const res = await app.request(`/api/v1/import/jobs/${jobId}`, { headers: { cookie } })
+      const body = await json<{ status: string }>(res)
+      return body.status === 'completed' ? body : undefined
+    })
+  }
+
+  const matrixHistoryRow: CsvRow = {
+    type: 'movie',
+    title: 'The Matrix',
+    watched_at: '2024-01-01T12:00:00.000Z',
+    source: 'manual',
+    tmdb_id: String(fx.MATRIX_TMDB_ID),
+  }
+  const pilotHistoryRow: CsvRow = {
+    type: 'episode',
+    title: 'Pilot',
+    show_title: 'Breaking Bad',
+    season_number: '1',
+    episode_number: '1',
+    watched_at: '2024-01-02T12:00:00.000Z',
+    source: 'manual',
+    tmdb_id: String(fx.BREAKING_BAD_SHOW_TMDB_ID),
+  }
+  const secondEpisodeHistoryRow: CsvRow = {
+    ...pilotHistoryRow,
+    episode_number: '2',
+    watched_at: '2024-01-03T12:00:00.000Z',
+  }
+  const breakingBadDroppedRow: CsvRow = {
+    show_title: 'Breaking Bad',
+    tmdb_id: String(fx.BREAKING_BAD_SHOW_TMDB_ID),
+    dropped_at: '2024-02-01T00:00:00.000Z',
+  }
+
+  it('imports watch history and dropped shows end to end from an uploaded rwnd.tv export', async () => {
+    vi.stubGlobal('fetch', createFetchStub())
+    const cookie = await createUserAndCookie()
+
+    const res = await postCsv(cookie, {
+      history: [matrixHistoryRow, pilotHistoryRow, secondEpisodeHistoryRow],
+      dropped: [breakingBadDroppedRow],
+    })
+    expect(res.status).toBe(202)
+    const job = await json<{ id: string; source: string }>(res)
+    expect(job.source).toBe('csv')
+
+    await waitForCompletion(cookie, job.id)
+
+    const me = await json<User>(await app.request('/api/v1/auth/me', { headers: { cookie } }))
+    const allPlays = await db.select().from(plays).where(eq(plays.userId, me.id))
+    expect(allPlays).toHaveLength(3)
+    expect(allPlays.every((p) => p.source === 'import')).toBe(true)
+
+    // manualDropped, not traktDropped — this data didn't come from a
+    // Trakt sync, so it's recorded as the user's own manual choice (see
+    // apps/api/src/import/csv.ts's processDroppedRow).
+    const dropped = await db.select().from(droppedShows).where(eq(droppedShows.userId, me.id))
+    expect(dropped).toHaveLength(1)
+    expect(dropped[0]?.manualDropped).toBe(true)
+    expect(dropped[0]?.traktDropped).toBeNull()
+  })
+
+  it('imports ratings (including a note-carrying watchlist entry) end to end', async () => {
+    vi.stubGlobal('fetch', createFetchStub())
+    const cookie = await createUserAndCookie()
+    const me = await json<User>(await app.request('/api/v1/auth/me', { headers: { cookie } }))
+
+    const res = await postCsv(cookie, {
+      ratings: [
+        { ...matrixHistoryRow, rating: '7', rated_at: '2024-01-15T00:00:00.000Z' },
+        { ...pilotHistoryRow, rating: '8', rated_at: '2024-01-20T00:00:00.000Z' },
+      ],
+      watchlist: [
+        {
+          ...matrixHistoryRow,
+          listed_at: '2024-01-10T00:00:00.000Z',
+          notes: 'watch with friends',
+        },
+      ],
+    })
+    const job = await json<{ id: string }>(res)
+    await waitForCompletion(cookie, job.id)
+
+    const ratingRows = await db.select().from(ratings).where(eq(ratings.userId, me.id))
+    expect(ratingRows.map((r) => r.rating).sort()).toEqual([7, 8])
+
+    const watchlistRows = await db
+      .select()
+      .from(watchlistItems)
+      .where(eq(watchlistItems.userId, me.id))
+    expect(watchlistRows).toHaveLength(1)
+    // Unlike the Trakt importer (which never writes notes at all — see
+    // trakt.ts's own processWatchlistItem), the CSV round-trip does.
+    expect(watchlistRows[0]?.notes).toBe('watch with friends')
+  })
+
+  it('respects the ratings/watchlist include toggles', async () => {
+    vi.stubGlobal('fetch', createFetchStub())
+    const cookie = await createUserAndCookie()
+    const me = await json<User>(await app.request('/api/v1/auth/me', { headers: { cookie } }))
+
+    const res = await postCsv(
+      cookie,
+      {
+        ratings: [{ ...matrixHistoryRow, rating: '7', rated_at: '2024-01-15T00:00:00.000Z' }],
+        watchlist: [{ ...matrixHistoryRow, listed_at: '2024-01-10T00:00:00.000Z', notes: '' }],
+      },
+      { ratings: false, watchlist: true },
+    )
+    const job = await json<{ id: string }>(res)
+    await waitForCompletion(cookie, job.id)
+
+    const ratingRows = await db.select().from(ratings).where(eq(ratings.userId, me.id))
+    expect(ratingRows).toHaveLength(0)
+    const watchlistRows = await db
+      .select()
+      .from(watchlistItems)
+      .where(eq(watchlistItems.userId, me.id))
+    expect(watchlistRows).toHaveLength(1)
+  })
+
+  it('caches season resolution across multiple episodes of the same show', async () => {
+    const seasonCalls = { count: 0 }
+    vi.stubGlobal('fetch', createFetchStub({ seasonCalls }))
+    const cookie = await createUserAndCookie()
+
+    const res = await postCsv(cookie, {
+      history: [pilotHistoryRow, secondEpisodeHistoryRow],
+    })
+    const job = await json<{ id: string }>(res)
+    await waitForCompletion(cookie, job.id)
+
+    expect(seasonCalls.count).toBe(1)
+  })
+
+  it('rejects a non-ZIP upload', async () => {
+    const cookie = await createUserAndCookie()
+    const form = new FormData()
+    form.set('file', new File([strToU8('not a zip')], 'notes.txt', { type: 'text/plain' }))
+    const res = await app.request('/api/v1/import/csv', {
+      method: 'POST',
+      headers: { cookie },
+      body: form,
+    })
+    expect(res.status).toBe(400)
+  })
+
+  it('rejects an upload missing the file field', async () => {
+    const cookie = await createUserAndCookie()
+    const res = await postCsv(cookie, null)
+    expect(res.status).toBe(400)
+  })
+
+  it("rejects a ZIP that doesn't look like an rwnd.tv export", async () => {
+    const cookie = await createUserAndCookie()
+    const entries: Record<string, Uint8Array> = {
+      'user-profile.json': strToU8(JSON.stringify({ username: 'nobody' })),
+    }
+    const form = new FormData()
+    form.set('file', new File([zipSync(entries)], 'wrong.zip', { type: 'application/zip' }))
+    const res = await app.request('/api/v1/import/csv', {
+      method: 'POST',
+      headers: { cookie },
+      body: form,
+    })
+    expect(res.status).toBe(400)
+    const body = await json<{ error: string }>(res)
+    expect(body.error).toMatch(/rwnd\.tv/)
+  })
+
+  it('rejects starting a second import while one is already in progress', async () => {
+    vi.stubGlobal('fetch', createFetchStub())
+    const cookie = await createUserAndCookie()
+    const first = await postCsv(cookie, { history: [matrixHistoryRow] })
+    expect(first.status).toBe(202)
+
+    const second = await postCsv(cookie, { history: [pilotHistoryRow] })
+    expect(second.status).toBe(409)
+  })
+
+  it('is idempotent on re-upload of the same export — no duplicate plays', async () => {
+    vi.stubGlobal('fetch', createFetchStub())
+    const cookie = await createUserAndCookie()
+    const me = await json<User>(await app.request('/api/v1/auth/me', { headers: { cookie } }))
+    const files = { history: [matrixHistoryRow] }
+
+    const first = await postCsv(cookie, files)
+    const firstJob = await json<{ id: string }>(first)
+    await waitForCompletion(cookie, firstJob.id)
+
+    const second = await postCsv(cookie, files)
+    const secondJob = await json<{ id: string }>(second)
+    const completed = await waitForCompletion(cookie, secondJob.id)
+
+    // The synthetic sourceRef (apps/api/src/import/csv.ts's own
+    // processHistoryRow) makes the re-upload a correct no-op via the
+    // existing plays_user_source_ref_idx partial unique index.
+    expect(completed).toMatchObject({ status: 'completed' })
+    const allPlays = await db.select().from(plays).where(eq(plays.userId, me.id))
+    expect(allPlays).toHaveLength(1)
+  })
+
+  // Regression: found live testing this feature. The synthetic sourceRef
+  // above only guards a CSV-imported play against *another CSV import* of
+  // the same row — it does nothing against the plays this CSV was
+  // originally exported from in the first place (a manual watch, a Plex
+  // scrobble, an earlier real Trakt import), which have their own
+  // different sourceRefs (or none) and so never collide with the unique
+  // index on their own. Confirmed live before this test existed: re-
+  // importing a real ~11,000-row export back into the same account
+  // duplicated every single history row. existingPlayKeys (csv.ts) is the
+  // actual fix — this test is what would have caught it.
+  it('does not duplicate a play that already exists under a different source', async () => {
+    vi.stubGlobal('fetch', createFetchStub())
+    const cookie = await createUserAndCookie()
+    const me = await json<User>(await app.request('/api/v1/auth/me', { headers: { cookie } }))
+
+    const manualPlay = await app.request('/api/v1/plays', {
+      method: 'POST',
+      headers: { cookie, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        movie: { source: 'tmdb', externalId: String(fx.MATRIX_TMDB_ID) },
+        watchedAt: matrixHistoryRow.watched_at,
+      }),
+    })
+    expect(manualPlay.status).toBe(201)
+
+    const res = await postCsv(cookie, { history: [matrixHistoryRow] })
+    const job = await json<{ id: string }>(res)
+    await waitForCompletion(cookie, job.id)
+
+    const allPlays = await db.select().from(plays).where(eq(plays.userId, me.id))
+    expect(allPlays).toHaveLength(1)
+    expect(allPlays[0]?.source).toBe('manual')
+  })
+
+  // Regression: found live testing this feature (same round-trip that
+  // caught the duplicate-plays bug above). A show already effectively
+  // dropped via Trakt alone (manualDropped null, deferring to Trakt) got
+  // hard-converted into a manual override on every CSV re-import, even
+  // though nothing about its dropped-ness actually changed — a real
+  // record mutation (visible as a spurious "added"/"removed" pair in the
+  // JSON Backup diff) counted as "imported" for no real reason.
+  it('does not convert a Trakt-only drop into a manual override on re-import', async () => {
+    vi.stubGlobal('fetch', createFetchStub())
+    const cookie = await createUserAndCookie()
+    const me = await json<User>(await app.request('/api/v1/auth/me', { headers: { cookie } }))
+
+    const historyRes = await postCsv(cookie, { history: [pilotHistoryRow] })
+    const historyJob = await json<{ id: string }>(historyRes)
+    await waitForCompletion(cookie, historyJob.id)
+    const [show] = await db.select().from(shows).where(eq(shows.title, 'Breaking Bad')).limit(1)
+    if (!show) throw new Error('history import did not create the show')
+
+    await db.insert(droppedShows).values({
+      userId: me.id,
+      showId: show.id,
+      traktDropped: true,
+      traktDroppedAt: new Date('2024-02-01T00:00:00.000Z'),
+    })
+
+    const res = await postCsv(cookie, { dropped: [breakingBadDroppedRow] })
+    const job = await json<{ id: string; itemsImported: number }>(res)
+    await waitForCompletion(cookie, job.id)
+
+    const [after] = await db.select().from(droppedShows).where(eq(droppedShows.userId, me.id))
+    expect(after?.traktDropped).toBe(true)
+    expect(after?.manualDropped).toBeNull()
+
+    const finished = await json<{ itemsImported: number }>(
+      await app.request(`/api/v1/import/jobs/${job.id}`, { headers: { cookie } }),
+    )
+    expect(finished.itemsImported).toBe(0)
+  })
+
+  it('respects the history/dropped include toggles', async () => {
+    vi.stubGlobal('fetch', createFetchStub())
+    const cookie = await createUserAndCookie()
+    const me = await json<User>(await app.request('/api/v1/auth/me', { headers: { cookie } }))
+
+    const res = await postCsv(
+      cookie,
+      { history: [matrixHistoryRow], dropped: [breakingBadDroppedRow] },
+      { history: false, dropped: true },
+    )
+    const job = await json<{ id: string }>(res)
+    await waitForCompletion(cookie, job.id)
+
+    const allPlays = await db.select().from(plays).where(eq(plays.userId, me.id))
+    expect(allPlays).toHaveLength(0)
+    const dropped = await db.select().from(droppedShows).where(eq(droppedShows.userId, me.id))
+    expect(dropped).toHaveLength(1)
+  })
+
+  it("does not let a user read another user's CSV import job", async () => {
+    vi.stubGlobal('fetch', createFetchStub())
+    const cookieA = await createUserAndCookie('csv-owner@example.com')
+    const resA = await postCsv(cookieA, { history: [matrixHistoryRow] })
+    const jobA = await json<{ id: string }>(resA)
+
+    await createLocalUser(db, 'csv-other@example.com', 'correct-horse-battery-staple')
+    const loginB = await app.request('/api/v1/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: 'csv-other@example.com',
+        password: 'correct-horse-battery-staple',
+      }),
+    })
+    const cookieB = extractCookie(loginB)!
+
+    const res = await app.request(`/api/v1/import/jobs/${jobA.id}`, {
+      headers: { cookie: cookieB },
+    })
+    expect(res.status).toBe(404)
+  })
+})

@@ -49,7 +49,7 @@ export const metadataEntityTypeEnum = pgEnum('metadata_entity_type', ['movie', '
 export const externalIdSourceEnum = pgEnum('external_id_source', ['tmdb', 'imdb', 'tvdb', 'trakt'])
 export const playSourceEnum = pgEnum('play_source', ['manual', 'plex', 'import'])
 export const webhookSourceEnum = pgEnum('webhook_source', ['plex'])
-export const importSourceEnum = pgEnum('import_source', ['trakt', 'trakt_zip'])
+export const importSourceEnum = pgEnum('import_source', ['trakt', 'trakt_zip', 'csv'])
 export const importJobStatusEnum = pgEnum('import_job_status', [
   'pending',
   'running',

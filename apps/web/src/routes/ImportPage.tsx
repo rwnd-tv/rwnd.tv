@@ -8,6 +8,7 @@ import { Button } from '../components/ui/Button.js'
 import { Spinner } from '../components/ui/Spinner.js'
 import { TraktConnectCard } from '../components/import/TraktConnectCard.js'
 import { TraktZipImportCard } from '../components/import/TraktZipImportCard.js'
+import { CsvImportCard } from '../components/import/CsvImportCard.js'
 import { ImportProgress } from '../components/import/ImportProgress.js'
 
 export function ImportPage() {
@@ -120,6 +121,7 @@ export function ImportPage() {
       </Card>
 
       <TraktZipImportCard />
+      <CsvImportCard />
       <ImportProgress />
     </div>
   )

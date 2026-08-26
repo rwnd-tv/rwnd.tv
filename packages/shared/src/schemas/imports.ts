@@ -12,9 +12,11 @@ export type ImportJobStatus = z.infer<typeof importJobStatusSchema>
 /** `trakt` is the OAuth device-flow import (TraktConnectCard.tsx); `trakt_zip`
  * is the file-upload alternative (TraktZipImportCard.tsx) — see
  * docs/TODO.md's "Build ZIP-upload import from Trakt's own 'Export now'
- * file". Surfaced on `ImportJob` so the UI can label which path a job came
- * through. */
-export const importJobSourceSchema = z.enum(['trakt', 'trakt_zip'])
+ * file". `csv` is the round-trip path for rwnd.tv's own data export
+ * (CsvImportCard.tsx) — a zip of history/ratings/watchlist/dropped-shows
+ * CSVs matching apps/api/src/export/build.ts's own output. Surfaced on
+ * `ImportJob` so the UI can label which path a job came through. */
+export const importJobSourceSchema = z.enum(['trakt', 'trakt_zip', 'csv'])
 export type ImportJobSource = z.infer<typeof importJobSourceSchema>
 
 /** What the user sees while pairing — never the device_code or any token. */

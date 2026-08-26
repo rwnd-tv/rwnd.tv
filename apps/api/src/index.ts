@@ -18,12 +18,13 @@ const app = createApp({ db, metadataProviders })
 // status only means "was running when we last checked in" (there's no
 // process-liveness signal), so on boot every such job gets flipped back to
 // `pending` and resumed from its stored {phase, page} cursor — see
-// apps/api/src/import/trakt.ts. A `trakt_zip` job can't be resumed this way
-// — the uploaded export it was working through only ever existed in memory
-// for that request, not persisted anywhere (see runTraktZipImport's own doc
-// comment) — so one caught mid-flight here is instead marked `failed`,
-// asking the user to just re-upload rather than silently restarting from
-// zero or crashing on a Trakt connection it has no reason to have.
+// apps/api/src/import/trakt.ts. A `trakt_zip` or `csv` job can't be resumed
+// this way — the uploaded export it was working through only ever existed
+// in memory for that request, not persisted anywhere (see
+// runTraktZipImport's/runCsvImport's own doc comments) — so one caught
+// mid-flight here is instead marked `failed`, asking the user to just
+// re-upload rather than silently restarting from zero or crashing on a
+// Trakt connection it has no reason to have.
 async function resumeInterruptedImports() {
   const interrupted = await db
     .update(importJobs)
@@ -31,7 +32,7 @@ async function resumeInterruptedImports() {
     .where(eq(importJobs.status, 'running'))
     .returning({ id: importJobs.id, source: importJobs.source })
   for (const job of interrupted) {
-    if (job.source === 'trakt_zip') {
+    if (job.source === 'trakt_zip' || job.source === 'csv') {
       await db
         .update(importJobs)
         .set({

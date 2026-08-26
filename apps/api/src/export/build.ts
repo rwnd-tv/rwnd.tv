@@ -11,7 +11,7 @@ import {
   watchlistItems,
 } from '@rwnd/db'
 import { UNKNOWN_WATCHED_AT, metadataProviderSourceSchema } from '@rwnd/shared'
-import { writeCsv } from './csv.js'
+import { writeCsv } from '../lib/csv.js'
 
 /** Every real metadata provider's own id gets its own export column
  * (`tmdb_id`, `tvdb_id`, …) — driven by this schema rather than hardcoded,

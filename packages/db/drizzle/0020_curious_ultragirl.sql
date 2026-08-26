@@ -1,0 +1,1 @@
+ALTER TYPE "public"."import_source" ADD VALUE 'csv';

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { Link } from 'react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { BackupSummary } from '@rwnd/shared'
 import { api } from '../../lib/api-client.js'
@@ -200,7 +201,10 @@ export function DatabasePanel() {
       <div className={backupsConfigured ? 'mt-8 border-t border-[var(--color-border)] pt-6' : ''}>
         <h3 className="mb-1 text-base font-semibold">{t('settings.database.export.title')}</h3>
         <p className="mb-4 text-sm text-[var(--color-fg-muted)]">
-          {t('settings.database.export.description')}
+          {t('settings.database.export.description')}{' '}
+          <Link to="/import" className="underline hover:no-underline">
+            {t('settings.database.export.importLink')}
+          </Link>
         </p>
         {/* A plain download link, not a Button — no request/response to
             await, the browser just navigates and the server's

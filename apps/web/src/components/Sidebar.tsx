@@ -2,7 +2,6 @@ import type { ReactNode } from 'react'
 import { Link, NavLink } from 'react-router'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '../lib/auth-context.js'
-import { usePublicSettings } from '../lib/use-public-settings.js'
 import { Avatar } from './Avatar.js'
 import {
   DashboardIcon,
@@ -64,10 +63,12 @@ function SidebarLink({
  * time (James, 2026-08-21: prefers `dvh`'s momentary jank while the address
  * bar is actively animating over `svh`'s permanently-wrong resting state —
  * being correct once the scroll settles matters more than being stable
- * during it). Back to `dvh`. Otherwise self-contained: fetches its own
- * auth/settings state instead of having Layout thread props through, since
- * usePublicSettings and useAuth are cached React Query hooks — calling them
- * again here is free, not a second network request.
+ * during it). Back to `dvh`. Otherwise self-contained: fetches its own auth
+ * state instead of having Layout thread props through, since useAuth is a
+ * cached React Query hook — calling it again here is free, not a second
+ * network request. (No longer also fetches usePublicSettings — that was
+ * only ever for the now-removed traktConfigured gate on the Import link
+ * below; every nav link is unconditional now.)
  *
  * Below the `sm` breakpoint (640px), "collapsed" stops meaning "icon rail"
  * and means "hidden entirely" instead — an icon rail still ate a real slice
@@ -83,7 +84,6 @@ function SidebarLink({
 export function Sidebar({ collapsed, onNavigate }: { collapsed: boolean; onNavigate: () => void }) {
   const { t } = useTranslation()
   const { user } = useAuth()
-  const { data: settings } = usePublicSettings()
 
   return (
     <nav
@@ -126,15 +126,17 @@ export function Sidebar({ collapsed, onNavigate }: { collapsed: boolean; onNavig
       </ul>
 
       <ul className="flex flex-col gap-1 border-t border-[var(--color-border)] px-2 py-2">
-        {settings?.traktConfigured && (
-          <SidebarLink
-            to="/import"
-            label={t('nav.import')}
-            icon={<ImportIcon />}
-            collapsed={collapsed}
-            onNavigate={onNavigate}
-          />
-        )}
+        {/* Always shown now, not gated on settings?.traktConfigured — the
+            page has real value with Trakt entirely unconfigured (the CSV
+            round-trip import and, previously, the Trakt ZIP-upload path
+            already didn't need it either). */}
+        <SidebarLink
+          to="/import"
+          label={t('nav.import')}
+          icon={<ImportIcon />}
+          collapsed={collapsed}
+          onNavigate={onNavigate}
+        />
         <SidebarLink
           to="/settings"
           label={t('nav.settings')}

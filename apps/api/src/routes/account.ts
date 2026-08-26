@@ -1,9 +1,11 @@
 import { OpenAPIHono, createRoute } from '@hono/zod-openapi'
 import { eq, sql } from 'drizzle-orm'
+import { strToU8, zipSync } from 'fflate'
 import { accountDataCountsSchema, clearDataRequestSchema } from '@rwnd/shared'
 import { droppedShows, plays, ratings, watchlistItems } from '@rwnd/db'
 import type { AppEnv } from '../types.js'
 import { requireAuth } from '../middleware/auth.js'
+import { buildExportFiles } from '../export/build.js'
 
 export const accountRoutes = new OpenAPIHono<AppEnv>()
 
@@ -82,3 +84,26 @@ accountRoutes.openapi(
     return c.body(null, 204)
   },
 )
+
+/**
+ * The open-format full data export (Settings > Database — see
+ * DatabasePanel.tsx). Plain route, not `.openapi()` — same reasoning as
+ * `apps/api/src/routes/auth.ts`'s avatar GET: a raw binary (zip) response
+ * doesn't fit the typed-JSON convention every other route here uses. See
+ * apps/api/src/export/build.ts's doc comment for why this is a separate,
+ * flatter CSV shape from the JSON Backup feature rather than reusing it.
+ */
+accountRoutes.get('/account/export', requireAuth, async (c) => {
+  const userId = c.get('user')!.id
+  const db = c.get('db')
+
+  const files = await buildExportFiles(db, userId)
+  const zipped = zipSync(
+    Object.fromEntries(Object.entries(files).map(([name, content]) => [name, strToU8(content)])),
+  )
+
+  const date = new Date().toISOString().slice(0, 10)
+  c.header('Content-Type', 'application/zip')
+  c.header('Content-Disposition', `attachment; filename="rwnd-tv-export-${date}.zip"`)
+  return c.body(zipped)
+})

@@ -98,6 +98,11 @@ export const api = {
   account: {
     dataCounts: () => get<AccountDataCounts>('/account/data-counts'),
     clearData: (body: ClearDataRequest) => post<void>('/account/clear-data', body),
+    /** Not fetched through api-client's own request() — same reasoning as
+     * auth.avatarUrl above, this is a plain URL for the browser to
+     * navigate/download directly rather than a function that awaits a
+     * parsed JSON body. */
+    exportUrl: '/api/v1/account/export',
   },
   backups: {
     list: () => get<ListBackupsResponse>('/backups'),

@@ -1,0 +1,298 @@
+import { and, eq, inArray, or } from 'drizzle-orm'
+import type { Database } from '@rwnd/db'
+import {
+  droppedShows,
+  episodes,
+  externalIds,
+  movies,
+  plays,
+  ratings,
+  shows,
+  watchlistItems,
+} from '@rwnd/db'
+import { UNKNOWN_WATCHED_AT } from '@rwnd/shared'
+import { writeCsv } from './csv.js'
+
+/** `"unknown"` for Trakt's "I don't remember when" sentinel, otherwise a
+ * plain UTC ISO 8601 string — sortable and unambiguous in a spreadsheet,
+ * matching what the rest of the export uses for every other timestamp. */
+function formatWatchedAt(watchedAt: Date): string {
+  return watchedAt.toISOString() === UNKNOWN_WATCHED_AT ? 'unknown' : watchedAt.toISOString()
+}
+
+/**
+ * The open-format full data export (Settings > Database — see
+ * DatabasePanel.tsx) — a CSV per category (history/ratings/watchlist/
+ * dropped shows), one of the project's stated aims since day one (see
+ * docs/vision.md). Deliberately a separate, flatter shape from
+ * apps/api/src/backup/build.ts's JSON: that format is restore-oriented
+ * (provider-tagged refs, nested show/season/episode metadata, meant to be
+ * read back into another rwnd.tv instance); this one is meant to be opened
+ * directly in a spreadsheet or read by an entirely different tool, so each
+ * row carries its own plain title/show title/season/episode inline rather
+ * than needing a second file cross-referenced by id.
+ */
+export async function buildExportFiles(
+  db: Database,
+  userId: string,
+): Promise<Record<string, string>> {
+  const [playRows, ratingRows, watchlistRows, droppedRows] = await Promise.all([
+    db.select().from(plays).where(eq(plays.userId, userId)),
+    db.select().from(ratings).where(eq(ratings.userId, userId)),
+    db.select().from(watchlistItems).where(eq(watchlistItems.userId, userId)),
+    db.select().from(droppedShows).where(eq(droppedShows.userId, userId)),
+  ])
+
+  const episodeIds = new Set<string>()
+  for (const row of playRows) if (row.episodeId) episodeIds.add(row.episodeId)
+  for (const row of ratingRows) if (row.entityType === 'episode') episodeIds.add(row.entityId)
+  for (const row of watchlistRows) if (row.entityType === 'episode') episodeIds.add(row.entityId)
+
+  const episodeRows =
+    episodeIds.size > 0
+      ? await db
+          .select()
+          .from(episodes)
+          .where(inArray(episodes.id, [...episodeIds]))
+      : []
+  const episodeById = new Map(episodeRows.map((row) => [row.id, row]))
+
+  const movieIds = new Set<string>()
+  for (const row of playRows) if (row.movieId) movieIds.add(row.movieId)
+  for (const row of ratingRows) if (row.entityType === 'movie') movieIds.add(row.entityId)
+  for (const row of watchlistRows) if (row.entityType === 'movie') movieIds.add(row.entityId)
+
+  const showIds = new Set<string>()
+  for (const row of droppedRows) showIds.add(row.showId)
+  for (const row of ratingRows) if (row.entityType === 'show') showIds.add(row.entityId)
+  for (const row of watchlistRows) if (row.entityType === 'show') showIds.add(row.entityId)
+  for (const episode of episodeRows) showIds.add(episode.showId)
+
+  const [movieRows, showRows, tmdbRows] = await Promise.all([
+    movieIds.size > 0
+      ? db
+          .select()
+          .from(movies)
+          .where(inArray(movies.id, [...movieIds]))
+      : [],
+    showIds.size > 0
+      ? db
+          .select()
+          .from(shows)
+          .where(inArray(shows.id, [...showIds]))
+      : [],
+    // Both entity types in one query — a movie id and a show id can never
+    // collide (separate uuid columns), so entityId alone is a safe map key
+    // below without also carrying entityType.
+    movieIds.size > 0 || showIds.size > 0
+      ? db
+          .select({ entityId: externalIds.entityId, externalId: externalIds.externalId })
+          .from(externalIds)
+          .where(
+            and(
+              eq(externalIds.source, 'tmdb'),
+              or(
+                movieIds.size > 0
+                  ? and(
+                      eq(externalIds.entityType, 'movie'),
+                      inArray(externalIds.entityId, [...movieIds]),
+                    )
+                  : undefined,
+                showIds.size > 0
+                  ? and(
+                      eq(externalIds.entityType, 'show'),
+                      inArray(externalIds.entityId, [...showIds]),
+                    )
+                  : undefined,
+              ),
+            ),
+          )
+      : [],
+  ])
+  const movieById = new Map(movieRows.map((row) => [row.id, row]))
+  const showById = new Map(showRows.map((row) => [row.id, row]))
+  const tmdbByEntityId = new Map(tmdbRows.map((row) => [row.entityId, row.externalId]))
+
+  const historyRows: (string | number | null)[][] = []
+  for (const row of playRows) {
+    if (row.movieId) {
+      const movie = movieById.get(row.movieId)
+      if (!movie) continue
+      historyRows.push([
+        'movie',
+        movie.title,
+        '',
+        '',
+        '',
+        formatWatchedAt(row.watchedAt),
+        row.source,
+        tmdbByEntityId.get(movie.id) ?? '',
+      ])
+    } else if (row.episodeId) {
+      const episode = episodeById.get(row.episodeId)
+      const show = episode && showById.get(episode.showId)
+      if (!episode || !show) continue
+      historyRows.push([
+        'episode',
+        episode.title,
+        show.title,
+        episode.seasonNumber,
+        episode.episodeNumber,
+        formatWatchedAt(row.watchedAt),
+        row.source,
+        tmdbByEntityId.get(show.id) ?? '',
+      ])
+    }
+  }
+
+  const ratingsRows: (string | number | null)[][] = []
+  for (const row of ratingRows) {
+    if (row.entityType === 'movie') {
+      const movie = movieById.get(row.entityId)
+      if (!movie) continue
+      ratingsRows.push([
+        'movie',
+        movie.title,
+        '',
+        '',
+        '',
+        row.rating,
+        row.ratedAt.toISOString(),
+        tmdbByEntityId.get(movie.id) ?? '',
+      ])
+    } else if (row.entityType === 'show') {
+      const show = showById.get(row.entityId)
+      if (!show) continue
+      ratingsRows.push([
+        'show',
+        show.title,
+        '',
+        '',
+        '',
+        row.rating,
+        row.ratedAt.toISOString(),
+        tmdbByEntityId.get(show.id) ?? '',
+      ])
+    } else {
+      const episode = episodeById.get(row.entityId)
+      const show = episode && showById.get(episode.showId)
+      if (!episode || !show) continue
+      ratingsRows.push([
+        'episode',
+        episode.title,
+        show.title,
+        episode.seasonNumber,
+        episode.episodeNumber,
+        row.rating,
+        row.ratedAt.toISOString(),
+        tmdbByEntityId.get(show.id) ?? '',
+      ])
+    }
+  }
+
+  const watchlistRowsOut: (string | number | null)[][] = []
+  for (const row of watchlistRows) {
+    if (row.entityType === 'movie') {
+      const movie = movieById.get(row.entityId)
+      if (!movie) continue
+      watchlistRowsOut.push([
+        'movie',
+        movie.title,
+        '',
+        '',
+        '',
+        row.listedAt.toISOString(),
+        row.notes,
+        tmdbByEntityId.get(movie.id) ?? '',
+      ])
+    } else if (row.entityType === 'show') {
+      const show = showById.get(row.entityId)
+      if (!show) continue
+      watchlistRowsOut.push([
+        'show',
+        show.title,
+        '',
+        '',
+        '',
+        row.listedAt.toISOString(),
+        row.notes,
+        tmdbByEntityId.get(show.id) ?? '',
+      ])
+    } else {
+      const episode = episodeById.get(row.entityId)
+      const show = episode && showById.get(episode.showId)
+      if (!episode || !show) continue
+      watchlistRowsOut.push([
+        'episode',
+        episode.title,
+        show.title,
+        episode.seasonNumber,
+        episode.episodeNumber,
+        row.listedAt.toISOString(),
+        row.notes,
+        tmdbByEntityId.get(show.id) ?? '',
+      ])
+    }
+  }
+
+  // Only rows currently *effectively* dropped — a dropped_shows row can
+  // exist without meaning "dropped" (e.g. traktDropped=false, no manual
+  // override), same "manualDropped wins, falls back to traktDropped"
+  // determination used everywhere else (apps/api/src/routes/library.ts).
+  const droppedRowsOut: (string | number | null)[][] = []
+  for (const row of droppedRows) {
+    const dropped = row.manualDropped ?? row.traktDropped ?? false
+    if (!dropped) continue
+    const show = showById.get(row.showId)
+    if (!show) continue
+    const droppedAt = row.manualDropped !== null ? row.manualDroppedAt : row.traktDroppedAt
+    droppedRowsOut.push([
+      show.title,
+      tmdbByEntityId.get(show.id) ?? '',
+      droppedAt ? droppedAt.toISOString() : '',
+    ])
+  }
+
+  return {
+    'history.csv': writeCsv(
+      [
+        'type',
+        'title',
+        'show_title',
+        'season_number',
+        'episode_number',
+        'watched_at',
+        'source',
+        'tmdb_id',
+      ],
+      historyRows,
+    ),
+    'ratings.csv': writeCsv(
+      [
+        'type',
+        'title',
+        'show_title',
+        'season_number',
+        'episode_number',
+        'rating',
+        'rated_at',
+        'tmdb_id',
+      ],
+      ratingsRows,
+    ),
+    'watchlist.csv': writeCsv(
+      [
+        'type',
+        'title',
+        'show_title',
+        'season_number',
+        'episode_number',
+        'listed_at',
+        'notes',
+        'tmdb_id',
+      ],
+      watchlistRowsOut,
+    ),
+    'dropped-shows.csv': writeCsv(['show_title', 'tmdb_id', 'dropped_at'], droppedRowsOut),
+  }
+}

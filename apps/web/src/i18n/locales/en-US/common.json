@@ -430,6 +430,11 @@
         "confirmDeleteBody": "This permanently deletes \"{{description}}\" ({{date}}). This can't be undone.",
         "diffTitle": "Changes since \"{{description}}\"",
         "diffLine": "{{added}} added, {{removed}} removed"
+      },
+      "export": {
+        "title": "Export data",
+        "description": "Download your watch history, ratings, watchlist, and dropped TV shows as CSV files — an open format you can open in a spreadsheet or take to another tool.",
+        "button": "Download export"
       }
     },
     "instance": {

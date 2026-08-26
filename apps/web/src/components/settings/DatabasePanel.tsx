@@ -198,6 +198,24 @@ export function DatabasePanel() {
       )}
 
       <div className={backupsConfigured ? 'mt-8 border-t border-[var(--color-border)] pt-6' : ''}>
+        <h3 className="mb-1 text-base font-semibold">{t('settings.database.export.title')}</h3>
+        <p className="mb-4 text-sm text-[var(--color-fg-muted)]">
+          {t('settings.database.export.description')}
+        </p>
+        {/* A plain download link, not a Button — no request/response to
+            await, the browser just navigates and the server's
+            Content-Disposition triggers a save. Styled to match Button's
+            own primary-variant classes since there's no anchor variant of
+            that component. */}
+        <a
+          href={api.account.exportUrl}
+          className="inline-flex items-center justify-center gap-2 rounded-md bg-[var(--color-primary)] px-4 py-2 text-sm font-medium text-[var(--color-primary-fg)] transition-colors hover:opacity-90"
+        >
+          {t('settings.database.export.button')}
+        </a>
+      </div>
+
+      <div className="mt-8 border-t border-[var(--color-border)] pt-6">
         <h3 className="mb-1 text-base font-semibold">{t('settings.database.clearTitle')}</h3>
         <p className="mb-4 text-sm text-[var(--color-fg-muted)]">
           {t('settings.database.description')}

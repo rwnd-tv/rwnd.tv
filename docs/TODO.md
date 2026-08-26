@@ -57,7 +57,7 @@ Format:
 
 ## Landing page & branding
 
-- [ ] **Build a real landing page for logged-out visitors** (2026-08-23 14:40 added)\
+- [ ] **Build a real landing page for logged-out visitors** (2026-08-23 14:40 added) — M3\
       `LoginPage.tsx` today is just a bare login card — no explanation of
       what rwnd.tv is, no artwork, no link to the GitHub repo, and the
       create-account option only shows up depending on
@@ -69,7 +69,7 @@ Format:
 
 ## Documentation
 
-- [ ] **Refresh the GitHub-facing docs** (2026-08-23 14:40 added)\
+- [ ] **Refresh the GitHub-facing docs** (2026-08-23 14:40 added) — M3\
       `README.md`'s "Status" section still says M1 is the only thing
       shipped and Trakt import is "next" — both M1 and M2 are done now
       (see `docs/TODO_ARCHIVE.md` for the real history). Update
@@ -81,7 +81,7 @@ Format:
 
 ## Metadata
 
-- [ ] **`seasons.airedEpisodeCount` can be wrong for the currently-airing season** (2026-08-25 15:39 added)\
+- [ ] **`seasons.airedEpisodeCount` can be wrong for the currently-airing season** (2026-08-25 15:39 added) — M3\
       Found live: Silo's Season 3 row has `aired_episode_count = 10`
       (i.e. "fully aired") while Episode 10 itself actually airs
       2026-09-03 — still in the future. Likely cause, from
@@ -106,7 +106,7 @@ Format:
       the doc comment on `airedEpisodes` in `showDetailSchema`) the show
       page's own aired-episode count would read wrong too.
 
-- [ ] **Per-episode data is never resolved proactively — only as a side effect of specific actions** (2026-08-25 15:42 added)\
+- [ ] **Per-episode data is never resolved proactively — only as a side effect of specific actions** (2026-08-25 15:42 added) — M3\
       James: concerned that episode-level data only shows up once
       someone happens to look at the season page. Actually worse than
       that, found while investigating: viewing a season/episode page
@@ -171,6 +171,45 @@ Format:
       theirs, so the page should make clear what's being authorized
       rather than a bare yes/no.
 
+## Self-hosting & deployment
+
+- [ ] **`docker-compose.yml` never passes through `TVDB_API_KEY`/`TVDB_PIN`/`ENVIRONMENT_LABEL`** (2026-08-26 added) — M3\
+      Found during the M3 readiness review: `.env.example` and
+      `docs/self-hosting.md`'s config table both document these as real
+      options, but the self-hoster-facing `docker-compose.yml`'s `app`
+      service `environment:` block only wires `DATABASE_URL`,
+      `TMDB_API_KEY`, `COOKIE_SECURE`, `TRAKT_*`, `SMTP_*`, and `APP_URL`
+      through to the container. A self-hoster who sets `TVDB_API_KEY` in
+      `.env` and runs `docker compose up` gets nothing — TheTVDB silently
+      never activates, no error anywhere. Fix: add the three missing
+      lines to the `environment:` block, same `${VAR:-}` pattern already
+      used for the optional ones.
+
+- [ ] **Cut the first tagged release** (2026-08-26 added) — M3\
+      `SECURITY.md` says rwnd.tv is "pre-1.0... until the first stable
+      release," and `docker-compose.yml`'s own comment already
+      anticipates this: "`edge` tracks main until the first tagged
+      release exists, after which `latest` will track the newest release
+      instead — see release.yml." M3 — ready for real use — is the
+      natural point to actually do this. Needs deciding: version number
+      (v1.0.0?), what "stable" means for a pre-1.0 project moving this
+      fast (semver commitment level), and whether `release.yml` needs
+      changes beyond what the existing comment already implies.
+
+## Security
+
+- [ ] **Full security review before M3 closes** (2026-08-26 added) — M3\
+      James, 2026-08-26: wants a full security review as part of "ready
+      for real use," not just the existing `SECURITY.md` policy
+      (reporting process) and its named areas of interest (session
+      handling, API token handling, multi-user data isolation). Scope not
+      yet defined — worth deciding whether this is a self-review, an
+      external audit, or a structured pass (e.g. OWASP ASVS/Top 10
+      checklist) against auth, session/cookie handling, API tokens,
+      webhook ingestion auth, multi-user data isolation, secrets handling
+      (`ENCRYPTION_KEY`, SMTP/OAuth credentials), and dependency
+      vulnerabilities, before scheduling the work itself.
+
 ## Roadmap
 
 Every open item from [ROADMAP.md](ROADMAP.md) that doesn't already have a
@@ -192,14 +231,18 @@ truth for scope; this is just so a TODO listing is complete.
       passing as future work, not as a separate required checkbox, so
       this was over-tagged M2 when first added. Left unmilestoned rather
       than reassigned to M3 — no strong reason it belongs there either.
-- [ ] **Stats and insights** (2026-08-23 15:32 added) — M3\
-      The reason to log anything in the first place, per the roadmap's
-      own framing of M3.
-- [ ] **Calendar of upcoming episodes** (2026-08-23 15:33 added) — M3\
+- [ ] **Stats and insights** (2026-08-23 15:32 added, un-M3'd 2026-08-26) — Not yet scheduled\
+      The reason to log anything in the first place, but not essential to
+      the core logging loop M3 was narrowed to (2026-08-26 — see
+      ROADMAP.md's M3 framing).
+- [ ] **Calendar of upcoming episodes** (2026-08-23 15:33 added, un-M3'd 2026-08-26) — Not yet scheduled\
       A view of what's airing next across the shows you're following.
-- [ ] **OIDC login** (2026-08-23 15:34 added) — M3\
+- [ ] **OIDC login** (2026-08-23 15:34 added, un-M3'd 2026-08-26) — Not yet scheduled\
       The `user_credentials` schema was designed for this from M1 — see
       [ADR 0003](adr/0003-auth-model.md).
+- [ ] **Additional locales beyond English** (2026-08-26 added) — Not yet scheduled\
+      en-GB/en-US both ship today; more locales is pure expansion, not
+      something the core logging loop needs.
 - [ ] **Mobile-friendly PWA installability** (2026-08-23 15:37 added) — Not yet scheduled\
       Installable/add-to-home-screen support.
 - [ ] **Public/shareable profile pages** (2026-08-23 15:38 added) — Not yet scheduled\

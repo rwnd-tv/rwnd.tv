@@ -25,15 +25,28 @@ Prove every layer works end to end, running as a real self-hosted deployment.
 - [x] **Multi-provider metadata matching**: `MetadataProviderSource` widened off the old TMDB-only literal, a real reverse-lookup fallback (Trakt's `imdb`/`tvdb` ids via TMDB's `/find`) for the common case a `tmdb` id is missing or stale, `METADATA_PROVIDER` env var replaced by credential-derived + admin-configurable priority, and a "Metadata: TMDB" provenance indicator on show/movie pages — see [ADR 0006](adr/0006-multi-provider-metadata.md)
 - [x] **TheTVDB as a real second metadata provider**: a full `TvdbProvider` against TheTVDB v4 API, cross-provider fallback for Trakt import matching (so a title TMDB has no entry for under any id, like Formula 1, can still resolve), and TVDB deep links/attribution logos on show/movie/season/episode pages
 
-## M3 — Make it worth using day to day
+## M3 — Ready for real use
 
-- [ ] Stats and insights (the reason to log anything in the first place)
+Core watch-logging is already solid (M1/M2 shipped local accounts, search,
+manual logging, Trakt/CSV import, and Plex webhooks). M3 isn't about adding
+every possible feature — it's closing the gap between "works" and "ready
+for real users to actually adopt": the ratings/watchlist data import
+already brings in becomes visible and usable, per-episode data is kept
+accurate for real usage (not just as a side effect of specific actions),
+the repo and self-hosting path read as current and actually work end to
+end, and a security review + first tagged release mark the project as
+genuinely production-ready.
+
 - [ ] Watchlist and custom lists
 - [ ] Ratings
-- [ ] Calendar of upcoming episodes
-- [ ] OIDC login (the `user_credentials` schema was designed for this from M1 — see [ADR 0003](adr/0003-auth-model.md))
-- [ ] Additional locales beyond English
+- [ ] Proactive per-episode data resolution, not just as a side effect of specific actions (see TODO.md)
+- [ ] Fix known metadata accuracy bugs affecting real usage — `airedEpisodeCount` for a currently-airing season (see TODO.md)
+- [ ] A real landing page for logged-out visitors (see TODO.md)
+- [ ] Refresh the GitHub-facing docs to reflect where the project actually is (see TODO.md)
+- [ ] Self-hosting readiness pass — confirm `docker-compose.yml`/`.env.example`/self-hosting.md actually work end to end for a real self-hoster (see TODO.md)
+- [ ] Full security review (see TODO.md)
+- [ ] Cut the first tagged release, moving `:latest` off tracking `:edge` (see TODO.md)
 
 ## Not yet scheduled
 
-Ideas that are in scope for the project eventually but don't have a milestone yet: mobile-friendly PWA installability, public/shareable profile pages.
+Ideas that are in scope for the project eventually but don't have a milestone yet: stats and insights, a calendar of upcoming episodes, OIDC login (the `user_credentials` schema was designed for this from M1 — see [ADR 0003](adr/0003-auth-model.md)), additional locales beyond English, mobile-friendly PWA installability, public/shareable profile pages.

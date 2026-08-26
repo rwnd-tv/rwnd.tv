@@ -1,9 +1,10 @@
-import { type ReactNode } from 'react'
+import { type ReactNode, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useParams } from 'react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, ApiError } from '../lib/api-client.js'
 import { useAuth } from '../lib/auth-context.js'
+import { UNKNOWN_WATCHED_AT, formatHistoryDate } from '../lib/date.js'
 import { useMovieWatchActions } from '../lib/use-movie-watch-actions.js'
 import { TMDB_LOGO_URL } from '../lib/tmdb.js'
 import { TVDB_LOGO_DARK_BG_URL, TVDB_LOGO_LIGHT_BG_URL, tvdbMovieUrl } from '../lib/tvdb.js'
@@ -11,6 +12,7 @@ import { MetadataAttribution } from '../components/library/MetadataAttribution.j
 import { UnwatchConfirmDialog } from '../components/library/UnwatchConfirmDialog.js'
 import { WatchDateDialog } from '../components/library/WatchDateDialog.js'
 import { Button } from '../components/ui/Button.js'
+import { Dialog } from '../components/ui/Dialog.js'
 import { Spinner } from '../components/ui/Spinner.js'
 
 /** Same tick used on the show page's Watched button (ShowDetailPage.tsx's
@@ -124,6 +126,31 @@ export function MovieDetailPage() {
     toggleDisabled,
   } = useMovieWatchActions(slug!, movie, movie?.tmdbId ?? null)
 
+  const [selectedWatchIds, setSelectedWatchIds] = useState<Set<string>>(new Set())
+  const [deleteSelectedConfirmOpen, setDeleteSelectedConfirmOpen] = useState(false)
+
+  // Same queryKey useMovieWatchActions' own watchesData query uses (see
+  // that hook's doc comment) — that one only fetches while the unwatch
+  // dialog is open. This page only ever renders one movie, so it's fine to
+  // fetch unconditionally once there's at least one watch to show; sharing
+  // the queryKey means the two consumers share one cached fetch rather than
+  // duplicating it. Named separately from the hook's own `watchesData` to
+  // avoid shadowing it.
+  const { data: historyWatchesData } = useQuery({
+    queryKey: ['movie', slug, 'watches'],
+    queryFn: () => api.library.movieWatches(slug!),
+    enabled: Boolean(slug) && Boolean(movie) && movie!.watchedCount > 0,
+  })
+
+  function toggleWatchSelected(id: string) {
+    setSelectedWatchIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
   // Manual "refresh metadata" button — same reasoning as ShowDetailPage's
   // own refreshMetadata: a refresh can touch almost any cached field
   // (title, poster, genres, rating...), so a real refetch is simpler and
@@ -151,7 +178,15 @@ export function MovieDetailPage() {
 
   return (
     <div className="flex flex-col gap-8">
-      <div className="flex flex-col gap-6 sm:flex-row">
+      {/* lg:items-start is load-bearing, not decorative — see
+          EpisodeDetailPage.tsx's own still-image container for the full
+          explanation: flex's default align-items:stretch would otherwise
+          force this aspect-[2/3] poster box to match the text column's
+          height once they sit side by side, distorting the poster's real
+          crop. lg, not sm, so the switch to row layout itself only
+          happens once there's enough width for the text column to
+          comfortably fit next to it. */}
+      <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
         <div className="aspect-[2/3] w-48 flex-shrink-0 overflow-hidden rounded-lg bg-[var(--color-surface)]">
           {movie.posterPath ? (
             <img
@@ -328,6 +363,113 @@ export function MovieDetailPage() {
           )}
         </div>
       </div>
+
+      {movie.watchedCount > 0 && (
+        // Native <details>/<summary> — same collapsible pattern as
+        // EpisodeDetailPage.tsx's own History table (closed by default, no
+        // extra state to manage).
+        <details>
+          <summary className="cursor-pointer text-lg font-semibold">
+            {t('showDetail.historyTable.title')}
+          </summary>
+          {historyWatchesData === undefined ? (
+            <Spinner label={t('common.loading')} />
+          ) : (
+            <div className="mt-3 flex flex-col gap-3">
+              <div className="max-w-2xl overflow-x-auto">
+                <table className="w-full text-left text-sm">
+                  <thead>
+                    <tr className="text-[var(--color-fg-muted)]">
+                      <th className="w-8 py-1.5" />
+                      <th className="py-1.5 pr-4 font-medium">
+                        {t('showDetail.historyTable.dateColumn')}
+                      </th>
+                      <th className="py-1.5 pr-4 font-medium">
+                        {t('showDetail.historyTable.timeColumn')}
+                      </th>
+                      <th className="py-1.5 font-medium">
+                        {t('showDetail.historyTable.typeColumn')}
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {historyWatchesData.watches.map((watch) => {
+                      const isUnknown = watch.watchedAt === UNKNOWN_WATCHED_AT
+                      const watchedAt = new Date(watch.watchedAt)
+                      return (
+                        <tr key={watch.id} className="border-t border-[var(--color-border)]">
+                          <td className="py-2">
+                            <input
+                              type="checkbox"
+                              checked={selectedWatchIds.has(watch.id)}
+                              onChange={() => toggleWatchSelected(watch.id)}
+                              aria-label={t('showDetail.unwatchDialog.remove')}
+                            />
+                          </td>
+                          <td className="py-2 pr-4">
+                            {isUnknown
+                              ? t('history.unknownDate')
+                              : formatHistoryDate(watchedAt, locale, t)}
+                          </td>
+                          <td className="py-2 pr-4">
+                            {isUnknown
+                              ? ''
+                              : watchedAt.toLocaleTimeString(locale, {
+                                  hour: 'numeric',
+                                  minute: '2-digit',
+                                })}
+                          </td>
+                          <td className="py-2">{t(`history.sourceLabel.${watch.source}`)}</td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <Button
+                type="button"
+                variant="danger"
+                className="w-fit"
+                disabled={selectedWatchIds.size === 0}
+                onClick={() => setDeleteSelectedConfirmOpen(true)}
+              >
+                {t('showDetail.historyTable.deleteSelectedWatches')}
+              </Button>
+            </div>
+          )}
+        </details>
+      )}
+
+      <Dialog
+        open={deleteSelectedConfirmOpen}
+        onClose={() => setDeleteSelectedConfirmOpen(false)}
+        title={t('showDetail.unwatchDialog.titleSelected')}
+      >
+        <div className="mt-6 flex justify-end gap-2">
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => setDeleteSelectedConfirmOpen(false)}
+          >
+            {t('showDetail.watchDialog.cancel')}
+          </Button>
+          <Button
+            type="button"
+            variant="danger"
+            isLoading={unwatch.isPending}
+            onClick={() =>
+              unwatch.mutate([...selectedWatchIds], {
+                onSuccess: () => {
+                  setDeleteSelectedConfirmOpen(false)
+                  setSelectedWatchIds(new Set())
+                },
+              })
+            }
+          >
+            {t('showDetail.unwatchDialog.removeSelected')}
+          </Button>
+        </div>
+      </Dialog>
 
       <WatchDateDialog
         open={dialogOpen}

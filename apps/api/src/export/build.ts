@@ -10,8 +10,18 @@ import {
   shows,
   watchlistItems,
 } from '@rwnd/db'
-import { UNKNOWN_WATCHED_AT } from '@rwnd/shared'
+import { UNKNOWN_WATCHED_AT, metadataProviderSourceSchema } from '@rwnd/shared'
 import { writeCsv } from './csv.js'
+
+/** Every real metadata provider's own id gets its own export column
+ * (`tmdb_id`, `tvdb_id`, …) — driven by this schema rather than hardcoded,
+ * so a future provider (see metadataProviderSourceSchema's own doc
+ * comment) picks up an export column automatically, no edit needed here.
+ * Deliberately narrower than `externalIdSourceEnum` in packages/db/src/
+ * schema.ts, which also has `imdb`/`trakt` — those are cross-reference
+ * tags on an entity resolved through a real provider, not providers
+ * themselves, so they'd be noise as export columns. */
+const PROVIDER_SOURCES = metadataProviderSourceSchema.options
 
 /** `"unknown"` for Trakt's "I don't remember when" sentinel, otherwise a
  * plain UTC ISO 8601 string — sortable and unambiguous in a spreadsheet,
@@ -68,7 +78,7 @@ export async function buildExportFiles(
   for (const row of watchlistRows) if (row.entityType === 'show') showIds.add(row.entityId)
   for (const episode of episodeRows) showIds.add(episode.showId)
 
-  const [movieRows, showRows, tmdbRows] = await Promise.all([
+  const [movieRows, showRows, providerIdRows] = await Promise.all([
     movieIds.size > 0
       ? db
           .select()
@@ -81,16 +91,21 @@ export async function buildExportFiles(
           .from(shows)
           .where(inArray(shows.id, [...showIds]))
       : [],
-    // Both entity types in one query — a movie id and a show id can never
-    // collide (separate uuid columns), so entityId alone is a safe map key
-    // below without also carrying entityType.
+    // Every real provider's id for every referenced movie/show, in one
+    // query — a movie id and a show id can never collide (separate uuid
+    // columns), so entityId alone is a safe map key below without also
+    // carrying entityType.
     movieIds.size > 0 || showIds.size > 0
       ? db
-          .select({ entityId: externalIds.entityId, externalId: externalIds.externalId })
+          .select({
+            entityId: externalIds.entityId,
+            source: externalIds.source,
+            externalId: externalIds.externalId,
+          })
           .from(externalIds)
           .where(
             and(
-              eq(externalIds.source, 'tmdb'),
+              inArray(externalIds.source, PROVIDER_SOURCES),
               or(
                 movieIds.size > 0
                   ? and(
@@ -111,7 +126,24 @@ export async function buildExportFiles(
   ])
   const movieById = new Map(movieRows.map((row) => [row.id, row]))
   const showById = new Map(showRows.map((row) => [row.id, row]))
-  const tmdbByEntityId = new Map(tmdbRows.map((row) => [row.entityId, row.externalId]))
+
+  const idsByEntity = new Map<string, Map<string, string>>()
+  for (const row of providerIdRows) {
+    let bySource = idsByEntity.get(row.entityId)
+    if (!bySource) {
+      bySource = new Map()
+      idsByEntity.set(row.entityId, bySource)
+    }
+    bySource.set(row.source, row.externalId)
+  }
+  /** One value per PROVIDER_SOURCES entry, in that fixed order — appended
+   * to every row so the CSV's `tmdb_id`/`tvdb_id`/… columns line up with
+   * the header regardless of which providers this particular entity
+   * actually has an id from. */
+  function providerIdColumns(entityId: string): string[] {
+    const bySource = idsByEntity.get(entityId)
+    return PROVIDER_SOURCES.map((source) => bySource?.get(source) ?? '')
+  }
 
   const historyRows: (string | number | null)[][] = []
   for (const row of playRows) {
@@ -126,7 +158,7 @@ export async function buildExportFiles(
         '',
         formatWatchedAt(row.watchedAt),
         row.source,
-        tmdbByEntityId.get(movie.id) ?? '',
+        ...providerIdColumns(movie.id),
       ])
     } else if (row.episodeId) {
       const episode = episodeById.get(row.episodeId)
@@ -140,7 +172,7 @@ export async function buildExportFiles(
         episode.episodeNumber,
         formatWatchedAt(row.watchedAt),
         row.source,
-        tmdbByEntityId.get(show.id) ?? '',
+        ...providerIdColumns(show.id),
       ])
     }
   }
@@ -158,7 +190,7 @@ export async function buildExportFiles(
         '',
         row.rating,
         row.ratedAt.toISOString(),
-        tmdbByEntityId.get(movie.id) ?? '',
+        ...providerIdColumns(movie.id),
       ])
     } else if (row.entityType === 'show') {
       const show = showById.get(row.entityId)
@@ -171,7 +203,7 @@ export async function buildExportFiles(
         '',
         row.rating,
         row.ratedAt.toISOString(),
-        tmdbByEntityId.get(show.id) ?? '',
+        ...providerIdColumns(show.id),
       ])
     } else {
       const episode = episodeById.get(row.entityId)
@@ -185,7 +217,7 @@ export async function buildExportFiles(
         episode.episodeNumber,
         row.rating,
         row.ratedAt.toISOString(),
-        tmdbByEntityId.get(show.id) ?? '',
+        ...providerIdColumns(show.id),
       ])
     }
   }
@@ -203,7 +235,7 @@ export async function buildExportFiles(
         '',
         row.listedAt.toISOString(),
         row.notes,
-        tmdbByEntityId.get(movie.id) ?? '',
+        ...providerIdColumns(movie.id),
       ])
     } else if (row.entityType === 'show') {
       const show = showById.get(row.entityId)
@@ -216,7 +248,7 @@ export async function buildExportFiles(
         '',
         row.listedAt.toISOString(),
         row.notes,
-        tmdbByEntityId.get(show.id) ?? '',
+        ...providerIdColumns(show.id),
       ])
     } else {
       const episode = episodeById.get(row.entityId)
@@ -230,7 +262,7 @@ export async function buildExportFiles(
         episode.episodeNumber,
         row.listedAt.toISOString(),
         row.notes,
-        tmdbByEntityId.get(show.id) ?? '',
+        ...providerIdColumns(show.id),
       ])
     }
   }
@@ -248,10 +280,12 @@ export async function buildExportFiles(
     const droppedAt = row.manualDropped !== null ? row.manualDroppedAt : row.traktDroppedAt
     droppedRowsOut.push([
       show.title,
-      tmdbByEntityId.get(show.id) ?? '',
+      ...providerIdColumns(show.id),
       droppedAt ? droppedAt.toISOString() : '',
     ])
   }
+
+  const providerIdHeaders = PROVIDER_SOURCES.map((source) => `${source}_id`)
 
   return {
     'history.csv': writeCsv(
@@ -263,7 +297,7 @@ export async function buildExportFiles(
         'episode_number',
         'watched_at',
         'source',
-        'tmdb_id',
+        ...providerIdHeaders,
       ],
       historyRows,
     ),
@@ -276,7 +310,7 @@ export async function buildExportFiles(
         'episode_number',
         'rating',
         'rated_at',
-        'tmdb_id',
+        ...providerIdHeaders,
       ],
       ratingsRows,
     ),
@@ -289,10 +323,13 @@ export async function buildExportFiles(
         'episode_number',
         'listed_at',
         'notes',
-        'tmdb_id',
+        ...providerIdHeaders,
       ],
       watchlistRowsOut,
     ),
-    'dropped-shows.csv': writeCsv(['show_title', 'tmdb_id', 'dropped_at'], droppedRowsOut),
+    'dropped-shows.csv': writeCsv(
+      ['show_title', ...providerIdHeaders, 'dropped_at'],
+      droppedRowsOut,
+    ),
   }
 }

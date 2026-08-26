@@ -646,6 +646,9 @@ export const ratings = pgTable(
   (table) => [
     uniqueIndex('ratings_user_entity_idx').on(table.userId, table.entityType, table.entityId),
     check('ratings_rating_range', sql`${table.rating} BETWEEN 1 AND 10`),
+    // Backs GET /activity's rating branch (apps/api/src/routes/activity.ts),
+    // which orders/paginates the merged feed by occurredAt — ratedAt here.
+    index('ratings_user_rated_at_idx').on(table.userId, table.ratedAt.desc()),
   ],
 )
 
@@ -669,6 +672,9 @@ export const watchlistItems = pgTable(
       table.entityType,
       table.entityId,
     ),
+    // Same reasoning as ratings_user_rated_at_idx above, for the watchlist
+    // branch of GET /activity.
+    index('watchlist_items_user_listed_at_idx').on(table.userId, table.listedAt.desc()),
   ],
 )
 

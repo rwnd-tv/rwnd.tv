@@ -148,6 +148,13 @@
       "when": 1787732373507,
       "tag": "0020_curious_ultragirl",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1787769963185,
+      "tag": "0021_handy_barracuda",
+      "breakpoints": true
     }
   ]
 }

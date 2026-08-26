@@ -330,6 +330,116 @@ describe('plays', () => {
     })
   })
 
+  describe('PATCH /plays/{id}', () => {
+    beforeEach(() => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (input: string | URL) => {
+          const url = new URL(input)
+          if (url.pathname === '/3/movie/603') {
+            return new Response(
+              JSON.stringify({
+                id: 603,
+                title: 'The Matrix',
+                release_date: '1999-03-30',
+                runtime: 136,
+                overview: 'A hacker learns the truth.',
+                poster_path: '/matrix.jpg',
+              }),
+              { status: 200 },
+            )
+          }
+          throw new Error(`Unexpected fetch in test: ${url}`)
+        }),
+      )
+    })
+
+    afterEach(() => vi.unstubAllGlobals())
+
+    it("edits a play's watched date and flips its source to manual", async () => {
+      const cookie = await createUserAndCookie()
+      const created = await app.request('/api/v1/plays', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', cookie },
+        body: JSON.stringify({
+          movie: { source: 'tmdb', externalId: '603' },
+          watchedAt: '2020-01-01T00:00:00.000Z',
+        }),
+      })
+      const play = await json<Play>(created)
+
+      const res = await app.request(`/api/v1/plays/${play.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', cookie },
+        body: JSON.stringify({ watchedAt: '2021-06-15T10:30:00.000Z' }),
+      })
+      expect(res.status).toBe(200)
+      const updated = await json<Play>(res)
+      expect(updated.watchedAt).toBe('2021-06-15T10:30:00.000Z')
+      expect(updated.source).toBe('manual')
+
+      const list = await json<ListPlaysResponse>(
+        await app.request('/api/v1/plays', { headers: { cookie } }),
+      )
+      expect(list.plays[0]?.watchedAt).toBe('2021-06-15T10:30:00.000Z')
+    })
+
+    it('rejects an edited watchedAt in the future', async () => {
+      const cookie = await createUserAndCookie()
+      const created = await app.request('/api/v1/plays', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', cookie },
+        body: JSON.stringify({ movie: { source: 'tmdb', externalId: '603' } }),
+      })
+      const play = await json<Play>(created)
+
+      const res = await app.request(`/api/v1/plays/${play.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', cookie },
+        body: JSON.stringify({ watchedAt: '2099-01-01T00:00:00.000Z' }),
+      })
+      expect(res.status).toBe(400)
+    })
+
+    it("does not let a different user edit someone else's play", async () => {
+      const cookieA = await createUserAndCookie()
+      const created = await app.request('/api/v1/plays', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', cookie: cookieA },
+        body: JSON.stringify({ movie: { source: 'tmdb', externalId: '603' } }),
+      })
+      const play = await json<Play>(created)
+
+      await createLocalUser(db, 'other2@example.com', 'correct-horse-battery-staple')
+      const loginB = await app.request('/api/v1/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: 'other2@example.com',
+          password: 'correct-horse-battery-staple',
+        }),
+      })
+      const cookieB = extractCookie(loginB)!
+
+      const res = await app.request(`/api/v1/plays/${play.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', cookie: cookieB },
+        body: JSON.stringify({ watchedAt: '2021-06-15T10:30:00.000Z' }),
+      })
+      expect(res.status).toBe(404)
+    })
+
+    it('returns 404 for a play that does not exist', async () => {
+      const cookie = await createUserAndCookie()
+      const res = await app.request(`/api/v1/plays/00000000-0000-0000-0000-000000000000`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', cookie },
+        body: JSON.stringify({ watchedAt: '2021-06-15T10:30:00.000Z' }),
+      })
+      expect(res.status).toBe(404)
+    })
+  })
+
   it('rejects a play row with neither or both media references at the database level', async () => {
     const cookie = await createUserAndCookie()
     const me = await json<User>(await app.request('/api/v1/auth/me', { headers: { cookie } }))

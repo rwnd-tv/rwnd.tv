@@ -6,6 +6,7 @@ import {
   listPlaysQuerySchema,
   listPlaysResponseSchema,
   playSchema,
+  updatePlayRequestSchema,
 } from '@rwnd/shared'
 import type { Database } from '@rwnd/db'
 import { episodes, movies, plays, shows } from '@rwnd/db'
@@ -14,6 +15,42 @@ import { requireAuth } from '../middleware/auth.js'
 import { episodeDisplayTitle, resolveEpisode, resolveMovie } from '../lib/media.js'
 
 export const playRoutes = new OpenAPIHono<AppEnv>()
+
+/** Shared by GET /plays and PATCH /plays/{id} — both join the same four
+ * tables and need the same movie-or-episode media shape back out. */
+function toPlayResponse(row: {
+  play: typeof plays.$inferSelect
+  movie: typeof movies.$inferSelect | null
+  episode: typeof episodes.$inferSelect | null
+  show: typeof shows.$inferSelect | null
+}) {
+  return {
+    id: row.play.id,
+    watchedAt: row.play.watchedAt.toISOString(),
+    source: row.play.source,
+    createdAt: row.play.createdAt.toISOString(),
+    media: row.movie
+      ? {
+          type: 'movie' as const,
+          title: row.movie.title,
+          posterPath: row.movie.posterPath,
+          movieSlug: row.movie.slug,
+        }
+      : {
+          type: 'episode' as const,
+          title: episodeDisplayTitle(
+            row.episode?.title ?? null,
+            row.episode?.seasonNumber,
+            row.episode?.episodeNumber,
+          ),
+          posterPath: row.show?.posterPath ?? null,
+          showSlug: row.show?.slug,
+          showTitle: row.show?.title,
+          seasonNumber: row.episode?.seasonNumber,
+          episodeNumber: row.episode?.episodeNumber,
+        },
+  }
+}
 
 /**
  * Two unknown-date watches of the same movie/episode are indistinguishable
@@ -80,32 +117,7 @@ playRoutes.openapi(
     const page = hasMore ? rows.slice(0, limit) : rows
 
     return c.json({
-      plays: page.map((row) => ({
-        id: row.play.id,
-        watchedAt: row.play.watchedAt.toISOString(),
-        source: row.play.source,
-        createdAt: row.play.createdAt.toISOString(),
-        media: row.movie
-          ? {
-              type: 'movie' as const,
-              title: row.movie.title,
-              posterPath: row.movie.posterPath,
-              movieSlug: row.movie.slug,
-            }
-          : {
-              type: 'episode' as const,
-              title: episodeDisplayTitle(
-                row.episode?.title ?? null,
-                row.episode?.seasonNumber,
-                row.episode?.episodeNumber,
-              ),
-              posterPath: row.show?.posterPath ?? null,
-              showSlug: row.show?.slug,
-              showTitle: row.show?.title,
-              seasonNumber: row.episode?.seasonNumber,
-              episodeNumber: row.episode?.episodeNumber,
-            },
-      })),
+      plays: page.map(toPlayResponse),
       nextCursor: hasMore ? (page[page.length - 1]?.play.watchedAt.toISOString() ?? null) : null,
     })
   },
@@ -252,5 +264,56 @@ playRoutes.openapi(
       .returning({ id: plays.id })
     if (result.length === 0) return c.json({ error: 'Play not found' }, 404)
     return c.body(null, 204)
+  },
+)
+
+playRoutes.openapi(
+  createRoute({
+    method: 'patch',
+    path: '/plays/{id}',
+    summary: "Edit a logged play's watched date/time",
+    middleware: [requireAuth] as const,
+    request: {
+      params: z.object({ id: z.string().uuid() }),
+      body: { content: { 'application/json': { schema: updatePlayRequestSchema } } },
+    },
+    responses: {
+      200: { description: 'Updated', content: { 'application/json': { schema: playSchema } } },
+      400: { description: 'watchedAt cannot be in the future' },
+      404: { description: 'Play not found' },
+    },
+  }),
+  async (c) => {
+    const { id } = c.req.valid('param')
+    const { watchedAt: watchedAtRaw } = c.req.valid('json')
+    const userId = c.get('user')!.id
+    const db = c.get('db')
+    const watchedAt = new Date(watchedAtRaw)
+
+    // Same "never guess a watch into the future" backstop as POST /plays.
+    if (watchedAt.getTime() > Date.now()) {
+      return c.json({ error: 'watchedAt cannot be in the future' }, 400)
+    }
+
+    // Always flips source to 'manual' — an edited timestamp no longer
+    // reflects what Plex's scrobble or an import actually reported (see
+    // updatePlayRequestSchema's doc comment, packages/shared/src/schemas/plays.ts).
+    const [updated] = await db
+      .update(plays)
+      .set({ watchedAt, source: 'manual' })
+      .where(and(eq(plays.id, id), eq(plays.userId, userId)))
+      .returning({ id: plays.id })
+    if (!updated) return c.json({ error: 'Play not found' }, 404)
+
+    const [row] = await db
+      .select({ play: plays, movie: movies, episode: episodes, show: shows })
+      .from(plays)
+      .leftJoin(movies, eq(plays.movieId, movies.id))
+      .leftJoin(episodes, eq(plays.episodeId, episodes.id))
+      .leftJoin(shows, eq(episodes.showId, shows.id))
+      .where(eq(plays.id, id))
+      .limit(1)
+
+    return c.json(toPlayResponse(row!))
   },
 )

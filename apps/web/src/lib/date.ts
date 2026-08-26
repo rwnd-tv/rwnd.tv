@@ -185,3 +185,29 @@ export function toTimeInputValue(date: Date): string {
   const minutes = String(date.getMinutes()).padStart(2, '0')
   return `${hours}:${minutes}`
 }
+
+/**
+ * Inverse of toDateInputValue — the exact instant a "YYYY-MM-DD" day
+ * (as picked from a native `<input type="date">`, see
+ * DateRangeFilterPanel.tsx) starts/ends in the *browser's* local timezone,
+ * as an ISO string ready for the API's `after`/`before` params
+ * (listActivityQuerySchema). Deliberately resolved client-side against
+ * `new Date(year, month, day, ...)` (which the JS Date constructor always
+ * treats as local time) rather than sent as a bare date for the server to
+ * interpret — the server has no per-user timezone to interpret it against,
+ * and HistoryPage.tsx's own day-heading grouping already uses the
+ * browser's local time (`toLocaleDateString`), so this keeps the filter
+ * boundary and the headings it's filtering agreeing on what day a moment
+ * near midnight actually falls on, rather than the two silently disagreeing
+ * whenever the browser isn't in UTC.
+ */
+export function localDayStartISO(dayString: string): string {
+  const [year, month, day] = dayString.split('-').map(Number)
+  return new Date(year!, month! - 1, day!, 0, 0, 0, 0).toISOString()
+}
+
+/** Inverse of toDateInputValue — see localDayStartISO's doc comment. */
+export function localDayEndISO(dayString: string): string {
+  const [year, month, day] = dayString.split('-').map(Number)
+  return new Date(year!, month! - 1, day!, 23, 59, 59, 999).toISOString()
+}

@@ -60,7 +60,7 @@ const router = createBrowserRouter([
           },
           { path: '/movies', element: <MoviesPage />, handle: fullWidthHandle },
           { path: '/movies/:slug', element: <MovieDetailPage />, handle: fullWidthHandle },
-          { path: '/history', element: <HistoryPage /> },
+          { path: '/history', element: <HistoryPage />, handle: fullWidthHandle },
           { path: '/import', element: <ImportPage /> },
           { path: '/settings', element: <SettingsPage /> },
           { path: '/account', element: <AccountPage /> },

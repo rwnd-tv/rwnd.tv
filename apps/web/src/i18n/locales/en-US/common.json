@@ -307,6 +307,44 @@
       "manual": "Manual",
       "plex": "Scrobbled",
       "import": "Imported"
+    },
+    "filterLabel": "Filter activity",
+    "filterPlaceholder": "Filter by title…",
+    "sortLabel": "Sort by",
+    "sortOccurredDesc": "Newest First",
+    "sortOccurredAsc": "Oldest First",
+    "sortTitleAsc": "Title (A - Z)",
+    "sortTitleDesc": "Title (Z - A)",
+    "filtersButton": "Filters…",
+    "noMatches": "Nothing matches \"{{query}}\".",
+    "noFilterMatches": "Nothing matches the selected filters.",
+    "filtersPanel": {
+      "kind": "Type",
+      "dateRange": "Date range",
+      "after": "From",
+      "before": "To",
+      "reset": "Reset"
+    },
+    "kindLabel": {
+      "watch": "Watched",
+      "rating": "Rated",
+      "watchlist": "Watchlist",
+      "dropped": "Dropped"
+    },
+    "ratingCaption": "Rated {{rating}}/10",
+    "watchlistCaption": "Added to watchlist",
+    "droppedCaption": "Dropped",
+    "selectAria": "Select {{title}}",
+    "selection": {
+      "count_one": "{{count}} selected",
+      "count_other": "{{count}} selected",
+      "remove": "Remove",
+      "editDate": "Edit date…",
+      "clear": "Clear"
+    },
+    "editDateDialog": {
+      "title": "When did you watch \"{{title}}\"?",
+      "confirm": "Save"
     }
   },
   "import": {

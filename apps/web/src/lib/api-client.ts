@@ -1,5 +1,7 @@
 import {
   type AccountDataCounts,
+  type ActivityKind,
+  type ActivitySort,
   type ApiToken,
   type BackupSummary,
   type ChangeEmailRequest,
@@ -18,6 +20,7 @@ import {
   type ImportJob,
   type InstanceSettings,
   type ListBackupsResponse,
+  type ListActivityResponse,
   type ListImportJobsResponse,
   type ListLibraryMoviesResponse,
   type ListLibraryShowsResponse,
@@ -30,6 +33,7 @@ import {
   type OnDeckResponse,
   type Play,
   type RegisterRequest,
+  type RemoveActivityRequest,
   type RemoveShowWatchesResponse,
   type RemoveWatchesRequest,
   type ResetPasswordRequest,
@@ -45,6 +49,7 @@ import {
   type TraktConnectionStatus,
   type TraktDevicePairing,
   type UpdateInstanceSettingsRequest,
+  type UpdatePlayRequest,
   type UpdateProfileRequest,
   type UpdateWebhookLinkRequest,
   type UpNextResponse,
@@ -165,6 +170,33 @@ export const api = {
     },
     create: (body: CreatePlayRequest) => post<Play>('/plays', body),
     delete: (id: string) => del<void>(`/plays/${id}`),
+    updateWatchedAt: (id: string, watchedAt: string) =>
+      patch<Play>(`/plays/${id}`, { watchedAt } satisfies UpdatePlayRequest),
+  },
+  activity: {
+    list: (params: {
+      offset: number
+      limit: number
+      q?: string
+      kinds?: ActivityKind[]
+      sort: ActivitySort
+      /** Inclusive ISO instant bounds — see date.ts's localDayStartISO/
+       * localDayEndISO for converting a picked calendar day into these. */
+      after?: string
+      before?: string
+    }) => {
+      const qs = new URLSearchParams()
+      qs.set('offset', String(params.offset))
+      qs.set('limit', String(params.limit))
+      if (params.q) qs.set('q', params.q)
+      if (params.kinds && params.kinds.length > 0) qs.set('kinds', params.kinds.join(','))
+      qs.set('sort', params.sort)
+      if (params.after) qs.set('after', params.after)
+      if (params.before) qs.set('before', params.before)
+      return get<ListActivityResponse>(`/activity-feed?${qs.toString()}`)
+    },
+    removeMany: (entries: RemoveActivityRequest['entries']) =>
+      del<void>('/activity-feed', { entries } satisfies RemoveActivityRequest),
   },
   library: {
     // Whole-library responses, not paginated — see packages/shared/src/schemas/library.ts.

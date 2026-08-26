@@ -49,6 +49,16 @@ export function WatchDateDialog({
    * the API silently skips whichever episodes in scope already have one,
    * same as it already does for unaired/already-watched episodes. */
   disableUnknown = false,
+  /** Seeds the dialog on "Other date" at this value instead of the
+   * "Just finished" default — for editing an existing watch's date
+   * (HistoryPage.tsx's "Edit date…") rather than logging a new one. */
+  initialWatchedAt,
+  /** Overrides the default "When did you watch…" title — HistoryPage.tsx's
+   * edit dialog isn't logging a new watch, so that copy doesn't fit. */
+  titleOverride,
+  /** Overrides the default "Add watch" confirm button label, same reasoning
+   * as `titleOverride`. */
+  confirmLabel,
   onConfirm,
   onCancel,
 }: {
@@ -59,6 +69,9 @@ export function WatchDateDialog({
   allowNowWatching?: boolean
   allowReleaseDate?: boolean
   disableUnknown?: boolean
+  initialWatchedAt?: string
+  titleOverride?: string
+  confirmLabel?: string
   onConfirm: (watchedAtIso: string) => void
   onCancel: () => void
 }) {
@@ -79,18 +92,37 @@ export function WatchDateDialog({
   const [previewText, setPreviewText] = useState(() => formatDateTimeInput(new Date(), locale))
 
   // Reset to sensible defaults every time the dialog opens, rather than
-  // carrying over whatever was left selected from a previous episode.
+  // carrying over whatever was left selected from a previous episode. Also
+  // seeds the matching preview directly here (rather than leaving the
+  // "justFinished" case for the mode-change effect below to pick up) —
+  // that effect fires on `mode` changes, and `open` flipping true doesn't
+  // itself change `mode`'s value in this same render, so it wouldn't
+  // otherwise refresh the preview on reopen if `mode` happened to already
+  // be at its default from a previous close.
   useEffect(() => {
     if (!open) return
-    setMode('justFinished')
-  }, [open])
+    if (initialWatchedAt) {
+      setMode('other')
+      const initial = new Date(initialWatchedAt)
+      setPreviewDate(initial)
+      setPreviewText(formatDateTimeInput(initial, locale))
+    } else {
+      setMode('justFinished')
+      const now = new Date()
+      setPreviewDate(now)
+      setPreviewText(formatDateTimeInput(now, locale))
+    }
+  }, [open, initialWatchedAt, locale])
 
-  // Keeps previewDate/previewText in sync with whichever non-"other" mode
-  // is selected — computed once when the mode is (re)selected, not a
-  // live-ticking clock, so "Now watching"/"Just finished" don't drift
-  // while the dialog just sits open.
+  // Keeps previewDate/previewText in sync when the user manually switches
+  // to a different non-"other" mode via the radio buttons. Deliberately
+  // NOT keyed on `open` (only `mode` and the values it's computed from) —
+  // the effect above already seeds the preview for the open transition;
+  // sharing `open` as a trigger here raced it, since this effect would
+  // re-fire on that same transition seeing the *previous* render's `mode`
+  // (React only commits `setMode` for the *next* render), clobbering the
+  // just-seeded `initialWatchedAt` preview with "now".
   useEffect(() => {
-    if (!open) return
     let next: Date | null = null
     if (mode === 'nowWatching') {
       next = new Date(Date.now() + (episode.runtimeMinutes ?? 0) * 60_000)
@@ -103,7 +135,7 @@ export function WatchDateDialog({
       setPreviewDate(next)
       setPreviewText(formatDateTimeInput(next, locale))
     }
-  }, [open, mode, episode.runtimeMinutes, episode.firstAired, locale])
+  }, [mode, episode.runtimeMinutes, episode.firstAired, locale])
 
   // "Other date" is the only mode where the user can enter an arbitrary
   // value — bounded to between the episode's air date and "now" plus its
@@ -170,7 +202,10 @@ export function WatchDateDialog({
     <Dialog
       open={open}
       onClose={onCancel}
-      title={t('showDetail.watchDialog.title', { episode: episode.title ?? episodeLabel })}
+      title={
+        titleOverride ??
+        t('showDetail.watchDialog.title', { episode: episode.title ?? episodeLabel })
+      }
     >
       <fieldset className="flex flex-col gap-2">
         <legend className="sr-only">{t('showDetail.watchDialog.legend')}</legend>
@@ -243,7 +278,7 @@ export function WatchDateDialog({
           {t('showDetail.watchDialog.cancel')}
         </Button>
         <Button type="button" variant="primary" onClick={handleConfirm}>
-          {t('showDetail.watchDialog.confirm')}
+          {confirmLabel ?? t('showDetail.watchDialog.confirm')}
         </Button>
       </div>
     </Dialog>

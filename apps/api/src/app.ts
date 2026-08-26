@@ -16,6 +16,7 @@ import { authRoutes } from './routes/auth.js'
 import { tokenRoutes } from './routes/tokens.js'
 import { searchRoutes } from './routes/search.js'
 import { playRoutes } from './routes/plays.js'
+import { activityRoutes } from './routes/activity.js'
 import { settingsRoutes } from './routes/settings.js'
 import { importRoutes } from './routes/imports.js'
 import { libraryRoutes } from './routes/library.js'
@@ -66,6 +67,7 @@ export function createApp(services?: { db: Database; metadataProviders: Metadata
   v1.route('/', tokenRoutes)
   v1.route('/', searchRoutes)
   v1.route('/', playRoutes)
+  v1.route('/', activityRoutes)
   v1.route('/', settingsRoutes)
   v1.route('/', importRoutes)
   v1.route('/', libraryRoutes)

@@ -2246,3 +2246,35 @@ DATABASE` ×2) — zero residue.\
       same `${VAR:-}` pattern already used for the other optional vars.
       Validated with `docker compose config` against a dummy `.env` —
       all three now resolve correctly in the rendered config.
+
+## History page
+
+- [x] **Redesign the History page as a full-width grid of watch tiles, with filter/sort/multi-select** (2026-08-23 14:15 added, done 2026-08-26) — M3\
+      History was M1's first pass: a narrow single-column list of plays
+      with a per-row Remove button, never brought up to the full gallery
+      treatment Shows/Movies got in M2. Broadened mid-implementation
+      (2026-08-26) from a watch-only history into an **activity** page —
+      the user's own actions across the app: watches, ratings, watchlist
+      adds, and dropped shows, not just plays. Done: rebuilt as
+      `HistoryPage.tsx`, a full-width `PosterGrid` of `ActivityTile`s
+      reusing `LibraryControls`/`FiltersPanel`, the same shell Shows/
+      Movies use. New `GET /activity` endpoint (new `activity.ts` route)
+      unions plays/ratings/watchlist_items/droppedShows via
+      a Drizzle CTE (`unionAll`), with server-side title filter, a kind
+      filter, four sort orders (occurred asc/desc, title asc/desc), and
+      offset/limit pagination (History can run to tens of thousands of
+      rows, unlike Shows/Movies' ~500-item client-side galleries). New
+      `DELETE /activity` bulk-remove deletes the underlying row for
+      watch/rating/watchlist entries and un-drops (rather than deleting)
+      a dropped entry, reusing the same effective-state CASE logic now
+      extracted into `apps/api/src/lib/dropped.ts`. New `PATCH /plays/{id}`
+      edits a watch's date and always flips `source` to `'manual'`. Day-
+      of-week headings (including the 1900-01-01 "Unknown date" Trakt
+      sentinel bucket) render only under a chronological sort; a title
+      sort renders one flat grid. `WatchDateDialog.tsx` gained additive
+      `initialWatchedAt`/`titleOverride`/`confirmLabel` props so the same
+      dialog serves the single-selection "Edit date…" action here.
+      Un-blocks part of the ratings/watchlist TODO items above — this
+      page is now the first place either surfaces in the UI at all,
+      though only read-only; setting/changing a rating or watchlist entry
+      is still unbuilt.

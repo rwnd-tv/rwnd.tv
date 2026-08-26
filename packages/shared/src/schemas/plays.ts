@@ -35,12 +35,19 @@ export const createPlayRequestSchema = z
   })
 export type CreatePlayRequest = z.infer<typeof createPlayRequestSchema>
 
-const playMediaSummarySchema = z.object({
-  type: z.enum(['movie', 'episode']),
+export const playMediaSummarySchema = z.object({
+  // 'show' is never produced by a play (POST /plays only ever logs a movie
+  // or episode watch) — it's here for GET /activity-feed's rating/watchlist
+  // entries (schemas/activity.ts), which can target a whole show rather
+  // than one episode. Widened on this shared schema rather than forked into
+  // a separate one so ActivityTile.tsx (apps/web) can reuse the same
+  // movie/episode/show switch PosterTile-based rendering everywhere else
+  // already uses.
+  type: z.enum(['movie', 'show', 'episode']),
   title: z.string(),
   posterPath: z.string().nullable(),
   showTitle: z.string().optional(),
-  /** Present only for episodes — links History entries to the show's page
+  /** Present for episodes and shows — links an entry to the show's page
    * (apps/web/src/routes/ShowDetailPage.tsx). */
   showSlug: z.string().optional(),
   /** Present only for movies — links History entries to the movie's page
@@ -68,3 +75,14 @@ export const listPlaysResponseSchema = z.object({
   nextCursor: z.string().datetime().nullable(),
 })
 export type ListPlaysResponse = z.infer<typeof listPlaysResponseSchema>
+
+/**
+ * Request body for PATCH /plays/{id} (HistoryPage.tsx's "Edit date…" on a
+ * single selected watch, via WatchDateDialog.tsx). Always flips `source` to
+ * `'manual'` server-side — not a request field — since an edited timestamp
+ * no longer reflects what Plex's scrobble or an import actually reported.
+ */
+export const updatePlayRequestSchema = z.object({
+  watchedAt: z.string().datetime(),
+})
+export type UpdatePlayRequest = z.infer<typeof updatePlayRequestSchema>

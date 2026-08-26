@@ -1,0 +1,2 @@
+CREATE INDEX "ratings_user_rated_at_idx" ON "ratings" USING btree ("user_id","rated_at" DESC NULLS LAST);--> statement-breakpoint
+CREATE INDEX "watchlist_items_user_listed_at_idx" ON "watchlist_items" USING btree ("user_id","listed_at" DESC NULLS LAST);

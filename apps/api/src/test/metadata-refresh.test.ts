@@ -374,6 +374,61 @@ describe('metadata refresh', () => {
     expect(bySeason.get(2)?.airedEpisodeCount).toBe(1) // only the latest season got fetched
   })
 
+  // Regression: TMDB can list an announced-but-empty future season
+  // (episodeCount 0, no episodes populated yet) alongside the season
+  // that's actually still airing. Confirmed live against Silo — season 4
+  // was such a placeholder while season 3 (the real "latest" season with
+  // episodes) was still airing. Picking season 4 as "latest" by season
+  // number alone would fetch its (empty) episode list instead of season
+  // 3's, and season 3 would wrongly be assumed fully aired.
+  it('treats an announced-but-empty future season as not-yet-latest, so the real airing season still gets its per-episode fetch', async () => {
+    const show = await insertShow({
+      tmdbId: 10,
+      status: 'Returning Series',
+      metadataRefreshedAt: new Date(Date.now() - 10 * DAY_MS),
+      withSeasons: false,
+    })
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: string | URL) => {
+        const url = new URL(input)
+        if (url.pathname === '/3/tv/10/season/3') {
+          return new Response(
+            tmdbSeasonResponse([
+              { episode_number: 1, air_date: '2020-01-01' },
+              { episode_number: 2, air_date: '2099-01-01' },
+            ]),
+            { status: 200 },
+          )
+        }
+        if (url.pathname === '/3/tv/10/season/4') {
+          throw new Error('season 4 is an empty placeholder — it should never be fetched')
+        }
+        return new Response(
+          tmdbShowResponse({
+            id: 10,
+            status: 'Returning Series',
+            seasons: [
+              { season_number: 3, episode_count: 10 },
+              { season_number: 4, episode_count: 0 },
+            ],
+          }),
+          { status: 200 },
+        )
+      }),
+    )
+
+    const result = await runMetadataRefresh(db, [provider])
+    expect(result.showsRefreshed).toBe(1)
+
+    const showSeasons = await db.select().from(seasons).where(eq(seasons.showId, show.id))
+    const bySeason = new Map(showSeasons.map((s) => [s.seasonNumber, s]))
+    // Only 1 of season 3's (eventual) 10 episodes has actually aired.
+    expect(bySeason.get(3)?.airedEpisodeCount).toBe(1)
+    expect(bySeason.get(4)?.airedEpisodeCount).toBe(0)
+  })
+
   it('does not refetch an airing show that is not yet stale', async () => {
     await insertShow({
       tmdbId: 4,

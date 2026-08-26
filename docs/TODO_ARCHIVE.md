@@ -1465,6 +1465,24 @@ currently-dropped shows, since a row can have both
       already-resolved show, not a show/movie the importer couldn't find
       at all.
 
+- [x] **`seasons.airedEpisodeCount` can be wrong for the currently-airing season** (2026-08-25 15:39 added, done 2026-08-26)\
+      Found live: Silo's Season 3 row had `aired_episode_count = 10`
+      (i.e. "fully aired") while Episode 10 itself actually airs
+      2026-09-03 — still in the future. Confirmed directly against TMDB
+      (`GET /tv/125988`): Season 4 is an announced-but-empty placeholder
+      (`episode_count: 0`, `air_date: null`), which `refreshOneShow`
+      (`apps/api/src/metadata/refresh.ts`) picked as `latestSeasonNumber`
+      via `Math.max` over season numbers — Season 3 (the season actually
+      still airing, confirmed via `GET /tv/125988/season/3` showing
+      episode 9 airing 2026-08-27 and episode 10 airing 2026-09-03, both
+      still in the future as of 2026-08-26) then fell into the "must be
+      fully aired" branch instead. Fix: `latestSeasonNumber` is now
+      computed only over seasons with `episodeCount > 0`, so an
+      unpopulated future placeholder season can no longer be mistaken
+      for the real latest one. Added a regression test reproducing the
+      exact shape (a real season plus an empty placeholder one season
+      number higher) to `apps/api/src/test/metadata-refresh.test.ts`.
+
 ## Webhooks & scrobbling
 
 - [x] **Plex webhook ingestion** (2026-08-23 15:30 added, done 2026-08-24) — M2\

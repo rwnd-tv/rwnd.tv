@@ -264,8 +264,18 @@ export async function refreshOneShow(
 
   if (fetched.seasons.length > 0) {
     const regularSeasons = fetched.seasons.filter((s) => s.seasonNumber > 0)
+    // TMDB can list an announced-but-not-yet-populated future season
+    // (episodeCount 0, no air date) alongside the season that's actually
+    // still airing — confirmed live against Silo, which had such a season
+    // 4 placeholder while season 3 was the one airing. Excluding
+    // episodeCount-0 seasons here means the highest *real* season number
+    // is treated as "latest", not whichever placeholder TMDB happens to
+    // have added next.
+    const seasonsWithEpisodes = regularSeasons.filter((s) => s.episodeCount > 0)
     const latestSeasonNumber =
-      regularSeasons.length > 0 ? Math.max(...regularSeasons.map((s) => s.seasonNumber)) : null
+      seasonsWithEpisodes.length > 0
+        ? Math.max(...seasonsWithEpisodes.map((s) => s.seasonNumber))
+        : null
     const isAiring = fetched.status !== null && AIRING_STATUSES.includes(fetched.status)
 
     // A past season, or any season once the show itself has finished, has

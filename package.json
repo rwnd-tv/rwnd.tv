@@ -25,16 +25,16 @@
     "db:reset-dev": "pnpm --filter @rwnd/db reset-dev"
   },
   "devDependencies": {
-    "@eslint/js": "^9.19.0",
-    "@types/node": "^22.10.7",
-    "eslint": "^9.19.0",
-    "eslint-config-prettier": "^9.1.0",
-    "eslint-plugin-react-hooks": "^5.1.0",
-    "eslint-plugin-react-refresh": "^0.4.18",
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^26.2.0",
+    "eslint": "^10.9.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.4",
     "prettier": "^3.4.2",
-    "prettier-plugin-tailwindcss": "^0.6.9",
-    "typescript": "^5.7.3",
-    "typescript-eslint": "^8.20.0",
-    "vitest": "^3.0.4"
+    "prettier-plugin-tailwindcss": "^0.8.1",
+    "typescript": "^7.0.2",
+    "typescript-eslint": "^8.67.0",
+    "vitest": "^4.1.11"
   }
 }

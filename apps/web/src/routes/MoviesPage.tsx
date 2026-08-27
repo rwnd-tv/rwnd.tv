@@ -359,7 +359,10 @@ export function MoviesPage() {
                         // not the "Watched N times" text is present, so a
                         // once-watched movie (no times-watched text at all)
                         // still gets a right-justified rating on its own.
-                        <p className="ml-auto" title={t('rating.yourRatingAria', { rating: movie.myRating })}>
+                        <p
+                          className="ml-auto"
+                          title={t('rating.yourRatingAria', { rating: movie.myRating })}
+                        >
                           ★ {(movie.myRating / 2).toFixed(1)}
                         </p>
                       )}

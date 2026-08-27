@@ -238,7 +238,7 @@ export function EpisodeCard({
           disabled={ratingDisabled}
           filledClassName="text-white"
           mutedClassName="text-white/70 hover:text-white"
-          className={`absolute bottom-2 left-2 rounded-full border border-white/70 bg-black/40 px-1.5 py-1 transition-opacity hover:bg-black/60 focus-within:opacity-100 group-hover:opacity-100 ${
+          className={`absolute bottom-2 left-2 rounded-full border border-white/70 bg-black/40 px-1.5 py-1 transition-opacity focus-within:opacity-100 hover:bg-black/60 group-hover:opacity-100 ${
             // Same "always shown once it has something to show" treatment
             // as the watched checkmark button above — only an *unrated*
             // episode stays hover-only, the same way the "log an additional

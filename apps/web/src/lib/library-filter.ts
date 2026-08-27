@@ -257,9 +257,7 @@ export function ratingComparatorAsc(
  * likely-wanted query here, hence the extra UnratedMode below rather than
  * just letting null always pass through.
  */
-export function myRatingRange<T extends { myRating: number | null }>(
-  items: T[],
-): YearRange | null {
+export function myRatingRange<T extends { myRating: number | null }>(items: T[]): YearRange | null {
   const ratings = items.map((item) => item.myRating).filter((r): r is number => r !== null)
   if (ratings.length === 0) return null
   return { min: Math.min(...ratings), max: Math.max(...ratings) }

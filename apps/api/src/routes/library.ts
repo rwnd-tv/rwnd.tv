@@ -725,7 +725,11 @@ libraryRoutes.openapi(
       .select({ rating: ratings.rating })
       .from(ratings)
       .where(
-        and(eq(ratings.userId, userId), eq(ratings.entityType, 'show'), eq(ratings.entityId, show.id)),
+        and(
+          eq(ratings.userId, userId),
+          eq(ratings.entityType, 'show'),
+          eq(ratings.entityId, show.id),
+        ),
       )
       .limit(1)
 
@@ -1294,7 +1298,11 @@ libraryRoutes.openapi(
     const db = c.get('db')
     const providers = await orderedProviders(db, c.get('metadataProviders'))
 
-    const [show] = await db.select({ id: shows.id }).from(shows).where(eq(shows.slug, slug)).limit(1)
+    const [show] = await db
+      .select({ id: shows.id })
+      .from(shows)
+      .where(eq(shows.slug, slug))
+      .limit(1)
     if (!show) return c.json({ error: 'Show not found' }, 404)
 
     const target = await pickRefreshTarget(db, 'show', show.id, providers)
@@ -1361,7 +1369,11 @@ libraryRoutes.openapi(
     const userId = c.get('user')!.id
     const db = c.get('db')
 
-    const [show] = await db.select({ id: shows.id }).from(shows).where(eq(shows.slug, slug)).limit(1)
+    const [show] = await db
+      .select({ id: shows.id })
+      .from(shows)
+      .where(eq(shows.slug, slug))
+      .limit(1)
     if (!show) return c.json({ error: 'Show not found' }, 404)
 
     const [episodeRow] = await db
@@ -1933,7 +1945,11 @@ libraryRoutes.openapi(
     const userId = c.get('user')!.id
     const db = c.get('db')
 
-    const [show] = await db.select({ id: shows.id }).from(shows).where(eq(shows.slug, slug)).limit(1)
+    const [show] = await db
+      .select({ id: shows.id })
+      .from(shows)
+      .where(eq(shows.slug, slug))
+      .limit(1)
     if (!show) return c.json({ error: 'Show not found' }, 404)
 
     const ratedAt = new Date()
@@ -1975,13 +1991,21 @@ libraryRoutes.openapi(
     const userId = c.get('user')!.id
     const db = c.get('db')
 
-    const [show] = await db.select({ id: shows.id }).from(shows).where(eq(shows.slug, slug)).limit(1)
+    const [show] = await db
+      .select({ id: shows.id })
+      .from(shows)
+      .where(eq(shows.slug, slug))
+      .limit(1)
     if (!show) return c.json({ error: 'Show not found' }, 404)
 
     await db
       .delete(ratings)
       .where(
-        and(eq(ratings.userId, userId), eq(ratings.entityType, 'show'), eq(ratings.entityId, show.id)),
+        and(
+          eq(ratings.userId, userId),
+          eq(ratings.entityType, 'show'),
+          eq(ratings.entityId, show.id),
+        ),
       )
 
     return c.json({ rating: null, ratedAt: null })

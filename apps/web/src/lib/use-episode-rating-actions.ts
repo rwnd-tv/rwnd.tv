@@ -35,7 +35,9 @@ export function useEpisodeRatingActions(
             ? {
                 ...prev,
                 episodes: prev.episodes.map((e) =>
-                  e.episodeNumber === episode?.episodeNumber ? { ...e, myRating: status.rating } : e,
+                  e.episodeNumber === episode?.episodeNumber
+                    ? { ...e, myRating: status.rating }
+                    : e,
                 ),
               }
             : prev,

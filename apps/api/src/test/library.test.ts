@@ -1267,179 +1267,176 @@ describe('library', () => {
     })
   })
 
-  describe(
-    'PUT/DELETE /library/shows/{slug}/seasons/{seasonNumber}/episodes/{episodeNumber}/rating',
-    () => {
-      function stubTmdbEpisode() {
-        vi.stubGlobal(
-          'fetch',
-          vi.fn(async (input: string | URL) => {
-            const url = new URL(input)
-            if (url.pathname === `/3/tv/${BREAKING_BAD_SHOW_TMDB_ID}/season/1/episode/1`) {
-              return new Response(
-                JSON.stringify({
-                  name: 'Pilot',
-                  season_number: 1,
-                  episode_number: 1,
-                  air_date: '2008-01-20',
-                }),
-                { status: 200 },
-              )
-            }
-            throw new Error(`Unexpected fetch in test: ${url}`)
-          }),
-        )
-      }
+  describe('PUT/DELETE /library/shows/{slug}/seasons/{seasonNumber}/episodes/{episodeNumber}/rating', () => {
+    function stubTmdbEpisode() {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (input: string | URL) => {
+          const url = new URL(input)
+          if (url.pathname === `/3/tv/${BREAKING_BAD_SHOW_TMDB_ID}/season/1/episode/1`) {
+            return new Response(
+              JSON.stringify({
+                name: 'Pilot',
+                season_number: 1,
+                episode_number: 1,
+                air_date: '2008-01-20',
+              }),
+              { status: 200 },
+            )
+          }
+          throw new Error(`Unexpected fetch in test: ${url}`)
+        }),
+      )
+    }
 
-      async function insertShowWithTmdbId(slug: string) {
-        const [show] = await db.insert(shows).values({ title: 'Breaking Bad', slug }).returning()
-        if (!show) throw new Error('failed to insert show')
-        await db.insert(externalIds).values({
-          entityType: 'show',
-          entityId: show.id,
-          source: 'tmdb',
-          externalId: String(BREAKING_BAD_SHOW_TMDB_ID),
-        })
-        return show
-      }
-
-      afterEach(() => vi.unstubAllGlobals())
-
-      it('creates the local episode row on demand and rates it, without logging a watch', async () => {
-        const cookie = await createUserAndCookie()
-        const show = await insertShowWithTmdbId('breaking-bad-rate-1')
-        stubTmdbEpisode()
-
-        const res = await app.request(
-          `/api/v1/library/shows/${show.slug}/seasons/1/episodes/1/rating`,
-          {
-            method: 'PUT',
-            headers: { cookie, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ rating: 8 }),
-          },
-        )
-        expect(res.status).toBe(200)
-        expect((await json<RatingStatus>(res)).rating).toBe(8)
-
-        const [episode] = await db
-          .select()
-          .from(episodes)
-          .where(
-            and(
-              eq(episodes.showId, show.id),
-              eq(episodes.seasonNumber, 1),
-              eq(episodes.episodeNumber, 1),
-            ),
-          )
-        expect(episode).toBeDefined()
-        expect(await db.select().from(plays)).toHaveLength(0)
-
-        const season = await json<SeasonDetail>(
-          await app.request(`/api/v1/library/shows/${show.slug}/seasons/1`, { headers: { cookie } }),
-        )
-        expect(season.episodes.find((e) => e.episodeNumber === 1)?.myRating).toBe(8)
+    async function insertShowWithTmdbId(slug: string) {
+      const [show] = await db.insert(shows).values({ title: 'Breaking Bad', slug }).returning()
+      if (!show) throw new Error('failed to insert show')
+      await db.insert(externalIds).values({
+        entityType: 'show',
+        entityId: show.id,
+        source: 'tmdb',
+        externalId: String(BREAKING_BAD_SHOW_TMDB_ID),
       })
+      return show
+    }
 
-      it('does not call the provider when the episode already has a local row', async () => {
-        const cookie = await createUserAndCookie()
-        const show = await insertShowWithTmdbId('breaking-bad-rate-2')
-        const [episode] = await db
-          .insert(episodes)
-          .values({ showId: show.id, seasonNumber: 1, episodeNumber: 1, title: 'Pilot' })
-          .returning()
-        if (!episode) throw new Error('failed to insert episode')
-        vi.stubGlobal(
-          'fetch',
-          vi.fn(async () => {
-            throw new Error('should not call the provider')
-          }),
+    afterEach(() => vi.unstubAllGlobals())
+
+    it('creates the local episode row on demand and rates it, without logging a watch', async () => {
+      const cookie = await createUserAndCookie()
+      const show = await insertShowWithTmdbId('breaking-bad-rate-1')
+      stubTmdbEpisode()
+
+      const res = await app.request(
+        `/api/v1/library/shows/${show.slug}/seasons/1/episodes/1/rating`,
+        {
+          method: 'PUT',
+          headers: { cookie, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ rating: 8 }),
+        },
+      )
+      expect(res.status).toBe(200)
+      expect((await json<RatingStatus>(res)).rating).toBe(8)
+
+      const [episode] = await db
+        .select()
+        .from(episodes)
+        .where(
+          and(
+            eq(episodes.showId, show.id),
+            eq(episodes.seasonNumber, 1),
+            eq(episodes.episodeNumber, 1),
+          ),
         )
+      expect(episode).toBeDefined()
+      expect(await db.select().from(plays)).toHaveLength(0)
 
-        const res = await app.request(
-          `/api/v1/library/shows/${show.slug}/seasons/1/episodes/1/rating`,
-          {
-            method: 'PUT',
-            headers: { cookie, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ rating: 6 }),
-          },
-        )
-        expect(res.status).toBe(200)
-      })
+      const season = await json<SeasonDetail>(
+        await app.request(`/api/v1/library/shows/${show.slug}/seasons/1`, { headers: { cookie } }),
+      )
+      expect(season.episodes.find((e) => e.episodeNumber === 1)?.myRating).toBe(8)
+    })
 
-      it('re-rating replaces rather than duplicates', async () => {
-        const cookie = await createUserAndCookie()
-        const show = await insertShowWithTmdbId('breaking-bad-rate-3')
-        stubTmdbEpisode()
+    it('does not call the provider when the episode already has a local row', async () => {
+      const cookie = await createUserAndCookie()
+      const show = await insertShowWithTmdbId('breaking-bad-rate-2')
+      const [episode] = await db
+        .insert(episodes)
+        .values({ showId: show.id, seasonNumber: 1, episodeNumber: 1, title: 'Pilot' })
+        .returning()
+      if (!episode) throw new Error('failed to insert episode')
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async () => {
+          throw new Error('should not call the provider')
+        }),
+      )
 
-        await app.request(`/api/v1/library/shows/${show.slug}/seasons/1/episodes/1/rating`, {
+      const res = await app.request(
+        `/api/v1/library/shows/${show.slug}/seasons/1/episodes/1/rating`,
+        {
           method: 'PUT',
           headers: { cookie, 'Content-Type': 'application/json' },
           body: JSON.stringify({ rating: 6 }),
-        })
-        const second = await json<RatingStatus>(
-          await app.request(`/api/v1/library/shows/${show.slug}/seasons/1/episodes/1/rating`, {
-            method: 'PUT',
-            headers: { cookie, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ rating: 10 }),
-          }),
-        )
-        expect(second.rating).toBe(10)
+        },
+      )
+      expect(res.status).toBe(200)
+    })
 
-        const rows = await db.select().from(ratings).where(eq(ratings.entityType, 'episode'))
-        expect(rows).toHaveLength(1)
+    it('re-rating replaces rather than duplicates', async () => {
+      const cookie = await createUserAndCookie()
+      const show = await insertShowWithTmdbId('breaking-bad-rate-3')
+      stubTmdbEpisode()
+
+      await app.request(`/api/v1/library/shows/${show.slug}/seasons/1/episodes/1/rating`, {
+        method: 'PUT',
+        headers: { cookie, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rating: 6 }),
       })
+      const second = await json<RatingStatus>(
+        await app.request(`/api/v1/library/shows/${show.slug}/seasons/1/episodes/1/rating`, {
+          method: 'PUT',
+          headers: { cookie, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ rating: 10 }),
+        }),
+      )
+      expect(second.rating).toBe(10)
 
-      it('clearing a rating with no local episode row is a harmless no-op with no provider call', async () => {
-        const cookie = await createUserAndCookie()
-        const show = await insertShowWithTmdbId('breaking-bad-rate-4')
-        vi.stubGlobal(
-          'fetch',
-          vi.fn(async () => {
-            throw new Error('should not call the provider')
-          }),
-        )
+      const rows = await db.select().from(ratings).where(eq(ratings.entityType, 'episode'))
+      expect(rows).toHaveLength(1)
+    })
 
-        const res = await app.request(
-          `/api/v1/library/shows/${show.slug}/seasons/1/episodes/1/rating`,
-          { method: 'DELETE', headers: { cookie } },
-        )
-        expect(res.status).toBe(200)
-        expect(await json<RatingStatus>(res)).toEqual({ rating: null, ratedAt: null })
-      })
+    it('clearing a rating with no local episode row is a harmless no-op with no provider call', async () => {
+      const cookie = await createUserAndCookie()
+      const show = await insertShowWithTmdbId('breaking-bad-rate-4')
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async () => {
+          throw new Error('should not call the provider')
+        }),
+      )
 
-      it('404s when the show has no external id for any configured provider', async () => {
-        const cookie = await createUserAndCookie()
-        const [show] = await db
-          .insert(shows)
-          .values({ title: 'No Provider Id', slug: 'no-provider-id-rating' })
-          .returning()
-        if (!show) throw new Error('failed to insert show')
+      const res = await app.request(
+        `/api/v1/library/shows/${show.slug}/seasons/1/episodes/1/rating`,
+        { method: 'DELETE', headers: { cookie } },
+      )
+      expect(res.status).toBe(200)
+      expect(await json<RatingStatus>(res)).toEqual({ rating: null, ratedAt: null })
+    })
 
-        const res = await app.request(
-          `/api/v1/library/shows/${show.slug}/seasons/1/episodes/1/rating`,
-          {
-            method: 'PUT',
-            headers: { cookie, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ rating: 8 }),
-          },
-        )
-        expect(res.status).toBe(404)
-      })
+    it('404s when the show has no external id for any configured provider', async () => {
+      const cookie = await createUserAndCookie()
+      const [show] = await db
+        .insert(shows)
+        .values({ title: 'No Provider Id', slug: 'no-provider-id-rating' })
+        .returning()
+      if (!show) throw new Error('failed to insert show')
 
-      it('404s for a show that does not exist', async () => {
-        const cookie = await createUserAndCookie()
-        const res = await app.request(
-          '/api/v1/library/shows/no-such-show/seasons/1/episodes/1/rating',
-          {
-            method: 'PUT',
-            headers: { cookie, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ rating: 8 }),
-          },
-        )
-        expect(res.status).toBe(404)
-      })
-    },
-  )
+      const res = await app.request(
+        `/api/v1/library/shows/${show.slug}/seasons/1/episodes/1/rating`,
+        {
+          method: 'PUT',
+          headers: { cookie, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ rating: 8 }),
+        },
+      )
+      expect(res.status).toBe(404)
+    })
+
+    it('404s for a show that does not exist', async () => {
+      const cookie = await createUserAndCookie()
+      const res = await app.request(
+        '/api/v1/library/shows/no-such-show/seasons/1/episodes/1/rating',
+        {
+          method: 'PUT',
+          headers: { cookie, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ rating: 8 }),
+        },
+      )
+      expect(res.status).toBe(404)
+    })
+  })
 
   describe('POST/DELETE /library/shows/{slug}/dropped', () => {
     it('marks a show as dropped, then un-drops it — reflected in both the detail and gallery endpoints', async () => {

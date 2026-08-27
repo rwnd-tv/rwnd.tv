@@ -43,9 +43,9 @@ describe('averageEpisodeRatingStars', () => {
 
   it('excludes unrated episodes entirely rather than counting them as 0', () => {
     // (8 + 10) / 2 episodes = 9 raw, / 2 = 4.5 stars — not (8 + 10 + 0) / 3.
-    expect(
-      averageEpisodeRatingStars([{ myRating: 8 }, { myRating: null }, { myRating: 10 }]),
-    ).toBe(4.5)
+    expect(averageEpisodeRatingStars([{ myRating: 8 }, { myRating: null }, { myRating: 10 }])).toBe(
+      4.5,
+    )
   })
 
   it('averages raw values before converting to stars, not each episode’s rounded star count', () => {

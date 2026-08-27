@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { eq } from 'drizzle-orm'
-import { movies, ratings, shows, watchlistItems } from '@rwnd/db'
+import { droppedShows, movies, ratings, shows, watchlistItems } from '@rwnd/db'
 import type { ListActivityResponse, Play } from '@rwnd/shared'
 import { createLocalUser, extractCookie, json, resetDb, testApp, testDb } from './helpers.js'
 import { BREAKING_BAD_SHOW_TMDB_ID, tmdbBreakingBadShow } from './fixtures/trakt.js'
@@ -133,8 +133,19 @@ async function seedOneOfEach(cookie: string) {
     headers: { cookie },
   })
   expect(dropRes.status).toBe(200)
+  const [droppedRow] = await db
+    .select({ id: droppedShows.id })
+    .from(droppedShows)
+    .where(eq(droppedShows.showId, showRow.id))
 
-  return { movie, episode, rating: rating!, watchlistItem: watchlistItem!, showId: showRow.id }
+  return {
+    movie,
+    episode,
+    rating: rating!,
+    watchlistItem: watchlistItem!,
+    showId: showRow.id,
+    droppedId: droppedRow!.id,
+  }
 }
 
 describe('activity', () => {
@@ -159,8 +170,14 @@ describe('activity', () => {
       expect(res.status).toBe(200)
       const body = await json<ListActivityResponse>(res)
 
-      expect(body.total).toBe(4)
-      expect(body.entries.map((e) => e.kind)).toEqual(['dropped', 'watchlist', 'rating', 'watch'])
+      expect(body.total).toBe(5)
+      expect(body.entries.map((e) => e.kind)).toEqual([
+        'dropped',
+        'watchlist',
+        'rating',
+        'watch',
+        'watch',
+      ])
 
       const dropped = body.entries[0]!
       expect(dropped.media).toMatchObject({ type: 'show', showSlug: 'breaking-bad-2008' })
@@ -183,6 +200,10 @@ describe('activity', () => {
         seasonNumber: 1,
         episodeNumber: 1,
       })
+
+      const movieWatch = body.entries[4]!
+      expect(movieWatch.id).toBe(seeded.movie.id)
+      expect(movieWatch.media).toMatchObject({ type: 'movie', movieSlug: 'the-matrix-1999' })
     })
 
     it('filters by title against the show/movie title, not the episode title', async () => {
@@ -191,8 +212,12 @@ describe('activity', () => {
 
       const res = await app.request('/api/v1/activity-feed?q=matrix', { headers: { cookie } })
       const body = await json<ListActivityResponse>(res)
-      expect(body.entries).toHaveLength(1)
-      expect(body.entries[0]?.kind).toBe('rating')
+      // Both the movie watch and the rating are on "The Matrix" — the
+      // episode watch (Breaking Bad) doesn't match, which is the thing
+      // actually under test here (matching the show's title, not the
+      // episode's own title).
+      expect(body.entries.map((e) => e.kind).sort()).toEqual(['rating', 'watch'])
+      expect(body.entries.every((e) => e.media.type === 'movie')).toBe(true)
     })
 
     it('filters by kind', async () => {
@@ -240,8 +265,8 @@ describe('activity', () => {
       const res = await app.request('/api/v1/activity-feed?sort=titleAsc', { headers: { cookie } })
       const body = await json<ListActivityResponse>(res)
       // "Breaking Bad" (rating/watchlist/dropped/episode-watch all resolve
-      // to a "Breaking Bad"-titled row except the Matrix rating) sorts
-      // before "The Matrix".
+      // to a "Breaking Bad"-titled row except the Matrix rating and the
+      // Matrix movie watch) sorts before "The Matrix".
       expect(body.entries[body.entries.length - 1]?.media.title).toBe('The Matrix')
     })
 
@@ -253,14 +278,20 @@ describe('activity', () => {
         await app.request('/api/v1/activity-feed?limit=2&offset=0', { headers: { cookie } }),
       )
       expect(page1.entries).toHaveLength(2)
-      expect(page1.total).toBe(4)
+      expect(page1.total).toBe(5)
       expect(page1.hasMore).toBe(true)
 
       const page2 = await json<ListActivityResponse>(
         await app.request('/api/v1/activity-feed?limit=2&offset=2', { headers: { cookie } }),
       )
       expect(page2.entries).toHaveLength(2)
-      expect(page2.hasMore).toBe(false)
+      expect(page2.hasMore).toBe(true)
+
+      const page3 = await json<ListActivityResponse>(
+        await app.request('/api/v1/activity-feed?limit=2&offset=4', { headers: { cookie } }),
+      )
+      expect(page3.entries).toHaveLength(1)
+      expect(page3.hasMore).toBe(false)
     })
 
     it('stops showing a dropped entry once the show is un-dropped', async () => {
@@ -276,7 +307,7 @@ describe('activity', () => {
       const res = await app.request('/api/v1/activity-feed', { headers: { cookie } })
       const body = await json<ListActivityResponse>(res)
       expect(body.entries.some((e) => e.kind === 'dropped')).toBe(false)
-      expect(body.total).toBe(3)
+      expect(body.total).toBe(4)
     })
 
     it("only shows the requesting user's own activity", async () => {
@@ -312,7 +343,7 @@ describe('activity', () => {
             { kind: 'watch', id: seeded.episode.id },
             { kind: 'rating', id: seeded.rating.id },
             { kind: 'watchlist', id: seeded.watchlistItem.id },
-            { kind: 'dropped', id: seeded.showId },
+            { kind: 'dropped', id: seeded.droppedId },
           ],
         }),
       })

@@ -1284,6 +1284,19 @@ describe('library', () => {
               { status: 200 },
             )
           }
+          // GET /library/shows/{slug}/seasons/1 (fetched after the rating
+          // PUT, to confirm myRating landed) also calls the provider for
+          // its own episode list — a separate call from the one above.
+          if (url.pathname === `/3/tv/${BREAKING_BAD_SHOW_TMDB_ID}/season/1`) {
+            return new Response(
+              JSON.stringify({
+                episodes: [
+                  { name: 'Pilot', season_number: 1, episode_number: 1, air_date: '2008-01-20' },
+                ],
+              }),
+              { status: 200 },
+            )
+          }
           throw new Error(`Unexpected fetch in test: ${url}`)
         }),
       )
@@ -1306,6 +1319,10 @@ describe('library', () => {
     it('creates the local episode row on demand and rates it, without logging a watch', async () => {
       const cookie = await createUserAndCookie()
       const show = await insertShowWithTmdbId('breaking-bad-rate-1')
+      // The season detail GET below needs a cached seasons row to find —
+      // separate from the episodes row the rating PUT itself resolves/
+      // creates on demand.
+      await db.insert(seasons).values({ showId: show.id, seasonNumber: 1, episodeCount: 1 })
       stubTmdbEpisode()
 
       const res = await app.request(

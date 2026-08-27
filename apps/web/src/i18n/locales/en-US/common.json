@@ -3,6 +3,187 @@
     "name": "rwnd.tv",
     "tagline": "Track what you watch."
   },
+  "landing": {
+    "badge": "early days",
+    "signIn": "Sign in",
+    "createAccount": "Create an account",
+    "createAccountShort": "Create account",
+    "selfHostCta": "Self-host with Docker",
+    "nav": {
+      "features": "Features",
+      "selfHost": "Self-host",
+      "status": "Status",
+      "github": "GitHub"
+    },
+    "hero": {
+      "status": "Early days — milestone 3 in progress",
+      "title": "Track what you watch, on your own server.",
+      "body": "rwnd.tv is an open source, self-hosted app for tracking the TV shows and movies you watch — a replacement for trakt.tv that you run yourself. Log by hand, import your Trakt history, or let Plex log it for you.",
+      "meta": "MIT licensed · Docker image on GHCR · Node 22 + PostgreSQL · Light, dark and system themes"
+    },
+    "strip": {
+      "m1": {
+        "label": "M1 · done",
+        "body": "Accounts, search, manual logging, Docker"
+      },
+      "m2": {
+        "label": "M2 · done",
+        "body": "Trakt import, galleries, Plex webhooks, export"
+      },
+      "m3": {
+        "label": "M3 · in progress",
+        "body": "Ratings and watchlists shipped; first tagged release next"
+      },
+      "honest": {
+        "label": "Honestly:",
+        "body": "no tagged release yet, and the security review is still open.",
+        "link": "See where things stand"
+      }
+    },
+    "features": {
+      "title": "What works today",
+      "body": "Everything listed here is shipped and running on the live instance. Nothing below is a plan.",
+      "log": {
+        "title": "Search and log",
+        "body": "Find a movie or a specific episode, log that you watched it, and browse your History — every watch, rating, watchlist add and drop in one place."
+      },
+      "plex": {
+        "title": "Plex logs it for you",
+        "body": "Point Plex at your webhook URL and watches log themselves. Multi-user servers are first class: every Plex account seen is claimed to its own rwnd.tv user, and earlier watches are backfilled on claim."
+      },
+      "trakt": {
+        "title": "Bring your Trakt data",
+        "body": "Import history, ratings and watchlist — either over OAuth or from the ZIP that Trakt's own \"Export now\" gives you, so the one-connected-app cap isn't in your way."
+      },
+      "galleries": {
+        "title": "Poster galleries",
+        "body": "TV Shows and Movies each get a poster wall, with per-show watch progress, genre include/exclude and release-year filters, and twelve sort orders."
+      },
+      "lists": {
+        "title": "Watchlists and ratings",
+        "body": "Any number of named lists plus a one-click default, and a 5-star rating for shows, movies and individual episodes — independent of whether you've watched them."
+      },
+      "export": {
+        "title": "Your data stays yours",
+        "body": "A CSV per category — history, ratings, watchlist, dropped shows — zipped and downloadable from Settings. Open formats, no lock-in, by design."
+      }
+    },
+    "selfHost": {
+      "title": "Three steps to running it",
+      "body": "A Docker image and a compose file. You bring a PostgreSQL database and a TMDB or TheTVDB API key.",
+      "quickStart": "Quick start",
+      "docsPrompt": "Configuration reference, backup and upgrade notes:",
+      "docsLink": "the self-hosting guide",
+      "registrationNote": "Registration on your instance can be open, invite-only or closed.",
+      "run": {
+        "title": "Run it",
+        "body": "Pull the compose file, fill in .env, and bring it up on the box you already have."
+      },
+      "import": {
+        "title": "Bring your history",
+        "body": "Import from Trakt over OAuth, upload Trakt's ZIP export, or load a CSV."
+      },
+      "current": {
+        "title": "Keep it current",
+        "body": "Add the Plex webhook and your per-user API token, or keep logging by hand."
+      }
+    },
+    "gallery": {
+      "title": "A look at the app",
+      "body": "Plain, fast, keyboard-friendly, and themed light or dark to match your system.",
+      "shows": "TV Shows: the poster wall, with progress and filters.",
+      "films": "Movies: the same wall, with repeat watches counted.",
+      "show": "A show page: seasons, progress, ratings, watchlist and spoiler-safe synopsis.",
+      "season": "A season page: tick off episodes, rate them, count rewatches.",
+      "import": "Import: connect Trakt or upload its ZIP export, pick what to bring in, and watch it run — re-running an import never creates duplicates."
+    },
+    "shots": {
+      "dashboard": "The rwnd.tv dashboard: search, Continue Watching, Upcoming and History poster rows",
+      "shows": "The TV Shows gallery: a wall of posters with per-show episode progress, a title filter and sort control",
+      "films": "The Movies gallery: posters with release years and repeat-watch counts",
+      "show": "A show page: poster, TMDB rating, episode progress, watched and watchlist controls, star rating and season cards",
+      "season": "A season page: episode stills with watched ticks and repeat-watch counts",
+      "import": "The Import page: connect a Trakt account and choose what to bring in, upload a Trakt ZIP or an rwnd.tv export, and watch import progress"
+    },
+    "status": {
+      "title": "Where the project actually is",
+      "body": "Two milestones are done and the third is under way. The roadmap in the repo is a living document and this page follows it rather than getting ahead of it.",
+      "done": "done",
+      "inProgress": "in progress",
+      "m1": {
+        "title": "M1 — Foundation",
+        "items": [
+          "Local accounts, sessions, per-user API tokens",
+          "TMDB search, manual watch logging, history",
+          "Docker image, CI and a GHCR release pipeline",
+          "Light/dark/system theming, i18n-ready UI"
+        ]
+      },
+      "m2": {
+        "title": "M2 — Get your data in",
+        "items": [
+          "Trakt import, over OAuth and from the ZIP export",
+          "TV Shows and Movies poster galleries",
+          "Plex webhook ingestion, multi-user aware",
+          "Full CSV export; TMDB and TheTVDB metadata"
+        ]
+      },
+      "m3": {
+        "title": "M3 — Ready for real use",
+        "items": [
+          "Watchlists, custom lists and ratings — shipped",
+          "History as a full-width poster grid — shipped",
+          "Metadata accuracy fixes, self-hosting readiness pass",
+          "Security review, then the first tagged release"
+        ]
+      },
+      "builtTitle": "Built with Claude Code, in the open.",
+      "builtBody": "The author isn't a web developer, and has said so from day one — the vision doc, the ADRs and the roadmap are all in the repo, and so is the reasoning behind every significant choice.",
+      "visionLink": "Read the vision doc",
+      "repoLink": "Browse the repo"
+    },
+    "faq": {
+      "title": "Questions",
+      "body": "Anything missing? Open an issue —",
+      "contributeLink": "contributions are welcome",
+      "selfHost": {
+        "q": "Do I have to self-host it?",
+        "aOpen": "No. rwnd.tv runs a public instance you can sign up for, and the same Docker image serves it. Every instance decides its own registration policy: open, invite-only or closed.",
+        "aClosed": "No. rwnd.tv runs a public instance, though it isn't taking new sign-ups right now — the same Docker image serves it, so self-hosting is the way in for now. Every instance decides its own registration policy: open, invite-only or closed."
+      },
+      "dropIn": {
+        "q": "Is it a drop-in Trakt replacement yet?",
+        "a": "Not entirely. Import, logging, galleries, watchlists, ratings and Plex scrobbling all work. Stats and insights, an upcoming-episodes calendar, and shareable profiles aren't scheduled yet."
+      },
+      "metadata": {
+        "q": "Where does the metadata come from?",
+        "a": "TMDB and TheTVDB, both behind a provider interface rather than called directly — so a more open source can join or replace them later without a rewrite."
+      },
+      "requirements": {
+        "q": "What do I need to run it?",
+        "a": "Docker, a PostgreSQL database and a TMDB or TheTVDB API key. To work on it: Node.js 22 or newer and pnpm."
+      },
+      "players": {
+        "q": "Jellyfin, Emby or Kodi?",
+        "a": "Not yet. Plex shipped first, but the ingestion core is source-agnostic on purpose — each additional player is one payload parser and one route, not a rework."
+      }
+    },
+    "cta": {
+      "title": "Start logging what you watch",
+      "bodyOpen": "Sign up on this instance, or run your own copy in a container. MIT licensed, either way.",
+      "bodyClosed": "Registration is closed on this instance — run your own copy in a container instead. MIT licensed, either way."
+    },
+    "footer": {
+      "blurb": "Open source watch tracking you host yourself.",
+      "licence": "MIT licensed",
+      "product": "Product",
+      "project": "Project",
+      "selfHostingGuide": "Self-hosting guide",
+      "adrs": "Architecture decisions",
+      "contributing": "Contributing",
+      "attribution": "This product uses the TMDB API but is not endorsed or certified by TMDB. Metadata provided by TheTVDB — please consider adding missing information or subscribing."
+    }
+  },
   "nav": {
     "main": "Main navigation",
     "collapseSidebar": "Collapse sidebar",
@@ -107,7 +288,10 @@
     "episodeAverageAria_one": "{{average}} out of 5 average, based on {{count}} rated episode",
     "episodeAverageAria_other": "{{average}} out of 5 average, based on {{count}} rated episodes",
     "levels": {
-      "1": { "label": "Avoid", "meaning": "Beyond saving. Not worth the time." },
+      "1": {
+        "label": "Avoid",
+        "meaning": "Beyond saving. Not worth the time."
+      },
       "2": {
         "label": "Flawed",
         "meaning": "Noticeable problems. Really only for devotees of the series, genre or cast."

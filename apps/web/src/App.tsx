@@ -1,4 +1,4 @@
-import { createBrowserRouter, Navigate, RouterProvider } from 'react-router'
+import { createBrowserRouter, RouterProvider } from 'react-router'
 import { Layout } from './components/Layout.js'
 import { ProtectedRoute } from './components/ProtectedRoute.js'
 import type { RouteHandle } from './lib/route-handle.js'
@@ -23,6 +23,7 @@ import { ImportPage } from './routes/ImportPage.js'
 import { SettingsPage } from './routes/SettingsPage.js'
 import { AccountPage } from './routes/AccountPage.js'
 import { NotFoundPage } from './routes/NotFoundPage.js'
+import { LandingPage } from './routes/LandingPage.js'
 
 // Gallery pages render full-viewport-width (see Layout.tsx) rather than the
 // 896px reading column every other page uses — a poster grid wants the
@@ -30,6 +31,7 @@ import { NotFoundPage } from './routes/NotFoundPage.js'
 const fullWidthHandle: RouteHandle = { width: 'full' }
 
 const router = createBrowserRouter([
+  { path: '/', element: <LandingPage /> },
   { path: '/setup', element: <SetupPage /> },
   { path: '/login', element: <LoginPage /> },
   { path: '/register', element: <RegisterPage /> },
@@ -43,10 +45,6 @@ const router = createBrowserRouter([
       {
         element: <Layout />,
         children: [
-          // Dashboard is the app's default landing page — every post-auth
-          // redirect (LoginPage, RegisterPage, SetupPage) independently
-          // hardcodes '/dashboard' too.
-          { path: '/', element: <Navigate to="/dashboard" replace /> },
           { path: '/dashboard', element: <DashboardPage />, handle: fullWidthHandle },
           { path: '/shows', element: <ShowsPage />, handle: fullWidthHandle },
           { path: '/shows/:slug', element: <ShowDetailPage />, handle: fullWidthHandle },

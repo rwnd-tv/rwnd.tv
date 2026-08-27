@@ -154,3 +154,30 @@ body {
 :root[data-theme='dark'] .tvdb-logo-light {
   display: none;
 }
+
+/* Landing page screenshots: dark/light pairs, one shown per theme.
+
+   Same selectors as the theme tokens at the top of this file — and the same
+   trick as .tvdb-logo-* below them. A landing-page visitor isn't signed in,
+   so there's no stored preference to honour, only the OS setting; the
+   [data-theme] halves are there so the rules stay correct if a signed-in
+   user ever lands on it. */
+.landing-shot-dark {
+  display: none;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .landing-shot-dark {
+    display: block;
+  }
+  :root:not([data-theme='light']) .landing-shot-light {
+    display: none;
+  }
+}
+
+:root[data-theme='dark'] .landing-shot-dark {
+  display: block;
+}
+:root[data-theme='dark'] .landing-shot-light {
+  display: none;
+}

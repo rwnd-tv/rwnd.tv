@@ -7,24 +7,29 @@ import { useAuth } from '../lib/auth-context.js'
 import {
   collectGenres,
   filterByGenres,
+  filterByMyRating,
   filterByRating,
   filterByReleaseYear,
   filterByTitle,
   filterByWatchedYear,
   lastWatchedComparatorAsc,
   lastWatchedComparatorDesc,
+  myRatingComparatorAsc,
+  myRatingComparatorDesc,
+  myRatingRange,
   ratingComparatorAsc,
   ratingComparatorDesc,
   ratingRange,
   titleComparatorAsc,
   titleComparatorDesc,
   UNKNOWN_WATCHED_MODES,
+  UNRATED_MODES,
   watchedYearRange,
   yearComparatorAsc,
   yearComparatorDesc,
   yearRange,
 } from '../lib/library-filter.js'
-import type { UnknownWatchedMode } from '../lib/library-filter.js'
+import type { UnknownWatchedMode, UnratedMode } from '../lib/library-filter.js'
 import { useSortCookie } from '../lib/use-sort-cookie.js'
 import { useGenreFilterCookie } from '../lib/use-genre-filter-cookie.js'
 import { useYearRangeCookie } from '../lib/use-year-range-cookie.js'
@@ -35,6 +40,7 @@ import { FiltersPanel } from '../components/library/FiltersPanel.js'
 import { GenreFilterPanel } from '../components/library/GenreFilterPanel.js'
 import { ReleaseYearFilterPanel } from '../components/library/ReleaseYearFilterPanel.js'
 import { RatingFilterPanel } from '../components/library/RatingFilterPanel.js'
+import { MyRatingFilterPanel } from '../components/library/MyRatingFilterPanel.js'
 import { WatchedYearFilterPanel } from '../components/library/WatchedYearFilterPanel.js'
 import { Button } from '../components/ui/Button.js'
 import { Spinner } from '../components/ui/Spinner.js'
@@ -50,6 +56,8 @@ const SORT_KEYS = [
   'timesWatchedAsc',
   'ratingDesc',
   'ratingAsc',
+  'myRatingDesc',
+  'myRatingAsc',
 ] as const
 type SortKey = (typeof SORT_KEYS)[number]
 
@@ -76,6 +84,10 @@ function sortMovies(movies: LibraryMovie[], sortBy: SortKey, locale: string): Li
       return sorted.sort(ratingComparatorDesc)
     case 'ratingAsc':
       return sorted.sort(ratingComparatorAsc)
+    case 'myRatingDesc':
+      return sorted.sort(myRatingComparatorDesc)
+    case 'myRatingAsc':
+      return sorted.sort(myRatingComparatorAsc)
   }
 }
 
@@ -112,6 +124,20 @@ export function MoviesPage() {
     libraryRatingRange?.max ?? 0,
     libraryRatingRange !== null,
   )
+  // Independent of libraryRatingRange above — see ShowsPage.tsx's identical
+  // field for the same reasoning.
+  const libraryMyRatingRange = useMemo(() => myRatingRange(data?.movies ?? []), [data])
+  const [myRatingFilter, setMyRatingFilter] = useYearRangeCookie(
+    'rwnd_movies_my_rating_filter',
+    libraryMyRatingRange?.min ?? 0,
+    libraryMyRatingRange?.max ?? 0,
+    libraryMyRatingRange !== null,
+  )
+  const [unratedMode, setUnratedMode] = useSortCookie<UnratedMode>(
+    'rwnd_movies_unrated_mode',
+    UNRATED_MODES,
+    'neutral',
+  )
   // 1900 (Trakt's "I don't remember when" sentinel) is excluded from this
   // range entirely — see watchedYearRange() — so the "After" slider can
   // never be dragged back to it. Movies with that sentinel are governed by
@@ -134,8 +160,14 @@ export function MoviesPage() {
     const byGenre = filterByGenres(byTitle, genreFilters)
     const byYear = filterByReleaseYear(byGenre, yearFilter.after, yearFilter.before)
     const byRating = filterByRating(byYear, ratingFilter.after, ratingFilter.before)
-    const byWatchedYear = filterByWatchedYear(
+    const byMyRating = filterByMyRating(
       byRating,
+      myRatingFilter.after,
+      myRatingFilter.before,
+      unratedMode,
+    )
+    const byWatchedYear = filterByWatchedYear(
+      byMyRating,
       watchedYearFilter.after,
       watchedYearFilter.before,
       unknownWatchedMode,
@@ -147,6 +179,8 @@ export function MoviesPage() {
     genreFilters,
     yearFilter,
     ratingFilter,
+    myRatingFilter,
+    unratedMode,
     watchedYearFilter,
     unknownWatchedMode,
     sortBy,
@@ -161,6 +195,10 @@ export function MoviesPage() {
     if (libraryRatingRange) {
       setRatingFilter({ after: libraryRatingRange.min, before: libraryRatingRange.max })
     }
+    if (libraryMyRatingRange) {
+      setMyRatingFilter({ after: libraryMyRatingRange.min, before: libraryMyRatingRange.max })
+    }
+    setUnratedMode('neutral')
     if (libraryWatchedYearRange) {
       setWatchedYearFilter({
         after: libraryWatchedYearRange.min,
@@ -217,6 +255,8 @@ export function MoviesPage() {
               { value: 'timesWatchedAsc', label: t('movies.sortTimesWatchedAsc') },
               { value: 'ratingDesc', label: t('movies.sortRatingDesc') },
               { value: 'ratingAsc', label: t('movies.sortRatingAsc') },
+              { value: 'myRatingDesc', label: t('movies.sortMyRatingDesc') },
+              { value: 'myRatingAsc', label: t('movies.sortMyRatingAsc') },
             ]}
           />
 
@@ -250,6 +290,22 @@ export function MoviesPage() {
                   groupLabel={t('movies.filtersPanel.rating')}
                   minLabel={t('movies.filtersPanel.min')}
                   maxLabel={t('movies.filtersPanel.max')}
+                />
+              )}
+              {libraryMyRatingRange && (
+                <MyRatingFilterPanel
+                  min={libraryMyRatingRange.min}
+                  max={libraryMyRatingRange.max}
+                  range={myRatingFilter}
+                  onChange={setMyRatingFilter}
+                  unratedMode={unratedMode}
+                  onUnratedModeChange={setUnratedMode}
+                  groupLabel={t('movies.filtersPanel.myRating')}
+                  minLabel={t('movies.filtersPanel.min')}
+                  maxLabel={t('movies.filtersPanel.max')}
+                  unratedLabel={t('movies.filtersPanel.unrated')}
+                  includeLabel={t('movies.filtersPanel.include')}
+                  excludeLabel={t('movies.filtersPanel.exclude')}
                 />
               )}
               {libraryWatchedYearRange && (
@@ -292,10 +348,22 @@ export function MoviesPage() {
                   posterPath={movie.posterPath}
                   to={`/movies/${movie.slug}`}
                 >
-                  {movie.playCount > 1 && (
-                    <p className="text-xs text-[var(--color-fg-muted)]">
-                      {t('movies.timesWatched', { count: movie.playCount })}
-                    </p>
+                  {(movie.playCount > 1 || movie.myRating !== null) && (
+                    <div className="flex items-center gap-2 text-xs text-[var(--color-fg-muted)]">
+                      {movie.playCount > 1 && (
+                        <p>{t('movies.timesWatched', { count: movie.playCount })}</p>
+                      )}
+                      {movie.myRating !== null && (
+                        // ml-auto rather than justify-between on the row —
+                        // pushes the rating to the right edge whether or
+                        // not the "Watched N times" text is present, so a
+                        // once-watched movie (no times-watched text at all)
+                        // still gets a right-justified rating on its own.
+                        <p className="ml-auto" title={t('rating.yourRatingAria', { rating: movie.myRating })}>
+                          ★ {(movie.myRating / 2).toFixed(1)}
+                        </p>
+                      )}
+                    </div>
                   )}
                 </PosterTile>
               ))}

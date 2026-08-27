@@ -247,6 +247,66 @@ export function ratingComparatorAsc(
 }
 
 /**
+ * "My rating" filter panel (ShowsPage.tsx / MyRatingFilterPanel.tsx) and the
+ * My Rating sort options — the current user's own 1-10 rating, deliberately
+ * parallel to and independent from the TMDB `voteAverage` filter/sort just
+ * above (a title can have either, both, or neither). Same shape as
+ * ratingRange (observed min/max), but most of a library starts out unrated
+ * — unlike voteAverage, which the metadata refresher populates for nearly
+ * everything — so unlike filterByRating, "hide/only show unrated" is a real,
+ * likely-wanted query here, hence the extra UnratedMode below rather than
+ * just letting null always pass through.
+ */
+export function myRatingRange<T extends { myRating: number | null }>(
+  items: T[],
+): YearRange | null {
+  const ratings = items.map((item) => item.myRating).filter((r): r is number => r !== null)
+  if (ratings.length === 0) return null
+  return { min: Math.min(...ratings), max: Math.max(...ratings) }
+}
+
+/** Same tri-state shape as UnknownWatchedMode/DroppedFilterMode above. */
+export const UNRATED_MODES = ['neutral', 'exclude', 'include'] as const
+export type UnratedMode = (typeof UNRATED_MODES)[number]
+
+/** Inclusive on both ends for a known rating. An unrated item is governed
+ * entirely by `unratedMode` instead — same tri-state treatment as
+ * filterByWatchedYear's unknownMode below. */
+export function filterByMyRating<T extends { myRating: number | null }>(
+  items: T[],
+  after: number,
+  before: number,
+  unratedMode: UnratedMode,
+): T[] {
+  return items.filter((item) => {
+    if (item.myRating === null) return unratedMode !== 'exclude'
+    return unratedMode !== 'include' && item.myRating >= after && item.myRating <= before
+  })
+}
+
+/** Same "unknown/unrated sorts last in both directions" treatment as
+ * ratingComparatorDesc/Asc above. */
+export function myRatingComparatorDesc(
+  a: { myRating: number | null },
+  b: { myRating: number | null },
+): number {
+  if (a.myRating === b.myRating) return 0
+  if (a.myRating === null) return 1
+  if (b.myRating === null) return -1
+  return b.myRating - a.myRating
+}
+
+export function myRatingComparatorAsc(
+  a: { myRating: number | null },
+  b: { myRating: number | null },
+): number {
+  if (a.myRating === b.myRating) return 0
+  if (a.myRating === null) return 1
+  if (b.myRating === null) return -1
+  return a.myRating - b.myRating
+}
+
+/**
  * "Watched" filter panel (ShowsPage.tsx / WatchedYearFilterPanel.tsx).
  * `lastWatchedAt` dated exactly 1900-01-01 is Trakt's "I don't remember
  * when" sentinel (see ShowDetailPage.tsx/HistoryPage.tsx's own handling of

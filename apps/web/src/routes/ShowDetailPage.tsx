@@ -13,6 +13,7 @@ import { EpisodeCard } from '../components/library/EpisodeCard.js'
 import { MetadataAttribution } from '../components/library/MetadataAttribution.js'
 import { PosterGrid } from '../components/library/PosterGrid.js'
 import { ProgressBar } from '../components/library/ProgressBar.js'
+import { RatingPicker } from '../components/library/RatingPicker.js'
 import { SpoilerGuard } from '../components/library/SpoilerGuard.js'
 import { WatchDateDialog } from '../components/library/WatchDateDialog.js'
 import { Button } from '../components/ui/Button.js'
@@ -148,6 +149,25 @@ export function ShowDetailPage() {
       // held here — invalidate rather than patch, same reasoning as
       // invalidateWatchData in lib/query-client.ts.
       void queryClient.invalidateQueries({ queryKey: ['library'] })
+    },
+  })
+
+  // Rating is fully independent of watched status — this never touches
+  // plays. `rating === null` clears rather than sets, same "one mutation,
+  // branch on the argument" shape as toggleDropped, but here the argument
+  // is the picker's own click rather than current cache state.
+  const setRating = useMutation({
+    mutationFn: (rating: number | null) =>
+      rating === null ? api.library.clearShowRating(slug!) : api.library.rateShow(slug!, rating),
+    onSuccess: (status) => {
+      queryClient.setQueryData(['show', slug], (prev: ShowDetail | undefined) =>
+        prev ? { ...prev, myRating: status.rating } : prev,
+      )
+      // Unlike toggleDropped's plain ['library'] invalidation, a rating
+      // change also needs ['activity'] — it adds/changes a "Rated N/10"
+      // entry in the Activity feed — so this goes through the shared
+      // helper rather than a one-off invalidateQueries call.
+      void invalidateWatchData(queryClient)
     },
   })
 
@@ -455,6 +475,13 @@ export function ShowDetailPage() {
               <RefreshIcon />
             </Button>
           </div>
+
+          <RatingPicker
+            value={show.myRating}
+            onRate={(rating) => setRating.mutate(rating)}
+            onClear={() => setRating.mutate(null)}
+            disabled={setRating.isPending}
+          />
 
           {refreshMetadata.isSuccess && (
             <p className="text-xs text-[var(--color-fg-muted)]">

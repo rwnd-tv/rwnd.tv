@@ -96,6 +96,35 @@
     "reveal": "Reveal spoiler",
     "revealEpisodes": "Reveal episodes"
   },
+  "rating": {
+    "groupAria": "Your rating",
+    "starAria": "Rate {{stars}} out of 5 — {{label}}",
+    "starAriaClear": "Rated {{stars}} out of 5 — click to clear your rating",
+    "clear": "Clear rating",
+    "clearAria": "Clear your rating",
+    "yourRatingAria": "You rated this {{rating}} out of 10",
+    "episodeAverageAria_one": "{{average}} out of 5 average, based on {{count}} rated episode",
+    "episodeAverageAria_other": "{{average}} out of 5 average, based on {{count}} rated episodes",
+    "levels": {
+      "1": { "label": "Avoid", "meaning": "Beyond saving. Not worth the time." },
+      "2": {
+        "label": "Flawed",
+        "meaning": "Noticeable problems. Really only for devotees of the series, genre or cast."
+      },
+      "3": {
+        "label": "Worth watching",
+        "meaning": "Genuinely has merit. Time well spent if the genre or series appeals to you."
+      },
+      "4": {
+        "label": "Highly recommended",
+        "meaning": "Well made and enjoyable — comfortable to recommend to almost anyone."
+      },
+      "5": {
+        "label": "Essential",
+        "meaning": "Among the best you'll see. Drop everything and watch it."
+      }
+    }
+  },
   "search": {
     "title": "Search",
     "placeholder": "Search for a film or TV show…",
@@ -114,8 +143,10 @@
     "sortYearAsc": "Year (Ascending)",
     "sortProgressDesc": "Progress (Descending)",
     "sortProgressAsc": "Progress (Ascending)",
-    "sortRatingDesc": "Rating (Descending)",
-    "sortRatingAsc": "Rating (Ascending)",
+    "sortRatingDesc": "TMDB Rating (Descending)",
+    "sortRatingAsc": "TMDB Rating (Ascending)",
+    "sortMyRatingDesc": "My Rating (Descending)",
+    "sortMyRatingAsc": "My Rating (Ascending)",
     "progress": "{{watched}} of {{total}} episodes",
     "progressUnknown_one": "{{count}} episode watched",
     "progressUnknown_other": "{{count}} episodes watched",
@@ -139,13 +170,15 @@
         "Canceled": "Cancelled"
       },
       "released": "Released",
-      "rating": "Rating",
+      "rating": "TMDB rating",
+      "myRating": "My rating",
       "min": "Min",
       "max": "Max",
       "watched": "Watched",
       "after": "After",
       "before": "Before",
       "unknown": "Unknown",
+      "unrated": "Unrated",
       "dropped": "Dropped",
       "reset": "Reset"
     }
@@ -252,8 +285,10 @@
     "sortYearAsc": "Year (Ascending)",
     "sortTimesWatchedDesc": "Times Watched (Descending)",
     "sortTimesWatchedAsc": "Times Watched (Ascending)",
-    "sortRatingDesc": "Rating (Descending)",
-    "sortRatingAsc": "Rating (Ascending)",
+    "sortRatingDesc": "TMDB Rating (Descending)",
+    "sortRatingAsc": "TMDB Rating (Ascending)",
+    "sortMyRatingDesc": "My Rating (Descending)",
+    "sortMyRatingAsc": "My Rating (Ascending)",
     "timesWatched": "Watched {{count}} times",
     "empty": "Nothing here yet. Films appear once you've logged a watch.",
     "noMatches": "No films match \"{{query}}\".",
@@ -264,13 +299,15 @@
       "include": "Include",
       "exclude": "Exclude",
       "released": "Released",
-      "rating": "Rating",
+      "rating": "TMDB rating",
+      "myRating": "My rating",
       "min": "Min",
       "max": "Max",
       "watched": "Watched",
       "after": "After",
       "before": "Before",
       "unknown": "Unknown",
+      "unrated": "Unrated",
       "reset": "Reset"
     }
   },
@@ -331,7 +368,7 @@
       "watchlist": "Watchlist",
       "dropped": "Dropped"
     },
-    "ratingCaption": "Rated {{rating}}/10",
+    "ratingCaption": "{{stars}}",
     "watchlistCaption": "Added to watchlist",
     "droppedCaption": "Dropped",
     "selectAria": "Select {{title}}",

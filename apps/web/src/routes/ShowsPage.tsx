@@ -10,6 +10,7 @@ import {
   DROPPED_FILTER_MODES,
   filterByDropped,
   filterByGenres,
+  filterByMyRating,
   filterByRating,
   filterByReleaseYear,
   filterByStatus,
@@ -17,18 +18,22 @@ import {
   filterByWatchedYear,
   lastWatchedComparatorAsc,
   lastWatchedComparatorDesc,
+  myRatingComparatorAsc,
+  myRatingComparatorDesc,
+  myRatingRange,
   ratingComparatorAsc,
   ratingComparatorDesc,
   ratingRange,
   titleComparatorAsc,
   titleComparatorDesc,
   UNKNOWN_WATCHED_MODES,
+  UNRATED_MODES,
   watchedYearRange,
   yearComparatorAsc,
   yearComparatorDesc,
   yearRange,
 } from '../lib/library-filter.js'
-import type { DroppedFilterMode, UnknownWatchedMode } from '../lib/library-filter.js'
+import type { DroppedFilterMode, UnknownWatchedMode, UnratedMode } from '../lib/library-filter.js'
 import { useSortCookie } from '../lib/use-sort-cookie.js'
 import { useGenreFilterCookie } from '../lib/use-genre-filter-cookie.js'
 import { useYearRangeCookie } from '../lib/use-year-range-cookie.js'
@@ -41,6 +46,7 @@ import { GenreFilterPanel } from '../components/library/GenreFilterPanel.js'
 import { StatusFilterPanel } from '../components/library/StatusFilterPanel.js'
 import { ReleaseYearFilterPanel } from '../components/library/ReleaseYearFilterPanel.js'
 import { RatingFilterPanel } from '../components/library/RatingFilterPanel.js'
+import { MyRatingFilterPanel } from '../components/library/MyRatingFilterPanel.js'
 import { WatchedYearFilterPanel } from '../components/library/WatchedYearFilterPanel.js'
 import { DroppedFilterPanel } from '../components/library/DroppedFilterPanel.js'
 import { Button } from '../components/ui/Button.js'
@@ -57,6 +63,8 @@ const SORT_KEYS = [
   'progressAsc',
   'ratingDesc',
   'ratingAsc',
+  'myRatingDesc',
+  'myRatingAsc',
 ] as const
 type SortKey = (typeof SORT_KEYS)[number]
 
@@ -104,6 +112,10 @@ function sortShows(shows: LibraryShow[], sortBy: SortKey, locale: string): Libra
       return sorted.sort(ratingComparatorDesc)
     case 'ratingAsc':
       return sorted.sort(ratingComparatorAsc)
+    case 'myRatingDesc':
+      return sorted.sort(myRatingComparatorDesc)
+    case 'myRatingAsc':
+      return sorted.sort(myRatingComparatorAsc)
   }
 }
 
@@ -160,6 +172,20 @@ export function ShowsPage() {
     libraryRatingRange?.max ?? 0,
     libraryRatingRange !== null,
   )
+  // Independent of libraryRatingRange above — see myRatingRange's own doc
+  // comment for why this is a separate field, not the same TMDB one.
+  const libraryMyRatingRange = useMemo(() => myRatingRange(data?.shows ?? []), [data])
+  const [myRatingFilter, setMyRatingFilter] = useYearRangeCookie(
+    'rwnd_shows_my_rating_filter',
+    libraryMyRatingRange?.min ?? 0,
+    libraryMyRatingRange?.max ?? 0,
+    libraryMyRatingRange !== null,
+  )
+  const [unratedMode, setUnratedMode] = useSortCookie<UnratedMode>(
+    'rwnd_shows_unrated_mode',
+    UNRATED_MODES,
+    'neutral',
+  )
   // 1900 (Trakt's "I don't remember when" sentinel) is excluded from this
   // range entirely — see watchedYearRange() — so the "After" slider can
   // never be dragged back to it. Shows with that sentinel are governed by
@@ -190,8 +216,14 @@ export function ShowsPage() {
     const byStatus = filterByStatus(byGenre, statusFilters)
     const byYear = filterByReleaseYear(byStatus, yearFilter.after, yearFilter.before)
     const byRating = filterByRating(byYear, ratingFilter.after, ratingFilter.before)
-    const byWatchedYear = filterByWatchedYear(
+    const byMyRating = filterByMyRating(
       byRating,
+      myRatingFilter.after,
+      myRatingFilter.before,
+      unratedMode,
+    )
+    const byWatchedYear = filterByWatchedYear(
+      byMyRating,
       watchedYearFilter.after,
       watchedYearFilter.before,
       unknownWatchedMode,
@@ -205,6 +237,8 @@ export function ShowsPage() {
     statusFilters,
     yearFilter,
     ratingFilter,
+    myRatingFilter,
+    unratedMode,
     watchedYearFilter,
     unknownWatchedMode,
     droppedMode,
@@ -221,6 +255,10 @@ export function ShowsPage() {
     if (libraryRatingRange) {
       setRatingFilter({ after: libraryRatingRange.min, before: libraryRatingRange.max })
     }
+    if (libraryMyRatingRange) {
+      setMyRatingFilter({ after: libraryMyRatingRange.min, before: libraryMyRatingRange.max })
+    }
+    setUnratedMode('neutral')
     if (libraryWatchedYearRange) {
       setWatchedYearFilter({
         after: libraryWatchedYearRange.min,
@@ -278,6 +316,8 @@ export function ShowsPage() {
               { value: 'progressAsc', label: t('shows.sortProgressAsc') },
               { value: 'ratingDesc', label: t('shows.sortRatingDesc') },
               { value: 'ratingAsc', label: t('shows.sortRatingAsc') },
+              { value: 'myRatingDesc', label: t('shows.sortMyRatingDesc') },
+              { value: 'myRatingAsc', label: t('shows.sortMyRatingAsc') },
             ]}
           />
 
@@ -320,6 +360,22 @@ export function ShowsPage() {
                   groupLabel={t('shows.filtersPanel.rating')}
                   minLabel={t('shows.filtersPanel.min')}
                   maxLabel={t('shows.filtersPanel.max')}
+                />
+              )}
+              {libraryMyRatingRange && (
+                <MyRatingFilterPanel
+                  min={libraryMyRatingRange.min}
+                  max={libraryMyRatingRange.max}
+                  range={myRatingFilter}
+                  onChange={setMyRatingFilter}
+                  unratedMode={unratedMode}
+                  onUnratedModeChange={setUnratedMode}
+                  groupLabel={t('shows.filtersPanel.myRating')}
+                  minLabel={t('shows.filtersPanel.min')}
+                  maxLabel={t('shows.filtersPanel.max')}
+                  unratedLabel={t('shows.filtersPanel.unrated')}
+                  includeLabel={t('shows.filtersPanel.include')}
+                  excludeLabel={t('shows.filtersPanel.exclude')}
                 />
               )}
               <DroppedFilterPanel
@@ -385,17 +441,33 @@ export function ShowsPage() {
                           total: show.totalEpisodes,
                         })}
                       />
-                      <p className="text-xs text-[var(--color-fg-muted)]">
-                        {t('shows.progress', {
-                          watched: show.watchedEpisodes,
-                          total: show.totalEpisodes,
-                        })}
-                      </p>
+                      <div className="flex items-center justify-between gap-2 text-xs text-[var(--color-fg-muted)]">
+                        <p>
+                          {t('shows.progress', {
+                            watched: show.watchedEpisodes,
+                            total: show.totalEpisodes,
+                          })}
+                        </p>
+                        {show.myRating !== null && (
+                          // Plain text, not the full RatingPicker — this is
+                          // a read-only summary of a sort/filter you might
+                          // currently be applying, not a place to change
+                          // the rating from.
+                          <p title={t('rating.yourRatingAria', { rating: show.myRating })}>
+                            ★ {(show.myRating / 2).toFixed(1)}
+                          </p>
+                        )}
+                      </div>
                     </div>
                   ) : (
-                    <p className="text-xs text-[var(--color-fg-muted)]">
-                      {t('shows.progressUnknown', { count: show.watchedEpisodes })}
-                    </p>
+                    <div className="flex items-center justify-between gap-2 text-xs text-[var(--color-fg-muted)]">
+                      <p>{t('shows.progressUnknown', { count: show.watchedEpisodes })}</p>
+                      {show.myRating !== null && (
+                        <p title={t('rating.yourRatingAria', { rating: show.myRating })}>
+                          ★ {(show.myRating / 2).toFixed(1)}
+                        </p>
+                      )}
+                    </div>
                   )}
                 </PosterTile>
               ))}

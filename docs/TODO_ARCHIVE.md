@@ -2278,3 +2278,42 @@ DATABASE` ×2) — zero residue.\
       page is now the first place either surfaces in the UI at all,
       though only read-only; setting/changing a rating or watchlist entry
       is still unbuilt.
+
+## Ratings & watchlist
+
+- [x] **Explore how ratings should work** (2026-08-23 14:15 added, done 2026-08-27) — M3\
+      Trakt import already brings in per-show/movie ratings (1-10,
+      the `ratings` table) and Clear database/Backup/Restore already
+      treat them as a first-class category, but nothing in the UI
+      surfaced or let you set one. Design pass settled: a 5-star, whole-
+      stars-only widget (each star = 2 points on the stored 1-10 scale;
+      an odd Trakt-imported value like 7 rounds to the nearest star for
+      display — 4★ — but is never rewritten until re-rated), each star
+      level showing a preset guide label + meaning to help pick
+      (`rating.levels.*` in the locale files) rather than a personal
+      note, fully independent of watched status (rating never touches
+      `plays`), covering shows/movies/episodes in one pass, with the
+      Activity feed staying read-only. No DB migration needed — the
+      `ratings` table already had exactly this shape.\
+      Built: `PUT`/`DELETE /library/{shows,movies}/{slug}/rating` and
+      `.../seasons/{n}/episodes/{n}/rating` (the episode route resolves/
+      creates the local episode row on demand via `resolveEpisode`,
+      since an episode has none until first watched or now rated — see
+      `apps/api/src/routes/library.ts`); `myRating` added to the show/
+      movie/episode detail and both gallery-list responses. New shared
+      `RatingPicker.tsx` (the star widget, `apps/web/src/lib/rating.ts`
+      for the pure star-math) wired into `ShowDetailPage.tsx`/
+      `MovieDetailPage.tsx`'s action row, `EpisodeCard.tsx` (a hover-
+      revealed overlay control) and `EpisodeDetailPage.tsx`, the last two
+      via a new `use-episode-rating-actions.ts` hook mirroring
+      `use-episode-watch-actions.ts` rather than extending it. Gallery
+      gained an independent "My rating" sort/filter
+      (`MyRatingFilterPanel.tsx`) alongside the pre-existing TMDB-
+      `voteAverage` one, with its own tri-state Unrated toggle — unlike
+      TMDB's rating, most of a library starts out unrated, so hiding/
+      isolating unrated titles is a real query here. Also stood up
+      `apps/web`'s first vitest project (`apps/web/vitest.config.ts`,
+      Node environment, no jsdom) so `library-filter.ts` and
+      `rating.ts`'s pure functions — written to be testable since the
+      file's own docstring predates this — finally have real test
+      coverage.

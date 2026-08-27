@@ -5,9 +5,11 @@ import { useQuery } from '@tanstack/react-query'
 import { api, ApiError } from '../lib/api-client.js'
 import { useAuth } from '../lib/auth-context.js'
 import { UNKNOWN_WATCHED_AT, formatHistoryDate } from '../lib/date.js'
+import { useEpisodeRatingActions } from '../lib/use-episode-rating-actions.js'
 import { useEpisodeWatchActions } from '../lib/use-episode-watch-actions.js'
 import { TVDB_LOGO_DARK_BG_URL, TVDB_LOGO_LIGHT_BG_URL, tvdbEpisodeUrl } from '../lib/tvdb.js'
 import { MetadataAttribution } from '../components/library/MetadataAttribution.js'
+import { RatingPicker } from '../components/library/RatingPicker.js'
 import { SpoilerGuard } from '../components/library/SpoilerGuard.js'
 import { WatchDateDialog } from '../components/library/WatchDateDialog.js'
 import { UnwatchConfirmDialog } from '../components/library/UnwatchConfirmDialog.js'
@@ -143,6 +145,7 @@ export function EpisodeDetailPage() {
     episode,
     show?.tmdbId ?? null,
   )
+  const ratingActions = useEpisodeRatingActions(slug ?? '', seasonNumber, episode)
 
   // Same queryKey useEpisodeWatchActions' own watchesData query uses (see
   // that hook's doc comment) — that one only fetches while the unwatch
@@ -422,6 +425,13 @@ export function EpisodeDetailPage() {
               </Button>
             )}
           </div>
+
+          <RatingPicker
+            value={episode.myRating}
+            onRate={(rating) => ratingActions.setRating.mutate(rating)}
+            onClear={() => ratingActions.setRating.mutate(null)}
+            disabled={ratingActions.ratingDisabled}
+          />
         </div>
       </div>
 

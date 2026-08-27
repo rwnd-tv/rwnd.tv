@@ -2,13 +2,16 @@ import { type ReactNode, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useParams } from 'react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import type { MovieDetail } from '@rwnd/shared'
 import { api, ApiError } from '../lib/api-client.js'
 import { useAuth } from '../lib/auth-context.js'
 import { UNKNOWN_WATCHED_AT, formatHistoryDate } from '../lib/date.js'
+import { invalidateWatchData } from '../lib/query-client.js'
 import { useMovieWatchActions } from '../lib/use-movie-watch-actions.js'
 import { TMDB_LOGO_URL } from '../lib/tmdb.js'
 import { TVDB_LOGO_DARK_BG_URL, TVDB_LOGO_LIGHT_BG_URL, tvdbMovieUrl } from '../lib/tvdb.js'
 import { MetadataAttribution } from '../components/library/MetadataAttribution.js'
+import { RatingPicker } from '../components/library/RatingPicker.js'
 import { UnwatchConfirmDialog } from '../components/library/UnwatchConfirmDialog.js'
 import { WatchDateDialog } from '../components/library/WatchDateDialog.js'
 import { Button } from '../components/ui/Button.js'
@@ -160,6 +163,19 @@ export function MovieDetailPage() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['movie', slug] })
       void queryClient.invalidateQueries({ queryKey: ['library'] })
+    },
+  })
+
+  // See ShowDetailPage.tsx's identical mutation for the full reasoning —
+  // fully independent of watched status, never touches plays.
+  const setRating = useMutation({
+    mutationFn: (rating: number | null) =>
+      rating === null ? api.library.clearMovieRating(slug!) : api.library.rateMovie(slug!, rating),
+    onSuccess: (status) => {
+      queryClient.setQueryData(['movie', slug], (prev: MovieDetail | undefined) =>
+        prev ? { ...prev, myRating: status.rating } : prev,
+      )
+      void invalidateWatchData(queryClient)
     },
   })
 
@@ -333,6 +349,13 @@ export function MovieDetailPage() {
               <RefreshIcon />
             </Button>
           </div>
+
+          <RatingPicker
+            value={movie.myRating}
+            onRate={(rating) => setRating.mutate(rating)}
+            onClear={() => setRating.mutate(null)}
+            disabled={setRating.isPending}
+          />
 
           {refreshMetadata.isSuccess && (
             <p className="text-xs text-[var(--color-fg-muted)]">

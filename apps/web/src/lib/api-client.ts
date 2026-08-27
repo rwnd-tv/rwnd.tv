@@ -32,6 +32,7 @@ import {
   type MovieDetail,
   type OnDeckResponse,
   type Play,
+  type RatingStatus,
   type RegisterRequest,
   type RemoveActivityRequest,
   type RemoveShowWatchesResponse,
@@ -43,6 +44,7 @@ import {
   type SearchResponse,
   type SeasonDetail,
   type SeasonWatches,
+  type SetRatingRequest,
   type SetupRequest,
   type ShowDetail,
   type ShowWatches,
@@ -95,6 +97,8 @@ const patch = <T>(path: string, body: unknown) =>
   request<T>(path, { method: 'PATCH', body: JSON.stringify(body) })
 const del = <T>(path: string, body?: unknown) =>
   request<T>(path, { method: 'DELETE', body: body ? JSON.stringify(body) : undefined })
+const put = <T>(path: string, body: unknown) =>
+  request<T>(path, { method: 'PUT', body: JSON.stringify(body) })
 const putForm = <T>(path: string, form: FormData) => request<T>(path, { method: 'PUT', body: form })
 const postForm = <T>(path: string, form: FormData) =>
   request<T>(path, { method: 'POST', body: form })
@@ -211,6 +215,12 @@ export const api = {
       post<DroppedStatus>(`/library/shows/${encodeURIComponent(slug)}/dropped`),
     undropShow: (slug: string) =>
       del<DroppedStatus>(`/library/shows/${encodeURIComponent(slug)}/dropped`),
+    rateShow: (slug: string, rating: number) =>
+      put<RatingStatus>(`/library/shows/${encodeURIComponent(slug)}/rating`, {
+        rating,
+      } satisfies SetRatingRequest),
+    clearShowRating: (slug: string) =>
+      del<RatingStatus>(`/library/shows/${encodeURIComponent(slug)}/rating`),
     markShowWatched: (slug: string, body: MarkShowWatchedRequest) =>
       post<MarkShowWatchedResponse>(`/library/shows/${encodeURIComponent(slug)}/watched`, body),
     removeShowWatches: (slug: string) =>
@@ -241,6 +251,15 @@ export const api = {
       get<Watches>(
         `/library/shows/${encodeURIComponent(slug)}/seasons/${seasonNumber}/episodes/${episodeNumber}/plays`,
       ),
+    rateEpisode: (slug: string, seasonNumber: number, episodeNumber: number, rating: number) =>
+      put<RatingStatus>(
+        `/library/shows/${encodeURIComponent(slug)}/seasons/${seasonNumber}/episodes/${episodeNumber}/rating`,
+        { rating } satisfies SetRatingRequest,
+      ),
+    clearEpisodeRating: (slug: string, seasonNumber: number, episodeNumber: number) =>
+      del<RatingStatus>(
+        `/library/shows/${encodeURIComponent(slug)}/seasons/${seasonNumber}/episodes/${episodeNumber}/rating`,
+      ),
     seasonWatches: (slug: string, seasonNumber: number) =>
       get<SeasonWatches>(
         `/library/shows/${encodeURIComponent(slug)}/seasons/${seasonNumber}/plays`,
@@ -254,6 +273,12 @@ export const api = {
     resolveMovie: (body: ResolveMediaRequest) =>
       post<ResolveMediaResponse>('/library/movies/resolve', body),
     movie: (slug: string) => get<MovieDetail>(`/library/movies/${encodeURIComponent(slug)}`),
+    rateMovie: (slug: string, rating: number) =>
+      put<RatingStatus>(`/library/movies/${encodeURIComponent(slug)}/rating`, {
+        rating,
+      } satisfies SetRatingRequest),
+    clearMovieRating: (slug: string) =>
+      del<RatingStatus>(`/library/movies/${encodeURIComponent(slug)}/rating`),
     refreshMovie: (slug: string) =>
       post<void>(`/library/movies/${encodeURIComponent(slug)}/refresh`),
     movieWatches: (slug: string) =>

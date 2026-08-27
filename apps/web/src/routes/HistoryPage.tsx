@@ -20,6 +20,7 @@ import { useActivityKindFilterCookie } from '../lib/use-activity-kind-filter-coo
 import { useDateRangeCookie } from '../lib/use-date-range-cookie.js'
 import { useDebouncedValue } from '../lib/use-debounced-value.js'
 import { localDayEndISO, localDayStartISO } from '../lib/date.js'
+import { ratingToStars } from '../lib/rating.js'
 import { PosterGrid } from '../components/library/PosterGrid.js'
 import { ActivityTile } from '../components/library/ActivityTile.js'
 import { LibraryControls } from '../components/library/LibraryControls.js'
@@ -199,7 +200,13 @@ export function HistoryPage() {
       })
       return `${time} · ${sourceLabel}`
     }
-    if (entry.kind === 'rating') return t('history.ratingCaption', { rating: entry.rating })
+    if (entry.kind === 'rating') {
+      // `rating` is only optional in the schema because it's shared across
+      // every kind — the API's rating branch (activity.ts) always sets it
+      // for a 'rating' entry. Repeated glyphs on the same 1-5 scale
+      // RatingPicker.tsx uses, not the raw 1-10 value or a bare count.
+      return t('history.ratingCaption', { stars: '★'.repeat(ratingToStars(entry.rating!)) })
+    }
     if (entry.kind === 'watchlist') {
       return entry.notes
         ? `${t('history.watchlistCaption')} — ${entry.notes}`

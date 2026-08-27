@@ -3,7 +3,9 @@ import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router'
 import type { SeasonEpisode } from '@rwnd/shared'
 import { useAuth } from '../../lib/auth-context.js'
+import { useEpisodeRatingActions } from '../../lib/use-episode-rating-actions.js'
 import { useEpisodeWatchActions } from '../../lib/use-episode-watch-actions.js'
+import { RatingPicker } from './RatingPicker.js'
 import { WatchDateDialog } from './WatchDateDialog.js'
 import { UnwatchConfirmDialog } from './UnwatchConfirmDialog.js'
 
@@ -138,6 +140,7 @@ export function EpisodeCard({
     notAiredYet,
     toggleDisabled,
   } = useEpisodeWatchActions(slug, seasonNumber, episode, tmdbId)
+  const { setRating, ratingDisabled } = useEpisodeRatingActions(slug, seasonNumber, episode)
 
   const episodeLabel = t('import.progress.episode', { number: episode.episodeNumber })
   const spoilerHidden = Boolean(user?.spoilerProtectionEnabled) && !episode.watched
@@ -227,6 +230,22 @@ export function EpisodeCard({
             <CheckIcon />
           )}
         </button>
+        <RatingPicker
+          size="sm"
+          value={episode.myRating}
+          onRate={(rating) => setRating.mutate(rating)}
+          onClear={() => setRating.mutate(null)}
+          disabled={ratingDisabled}
+          filledClassName="text-white"
+          mutedClassName="text-white/70 hover:text-white"
+          className={`absolute bottom-2 left-2 rounded-full border border-white/70 bg-black/40 px-1.5 py-1 transition-opacity hover:bg-black/60 focus-within:opacity-100 group-hover:opacity-100 ${
+            // Same "always shown once it has something to show" treatment
+            // as the watched checkmark button above — only an *unrated*
+            // episode stays hover-only, the same way the "log an additional
+            // watch" + button only appears once there's a watch to add to.
+            episode.myRating !== null ? 'opacity-100' : 'opacity-0'
+          }`}
+        />
       </div>
       <div>
         <h3 className="truncate text-sm font-medium">

@@ -33,22 +33,6 @@ Format:
 
 ## Ratings & watchlist
 
-- [ ] **Explore how ratings should work** (2026-08-23 14:15 added) — M3\
-      Trakt import already brings in per-show/movie ratings (1-10,
-      the `ratings` table) and Clear database/Backup/Restore already
-      treat them as a first-class category, but nothing in the UI
-      surfaces or lets you set one — no rating shown on the show/movie
-      page, no manual rate action, no gallery filter/sort by _your_
-      rating (distinct from the TMDB rating badge already shown there,
-      which is TMDB's own average, not the user's). Needs a design pass
-      before building: where a rating shows up, how you set/change one,
-      whether rating something implies it's watched.\
-      2026-08-26: the Activity page (`HistoryPage.tsx`, ex-History) now
-      shows existing ratings as read-only feed entries ("Rated 8/10"),
-      via `GET /activity` — this item is still about the missing
-      _write_ path (no rate/re-rate UI anywhere) and the show/movie-page
-      display, not the feed listing.
-
 - [ ] **Explore how the watchlist should work** (2026-08-23 14:15 added) — M3\
       Trakt import already brings in watchlist entries (with an optional
       note, the `watchlist_items` table) and Clear database/Backup/Restore

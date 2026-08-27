@@ -60,6 +60,12 @@ export const libraryShowSchema = z.object({
    * yet — both render the same way (no rating shown). Backs the gallery's
    * rating filter/sort — see ShowsPage.tsx. */
   voteAverage: z.number().nullable(),
+  /** The current user's own rating, 1-10 — distinct from `voteAverage`
+   * above, which is TMDB's public average. Rendered as 5 whole stars
+   * (stars = rating / 2). Null means genuinely unrated, not "not loaded
+   * yet" — there's no separate loading state for this field. Backs the
+   * gallery's "my rating" filter/sort — see ShowsPage.tsx. */
+  myRating: z.number().int().min(1).max(10).nullable(),
   /** Whether the current user has marked this show as "dropped" — partially
    * watched, no longer intending to finish (mirrors Trakt's own "Dropped"
    * feature). Hidden from the gallery by default — see ShowsPage.tsx's
@@ -185,6 +191,8 @@ export const showDetailSchema = z.object({
    * than silently in the background (docs/adr/0005), "how old is this" is
    * a question a user can reasonably ask. */
   metadataRefreshedAt: z.string().datetime(),
+  /** See libraryShowSchema's `myRating` for what this means. */
+  myRating: z.number().int().min(1).max(10).nullable(),
   /** See libraryShowSchema's `dropped` for what this means. */
   dropped: z.boolean(),
   /** When the show was dropped — from Trakt's `hidden_at` if imported, or
@@ -254,6 +262,9 @@ export const seasonEpisodeSchema = z.object({
    * or genuinely unrated — both render the same way (no rating shown), same
    * convention as those other fields. */
   voteAverage: z.number().nullable(),
+  /** See libraryShowSchema's `myRating` for what this means — this is the
+   * episode's own rating, independent of the show's and season's. */
+  myRating: z.number().int().min(1).max(10).nullable(),
   /** This episode's own TVDB numeric id, for linking to its exact TVDB page
    * (thetvdb.com/dereferrer/episode/{id} — see apps/web/src/lib/tvdb.ts).
    * Distinct from `episodeNumber`, which is what the primary provider
@@ -405,6 +416,25 @@ export const droppedStatusSchema = z.object({
 export type DroppedStatus = z.infer<typeof droppedStatusSchema>
 
 /**
+ * Response shape for the rating write routes (PUT/DELETE
+ * .../rating — shows, movies, and episodes all share this, addressed by
+ * their own route — see ShowDetailPage.tsx/MovieDetailPage.tsx/
+ * EpisodeCard.tsx's RatingPicker). Same "just the changed fields" reasoning
+ * as droppedStatusSchema above.
+ */
+export const ratingStatusSchema = z.object({
+  rating: z.number().int().min(1).max(10).nullable(),
+  ratedAt: z.string().datetime().nullable(),
+})
+export type RatingStatus = z.infer<typeof ratingStatusSchema>
+
+/** Request body for PUT .../rating — see ratingStatusSchema above. */
+export const setRatingRequestSchema = z.object({
+  rating: z.number().int().min(1).max(10),
+})
+export type SetRatingRequest = z.infer<typeof setRatingRequestSchema>
+
+/**
  * Backs the show page's "Watched" button (POST /library/shows/{slug}/watched
  * — see ShowDetailPage.tsx and its season-scoped counterpart,
  * SeasonDetailPage.tsx), the show-level equivalent of marking one episode
@@ -475,6 +505,8 @@ export const libraryMovieSchema = z.object({
    * gallery's rating filter/sort — see libraryShowSchema's `voteAverage`
    * for the same convention. */
   voteAverage: z.number().nullable(),
+  /** See libraryShowSchema's `myRating` for what this means. */
+  myRating: z.number().int().min(1).max(10).nullable(),
   /** Counts rewatches. */
   playCount: z.number().int(),
   lastWatchedAt: z.string().datetime(),
@@ -506,6 +538,8 @@ export const movieDetailSchema = z.object({
   /** TMDB's average rating, 0-10 — see libraryShowSchema's `voteAverage`
    * for the null-handling convention. */
   voteAverage: z.number().nullable(),
+  /** See libraryShowSchema's `myRating` for what this means. */
+  myRating: z.number().int().min(1).max(10).nullable(),
   /** TMDB's own numeric id for this movie, for linking to its TMDB page —
    * see showDetailSchema's `tmdbId` for the same convention. */
   tmdbId: z.string().nullable(),

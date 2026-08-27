@@ -3,6 +3,8 @@ import { and, asc, desc, eq, gt, inArray, sql } from 'drizzle-orm'
 import {
   UNKNOWN_WATCHED_AT,
   droppedStatusSchema,
+  ratingStatusSchema,
+  setRatingRequestSchema,
   watchedStatusSchema,
   watchesSchema,
   seasonWatchesSchema,
@@ -22,13 +24,23 @@ import {
   upNextResponseSchema,
 } from '@rwnd/shared'
 import type { Database } from '@rwnd/db'
-import { droppedShows, episodes, externalIds, movies, plays, seasons, shows } from '@rwnd/db'
+import {
+  droppedShows,
+  episodes,
+  externalIds,
+  movies,
+  plays,
+  ratings,
+  seasons,
+  shows,
+} from '@rwnd/db'
 import type { AppEnv } from '../types.js'
 import type { MetadataProvider } from '../providers/types.js'
 import { requireAuth } from '../middleware/auth.js'
 import {
   findNextAiringEpisode,
   findNextUnwatchedEpisode,
+  resolveEpisode,
   resolveMovie,
   resolveShow,
   resolveSeasonEpisodes,
@@ -229,6 +241,14 @@ libraryRoutes.openapi(
         // seasons — see apps/api/src/metadata/refresh.ts. Not 0: the UI
         // needs to tell "not counted yet" apart from "counted, zero".
         totalEpisodes: totals.totalEpisodes,
+        // The current user's own rating, distinct from voteAverage above —
+        // see libraryShowSchema's `myRating` doc comment. Scoped to userId
+        // in the join condition, not a WHERE clause, for the same reason as
+        // the droppedShows join just below: an unrated show still needs a
+        // row, not exclusion from the list. Safe against fan-out (this join
+        // can't multiply rows) only because of ratings_user_entity_idx,
+        // which guarantees at most one matching row per show per user.
+        myRating: ratings.rating,
       })
       .from(watched)
       .innerJoin(shows, eq(shows.id, watched.showId))
@@ -236,6 +256,14 @@ libraryRoutes.openapi(
       .leftJoin(
         droppedShows,
         and(eq(droppedShows.showId, watched.showId), eq(droppedShows.userId, userId)),
+      )
+      .leftJoin(
+        ratings,
+        and(
+          eq(ratings.entityId, watched.showId),
+          eq(ratings.entityType, 'show'),
+          eq(ratings.userId, userId),
+        ),
       )
       .orderBy(asc(shows.title))
 
@@ -249,6 +277,7 @@ libraryRoutes.openapi(
         status: row.status,
         genres: row.genres,
         voteAverage: row.voteAverage,
+        myRating: row.myRating,
         dropped: row.manualDropped ?? row.traktDropped ?? false,
         watchedEpisodes: row.watchedEpisodes,
         totalEpisodes: row.totalEpisodes ?? null,
@@ -688,6 +717,18 @@ libraryRoutes.openapi(
     const droppedAt =
       droppedRow?.manualDropped != null ? droppedRow.manualDroppedAt : droppedRow?.traktDroppedAt
 
+    // The current user's own rating — see libraryShowSchema's `myRating`
+    // doc comment for what this means and how it differs from
+    // `voteAverage`. Independent of watched status: this table has no
+    // relation to `plays` at all.
+    const [ratingRow] = await db
+      .select({ rating: ratings.rating })
+      .from(ratings)
+      .where(
+        and(eq(ratings.userId, userId), eq(ratings.entityType, 'show'), eq(ratings.entityId, show.id)),
+      )
+      .limit(1)
+
     const seasonRows = await db
       .select()
       .from(seasons)
@@ -773,6 +814,7 @@ libraryRoutes.openapi(
       metadataSource:
         show.metadataSource && isProviderSource(show.metadataSource) ? show.metadataSource : null,
       metadataRefreshedAt: show.metadataRefreshedAt.toISOString(),
+      myRating: ratingRow?.rating ?? null,
       dropped,
       droppedAt: dropped && droppedAt ? droppedAt.toISOString() : null,
       watchedEpisodes,
@@ -975,6 +1017,29 @@ libraryRoutes.openapi(
 
     const watchedByEpisode = new Map(watchRows.map((row) => [row.episodeNumber, row]))
 
+    // The current user's own rating for each episode of this season — see
+    // libraryShowSchema's `myRating` doc comment. A separate query rather
+    // than folding into watchRows above: that one's a GROUP BY aggregate
+    // (count/max), and a joined non-aggregate column there would mean
+    // either widening the GROUP BY or wrapping it in max(), which muddies
+    // a query the "does not double-count" regression already covers.
+    // Selecting from episodes (not providerEpisodes) is deliberate too — an
+    // episode with no local row can't have a rating, same reasoning as
+    // watchRows only ever covering resolved episodes.
+    const ratingRows = await db
+      .select({ episodeNumber: episodes.episodeNumber, rating: ratings.rating })
+      .from(episodes)
+      .innerJoin(
+        ratings,
+        and(
+          eq(ratings.entityId, episodes.id),
+          eq(ratings.entityType, 'episode'),
+          eq(ratings.userId, user.id),
+        ),
+      )
+      .where(and(eq(episodes.showId, show.id), eq(episodes.seasonNumber, seasonNumber)))
+    const ratingByEpisode = new Map(ratingRows.map((row) => [row.episodeNumber, row.rating]))
+
     return c.json({
       seasonNumber: seasonRow.seasonNumber,
       name: seasonRow.name,
@@ -1012,6 +1077,7 @@ libraryRoutes.openapi(
               : null,
             hasUnknownWatch: watch?.hasUnknownWatch ?? false,
             voteAverage: episode.voteAverage,
+            myRating: ratingByEpisode.get(episode.episodeNumber) ?? null,
             tvdbEpisodeId: tvdbEpisodeIdByNumber.get(episode.episodeNumber) ?? null,
           }
         }),
@@ -1182,6 +1248,146 @@ libraryRoutes.openapi(
       watchedCount: remaining.length,
       lastWatchedAt: remaining[0] ? remaining[0].watchedAt.toISOString() : null,
     })
+  },
+)
+
+/**
+ * Set (or replace) the current user's rating for one episode — see the
+ * show-level PUT .../rating route above for the general reasoning (PUT
+ * over POST, upsert semantics, independence from `plays`).
+ *
+ * Unlike the show/movie routes, this one has to resolve the episode first:
+ * an episode has no local row until it's been watched or (now) rated —
+ * resolveEpisode creates one on demand from whichever configured provider
+ * actually has an external id on record for this show (pickRefreshTarget,
+ * not the request-scoped primary provider — see the season detail route's
+ * identical reasoning above), the same way the season/show "Watched"
+ * routes do. A provider that can't find the episode is surfaced as 404,
+ * not a 500 — nothing here can rate an episode it can't identify.
+ */
+libraryRoutes.openapi(
+  createRoute({
+    method: 'put',
+    path: '/library/shows/{slug}/seasons/{seasonNumber}/episodes/{episodeNumber}/rating',
+    summary: "Set the current user's rating for one episode",
+    middleware: [requireAuth] as const,
+    request: {
+      params: z.object({
+        slug: z.string(),
+        seasonNumber: z.coerce.number().int().min(0),
+        episodeNumber: z.coerce.number().int().min(1),
+      }),
+      body: { content: { 'application/json': { schema: setRatingRequestSchema } } },
+    },
+    responses: {
+      200: {
+        description: 'Rating set',
+        content: { 'application/json': { schema: ratingStatusSchema } },
+      },
+      404: { description: 'Show or episode not found' },
+    },
+  }),
+  async (c) => {
+    const { slug, seasonNumber, episodeNumber } = c.req.valid('param')
+    const { rating } = c.req.valid('json')
+    const user = c.get('user')!
+    const db = c.get('db')
+    const providers = await orderedProviders(db, c.get('metadataProviders'))
+
+    const [show] = await db.select({ id: shows.id }).from(shows).where(eq(shows.slug, slug)).limit(1)
+    if (!show) return c.json({ error: 'Show not found' }, 404)
+
+    const target = await pickRefreshTarget(db, 'show', show.id, providers)
+    if (!target) return c.json({ error: 'Show or episode not found' }, 404)
+
+    let episode: { id: string }
+    try {
+      episode = await resolveEpisode(
+        db,
+        target.provider,
+        target.externalId,
+        seasonNumber,
+        episodeNumber,
+        user.locale,
+      )
+    } catch {
+      return c.json({ error: 'Show or episode not found' }, 404)
+    }
+
+    const ratedAt = new Date()
+    const [row] = await db
+      .insert(ratings)
+      .values({ userId: user.id, entityType: 'episode', entityId: episode.id, rating, ratedAt })
+      .onConflictDoUpdate({
+        target: [ratings.userId, ratings.entityType, ratings.entityId],
+        set: { rating, ratedAt },
+      })
+      .returning({ rating: ratings.rating, ratedAt: ratings.ratedAt })
+
+    return c.json({ rating: row!.rating, ratedAt: row!.ratedAt.toISOString() })
+  },
+)
+
+/**
+ * Clear the current user's rating for one episode. Deliberately does NOT
+ * resolve the episode from the provider — if there's no local episode row
+ * there can be no rating either, so this is a plain lookup-and-no-op
+ * rather than paying for a provider round trip to clear something that
+ * can't exist. Asymmetric with the PUT above on purpose.
+ */
+libraryRoutes.openapi(
+  createRoute({
+    method: 'delete',
+    path: '/library/shows/{slug}/seasons/{seasonNumber}/episodes/{episodeNumber}/rating',
+    summary: "Clear the current user's rating for one episode",
+    middleware: [requireAuth] as const,
+    request: {
+      params: z.object({
+        slug: z.string(),
+        seasonNumber: z.coerce.number().int().min(0),
+        episodeNumber: z.coerce.number().int().min(1),
+      }),
+    },
+    responses: {
+      200: {
+        description: 'Rating cleared',
+        content: { 'application/json': { schema: ratingStatusSchema } },
+      },
+      404: { description: 'Show not found' },
+    },
+  }),
+  async (c) => {
+    const { slug, seasonNumber, episodeNumber } = c.req.valid('param')
+    const userId = c.get('user')!.id
+    const db = c.get('db')
+
+    const [show] = await db.select({ id: shows.id }).from(shows).where(eq(shows.slug, slug)).limit(1)
+    if (!show) return c.json({ error: 'Show not found' }, 404)
+
+    const [episodeRow] = await db
+      .select({ id: episodes.id })
+      .from(episodes)
+      .where(
+        and(
+          eq(episodes.showId, show.id),
+          eq(episodes.seasonNumber, seasonNumber),
+          eq(episodes.episodeNumber, episodeNumber),
+        ),
+      )
+      .limit(1)
+    if (!episodeRow) return c.json({ rating: null, ratedAt: null })
+
+    await db
+      .delete(ratings)
+      .where(
+        and(
+          eq(ratings.userId, userId),
+          eq(ratings.entityType, 'episode'),
+          eq(ratings.entityId, episodeRow.id),
+        ),
+      )
+
+    return c.json({ rating: null, ratedAt: null })
   },
 )
 
@@ -1689,6 +1895,100 @@ libraryRoutes.openapi(
 )
 
 /**
+ * Set (or replace) the current user's rating for a show
+ * (apps/web/src/routes/ShowDetailPage.tsx's RatingPicker) — PUT, not POST,
+ * since a rating is a single value-carrying sub-resource unique per
+ * (user, show): re-sending the same body is a no-op, which PUT promises
+ * and POST doesn't. Upserts on ratings_user_entity_idx, same as Trakt
+ * import's processRatingItem (apps/api/src/import/trakt.ts) — unlike that
+ * import path, this always re-stamps ratedAt on a write, since a manual
+ * "I rated this again" is exactly when the user last said so, not
+ * something to guard against re-processing.
+ *
+ * Deliberately never touches `plays` — rating and watched status are fully
+ * independent (docs/TODO.md's ratings design pass). Don't "helpfully" wire
+ * this into the watched flow.
+ */
+libraryRoutes.openapi(
+  createRoute({
+    method: 'put',
+    path: '/library/shows/{slug}/rating',
+    summary: "Set the current user's rating for a show",
+    middleware: [requireAuth] as const,
+    request: {
+      params: z.object({ slug: z.string() }),
+      body: { content: { 'application/json': { schema: setRatingRequestSchema } } },
+    },
+    responses: {
+      200: {
+        description: 'Rating set',
+        content: { 'application/json': { schema: ratingStatusSchema } },
+      },
+      404: { description: 'Show not found' },
+    },
+  }),
+  async (c) => {
+    const { slug } = c.req.valid('param')
+    const { rating } = c.req.valid('json')
+    const userId = c.get('user')!.id
+    const db = c.get('db')
+
+    const [show] = await db.select({ id: shows.id }).from(shows).where(eq(shows.slug, slug)).limit(1)
+    if (!show) return c.json({ error: 'Show not found' }, 404)
+
+    const ratedAt = new Date()
+    const [row] = await db
+      .insert(ratings)
+      .values({ userId, entityType: 'show', entityId: show.id, rating, ratedAt })
+      .onConflictDoUpdate({
+        target: [ratings.userId, ratings.entityType, ratings.entityId],
+        set: { rating, ratedAt },
+      })
+      .returning({ rating: ratings.rating, ratedAt: ratings.ratedAt })
+
+    return c.json({ rating: row!.rating, ratedAt: row!.ratedAt.toISOString() })
+  },
+)
+
+/**
+ * Clear the current user's rating for a show. A no-op (nothing to delete)
+ * if the show was never rated — same convention as DELETE .../dropped
+ * above.
+ */
+libraryRoutes.openapi(
+  createRoute({
+    method: 'delete',
+    path: '/library/shows/{slug}/rating',
+    summary: "Clear the current user's rating for a show",
+    middleware: [requireAuth] as const,
+    request: { params: z.object({ slug: z.string() }) },
+    responses: {
+      200: {
+        description: 'Rating cleared',
+        content: { 'application/json': { schema: ratingStatusSchema } },
+      },
+      404: { description: 'Show not found' },
+    },
+  }),
+  async (c) => {
+    const { slug } = c.req.valid('param')
+    const userId = c.get('user')!.id
+    const db = c.get('db')
+
+    const [show] = await db.select({ id: shows.id }).from(shows).where(eq(shows.slug, slug)).limit(1)
+    if (!show) return c.json({ error: 'Show not found' }, 404)
+
+    await db
+      .delete(ratings)
+      .where(
+        and(eq(ratings.userId, userId), eq(ratings.entityType, 'show'), eq(ratings.entityId, show.id)),
+      )
+
+    return c.json({ rating: null, ratedAt: null })
+  },
+)
+
+/**
  * The show page's "Watched" button (apps/web/src/routes/ShowDetailPage.tsx)
  * — the show-level equivalent of marking one episode watched from the
  * season grid. Logs one new play for every non-special episode that isn't
@@ -1836,6 +2136,11 @@ libraryRoutes.openapi(
         posterPath: movies.posterPath,
         genres: movies.genres,
         voteAverage: movies.voteAverage,
+        // See the shows gallery query's identical join above for the
+        // fan-out reasoning (safe only because of ratings_user_entity_idx —
+        // must stay in the GROUP BY below since it's a plain column
+        // alongside the aggregates, not itself aggregated).
+        myRating: ratings.rating,
         playCount: sql<number>`count(${plays.id})`.mapWith(Number).as('play_count'),
         lastWatchedAt: sql`max(${plays.watchedAt})`
           .mapWith((v: string) => new Date(v))
@@ -1843,8 +2148,16 @@ libraryRoutes.openapi(
       })
       .from(plays)
       .innerJoin(movies, eq(plays.movieId, movies.id))
+      .leftJoin(
+        ratings,
+        and(
+          eq(ratings.entityId, movies.id),
+          eq(ratings.entityType, 'movie'),
+          eq(ratings.userId, userId),
+        ),
+      )
       .where(eq(plays.userId, userId))
-      .groupBy(movies.id)
+      .groupBy(movies.id, ratings.rating)
       .orderBy(asc(movies.title))
 
     return c.json({
@@ -1856,6 +2169,7 @@ libraryRoutes.openapi(
         posterPath: row.posterPath,
         genres: row.genres,
         voteAverage: row.voteAverage,
+        myRating: row.myRating,
         playCount: row.playCount,
         lastWatchedAt: row.lastWatchedAt.toISOString(),
       })),
@@ -1938,6 +2252,19 @@ libraryRoutes.openapi(
       .from(plays)
       .where(and(eq(plays.userId, userId), eq(plays.movieId, movie.id)))
 
+    // See the show detail route's identical lookup above.
+    const [ratingRow] = await db
+      .select({ rating: ratings.rating })
+      .from(ratings)
+      .where(
+        and(
+          eq(ratings.userId, userId),
+          eq(ratings.entityType, 'movie'),
+          eq(ratings.entityId, movie.id),
+        ),
+      )
+      .limit(1)
+
     return c.json({
       id: movie.id,
       slug: movie.slug,
@@ -1955,6 +2282,7 @@ libraryRoutes.openapi(
           ? movie.metadataSource
           : null,
       metadataRefreshedAt: movie.metadataRefreshedAt.toISOString(),
+      myRating: ratingRow?.rating ?? null,
       watched: (watchedRange?.watchedCount ?? 0) > 0,
       watchedCount: watchedRange?.watchedCount ?? 0,
       firstWatchedAt: watchedRange?.firstWatchedAt
@@ -2112,5 +2440,102 @@ libraryRoutes.openapi(
       watchedCount: remaining.length,
       lastWatchedAt: remaining[0] ? remaining[0].watchedAt.toISOString() : null,
     })
+  },
+)
+
+/**
+ * Set (or replace) the current user's rating for a movie — movie
+ * counterpart of PUT /library/shows/{slug}/rating above. Same reasoning
+ * throughout (PUT semantics, upsert on ratings_user_entity_idx, no
+ * interaction with `plays`).
+ */
+libraryRoutes.openapi(
+  createRoute({
+    method: 'put',
+    path: '/library/movies/{slug}/rating',
+    summary: "Set the current user's rating for a movie",
+    middleware: [requireAuth] as const,
+    request: {
+      params: z.object({ slug: z.string() }),
+      body: { content: { 'application/json': { schema: setRatingRequestSchema } } },
+    },
+    responses: {
+      200: {
+        description: 'Rating set',
+        content: { 'application/json': { schema: ratingStatusSchema } },
+      },
+      404: { description: 'Movie not found' },
+    },
+  }),
+  async (c) => {
+    const { slug } = c.req.valid('param')
+    const { rating } = c.req.valid('json')
+    const userId = c.get('user')!.id
+    const db = c.get('db')
+
+    const [movie] = await db
+      .select({ id: movies.id })
+      .from(movies)
+      .where(eq(movies.slug, slug))
+      .limit(1)
+    if (!movie) return c.json({ error: 'Movie not found' }, 404)
+
+    const ratedAt = new Date()
+    const [row] = await db
+      .insert(ratings)
+      .values({ userId, entityType: 'movie', entityId: movie.id, rating, ratedAt })
+      .onConflictDoUpdate({
+        target: [ratings.userId, ratings.entityType, ratings.entityId],
+        set: { rating, ratedAt },
+      })
+      .returning({ rating: ratings.rating, ratedAt: ratings.ratedAt })
+
+    return c.json({ rating: row!.rating, ratedAt: row!.ratedAt.toISOString() })
+  },
+)
+
+/**
+ * Clear the current user's rating for a movie — see DELETE
+ * /library/shows/{slug}/rating above for the same "harmless no-op"
+ * convention.
+ */
+libraryRoutes.openapi(
+  createRoute({
+    method: 'delete',
+    path: '/library/movies/{slug}/rating',
+    summary: "Clear the current user's rating for a movie",
+    middleware: [requireAuth] as const,
+    request: { params: z.object({ slug: z.string() }) },
+    responses: {
+      200: {
+        description: 'Rating cleared',
+        content: { 'application/json': { schema: ratingStatusSchema } },
+      },
+      404: { description: 'Movie not found' },
+    },
+  }),
+  async (c) => {
+    const { slug } = c.req.valid('param')
+    const userId = c.get('user')!.id
+    const db = c.get('db')
+
+    const [movie] = await db
+      .select({ id: movies.id })
+      .from(movies)
+      .where(eq(movies.slug, slug))
+      .limit(1)
+    if (!movie) return c.json({ error: 'Movie not found' }, 404)
+
+    await db
+      .delete(ratings)
+      .where(
+        and(
+          eq(ratings.userId, userId),
+          eq(ratings.entityType, 'movie'),
+          eq(ratings.entityId, movie.id),
+        ),
+      )
+
+    return c.json({ rating: null, ratedAt: null })
   },
 )

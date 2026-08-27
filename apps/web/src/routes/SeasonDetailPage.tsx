@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, ApiError } from '../lib/api-client.js'
 import { invalidateWatchData } from '../lib/query-client.js'
 import { UNKNOWN_WATCHED_AT, formatHistoryDate, markWatchedRequestBody } from '../lib/date.js'
+import { averageEpisodeRatingStars } from '../lib/rating.js'
 import { TVDB_LOGO_DARK_BG_URL, TVDB_LOGO_LIGHT_BG_URL, tvdbSeasonUrl } from '../lib/tvdb.js'
 import { useAuth } from '../lib/auth-context.js'
 import { EpisodeCard } from '../components/library/EpisodeCard.js'
@@ -276,6 +277,14 @@ export function SeasonDetailPage() {
   const watchedAiredEpisodes = airedEpisodes.filter((episode) => episode.watched).length
   const fullyWatched = airedEpisodes.length > 0 && watchedAiredEpisodes === airedEpisodes.length
 
+  // Read-only — this page has no rate-the-season action of its own (there's
+  // no season-level entityType, only show/movie/episode — see
+  // packages/db/src/schema.ts), just a summary of the episode ratings set
+  // individually below. null (hidden entirely) until at least one episode
+  // in this season has been rated.
+  const episodeRatingAverage = averageEpisodeRatingStars(season.episodes)
+  const ratedEpisodeCount = season.episodes.filter((episode) => episode.myRating !== null).length
+
   // show.seasons is already ordered by seasonNumber ascending (see
   // apps/api/src/routes/library.ts) — adjacent array entries are exactly
   // the previous/next season, specials (0) included like ShowDetailPage's
@@ -396,6 +405,22 @@ export function SeasonDetailPage() {
                       className="tvdb-logo-dark h-[0.9rem]"
                     />
                   </a>
+                ) : null,
+                // Read-only summary of the episode ratings set individually
+                // below — there's no season-level rating of its own (no
+                // season entityType, only show/movie/episode — see
+                // packages/db/src/schema.ts). Placed last, after both
+                // TMDB/TVDB facts, so it doesn't read as another critic
+                // score alongside them.
+                episodeRatingAverage !== null ? (
+                  <span
+                    title={t('rating.episodeAverageAria', {
+                      average: episodeRatingAverage.toFixed(1),
+                      count: ratedEpisodeCount,
+                    })}
+                  >
+                    ★ {episodeRatingAverage.toFixed(1)}
+                  </span>
                 ) : null,
               ] satisfies (ReactNode | null)[]
             )

@@ -1,12 +1,23 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { and, eq } from 'drizzle-orm'
-import { droppedShows, episodes, externalIds, movies, plays, seasons, shows, users } from '@rwnd/db'
+import {
+  droppedShows,
+  episodes,
+  externalIds,
+  movies,
+  plays,
+  ratings,
+  seasons,
+  shows,
+  users,
+} from '@rwnd/db'
 import type {
   ListLibraryMoviesResponse,
   ListLibraryShowsResponse,
   MarkShowWatchedResponse,
   MovieDetail,
   OnDeckResponse,
+  RatingStatus,
   RemoveShowWatchesResponse,
   SeasonDetail,
   ShowDetail,
@@ -17,6 +28,7 @@ import type {
 import { createLocalUser, extractCookie, json, resetDb, testApp, testDb } from './helpers.js'
 import { createApp } from '../app.js'
 import type { MetadataProvider, ProviderSeason } from '../providers/types.js'
+import { BREAKING_BAD_SHOW_TMDB_ID } from './fixtures/trakt.js'
 
 const db = testDb()
 const app = testApp()
@@ -104,6 +116,44 @@ describe('library', () => {
         genres: ['Drama', 'Crime'],
         totalEpisodes: 30,
         watchedEpisodes: 3,
+      })
+    })
+
+    it('a rated show with several plays still reports correct counts, and the rating (fan-out guard)', async () => {
+      // Same regression risk as the test above, now that a ratings LEFT
+      // JOIN sits alongside droppedShows in this query — ratings_user_
+      // entity_idx must keep it from multiplying rows.
+      const cookie = await createUserAndCookie()
+      const userId = await meId(cookie)
+
+      const [show] = await db
+        .insert(shows)
+        .values({ title: 'Rated And Rewatched', slug: 'rated-and-rewatched' })
+        .returning()
+      if (!show) throw new Error('failed to insert show')
+      await db.insert(seasons).values({ showId: show.id, seasonNumber: 1, episodeCount: 1 })
+      const [ep] = await db
+        .insert(episodes)
+        .values({ showId: show.id, seasonNumber: 1, episodeNumber: 1 })
+        .returning()
+      if (!ep) throw new Error('failed to insert episode')
+      await db.insert(plays).values([
+        { userId, episodeId: ep.id, watchedAt: new Date('2026-01-01') },
+        { userId, episodeId: ep.id, watchedAt: new Date('2026-01-02') },
+      ])
+      await app.request(`/api/v1/library/shows/${show.slug}/rating`, {
+        method: 'PUT',
+        headers: { cookie, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rating: 9 }),
+      })
+
+      const { shows: library } = await json<ListLibraryShowsResponse>(
+        await app.request('/api/v1/library/shows', { headers: { cookie } }),
+      )
+      expect(library.find((s) => s.slug === show.slug)).toMatchObject({
+        totalEpisodes: 1,
+        watchedEpisodes: 1,
+        myRating: 9,
       })
     })
 
@@ -1217,6 +1267,180 @@ describe('library', () => {
     })
   })
 
+  describe(
+    'PUT/DELETE /library/shows/{slug}/seasons/{seasonNumber}/episodes/{episodeNumber}/rating',
+    () => {
+      function stubTmdbEpisode() {
+        vi.stubGlobal(
+          'fetch',
+          vi.fn(async (input: string | URL) => {
+            const url = new URL(input)
+            if (url.pathname === `/3/tv/${BREAKING_BAD_SHOW_TMDB_ID}/season/1/episode/1`) {
+              return new Response(
+                JSON.stringify({
+                  name: 'Pilot',
+                  season_number: 1,
+                  episode_number: 1,
+                  air_date: '2008-01-20',
+                }),
+                { status: 200 },
+              )
+            }
+            throw new Error(`Unexpected fetch in test: ${url}`)
+          }),
+        )
+      }
+
+      async function insertShowWithTmdbId(slug: string) {
+        const [show] = await db.insert(shows).values({ title: 'Breaking Bad', slug }).returning()
+        if (!show) throw new Error('failed to insert show')
+        await db.insert(externalIds).values({
+          entityType: 'show',
+          entityId: show.id,
+          source: 'tmdb',
+          externalId: String(BREAKING_BAD_SHOW_TMDB_ID),
+        })
+        return show
+      }
+
+      afterEach(() => vi.unstubAllGlobals())
+
+      it('creates the local episode row on demand and rates it, without logging a watch', async () => {
+        const cookie = await createUserAndCookie()
+        const show = await insertShowWithTmdbId('breaking-bad-rate-1')
+        stubTmdbEpisode()
+
+        const res = await app.request(
+          `/api/v1/library/shows/${show.slug}/seasons/1/episodes/1/rating`,
+          {
+            method: 'PUT',
+            headers: { cookie, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ rating: 8 }),
+          },
+        )
+        expect(res.status).toBe(200)
+        expect((await json<RatingStatus>(res)).rating).toBe(8)
+
+        const [episode] = await db
+          .select()
+          .from(episodes)
+          .where(
+            and(
+              eq(episodes.showId, show.id),
+              eq(episodes.seasonNumber, 1),
+              eq(episodes.episodeNumber, 1),
+            ),
+          )
+        expect(episode).toBeDefined()
+        expect(await db.select().from(plays)).toHaveLength(0)
+
+        const season = await json<SeasonDetail>(
+          await app.request(`/api/v1/library/shows/${show.slug}/seasons/1`, { headers: { cookie } }),
+        )
+        expect(season.episodes.find((e) => e.episodeNumber === 1)?.myRating).toBe(8)
+      })
+
+      it('does not call the provider when the episode already has a local row', async () => {
+        const cookie = await createUserAndCookie()
+        const show = await insertShowWithTmdbId('breaking-bad-rate-2')
+        const [episode] = await db
+          .insert(episodes)
+          .values({ showId: show.id, seasonNumber: 1, episodeNumber: 1, title: 'Pilot' })
+          .returning()
+        if (!episode) throw new Error('failed to insert episode')
+        vi.stubGlobal(
+          'fetch',
+          vi.fn(async () => {
+            throw new Error('should not call the provider')
+          }),
+        )
+
+        const res = await app.request(
+          `/api/v1/library/shows/${show.slug}/seasons/1/episodes/1/rating`,
+          {
+            method: 'PUT',
+            headers: { cookie, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ rating: 6 }),
+          },
+        )
+        expect(res.status).toBe(200)
+      })
+
+      it('re-rating replaces rather than duplicates', async () => {
+        const cookie = await createUserAndCookie()
+        const show = await insertShowWithTmdbId('breaking-bad-rate-3')
+        stubTmdbEpisode()
+
+        await app.request(`/api/v1/library/shows/${show.slug}/seasons/1/episodes/1/rating`, {
+          method: 'PUT',
+          headers: { cookie, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ rating: 6 }),
+        })
+        const second = await json<RatingStatus>(
+          await app.request(`/api/v1/library/shows/${show.slug}/seasons/1/episodes/1/rating`, {
+            method: 'PUT',
+            headers: { cookie, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ rating: 10 }),
+          }),
+        )
+        expect(second.rating).toBe(10)
+
+        const rows = await db.select().from(ratings).where(eq(ratings.entityType, 'episode'))
+        expect(rows).toHaveLength(1)
+      })
+
+      it('clearing a rating with no local episode row is a harmless no-op with no provider call', async () => {
+        const cookie = await createUserAndCookie()
+        const show = await insertShowWithTmdbId('breaking-bad-rate-4')
+        vi.stubGlobal(
+          'fetch',
+          vi.fn(async () => {
+            throw new Error('should not call the provider')
+          }),
+        )
+
+        const res = await app.request(
+          `/api/v1/library/shows/${show.slug}/seasons/1/episodes/1/rating`,
+          { method: 'DELETE', headers: { cookie } },
+        )
+        expect(res.status).toBe(200)
+        expect(await json<RatingStatus>(res)).toEqual({ rating: null, ratedAt: null })
+      })
+
+      it('404s when the show has no external id for any configured provider', async () => {
+        const cookie = await createUserAndCookie()
+        const [show] = await db
+          .insert(shows)
+          .values({ title: 'No Provider Id', slug: 'no-provider-id-rating' })
+          .returning()
+        if (!show) throw new Error('failed to insert show')
+
+        const res = await app.request(
+          `/api/v1/library/shows/${show.slug}/seasons/1/episodes/1/rating`,
+          {
+            method: 'PUT',
+            headers: { cookie, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ rating: 8 }),
+          },
+        )
+        expect(res.status).toBe(404)
+      })
+
+      it('404s for a show that does not exist', async () => {
+        const cookie = await createUserAndCookie()
+        const res = await app.request(
+          '/api/v1/library/shows/no-such-show/seasons/1/episodes/1/rating',
+          {
+            method: 'PUT',
+            headers: { cookie, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ rating: 8 }),
+          },
+        )
+        expect(res.status).toBe(404)
+      })
+    },
+  )
+
   describe('POST/DELETE /library/shows/{slug}/dropped', () => {
     it('marks a show as dropped, then un-drops it — reflected in both the detail and gallery endpoints', async () => {
       const cookie = await createUserAndCookie()
@@ -1338,6 +1562,199 @@ describe('library', () => {
         headers: { cookie },
       })
       expect(res.status).toBe(404)
+    })
+  })
+
+  describe('PUT/DELETE /library/shows/{slug}/rating', () => {
+    it('sets a rating, reflected in both the detail and gallery endpoints', async () => {
+      const cookie = await createUserAndCookie()
+      const [show] = await db
+        .insert(shows)
+        .values({ title: 'Rated Show', slug: 'rated-show' })
+        .returning()
+      if (!show) throw new Error('failed to insert show')
+
+      const res = await app.request(`/api/v1/library/shows/${show.slug}/rating`, {
+        method: 'PUT',
+        headers: { cookie, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rating: 8 }),
+      })
+      expect(res.status).toBe(200)
+      const status = await json<RatingStatus>(res)
+      expect(status.rating).toBe(8)
+      expect(status.ratedAt).not.toBeNull()
+
+      const detail = await json<ShowDetail>(
+        await app.request(`/api/v1/library/shows/${show.slug}`, { headers: { cookie } }),
+      )
+      expect(detail.myRating).toBe(8)
+
+      const gallery = await json<ListLibraryShowsResponse>(
+        await app.request('/api/v1/library/shows', { headers: { cookie } }),
+      )
+      // Unwatched, so it wouldn't otherwise appear in the plays-driven
+      // gallery query — confirms myRating doesn't itself pull it in or
+      // drop out an unrelated row.
+      expect(gallery.shows.find((s) => s.slug === show.slug)).toBeUndefined()
+    })
+
+    it('rating a show does not log a watch — rating is independent of watched status', async () => {
+      const cookie = await createUserAndCookie()
+      const [show] = await db
+        .insert(shows)
+        .values({ title: 'Never Watched, Rated', slug: 'never-watched-rated' })
+        .returning()
+      if (!show) throw new Error('failed to insert show')
+
+      await app.request(`/api/v1/library/shows/${show.slug}/rating`, {
+        method: 'PUT',
+        headers: { cookie, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rating: 10 }),
+      })
+
+      const allPlays = await db.select().from(plays)
+      expect(allPlays).toHaveLength(0)
+    })
+
+    it('re-rating replaces rather than duplicates, and moves ratedAt', async () => {
+      const cookie = await createUserAndCookie()
+      const [show] = await db
+        .insert(shows)
+        .values({ title: 'Re-rated Show', slug: 're-rated-show' })
+        .returning()
+      if (!show) throw new Error('failed to insert show')
+
+      const first = await json<RatingStatus>(
+        await app.request(`/api/v1/library/shows/${show.slug}/rating`, {
+          method: 'PUT',
+          headers: { cookie, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ rating: 4 }),
+        }),
+      )
+      const second = await json<RatingStatus>(
+        await app.request(`/api/v1/library/shows/${show.slug}/rating`, {
+          method: 'PUT',
+          headers: { cookie, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ rating: 10 }),
+        }),
+      )
+      expect(second.rating).toBe(10)
+      expect(second.ratedAt).not.toBe(first.ratedAt)
+
+      const rows = await db
+        .select()
+        .from(ratings)
+        .where(and(eq(ratings.entityType, 'show'), eq(ratings.entityId, show.id)))
+      expect(rows).toHaveLength(1)
+    })
+
+    it('accepts an odd rating value — the API is not narrowed to the 5-star widget’s even values', async () => {
+      const cookie = await createUserAndCookie()
+      const [show] = await db
+        .insert(shows)
+        .values({ title: 'Odd Rating Show', slug: 'odd-rating-show' })
+        .returning()
+      if (!show) throw new Error('failed to insert show')
+
+      const res = await app.request(`/api/v1/library/shows/${show.slug}/rating`, {
+        method: 'PUT',
+        headers: { cookie, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rating: 7 }),
+      })
+      expect(res.status).toBe(200)
+      expect((await json<RatingStatus>(res)).rating).toBe(7)
+    })
+
+    it.each([0, 11, 2.5])('rejects an out-of-range or non-integer rating (%s)', async (rating) => {
+      const cookie = await createUserAndCookie()
+      const [show] = await db
+        .insert(shows)
+        .values({ title: 'Invalid Rating Show', slug: 'invalid-rating-show' })
+        .returning()
+      if (!show) throw new Error('failed to insert show')
+
+      const res = await app.request(`/api/v1/library/shows/${show.slug}/rating`, {
+        method: 'PUT',
+        headers: { cookie, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rating }),
+      })
+      expect(res.status).toBe(400)
+    })
+
+    it('404s for a show that does not exist', async () => {
+      const cookie = await createUserAndCookie()
+      const res = await app.request('/api/v1/library/shows/no-such-show/rating', {
+        method: 'PUT',
+        headers: { cookie, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rating: 5 }),
+      })
+      expect(res.status).toBe(404)
+    })
+
+    it('clears a rating, and clearing a never-rated show is a harmless no-op', async () => {
+      const cookie = await createUserAndCookie()
+      const [show] = await db
+        .insert(shows)
+        .values({ title: 'Clear Rating Show', slug: 'clear-rating-show' })
+        .returning()
+      if (!show) throw new Error('failed to insert show')
+
+      await app.request(`/api/v1/library/shows/${show.slug}/rating`, {
+        method: 'PUT',
+        headers: { cookie, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rating: 6 }),
+      })
+
+      const cleared = await app.request(`/api/v1/library/shows/${show.slug}/rating`, {
+        method: 'DELETE',
+        headers: { cookie },
+      })
+      expect(await json<RatingStatus>(cleared)).toEqual({ rating: null, ratedAt: null })
+
+      // Clearing again — nothing left to clear — is still a 200 no-op.
+      const clearedAgain = await app.request(`/api/v1/library/shows/${show.slug}/rating`, {
+        method: 'DELETE',
+        headers: { cookie },
+      })
+      expect(clearedAgain.status).toBe(200)
+      expect(await json<RatingStatus>(clearedAgain)).toEqual({ rating: null, ratedAt: null })
+    })
+
+    it("one user's rating is invisible to, and cannot be cleared by, another", async () => {
+      const cookieA = await createUserAndCookie('a@example.com')
+      await createLocalUser(db, 'b@example.com', 'correct-horse-battery-staple')
+      const loginB = await app.request('/api/v1/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: 'b@example.com', password: 'correct-horse-battery-staple' }),
+      })
+      const cookieB = extractCookie(loginB)!
+      const [show] = await db
+        .insert(shows)
+        .values({ title: 'Shared Show', slug: 'shared-show-rating' })
+        .returning()
+      if (!show) throw new Error('failed to insert show')
+
+      await app.request(`/api/v1/library/shows/${show.slug}/rating`, {
+        method: 'PUT',
+        headers: { cookie: cookieA, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rating: 9 }),
+      })
+
+      const detailB = await json<ShowDetail>(
+        await app.request(`/api/v1/library/shows/${show.slug}`, { headers: { cookie: cookieB } }),
+      )
+      expect(detailB.myRating).toBeNull()
+
+      await app.request(`/api/v1/library/shows/${show.slug}/rating`, {
+        method: 'DELETE',
+        headers: { cookie: cookieB },
+      })
+
+      const detailA = await json<ShowDetail>(
+        await app.request(`/api/v1/library/shows/${show.slug}`, { headers: { cookie: cookieA } }),
+      )
+      expect(detailA.myRating).toBe(9)
     })
   })
 
@@ -2474,6 +2891,147 @@ describe('library', () => {
         watchedCount: 0,
         lastWatchedAt: null,
       })
+    })
+  })
+
+  describe('PUT/DELETE /library/movies/{slug}/rating', () => {
+    it('sets a rating, reflected in the detail endpoint, without logging a watch', async () => {
+      const cookie = await createUserAndCookie()
+      const [movie] = await db
+        .insert(movies)
+        .values({ title: 'Rated Movie', slug: 'rated-movie' })
+        .returning()
+      if (!movie) throw new Error('failed to insert movie')
+
+      const res = await app.request(`/api/v1/library/movies/${movie.slug}/rating`, {
+        method: 'PUT',
+        headers: { cookie, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rating: 8 }),
+      })
+      expect(res.status).toBe(200)
+      expect((await json<RatingStatus>(res)).rating).toBe(8)
+
+      const detail = await json<MovieDetail>(
+        await app.request(`/api/v1/library/movies/${movie.slug}`, { headers: { cookie } }),
+      )
+      expect(detail.myRating).toBe(8)
+      expect(detail.watched).toBe(false)
+      expect(await db.select().from(plays)).toHaveLength(0)
+    })
+
+    it('a rated movie with several plays still reports the correct play count (fan-out guard)', async () => {
+      // GET /library/movies is a GROUP BY movies.id aggregate — the rating
+      // join added alongside it must not multiply playCount, the same
+      // "does not double-count" risk the shows gallery query already
+      // guards against.
+      const cookie = await createUserAndCookie()
+      const userId = await meId(cookie)
+      const [movie] = await db
+        .insert(movies)
+        .values({ title: 'Rated Rewatch', slug: 'rated-rewatch' })
+        .returning()
+      if (!movie) throw new Error('failed to insert movie')
+      await db.insert(plays).values([
+        { userId, movieId: movie.id, watchedAt: new Date('2026-01-01') },
+        { userId, movieId: movie.id, watchedAt: new Date('2026-01-02') },
+        { userId, movieId: movie.id, watchedAt: new Date('2026-01-03') },
+      ])
+
+      await app.request(`/api/v1/library/movies/${movie.slug}/rating`, {
+        method: 'PUT',
+        headers: { cookie, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rating: 6 }),
+      })
+
+      const { movies: library } = await json<ListLibraryMoviesResponse>(
+        await app.request('/api/v1/library/movies', { headers: { cookie } }),
+      )
+      expect(library.find((m) => m.slug === movie.slug)).toMatchObject({
+        playCount: 3,
+        myRating: 6,
+      })
+    })
+
+    it('re-rating replaces rather than duplicates', async () => {
+      const cookie = await createUserAndCookie()
+      const [movie] = await db
+        .insert(movies)
+        .values({ title: 'Re-rated Movie', slug: 're-rated-movie' })
+        .returning()
+      if (!movie) throw new Error('failed to insert movie')
+
+      await app.request(`/api/v1/library/movies/${movie.slug}/rating`, {
+        method: 'PUT',
+        headers: { cookie, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rating: 4 }),
+      })
+      const second = await json<RatingStatus>(
+        await app.request(`/api/v1/library/movies/${movie.slug}/rating`, {
+          method: 'PUT',
+          headers: { cookie, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ rating: 10 }),
+        }),
+      )
+      expect(second.rating).toBe(10)
+
+      const rows = await db
+        .select()
+        .from(ratings)
+        .where(and(eq(ratings.entityType, 'movie'), eq(ratings.entityId, movie.id)))
+      expect(rows).toHaveLength(1)
+    })
+
+    it('clears a rating, and clearing a never-rated movie is a harmless no-op', async () => {
+      const cookie = await createUserAndCookie()
+      const [movie] = await db
+        .insert(movies)
+        .values({ title: 'Clear Rating Movie', slug: 'clear-rating-movie' })
+        .returning()
+      if (!movie) throw new Error('failed to insert movie')
+
+      await app.request(`/api/v1/library/movies/${movie.slug}/rating`, {
+        method: 'PUT',
+        headers: { cookie, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rating: 6 }),
+      })
+      const cleared = await app.request(`/api/v1/library/movies/${movie.slug}/rating`, {
+        method: 'DELETE',
+        headers: { cookie },
+      })
+      expect(await json<RatingStatus>(cleared)).toEqual({ rating: null, ratedAt: null })
+
+      const clearedAgain = await app.request(`/api/v1/library/movies/${movie.slug}/rating`, {
+        method: 'DELETE',
+        headers: { cookie },
+      })
+      expect(clearedAgain.status).toBe(200)
+      expect(await json<RatingStatus>(clearedAgain)).toEqual({ rating: null, ratedAt: null })
+    })
+
+    it('404s for a movie that does not exist', async () => {
+      const cookie = await createUserAndCookie()
+      const res = await app.request('/api/v1/library/movies/no-such-movie/rating', {
+        method: 'PUT',
+        headers: { cookie, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rating: 5 }),
+      })
+      expect(res.status).toBe(404)
+    })
+
+    it('rejects an out-of-range rating', async () => {
+      const cookie = await createUserAndCookie()
+      const [movie] = await db
+        .insert(movies)
+        .values({ title: 'Invalid Rating Movie', slug: 'invalid-rating-movie' })
+        .returning()
+      if (!movie) throw new Error('failed to insert movie')
+
+      const res = await app.request(`/api/v1/library/movies/${movie.slug}/rating`, {
+        method: 'PUT',
+        headers: { cookie, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rating: 0 }),
+      })
+      expect(res.status).toBe(400)
     })
   })
 

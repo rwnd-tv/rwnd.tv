@@ -15,6 +15,7 @@ const SECTION_KEYS: Record<string, string> = {
   '/dashboard': 'nav.dashboard',
   '/shows': 'nav.shows',
   '/movies': 'nav.movies',
+  '/watchlists': 'nav.watchlists',
   '/history': 'nav.history',
   '/import': 'nav.import',
   '/settings': 'nav.settings',
@@ -37,6 +38,7 @@ export function PageTitleEffect() {
   const showMatch = useMatch('/shows/:slug')
   const seasonMatch = useMatch('/shows/:slug/season/:seasonNumber')
   const movieMatch = useMatch('/movies/:slug')
+  const watchlistMatch = useMatch('/watchlists/:id')
   // Either show match supplies a slug — a season page needs the show's
   // title too, same as the show page itself.
   const slug = showMatch?.params.slug ?? seasonMatch?.params.slug
@@ -67,6 +69,17 @@ export function PageTitleEffect() {
     enabled: Boolean(movieSlug),
   })
 
+  // Same queryKey as WatchlistDetailPage.tsx — ['watchlists', id], not
+  // ['watchlist', id]: nesting under the plural means invalidating the
+  // whole ['watchlists'] prefix (query-client.ts's invalidateWatchData)
+  // catches every open detail query too, not just the index.
+  const watchlistId = watchlistMatch?.params.id
+  const { data: watchlist } = useQuery({
+    queryKey: ['watchlists', watchlistId],
+    queryFn: () => api.watchlists.get(watchlistId!),
+    enabled: Boolean(watchlistId),
+  })
+
   useEffect(() => {
     const base = settings?.environmentLabel ? `[${settings.environmentLabel}] rwnd.tv` : 'rwnd.tv'
     const segments = [base]
@@ -91,6 +104,9 @@ export function PageTitleEffect() {
     } else if (movieMatch) {
       segments.push(t('nav.movies'))
       if (movie) segments.push(movie.year ? `${movie.title} (${movie.year})` : movie.title)
+    } else if (watchlistMatch) {
+      segments.push(t('nav.watchlists'))
+      if (watchlist) segments.push(watchlist.name)
     }
 
     document.title = segments.join(' > ')
@@ -100,9 +116,11 @@ export function PageTitleEffect() {
     showMatch,
     seasonMatch,
     movieMatch,
+    watchlistMatch,
     show,
     season,
     movie,
+    watchlist,
     t,
   ])
 

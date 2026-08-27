@@ -31,23 +31,6 @@ Format:
       leading-article rules are a bigger job than this feature needed; left
       as a known simplification.
 
-## Ratings & watchlist
-
-- [ ] **Explore how the watchlist should work** (2026-08-23 14:15 added) — M3\
-      Trakt import already brings in watchlist entries (with an optional
-      note, the `watchlist_items` table) and Clear database/Backup/Restore
-      already treat it as a first-class category, but nothing in the UI
-      surfaces it — no watchlist page, no way to add/remove a title
-      manually, no "on my watchlist" indicator on a show/movie page. Needs
-      a design pass before building: its own page (like History), a
-      gallery filter, or both. ROADMAP.md bundles "custom lists" in with
-      this under M3 — worth deciding whether that's the same feature or a
-      separate one when the design pass happens.\
-      2026-08-26: same update as the ratings item above — the Activity
-      page now shows existing watchlist adds as read-only feed entries,
-      via `GET /activity`. The missing add/remove UI and a dedicated
-      watchlist page/filter are still open.
-
 ## Landing page & branding
 
 - [ ] **Build a real landing page for logged-out visitors** (2026-08-23 14:40 added) — M3\
@@ -124,9 +107,8 @@ Format:
 ## Roadmap
 
 Every open item from [ROADMAP.md](ROADMAP.md) that doesn't already have a
-more specific TODO elsewhere in this file (ratings/watchlist above
-double as their M3 entry). Kept brief — ROADMAP.md is the source of
-truth for scope; this is just so a TODO listing is complete.
+more specific TODO elsewhere in this file. Kept brief — ROADMAP.md is the
+source of truth for scope; this is just so a TODO listing is complete.
 
 - [ ] **Tautulli/Jellyfin/Emby/Kodi webhook ingestion** (2026-08-24 16:25 added, un-M2'd 2026-08-24)\
       Plex's own webhook shipped 2026-08-24 (see `docs/TODO_ARCHIVE.md`) —

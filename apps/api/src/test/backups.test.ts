@@ -25,6 +25,7 @@ import { BACKUP_FORMAT_VERSION } from '@rwnd/shared'
 import { createLocalUser, extractCookie, json, resetDb, testApp, testDb } from './helpers.js'
 import { loadEnv } from '../env.js'
 import { restoreBackupFile } from '../backup/restore.js'
+import { ensureDefaultWatchlist } from '../lib/watchlists.js'
 import { backupFilePath, backupUserDir, generateBackupId } from '../backup/paths.js'
 import { createApp } from '../app.js'
 import type { MetadataProvider } from '../providers/types.js'
@@ -142,8 +143,10 @@ describe('backups', () => {
     await db
       .insert(ratings)
       .values({ userId, entityType: 'show', entityId: show.id, rating: 9, ratedAt: new Date() })
+    const watchlistId = await ensureDefaultWatchlist(db, userId)
     await db.insert(watchlistItems).values({
       userId,
+      watchlistId,
       entityType: 'movie',
       entityId: movie.id,
       listedAt: new Date(),
@@ -291,6 +294,7 @@ describe('backups', () => {
       ],
       ratings: [],
       watchlist: [],
+      watchlists: [],
       droppedShows: [],
     }
 

@@ -13,6 +13,7 @@ import {
   type CreateBackupRequest,
   type CreateImportJobRequest,
   type CreatePlayRequest,
+  type CreateWatchlistRequest,
   type DeleteAccountRequest,
   type DiffBackupResponse,
   type DroppedStatus,
@@ -25,6 +26,7 @@ import {
   type ListLibraryMoviesResponse,
   type ListLibraryShowsResponse,
   type ListPlaysResponse,
+  type ListWatchlistsResponse,
   type ListWebhookLinksResponse,
   type LoginRequest,
   type MarkShowWatchedRequest,
@@ -53,12 +55,16 @@ import {
   type UpdateInstanceSettingsRequest,
   type UpdatePlayRequest,
   type UpdateProfileRequest,
+  type UpdateWatchlistRequest,
   type UpdateWebhookLinkRequest,
   type UpNextResponse,
   type User,
   type VerifyEmailRequest,
   type WatchedStatus,
   type Watches,
+  type WatchlistDetail,
+  type WatchlistMembershipStatus,
+  type WatchlistSummary,
 } from '@rwnd/shared'
 
 export class ApiError extends Error {
@@ -97,8 +103,8 @@ const patch = <T>(path: string, body: unknown) =>
   request<T>(path, { method: 'PATCH', body: JSON.stringify(body) })
 const del = <T>(path: string, body?: unknown) =>
   request<T>(path, { method: 'DELETE', body: body ? JSON.stringify(body) : undefined })
-const put = <T>(path: string, body: unknown) =>
-  request<T>(path, { method: 'PUT', body: JSON.stringify(body) })
+const put = <T>(path: string, body?: unknown) =>
+  request<T>(path, { method: 'PUT', body: body !== undefined ? JSON.stringify(body) : undefined })
 const putForm = <T>(path: string, form: FormData) => request<T>(path, { method: 'PUT', body: form })
 const postForm = <T>(path: string, form: FormData) =>
   request<T>(path, { method: 'POST', body: form })
@@ -221,6 +227,14 @@ export const api = {
       } satisfies SetRatingRequest),
     clearShowRating: (slug: string) =>
       del<RatingStatus>(`/library/shows/${encodeURIComponent(slug)}/rating`),
+    addShowToWatchlist: (slug: string, watchlistId: string) =>
+      put<WatchlistMembershipStatus>(
+        `/library/shows/${encodeURIComponent(slug)}/watchlists/${watchlistId}`,
+      ),
+    removeShowFromWatchlist: (slug: string, watchlistId: string) =>
+      del<WatchlistMembershipStatus>(
+        `/library/shows/${encodeURIComponent(slug)}/watchlists/${watchlistId}`,
+      ),
     markShowWatched: (slug: string, body: MarkShowWatchedRequest) =>
       post<MarkShowWatchedResponse>(`/library/shows/${encodeURIComponent(slug)}/watched`, body),
     removeShowWatches: (slug: string) =>
@@ -279,6 +293,14 @@ export const api = {
       } satisfies SetRatingRequest),
     clearMovieRating: (slug: string) =>
       del<RatingStatus>(`/library/movies/${encodeURIComponent(slug)}/rating`),
+    addMovieToWatchlist: (slug: string, watchlistId: string) =>
+      put<WatchlistMembershipStatus>(
+        `/library/movies/${encodeURIComponent(slug)}/watchlists/${watchlistId}`,
+      ),
+    removeMovieFromWatchlist: (slug: string, watchlistId: string) =>
+      del<WatchlistMembershipStatus>(
+        `/library/movies/${encodeURIComponent(slug)}/watchlists/${watchlistId}`,
+      ),
     refreshMovie: (slug: string) =>
       post<void>(`/library/movies/${encodeURIComponent(slug)}/refresh`),
     movieWatches: (slug: string) =>
@@ -287,6 +309,14 @@ export const api = {
       del<WatchedStatus>(`/library/movies/${encodeURIComponent(slug)}/plays`, {
         ids,
       } satisfies RemoveWatchesRequest),
+  },
+  watchlists: {
+    list: () => get<ListWatchlistsResponse>('/watchlists'),
+    create: (body: CreateWatchlistRequest) => post<WatchlistSummary>('/watchlists', body),
+    update: (id: string, body: UpdateWatchlistRequest) =>
+      patch<WatchlistSummary>(`/watchlists/${id}`, body),
+    delete: (id: string) => del<void>(`/watchlists/${id}`),
+    get: (id: string) => get<WatchlistDetail>(`/watchlists/${id}`),
   },
   settings: {
     get: () => get<InstanceSettings>('/settings'),

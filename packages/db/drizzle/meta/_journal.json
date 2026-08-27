@@ -155,6 +155,13 @@
       "when": 1787769963185,
       "tag": "0021_handy_barracuda",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1787854911429,
+      "tag": "0022_sparkling_excalibur",
+      "breakpoints": true
     }
   ]
 }

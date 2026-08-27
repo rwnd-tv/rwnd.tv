@@ -4,6 +4,7 @@ import { droppedShows, movies, ratings, shows, watchlistItems } from '@rwnd/db'
 import type { ListActivityResponse, Play } from '@rwnd/shared'
 import { createLocalUser, extractCookie, json, resetDb, testApp, testDb } from './helpers.js'
 import { BREAKING_BAD_SHOW_TMDB_ID, tmdbBreakingBadShow } from './fixtures/trakt.js'
+import { ensureDefaultWatchlist } from '../lib/watchlists.js'
 
 const db = testDb()
 const app = testApp()
@@ -118,10 +119,12 @@ async function seedOneOfEach(cookie: string) {
     })
     .returning()
 
+  const watchlistId = await ensureDefaultWatchlist(db, me.id)
   const [watchlistItem] = await db
     .insert(watchlistItems)
     .values({
       userId: me.id,
+      watchlistId,
       entityType: 'show',
       entityId: showRow.id,
       listedAt: new Date('2026-01-04T12:00:00.000Z'),

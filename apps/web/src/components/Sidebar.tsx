@@ -10,6 +10,7 @@ import {
   MoviesIcon,
   SettingsIcon,
   ShowsIcon,
+  WatchlistsIcon,
 } from './icons.js'
 
 function SidebarLink({
@@ -113,6 +114,13 @@ export function Sidebar({ collapsed, onNavigate }: { collapsed: boolean; onNavig
           to="/movies"
           label={t('nav.movies')}
           icon={<MoviesIcon />}
+          collapsed={collapsed}
+          onNavigate={onNavigate}
+        />
+        <SidebarLink
+          to="/watchlists"
+          label={t('nav.watchlists')}
+          icon={<WatchlistsIcon />}
           collapsed={collapsed}
           onNavigate={onNavigate}
         />

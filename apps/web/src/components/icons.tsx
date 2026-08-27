@@ -60,6 +60,14 @@ export function MoviesIcon(props: SVGProps<SVGSVGElement>) {
   )
 }
 
+export function WatchlistsIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <Icon {...props}>
+      <path d="M6 4a2 2 0 00-2 2v14l8-5 8 5V6a2 2 0 00-2-2H6z" />
+    </Icon>
+  )
+}
+
 export function HistoryIcon(props: SVGProps<SVGSVGElement>) {
   return (
     <Icon {...props}>

@@ -37,8 +37,8 @@ the repo and self-hosting path read as current and actually work end to
 end, and a security review + first tagged release mark the project as
 genuinely production-ready.
 
-- [ ] Watchlist and custom lists
-- [ ] Ratings
+- [x] **Watchlist and custom lists**: any number of named watchlists per user, plus the always-present, never-renameable/deletable Default list a one-click toggle on the show/movie page writes to. A title can sit on several lists at once; a custom-lists dialog manages the rest. A `/watchlists` page shows every list as a tile (cover art: the most recently added item, or a user-pinned one), each drilling into `/watchlists/{id}`'s gallery of that list's shows/movies. Watchlisted shows also feed the Dashboard's Upcoming row, even with no watch history. See TODO_ARCHIVE.md for the full design rationale.
+- [x] **Ratings**: a 5-star picker for shows, movies and episodes, independent of watched status
 - [ ] Proactive per-episode data resolution, not just as a side effect of specific actions (see TODO.md)
 - [ ] Fix known metadata accuracy bugs affecting real usage — `airedEpisodeCount` for a currently-airing season (see TODO.md)
 - [ ] A real landing page for logged-out visitors (see TODO.md)
@@ -46,7 +46,7 @@ genuinely production-ready.
 - [ ] Self-hosting readiness pass — confirm `docker-compose.yml`/`.env.example`/self-hosting.md actually work end to end for a real self-hoster (see TODO.md)
 - [ ] Full security review (see TODO.md)
 - [ ] Cut the first tagged release, moving `:latest` off tracking `:edge` (see TODO.md)
-- [ ] Redesign the History page as a full-width grid, matching the Shows/Movies gallery treatment (see TODO.md)
+- [x] **Redesign the History page as a full-width grid**, matching the Shows/Movies gallery treatment — shipped 2026-08-26 as the Activity page (merges watches, ratings, watchlist adds and drops into one feed)
 
 ## Not yet scheduled
 

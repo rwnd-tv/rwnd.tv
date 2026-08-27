@@ -5,6 +5,7 @@ import {
   BACKUP_FORMAT_VERSION,
   backupFileSchema,
   backupFileSchemaV1,
+  backupFileSchemaV2,
   backupIdSchema,
   backupSummarySchema,
   createBackupRequestSchema,
@@ -18,7 +19,7 @@ import { loadEnv } from '../env.js'
 import { buildBackupFile } from '../backup/build.js'
 import { restoreBackupFile } from '../backup/restore.js'
 import { computeBackupDiff } from '../backup/diff.js'
-import { migrateLegacyBackupFile } from '../backup/legacy.js'
+import { migrateLegacyBackupFile, migrateV2BackupFile } from '../backup/legacy.js'
 import {
   backupFilePath,
   backupUserDir,
@@ -31,11 +32,10 @@ export const backupRoutes = new OpenAPIHono<AppEnv>()
 /** Reads and validates one backup file, shared by the restore and diff
  * routes below — both need the exact same "not found" / "corrupt" /
  * "incompatible version" handling before they can do anything with the
- * file's contents. A BACKUP_FORMAT_VERSION 1 file parses fine (its bare
- * TMDB-id shape is still a valid file, just an older one) and is
- * up-converted via migrateLegacyBackupFile before being handed back — see
- * that function's doc comment for why 1 -> 2 specifically is safe to do
- * silently, unlike a version this code doesn't know how to migrate. */
+ * file's contents. An older file parses fine against its own frozen schema
+ * (backups-v1.ts/backups-v2.ts) and is up-converted before being handed
+ * back — see legacy.ts's doc comments for why each transition is safe to
+ * do silently, unlike a version this code doesn't know how to migrate. */
 async function loadBackupFile(
   email: string,
   id: string,
@@ -56,19 +56,22 @@ async function loadBackupFile(
   const parsed = backupFileSchema.safeParse(raw)
   if (parsed.success) return { ok: true, data: parsed.data }
 
-  const legacy = backupFileSchemaV1.safeParse(raw)
-  if (legacy.success) return { ok: true, data: migrateLegacyBackupFile(legacy.data) }
+  const v2 = backupFileSchemaV2.safeParse(raw)
+  if (v2.success) return { ok: true, data: migrateV2BackupFile(v2.data) }
 
-  // A stale/foreign formatVersion is by far the most likely reason both
-  // parses failed, and the one worth naming — everything else collapses to
+  const v1 = backupFileSchemaV1.safeParse(raw)
+  if (v1.success) return { ok: true, data: migrateLegacyBackupFile(v1.data) }
+
+  // A stale/foreign formatVersion is by far the most likely reason every
+  // parse failed, and the one worth naming — everything else collapses to
   // "corrupt", same as the JSON.parse failure above. Checked before
   // reporting the generic error, not instead of full-shape validation.
+  const knownVersions: unknown[] = [BACKUP_FORMAT_VERSION, 1, 2]
   const versionMismatch =
     typeof raw === 'object' &&
     raw !== null &&
     'formatVersion' in raw &&
-    (raw as { formatVersion: unknown }).formatVersion !== BACKUP_FORMAT_VERSION &&
-    (raw as { formatVersion: unknown }).formatVersion !== 1
+    !knownVersions.includes((raw as { formatVersion: unknown }).formatVersion)
   return {
     ok: false,
     status: 400,

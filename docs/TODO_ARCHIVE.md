@@ -2317,3 +2317,92 @@ DATABASE` ×2) — zero residue.\
       `rating.ts`'s pure functions — written to be testable since the
       file's own docstring predates this — finally have real test
       coverage.
+
+- [x] **Explore how the watchlist should work** (2026-08-23 14:15 added, done 2026-08-27) — M3\
+      Trakt import already brought in a flat per-user watchlist
+      (`watchlist_items`) and Clear database/Backup/Restore/CSV export
+      already treated it as a first-class category, but there was no UI
+      at all — no page, no add/remove, no indicator. ROADMAP.md bundled
+      "custom lists" into the same item; the design pass (talked through
+      with James, 2026-08-27) settled that as the same feature, not a
+      separate one: any number of named watchlists per user, not just
+      one flat list.\
+      **Settled design**: a **Default** list, auto-created at
+      registration (`ensureDefaultWatchlist`,
+      `apps/api/src/lib/watchlists.ts`), never renameable or deletable —
+      what the one-click toggle on a show/movie page writes to (same
+      one-click shape as Drop/Undrop and RatingPicker). Custom lists are
+      freely created/renamed/deleted, managed through a secondary dialog
+      rather than the one-click button — James: wanted single-click for
+      the common case, happy for the rest to need more UI. A title can
+      sit on several lists at once, or none. List names are unique
+      **per user**, not globally (two users can each have "Cool Sci-fi
+      Stuff!") — if sharing ever happens, disambiguate via the owner's
+      username rather than constraining the data. A list's cover art
+      defaults to its most recently added item's poster, with an option
+      to pin a specific item instead (falls back automatically if the
+      pinned item is later removed). Episode-level watchlist entries
+      stay possible at the schema level (Trakt can produce one) but the
+      UI only ever shows/creates movie and show entries — deliberately
+      left open to enable later. Clearing the Watchlist category
+      (Settings > Database) deletes custom lists too, leaving an emptied
+      Default. A watchlisted show (even with zero watch history) now
+      also feeds the Dashboard's Upcoming row, scanning forward from
+      season 1 the same way an already-existing "no watched season yet"
+      case already did — no new logic needed there. Movies deliberately
+      stay out of Upcoming (no next-episode concept) — a future idea,
+      not built.\
+      **Data model**: new `watchlists` table
+      (`packages/db/src/schema.ts`) — `userId`, `name`, `isDefault`, a
+      nullable `coverItemId` (`ON DELETE SET NULL`, resolved at read
+      time). `watchlist_items` gained `watchlistId`, and its unique
+      index moved from `(userId, entityType, entityId)` to
+      `(watchlistId, entityType, entityId)` — that's the whole
+      multi-list-membership feature. Migration `0022` (hand-edited
+      backfill: create `watchlists`, seed one Default per existing user,
+      add `watchlist_id` nullable → backfill → `SET NOT NULL`, same
+      shape as `0004`'s slug backfill) rehearsed for real against a
+      seeded local Postgres before being trusted — confirmed exactly one
+      Default per user, zero orphaned items, and a re-run of
+      `db:generate` afterward produced no further drift.\
+      **Backend**: new `apps/api/src/routes/watchlists.ts` (list/create/
+      rename/delete a watchlist, plus the per-list gallery), and
+      `PUT`/`DELETE /library/{shows,movies}/{slug}/watchlists/{id}` in
+      `library.ts` for per-title membership (mirrors the rating routes'
+      shape). `myWatchlistIds` added to the show/movie detail responses,
+      same convention as `myRating`. Every existing watchlist writer —
+      Trakt OAuth/ZIP import, CSV import/export, JSON backup build/
+      restore, the activity feed — updated to target a real
+      `watchlistId` instead of the old per-user uniqueness; JSON backup
+      bumped to `BACKUP_FORMAT_VERSION` 3 (a `list` name per entry plus
+      a roster of custom lists), with a `backups-v2.ts` frozen schema
+      and `migrateV2BackupFile` up-converter following the exact
+      precedent `backups-v1.ts`/the 1→2 migration already set — every
+      pre-existing entry lands on Default, losslessly. CSV's
+      `watchlist.csv` gained an optional `list` column (round-trips a
+      custom list's name, get-or-created on import) without breaking an
+      older export's import. The Activity feed's watchlist entries now
+      name their list (`listName`) — required widening all four branches
+      of its `unionAll` (Postgres needs them set-compatible), not just
+      the watchlist one.\
+      **Frontend**: new `/watchlists` (tile grid, poster = cover art +
+      item count, "+ New list") and `/watchlists/{id}` (that list's
+      gallery — title filter + sort only, deliberately lighter than
+      Shows/Movies' full filter-panel stack) pages, a new sidebar entry
+      between Movies and History. Show/movie pages gained a
+      `WatchlistButton` (`components/library/WatchlistButton.tsx`) — one
+      shared component rather than
+      duplicated per page, backed by `use-watchlist-actions.ts` (mirrors
+      the existing `use-episode-*-actions.ts` "one hook, two consumers"
+      shape): the one-click Default toggle plus an icon-only button
+      opening a checkbox dialog for custom lists, with an inline
+      "+ New list" that creates and adds in one step.\
+      **Verified**: a dedicated `apps/api/src/test/watchlists.test.ts`
+      (11 tests — Default immutability, duplicate-name rejection,
+      multi-list membership and idempotency, cross-user isolation, cover
+      resolution including the pin/fallback behaviour, clear-data, and
+      the Activity feed's `listName`) plus the existing suite, all 335
+      tests run for real against a live local Postgres (WSL2, not just
+      typechecked) — worth calling out since a past session's own retro
+      noted this sandbox previously had no live Postgres to verify
+      against at all. `pnpm lint`/`typecheck`/`format:check` all clean.

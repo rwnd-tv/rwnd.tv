@@ -9,6 +9,7 @@ import {
   seasons,
   shows,
   watchlistItems,
+  watchlists,
 } from '@rwnd/db'
 import {
   BACKUP_FORMAT_VERSION,
@@ -18,6 +19,7 @@ import {
   type BackupRating,
   type BackupShow,
   type BackupWatch,
+  type BackupWatchlist,
   type BackupWatchlistItem,
   type ExternalRef,
 } from '@rwnd/shared'
@@ -39,12 +41,20 @@ export async function buildBackupFile(
   now: Date,
   providers: MetadataProvider[],
 ): Promise<BackupFile> {
-  const [playRows, ratingRows, watchlistRows, droppedRows] = await Promise.all([
+  const [playRows, ratingRows, watchlistRows, droppedRows, watchlistRowsRaw] = await Promise.all([
     db.select().from(plays).where(eq(plays.userId, userId)),
     db.select().from(ratings).where(eq(ratings.userId, userId)),
     db.select().from(watchlistItems).where(eq(watchlistItems.userId, userId)),
     db.select().from(droppedShows).where(eq(droppedShows.userId, userId)),
+    db.select().from(watchlists).where(eq(watchlists.userId, userId)),
   ])
+  const watchlistNameById = new Map(watchlistRowsRaw.map((row) => [row.id, row.name]))
+  // Custom lists only — the Default list isn't carried here at all, see
+  // backupWatchlistSchema's doc comment for why restore doesn't need it in
+  // the roster to leave it alone.
+  const watchlistRoster: BackupWatchlist[] = watchlistRowsRaw
+    .filter((row) => !row.isDefault)
+    .map((row) => ({ name: row.name }))
 
   // Every episode any of the four categories reference, resolved once —
   // gives showId + season/episode number for plays (which only carry
@@ -206,6 +216,11 @@ export async function buildBackupFile(
 
   const watchlist: BackupWatchlistItem[] = []
   for (const row of watchlistRows) {
+    // Shouldn't happen (watchlist_items.watchlist_id is a NOT NULL FK) —
+    // falls back to "Default" rather than being skipped/counted as data
+    // loss, same reasoning as the CSV export's identical fallback
+    // (apps/api/src/export/build.ts).
+    const list = watchlistNameById.get(row.watchlistId) ?? 'Default'
     if (row.entityType === 'movie') {
       const movieRefValue = movieRef.get(row.entityId)
       if (!movieRefValue) {
@@ -216,6 +231,7 @@ export async function buildBackupFile(
         movie: movieRefValue,
         listedAt: row.listedAt.toISOString(),
         notes: row.notes,
+        list,
       })
     } else if (row.entityType === 'show') {
       const showRefValue = showRef.get(row.entityId)
@@ -223,14 +239,19 @@ export async function buildBackupFile(
         skipped++
         continue
       }
-      watchlist.push({ show: showRefValue, listedAt: row.listedAt.toISOString(), notes: row.notes })
+      watchlist.push({
+        show: showRefValue,
+        listedAt: row.listedAt.toISOString(),
+        notes: row.notes,
+        list,
+      })
     } else {
       const ref = episodeRef(row.entityId)
       if (!ref) {
         skipped++
         continue
       }
-      watchlist.push({ ...ref, listedAt: row.listedAt.toISOString(), notes: row.notes })
+      watchlist.push({ ...ref, listedAt: row.listedAt.toISOString(), notes: row.notes, list })
     }
   }
 
@@ -311,6 +332,7 @@ export async function buildBackupFile(
     watchHistory,
     ratings: ratingEntries,
     watchlist,
+    watchlists: watchlistRoster,
     droppedShows: droppedShowEntries,
   }
 }

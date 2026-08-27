@@ -152,6 +152,11 @@ export const backupWatchlistItemSchema = z
     episode: z.number().int().min(1).optional(),
     listedAt: z.string().datetime(),
     notes: z.string().nullable(),
+    /** Which of the user's watchlists this entry belongs to, by name — see
+     * `backupWatchlistSchema` below for the roster this is matched against
+     * on restore. Added in format version 3 (named watchlists); every v1/v2
+     * entry up-converts to "Default" (apps/api/src/backup/legacy.ts). */
+    list: z.string(),
   })
   .refine((v) => Boolean(v.movie) !== Boolean(v.show), {
     message: 'Provide exactly one of movie or show',
@@ -160,6 +165,20 @@ export const backupWatchlistItemSchema = z
     message: 'season and episode must both be present or both absent',
   })
 export type BackupWatchlistItem = z.infer<typeof backupWatchlistItemSchema>
+
+/**
+ * One of the user's named watchlists, independent of its items — needed
+ * alongside `backupWatchlistItemSchema.list` above so an *empty* custom
+ * list still round-trips through backup/restore rather than only existing
+ * implicitly wherever an item happens to reference its name. The Default
+ * list is never included here: it's not created by restore reading this
+ * array, it always exists on its own (ensureDefaultWatchlist,
+ * apps/api/src/lib/watchlists.ts) — restore just needs to leave it alone.
+ */
+export const backupWatchlistSchema = z.object({
+  name: z.string(),
+})
+export type BackupWatchlist = z.infer<typeof backupWatchlistSchema>
 
 export const backupDroppedShowSchema = z.object({
   show: externalRefSchema,
@@ -182,16 +201,17 @@ export const backupCountsSchema = z.object({
 export type BackupCounts = z.infer<typeof backupCountsSchema>
 
 /** Bumped whenever a change to the shapes above would make an older file
- * unsafe to restore or diff as-is. Unlike a version bump in general, this
- * one specific transition (1 -> 2, bare `tmdbId` strings to provider-tagged
- * `externalRefSchema` refs) has a safe, lossless up-conversion — every v1
- * file was necessarily written when TMDB was the only provider, so its ids
- * are unambiguously `{source: 'tmdb', externalId}` — and
- * apps/api/src/backup/legacy.ts performs it on read rather than refusing
- * the file outright. A future format change without an equivalent
- * up-conversion should still refuse, the same way this file historically
- * did for any version mismatch. */
-export const BACKUP_FORMAT_VERSION = 2
+ * unsafe to restore or diff as-is. Both existing transitions have a safe,
+ * lossless up-conversion, performed on read by apps/api/src/backup/legacy.ts
+ * rather than refusing the file outright: 1 -> 2 (bare `tmdbId` strings to
+ * provider-tagged `externalRefSchema` refs — every v1 file was necessarily
+ * written when TMDB was the only provider, so its ids are unambiguously
+ * `{source: 'tmdb', externalId}`) and 2 -> 3 (named watchlists — every v1/v2
+ * file's flat watchlist is unambiguously what's now called "Default", see
+ * `backupWatchlistItemSchema.list` above). A future format change without
+ * an equivalent up-conversion should still refuse, the same way this file
+ * historically did for any version mismatch. */
+export const BACKUP_FORMAT_VERSION = 3
 
 export const backupFileSchema = z.object({
   formatVersion: z.literal(BACKUP_FORMAT_VERSION),
@@ -204,6 +224,10 @@ export const backupFileSchema = z.object({
   watchHistory: z.array(backupWatchSchema),
   ratings: z.array(backupRatingSchema),
   watchlist: z.array(backupWatchlistItemSchema),
+  /** Every one of the user's *custom* watchlists, independent of their
+   * items — see `backupWatchlistSchema`'s doc comment for why this exists
+   * separately from `watchlist` above. */
+  watchlists: z.array(backupWatchlistSchema),
   droppedShows: z.array(backupDroppedShowSchema),
 })
 export type BackupFile = z.infer<typeof backupFileSchema>

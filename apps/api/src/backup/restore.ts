@@ -10,9 +10,11 @@ import {
   seasons,
   shows,
   watchlistItems,
+  watchlists,
 } from '@rwnd/db'
 import type { BackupCounts, BackupFile } from '@rwnd/shared'
 import { generateUniqueMovieSlug, generateUniqueShowSlug } from '../lib/slug.js'
+import { ensureDefaultWatchlist } from '../lib/watchlists.js'
 
 /** Postgres caps a single statement at 65535 bound parameters — chunking
  * keeps every insert well under that regardless of row width, and matches
@@ -258,8 +260,28 @@ export async function restoreBackupFile(
     // --- Wipe, then rewrite. No merge — matches Clear database exactly.
     await tx.delete(plays).where(eq(plays.userId, userId))
     await tx.delete(ratings).where(eq(ratings.userId, userId))
-    await tx.delete(watchlistItems).where(eq(watchlistItems.userId, userId))
     await tx.delete(droppedShows).where(eq(droppedShows.userId, userId))
+    // Every custom watchlist (ON DELETE CASCADE takes its items with it),
+    // but never the Default list itself — only its contents. Same
+    // "structure survives, data doesn't" reasoning Clear database uses for
+    // this category (James, 2026-08-27 — see docs/TODO_ARCHIVE.md).
+    await tx
+      .delete(watchlists)
+      .where(and(eq(watchlists.userId, userId), eq(watchlists.isDefault, false)))
+    const defaultWatchlistId = await ensureDefaultWatchlist(tx, userId)
+    await tx.delete(watchlistItems).where(eq(watchlistItems.watchlistId, defaultWatchlistId))
+
+    // Recreate every custom list from the file's roster before the items
+    // loop below needs to resolve a `list` name to an id — see
+    // backupWatchlistSchema's doc comment for why Default isn't in here.
+    const watchlistIdByName = new Map<string, string>([['Default', defaultWatchlistId]])
+    if (file.watchlists.length > 0) {
+      const createdLists = await tx
+        .insert(watchlists)
+        .values(file.watchlists.map((w) => ({ userId, name: w.name })))
+        .returning({ id: watchlists.id, name: watchlists.name })
+      for (const row of createdLists) watchlistIdByName.set(row.name, row.id)
+    }
 
     const playValues = file.watchHistory
       .map((entry) => {
@@ -326,11 +348,18 @@ export async function restoreBackupFile(
 
     const watchlistValues = file.watchlist
       .map((entry) => {
+        // Falls back to Default for a name the roster doesn't have —
+        // shouldn't happen for a file this codebase wrote (every `list`
+        // value it writes has a matching roster entry, or is "Default"
+        // itself, which isn't in the roster at all), but a hand-edited or
+        // otherwise foreign file shouldn't lose the entry entirely over it.
+        const watchlistId = watchlistIdByName.get(entry.list) ?? defaultWatchlistId
         if (entry.movie) {
           const entityId = movieIdByRef.get(refKey(entry.movie.source, entry.movie.externalId))
           if (!entityId) return null
           return {
             userId,
+            watchlistId,
             entityType: 'movie' as const,
             entityId,
             listedAt: new Date(entry.listedAt),
@@ -342,6 +371,7 @@ export async function restoreBackupFile(
           if (!entityId) return null
           return {
             userId,
+            watchlistId,
             entityType: 'show' as const,
             entityId,
             listedAt: new Date(entry.listedAt),
@@ -352,6 +382,7 @@ export async function restoreBackupFile(
         if (!entityId) return null
         return {
           userId,
+          watchlistId,
           entityType: 'episode' as const,
           entityId,
           listedAt: new Date(entry.listedAt),

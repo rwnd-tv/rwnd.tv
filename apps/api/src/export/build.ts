@@ -9,6 +9,7 @@ import {
   ratings,
   shows,
   watchlistItems,
+  watchlists,
 } from '@rwnd/db'
 import { UNKNOWN_WATCHED_AT, metadataProviderSourceSchema } from '@rwnd/shared'
 import { writeCsv } from '../lib/csv.js'
@@ -66,6 +67,20 @@ export async function buildExportFiles(
           .where(inArray(episodes.id, [...episodeIds]))
       : []
   const episodeById = new Map(episodeRows.map((row) => [row.id, row]))
+
+  // Named lists, for watchlist.csv's `list` column below — id -> name, only
+  // ever this user's own (watchlistItems.userId already scopes watchlistRows
+  // above, so every watchlistId referenced here is guaranteed to be one of
+  // theirs too).
+  const watchlistIds = new Set(watchlistRows.map((row) => row.watchlistId))
+  const watchlistRowsById =
+    watchlistIds.size > 0
+      ? await db
+          .select({ id: watchlists.id, name: watchlists.name })
+          .from(watchlists)
+          .where(inArray(watchlists.id, [...watchlistIds]))
+      : []
+  const watchlistNameById = new Map(watchlistRowsById.map((row) => [row.id, row.name]))
 
   const movieIds = new Set<string>()
   for (const row of playRows) if (row.movieId) movieIds.add(row.movieId)
@@ -224,6 +239,12 @@ export async function buildExportFiles(
 
   const watchlistRowsOut: (string | number | null)[][] = []
   for (const row of watchlistRows) {
+    // Falls back to "Default" rather than skipping the row outright on a
+    // lookup miss — shouldn't happen (watchlist_items.watchlist_id is a
+    // NOT NULL FK), but a blank list name would read as a data-loss bug in
+    // the exported file, where "Default" reads as the truth it almost
+    // certainly is.
+    const listName = watchlistNameById.get(row.watchlistId) ?? 'Default'
     if (row.entityType === 'movie') {
       const movie = movieById.get(row.entityId)
       if (!movie) continue
@@ -235,6 +256,7 @@ export async function buildExportFiles(
         '',
         row.listedAt.toISOString(),
         row.notes,
+        listName,
         ...providerIdColumns(movie.id),
       ])
     } else if (row.entityType === 'show') {
@@ -248,6 +270,7 @@ export async function buildExportFiles(
         '',
         row.listedAt.toISOString(),
         row.notes,
+        listName,
         ...providerIdColumns(show.id),
       ])
     } else {
@@ -262,6 +285,7 @@ export async function buildExportFiles(
         episode.episodeNumber,
         row.listedAt.toISOString(),
         row.notes,
+        listName,
         ...providerIdColumns(show.id),
       ])
     }
@@ -323,6 +347,7 @@ export async function buildExportFiles(
         'episode_number',
         'listed_at',
         'notes',
+        'list',
         ...providerIdHeaders,
       ],
       watchlistRowsOut,

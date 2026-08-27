@@ -10,6 +10,7 @@ const TABLES = [
   'plays',
   'ratings',
   'watchlist_items',
+  'watchlists',
   'dropped_shows',
   'import_jobs',
   'trakt_connections',

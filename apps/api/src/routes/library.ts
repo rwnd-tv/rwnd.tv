@@ -22,6 +22,7 @@ import {
   seasonDetailSchema,
   showDetailSchema,
   upNextResponseSchema,
+  watchlistMembershipStatusSchema,
 } from '@rwnd/shared'
 import type { Database } from '@rwnd/db'
 import {
@@ -33,6 +34,8 @@ import {
   ratings,
   seasons,
   shows,
+  watchlistItems,
+  watchlists,
 } from '@rwnd/db'
 import type { AppEnv } from '../types.js'
 import type { MetadataProvider } from '../providers/types.js'
@@ -55,6 +58,7 @@ import {
 } from '../metadata/refresh.js'
 import { orderedProviders } from '../providers/priority.js'
 import { isProviderSource } from '../lib/provider-source.js'
+import { getMyWatchlistIds, getOwnedWatchlist } from '../lib/watchlists.js'
 
 /**
  * Shared by the show- and season-level "Watched" button routes below.
@@ -509,6 +513,71 @@ async function getRecentlyWatchedCandidates(
 }
 
 /**
+ * Shows on any of the current user's watchlists, not dropped, with an id
+ * from some configured provider — the Up Next row's second candidate
+ * source below (getRecentlyWatchedCandidates above is the first), so a
+ * watchlisted show still tells you when its next episode airs even with no
+ * recent — or any — watch history. `maxWatchedSeason`/
+ * `maxWatchedEpisodeInMaxSeason` are always null here (unlike a
+ * recently-watched candidate, there's no "where the viewer got to" to
+ * start from), which makes the Up Next route's existing `?? 1` fallback
+ * scan from season 1 — findNextAiringEpisode already skips anything
+ * already aired/watched as it scans forward, so starting from season 1
+ * instead of a show's real last-watched season only costs a wider scan for
+ * an old, already-watched-through show that's just been (re-)watchlisted,
+ * never a wrong answer. Not restricted to the same
+ * `DASHBOARD_ROW_WINDOW_DAYS` recency window `getRecentlyWatchedCandidates`
+ * uses — a watchlisted show is an explicit, standing "I care about this",
+ * not something that should fall out of the row after 30 days.
+ */
+async function getWatchlistedShowCandidates(
+  db: Database,
+  userId: string,
+  providers: MetadataProvider[],
+): Promise<RecentlyWatchedCandidate[]> {
+  const rows = await db
+    .selectDistinct({
+      id: shows.id,
+      slug: shows.slug,
+      title: shows.title,
+      posterPath: shows.posterPath,
+      // Null when this user has no droppedShows row at all for this show —
+      // same join shape as getRecentlyWatchedCandidates above.
+      traktDropped: droppedShows.traktDropped,
+      manualDropped: droppedShows.manualDropped,
+    })
+    .from(watchlistItems)
+    .innerJoin(watchlists, eq(watchlistItems.watchlistId, watchlists.id))
+    .innerJoin(shows, eq(watchlistItems.entityId, shows.id))
+    .leftJoin(droppedShows, and(eq(droppedShows.showId, shows.id), eq(droppedShows.userId, userId)))
+    .where(and(eq(watchlists.userId, userId), eq(watchlistItems.entityType, 'show')))
+
+  const undropped = rows.filter((row) => !(row.manualDropped ?? row.traktDropped ?? false))
+  const targets = await pickRefreshTargets(
+    db,
+    'show',
+    undropped.map((row) => row.id),
+    providers,
+  )
+  return undropped.flatMap((row) => {
+    const target = targets.get(row.id)
+    if (!target) return []
+    return [
+      {
+        id: row.id,
+        slug: row.slug,
+        title: row.title,
+        posterPath: row.posterPath,
+        maxWatchedSeason: null,
+        maxWatchedEpisodeInMaxSeason: null,
+        provider: target.provider,
+        providerExternalId: target.externalId,
+      },
+    ]
+  })
+}
+
+/**
  * Backs the Dashboard's On Deck row (apps/web/src/routes/DashboardPage.tsx)
  * — one card per recently-watched, non-dropped show that hasn't finished,
  * each pointing at the next episode the viewer hasn't seen yet, sorted by
@@ -581,11 +650,16 @@ libraryRoutes.openapi(
 
 /**
  * Backs the Dashboard's Up Next row (apps/web/src/routes/DashboardPage.tsx)
- * — one card per recently-watched, non-dropped show's next *upcoming*
- * episode (not yet aired), independent of On Deck above: a show can be
- * behind on already-aired episodes (On Deck) and still have something
- * upcoming (Up Next) at the same time, by design (James, 2026-08-23) —
- * they answer different questions, so neither excludes the other.
+ * — one card per recently-watched or watchlisted, non-dropped show's next
+ * *upcoming* episode (not yet aired), independent of On Deck above: a show
+ * can be behind on already-aired episodes (On Deck) and still have
+ * something upcoming (Up Next) at the same time, by design (James,
+ * 2026-08-23) — they answer different questions, so neither excludes the
+ * other. Two candidate sources, deduped by show id — a show can be both
+ * recently watched and watchlisted at once, and shouldn't show up twice
+ * (James, 2026-08-27, when watchlisting was added): getRecentlyWatchedCandidates'
+ * real maxWatchedSeason wins when both apply, since it lets the scan below
+ * start further forward than getWatchlistedShowCandidates' always-null one.
  */
 libraryRoutes.openapi(
   createRoute({
@@ -605,7 +679,13 @@ libraryRoutes.openapi(
     const db = c.get('db')
     const providers = await orderedProviders(db, c.get('metadataProviders'))
 
-    const candidates = await getRecentlyWatchedCandidates(db, user.id, providers)
+    const recentlyWatched = await getRecentlyWatchedCandidates(db, user.id, providers)
+    const watchlisted = await getWatchlistedShowCandidates(db, user.id, providers)
+    const recentlyWatchedIds = new Set(recentlyWatched.map((candidate) => candidate.id))
+    const candidates = [
+      ...recentlyWatched,
+      ...watchlisted.filter((candidate) => !recentlyWatchedIds.has(candidate.id)),
+    ]
 
     const shownShows = []
     for (const candidate of candidates) {
@@ -733,6 +813,8 @@ libraryRoutes.openapi(
       )
       .limit(1)
 
+    const myWatchlistIds = await getMyWatchlistIds(db, userId, 'show', show.id)
+
     const seasonRows = await db
       .select()
       .from(seasons)
@@ -819,6 +901,7 @@ libraryRoutes.openapi(
         show.metadataSource && isProviderSource(show.metadataSource) ? show.metadataSource : null,
       metadataRefreshedAt: show.metadataRefreshedAt.toISOString(),
       myRating: ratingRow?.rating ?? null,
+      myWatchlistIds,
       dropped,
       droppedAt: dropped && droppedAt ? droppedAt.toISOString() : null,
       watchedEpisodes,
@@ -2013,6 +2096,105 @@ libraryRoutes.openapi(
 )
 
 /**
+ * Add a show to one of the current user's watchlists — the one-click
+ * Default-list toggle and the custom-lists dialog on ShowDetailPage.tsx
+ * both call this, just with a different `watchlistId` (see
+ * apps/web/src/lib/use-watchlist-actions.ts). PUT, not POST: re-sending the
+ * same (show, watchlist) pair is a no-op, not a second entry — upserts via
+ * `onConflictDoNothing` on watchlist_items_watchlist_entity_idx rather than
+ * `onConflictDoUpdate` like the rating routes above, since there's no field
+ * to update on a repeat add (`listedAt` deliberately keeps the original
+ * add time, not the most recent one).
+ */
+libraryRoutes.openapi(
+  createRoute({
+    method: 'put',
+    path: '/library/shows/{slug}/watchlists/{watchlistId}',
+    summary: "Add a show to one of the current user's watchlists",
+    middleware: [requireAuth] as const,
+    request: { params: z.object({ slug: z.string(), watchlistId: z.string().uuid() }) },
+    responses: {
+      200: {
+        description: 'Added to the watchlist',
+        content: { 'application/json': { schema: watchlistMembershipStatusSchema } },
+      },
+      404: { description: 'Show or watchlist not found' },
+    },
+  }),
+  async (c) => {
+    const { slug, watchlistId } = c.req.valid('param')
+    const userId = c.get('user')!.id
+    const db = c.get('db')
+
+    const [show] = await db
+      .select({ id: shows.id })
+      .from(shows)
+      .where(eq(shows.slug, slug))
+      .limit(1)
+    if (!show) return c.json({ error: 'Show not found' }, 404)
+
+    const list = await getOwnedWatchlist(db, userId, watchlistId)
+    if (!list) return c.json({ error: 'Watchlist not found' }, 404)
+
+    await db
+      .insert(watchlistItems)
+      .values({ userId, watchlistId, entityType: 'show', entityId: show.id, listedAt: new Date() })
+      .onConflictDoNothing({
+        target: [watchlistItems.watchlistId, watchlistItems.entityType, watchlistItems.entityId],
+      })
+
+    return c.json({ myWatchlistIds: await getMyWatchlistIds(db, userId, 'show', show.id) })
+  },
+)
+
+/** Remove a show from one of the current user's watchlists — a no-op
+ * (nothing to delete) if it wasn't on it, same convention as DELETE
+ * .../rating above. */
+libraryRoutes.openapi(
+  createRoute({
+    method: 'delete',
+    path: '/library/shows/{slug}/watchlists/{watchlistId}',
+    summary: "Remove a show from one of the current user's watchlists",
+    middleware: [requireAuth] as const,
+    request: { params: z.object({ slug: z.string(), watchlistId: z.string().uuid() }) },
+    responses: {
+      200: {
+        description: 'Removed from the watchlist',
+        content: { 'application/json': { schema: watchlistMembershipStatusSchema } },
+      },
+      404: { description: 'Show or watchlist not found' },
+    },
+  }),
+  async (c) => {
+    const { slug, watchlistId } = c.req.valid('param')
+    const userId = c.get('user')!.id
+    const db = c.get('db')
+
+    const [show] = await db
+      .select({ id: shows.id })
+      .from(shows)
+      .where(eq(shows.slug, slug))
+      .limit(1)
+    if (!show) return c.json({ error: 'Show not found' }, 404)
+
+    const list = await getOwnedWatchlist(db, userId, watchlistId)
+    if (!list) return c.json({ error: 'Watchlist not found' }, 404)
+
+    await db
+      .delete(watchlistItems)
+      .where(
+        and(
+          eq(watchlistItems.watchlistId, watchlistId),
+          eq(watchlistItems.entityType, 'show'),
+          eq(watchlistItems.entityId, show.id),
+        ),
+      )
+
+    return c.json({ myWatchlistIds: await getMyWatchlistIds(db, userId, 'show', show.id) })
+  },
+)
+
+/**
  * The show page's "Watched" button (apps/web/src/routes/ShowDetailPage.tsx)
  * — the show-level equivalent of marking one episode watched from the
  * season grid. Logs one new play for every non-special episode that isn't
@@ -2289,6 +2471,8 @@ libraryRoutes.openapi(
       )
       .limit(1)
 
+    const myWatchlistIds = await getMyWatchlistIds(db, userId, 'movie', movie.id)
+
     return c.json({
       id: movie.id,
       slug: movie.slug,
@@ -2307,6 +2491,7 @@ libraryRoutes.openapi(
           : null,
       metadataRefreshedAt: movie.metadataRefreshedAt.toISOString(),
       myRating: ratingRow?.rating ?? null,
+      myWatchlistIds,
       watched: (watchedRange?.watchedCount ?? 0) > 0,
       watchedCount: watchedRange?.watchedCount ?? 0,
       firstWatchedAt: watchedRange?.firstWatchedAt
@@ -2561,5 +2746,102 @@ libraryRoutes.openapi(
       )
 
     return c.json({ rating: null, ratedAt: null })
+  },
+)
+
+/** Add a movie to one of the current user's watchlists — movie counterpart
+ * of PUT /library/shows/{slug}/watchlists/{watchlistId} above. Same
+ * reasoning throughout. */
+libraryRoutes.openapi(
+  createRoute({
+    method: 'put',
+    path: '/library/movies/{slug}/watchlists/{watchlistId}',
+    summary: "Add a movie to one of the current user's watchlists",
+    middleware: [requireAuth] as const,
+    request: { params: z.object({ slug: z.string(), watchlistId: z.string().uuid() }) },
+    responses: {
+      200: {
+        description: 'Added to the watchlist',
+        content: { 'application/json': { schema: watchlistMembershipStatusSchema } },
+      },
+      404: { description: 'Movie or watchlist not found' },
+    },
+  }),
+  async (c) => {
+    const { slug, watchlistId } = c.req.valid('param')
+    const userId = c.get('user')!.id
+    const db = c.get('db')
+
+    const [movie] = await db
+      .select({ id: movies.id })
+      .from(movies)
+      .where(eq(movies.slug, slug))
+      .limit(1)
+    if (!movie) return c.json({ error: 'Movie not found' }, 404)
+
+    const list = await getOwnedWatchlist(db, userId, watchlistId)
+    if (!list) return c.json({ error: 'Watchlist not found' }, 404)
+
+    await db
+      .insert(watchlistItems)
+      .values({
+        userId,
+        watchlistId,
+        entityType: 'movie',
+        entityId: movie.id,
+        listedAt: new Date(),
+      })
+      .onConflictDoNothing({
+        target: [watchlistItems.watchlistId, watchlistItems.entityType, watchlistItems.entityId],
+      })
+
+    return c.json({ myWatchlistIds: await getMyWatchlistIds(db, userId, 'movie', movie.id) })
+  },
+)
+
+/** Remove a movie from one of the current user's watchlists — movie
+ * counterpart of DELETE /library/shows/{slug}/watchlists/{watchlistId}
+ * above. Same reasoning throughout. */
+libraryRoutes.openapi(
+  createRoute({
+    method: 'delete',
+    path: '/library/movies/{slug}/watchlists/{watchlistId}',
+    summary: "Remove a movie from one of the current user's watchlists",
+    middleware: [requireAuth] as const,
+    request: { params: z.object({ slug: z.string(), watchlistId: z.string().uuid() }) },
+    responses: {
+      200: {
+        description: 'Removed from the watchlist',
+        content: { 'application/json': { schema: watchlistMembershipStatusSchema } },
+      },
+      404: { description: 'Movie or watchlist not found' },
+    },
+  }),
+  async (c) => {
+    const { slug, watchlistId } = c.req.valid('param')
+    const userId = c.get('user')!.id
+    const db = c.get('db')
+
+    const [movie] = await db
+      .select({ id: movies.id })
+      .from(movies)
+      .where(eq(movies.slug, slug))
+      .limit(1)
+    if (!movie) return c.json({ error: 'Movie not found' }, 404)
+
+    const list = await getOwnedWatchlist(db, userId, watchlistId)
+    if (!list) return c.json({ error: 'Watchlist not found' }, 404)
+
+    await db
+      .delete(watchlistItems)
+      .where(
+        and(
+          eq(watchlistItems.watchlistId, watchlistId),
+          eq(watchlistItems.entityType, 'movie'),
+          eq(watchlistItems.entityId, movie.id),
+        ),
+      )
+
+    return c.json({ myWatchlistIds: await getMyWatchlistIds(db, userId, 'movie', movie.id) })
   },
 )

@@ -14,6 +14,7 @@ import { MetadataAttribution } from '../components/library/MetadataAttribution.j
 import { RatingPicker } from '../components/library/RatingPicker.js'
 import { UnwatchConfirmDialog } from '../components/library/UnwatchConfirmDialog.js'
 import { WatchDateDialog } from '../components/library/WatchDateDialog.js'
+import { WatchlistButton } from '../components/library/WatchlistButton.js'
 import { Button } from '../components/ui/Button.js'
 import { Dialog } from '../components/ui/Dialog.js'
 import { Spinner } from '../components/ui/Spinner.js'
@@ -333,6 +334,11 @@ export function MovieDetailPage() {
                 <PlusIcon />
               </Button>
             )}
+            <WatchlistButton
+              mediaType="movie"
+              slug={movie.slug}
+              myWatchlistIds={movie.myWatchlistIds}
+            />
             <Button
               variant="secondary"
               type="button"

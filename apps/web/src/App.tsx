@@ -17,6 +17,8 @@ import { SeasonDetailPage } from './routes/SeasonDetailPage.js'
 import { EpisodeDetailPage } from './routes/EpisodeDetailPage.js'
 import { MoviesPage } from './routes/MoviesPage.js'
 import { MovieDetailPage } from './routes/MovieDetailPage.js'
+import { WatchlistsPage } from './routes/WatchlistsPage.js'
+import { WatchlistDetailPage } from './routes/WatchlistDetailPage.js'
 import { ImportPage } from './routes/ImportPage.js'
 import { SettingsPage } from './routes/SettingsPage.js'
 import { AccountPage } from './routes/AccountPage.js'
@@ -60,6 +62,8 @@ const router = createBrowserRouter([
           },
           { path: '/movies', element: <MoviesPage />, handle: fullWidthHandle },
           { path: '/movies/:slug', element: <MovieDetailPage />, handle: fullWidthHandle },
+          { path: '/watchlists', element: <WatchlistsPage />, handle: fullWidthHandle },
+          { path: '/watchlists/:id', element: <WatchlistDetailPage />, handle: fullWidthHandle },
           { path: '/history', element: <HistoryPage />, handle: fullWidthHandle },
           { path: '/import', element: <ImportPage /> },
           { path: '/settings', element: <SettingsPage /> },

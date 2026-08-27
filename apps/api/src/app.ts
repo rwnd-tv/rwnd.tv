@@ -20,6 +20,7 @@ import { activityRoutes } from './routes/activity.js'
 import { settingsRoutes } from './routes/settings.js'
 import { importRoutes } from './routes/imports.js'
 import { libraryRoutes } from './routes/library.js'
+import { watchlistRoutes } from './routes/watchlists.js'
 import { accountRoutes } from './routes/account.js'
 import { backupRoutes } from './routes/backups.js'
 import { webhookRoutes } from './routes/webhooks.js'
@@ -71,6 +72,7 @@ export function createApp(services?: { db: Database; metadataProviders: Metadata
   v1.route('/', settingsRoutes)
   v1.route('/', importRoutes)
   v1.route('/', libraryRoutes)
+  v1.route('/', watchlistRoutes)
   v1.route('/', accountRoutes)
   v1.route('/', backupRoutes)
   v1.route('/', webhookRoutes)

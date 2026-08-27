@@ -15,6 +15,7 @@ import type { MetadataProvider } from '../providers/types.js'
 import { orderedProviders } from '../providers/priority.js'
 import { decryptSecret, encryptSecret } from '../lib/crypto.js'
 import { hasCrossSourceDuplicate } from '../lib/plays.js'
+import { ensureDefaultWatchlist } from '../lib/watchlists.js'
 import { TraktClient, type PagedResult } from '../trakt/client.js'
 import { refreshAccessToken } from '../trakt/auth.js'
 import type {
@@ -171,6 +172,13 @@ async function runImportJob(
   // own sweep (apps/api/src/metadata/refresh.ts).
   const providers = await orderedProviders(db, metadataProviders)
 
+  // Every watchlist entry Trakt import writes lands on this list — named,
+  // user-created lists are a UI-only concept (see docs/TODO.md's "Import
+  // Trakt's custom lists" non-goal). Cheap to resolve even when this job's
+  // watchlist phase is disabled: almost always already exists from
+  // registration, in which case this is one SELECT.
+  const defaultWatchlistId = await ensureDefaultWatchlist(db, userId)
+
   const enabledPhases = PHASES.filter(
     (phase) =>
       (phase === 'history' && job.includeHistory) ||
@@ -302,11 +310,20 @@ async function runImportJob(
     }
     const listedAt = new Date(item.listed_at)
     // See processRatingItem's own comment on setWhere — same reasoning.
+    // Target is the (watchlistId, entityType, entityId) index now, not
+    // (userId, entityType, entityId) — see watchlist_items' doc comment in
+    // packages/db/src/schema.ts for why (a title can sit on several lists).
     const written = await db
       .insert(watchlistItems)
-      .values({ userId, entityType: match.entityType, entityId: match.entityId, listedAt })
+      .values({
+        userId,
+        watchlistId: defaultWatchlistId,
+        entityType: match.entityType,
+        entityId: match.entityId,
+        listedAt,
+      })
       .onConflictDoUpdate({
-        target: [watchlistItems.userId, watchlistItems.entityType, watchlistItems.entityId],
+        target: [watchlistItems.watchlistId, watchlistItems.entityType, watchlistItems.entityId],
         set: { listedAt },
         setWhere: ne(watchlistItems.listedAt, listedAt),
       })

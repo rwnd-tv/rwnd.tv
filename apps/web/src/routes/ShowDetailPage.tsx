@@ -16,6 +16,7 @@ import { ProgressBar } from '../components/library/ProgressBar.js'
 import { RatingPicker } from '../components/library/RatingPicker.js'
 import { SpoilerGuard } from '../components/library/SpoilerGuard.js'
 import { WatchDateDialog } from '../components/library/WatchDateDialog.js'
+import { WatchlistButton } from '../components/library/WatchlistButton.js'
 import { Button } from '../components/ui/Button.js'
 import { Dialog } from '../components/ui/Dialog.js'
 import { Spinner } from '../components/ui/Spinner.js'
@@ -459,6 +460,11 @@ export function ShowDetailPage() {
             >
               {t(show.dropped ? 'showDetail.undrop' : 'showDetail.drop')}
             </Button>
+            <WatchlistButton
+              mediaType="show"
+              slug={show.slug}
+              myWatchlistIds={show.myWatchlistIds}
+            />
             <Button
               variant="secondary"
               type="button"

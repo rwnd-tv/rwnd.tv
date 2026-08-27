@@ -1,5 +1,6 @@
 import { relations, sql } from 'drizzle-orm'
 import {
+  type AnyPgColumn,
   boolean,
   check,
   customType,
@@ -652,14 +653,67 @@ export const ratings = pgTable(
   ],
 )
 
-/** Polymorphic like `ratings` above. */
-export const watchlistItems = pgTable(
-  'watchlist_items',
+/**
+ * A named list a user keeps titles on — "Watchlist" (2026-08-27) widened
+ * `watchlist_items` below from a single flat per-user list into any number
+ * of named ones. Every user always has exactly one list with
+ * `isDefault: true` (`ensureDefaultWatchlist`, apps/api/src/lib/watchlists.ts),
+ * created at registration and never renameable/deletable — it's what the
+ * one-click watchlist toggle on a show/movie page writes to. Custom lists
+ * are freely created/renamed/deleted by the user, added via a secondary
+ * "manage lists" dialog rather than the one-click toggle (James, 2026-08-27:
+ * wanted single-click for the common case, more UI is fine for the rest).
+ */
+export const watchlists = pgTable(
+  'watchlists',
   {
     id: uuid('id').primaryKey().defaultRandom(),
     userId: uuid('user_id')
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    isDefault: boolean('is_default').notNull().default(false),
+    // The pinned cover item, if the user chose one — null means "fall back
+    // to the most recently added item", resolved at read time rather than
+    // stored, so removing or un-pinning the cover item can't leave a list
+    // with no art. ON DELETE SET NULL for the same reason: removing the
+    // pinned item from the list falls back automatically instead of
+    // dangling or cascading the whole list away.
+    coverItemId: uuid('cover_item_id').references((): AnyPgColumn => watchlistItems.id, {
+      onDelete: 'set null',
+    }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    // Names are unique per user, not globally (James, 2026-08-27) — two
+    // users can each have a list called "Cool Sci-fi Stuff!". If sharing
+    // lists ever happens, disambiguate in the UI via the owner's username
+    // rather than constraining the data.
+    uniqueIndex('watchlists_user_name_idx').on(table.userId, table.name),
+    // Partial unique index: at most one row per user can have
+    // isDefault = true, so a bug can't silently create a second Default.
+    uniqueIndex('watchlists_user_default_idx')
+      .on(table.userId)
+      .where(sql`${table.isDefault}`),
+  ],
+)
+
+/** Polymorphic like `ratings` above. */
+export const watchlistItems = pgTable(
+  'watchlist_items',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    // Denormalised alongside watchlistId (always written together) rather
+    // than dropped in favour of a join — every existing per-user scoped
+    // query (activity feed, backup, export, clear-data, data-counts)
+    // filters on userId directly, and every one of those would need a new
+    // join to `watchlists` for no gain if this were removed.
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    watchlistId: uuid('watchlist_id')
+      .notNull()
+      .references(() => watchlists.id, { onDelete: 'cascade' }),
     entityType: metadataEntityTypeEnum('entity_type').notNull(),
     entityId: uuid('entity_id').notNull(),
     listedAt: timestamp('listed_at', { withTimezone: true }).notNull(),
@@ -667,8 +721,11 @@ export const watchlistItems = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
-    uniqueIndex('watchlist_items_user_entity_idx').on(
-      table.userId,
+    // Was (userId, entityType, entityId) before named lists — widening it
+    // to key on watchlistId instead of userId is what lets the same title
+    // sit on several of a user's lists at once, one row each.
+    uniqueIndex('watchlist_items_watchlist_entity_idx').on(
+      table.watchlistId,
       table.entityType,
       table.entityId,
     ),
@@ -750,7 +807,7 @@ export const usersRelations = relations(users, ({ many, one }) => ({
   }),
   importJobs: many(importJobs),
   ratings: many(ratings),
-  watchlistItems: many(watchlistItems),
+  watchlists: many(watchlists),
   droppedShows: many(droppedShows),
 }))
 
@@ -766,8 +823,21 @@ export const ratingsRelations = relations(ratings, ({ one }) => ({
   user: one(users, { fields: [ratings.userId], references: [users.id] }),
 }))
 
+export const watchlistsRelations = relations(watchlists, ({ one, many }) => ({
+  user: one(users, { fields: [watchlists.userId], references: [users.id] }),
+  items: many(watchlistItems),
+  coverItem: one(watchlistItems, {
+    fields: [watchlists.coverItemId],
+    references: [watchlistItems.id],
+  }),
+}))
+
 export const watchlistItemsRelations = relations(watchlistItems, ({ one }) => ({
   user: one(users, { fields: [watchlistItems.userId], references: [users.id] }),
+  watchlist: one(watchlists, {
+    fields: [watchlistItems.watchlistId],
+    references: [watchlists.id],
+  }),
 }))
 
 export const droppedShowsRelations = relations(droppedShows, ({ one }) => ({

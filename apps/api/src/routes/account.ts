@@ -1,11 +1,12 @@
 import { OpenAPIHono, createRoute } from '@hono/zod-openapi'
-import { eq, sql } from 'drizzle-orm'
+import { and, eq, sql } from 'drizzle-orm'
 import { strToU8, zipSync } from 'fflate'
 import { accountDataCountsSchema, clearDataRequestSchema } from '@rwnd/shared'
-import { droppedShows, plays, ratings, watchlistItems } from '@rwnd/db'
+import { droppedShows, plays, ratings, watchlistItems, watchlists } from '@rwnd/db'
 import type { AppEnv } from '../types.js'
 import { requireAuth } from '../middleware/auth.js'
 import { buildExportFiles } from '../export/build.js'
+import { ensureDefaultWatchlist } from '../lib/watchlists.js'
 
 export const accountRoutes = new OpenAPIHono<AppEnv>()
 
@@ -77,7 +78,17 @@ accountRoutes.openapi(
     await db.transaction(async (tx) => {
       if (body.watchHistory) await tx.delete(plays).where(eq(plays.userId, userId))
       if (body.ratings) await tx.delete(ratings).where(eq(ratings.userId, userId))
-      if (body.watchlist) await tx.delete(watchlistItems).where(eq(watchlistItems.userId, userId))
+      if (body.watchlist) {
+        // Deletes every custom list too (James, 2026-08-27), not just their
+        // items — ON DELETE CASCADE takes the items with it. The Default
+        // list itself is never deleted (see watchlists' doc comment,
+        // packages/db/src/schema.ts), only emptied.
+        await tx
+          .delete(watchlists)
+          .where(and(eq(watchlists.userId, userId), eq(watchlists.isDefault, false)))
+        const defaultWatchlistId = await ensureDefaultWatchlist(tx, userId)
+        await tx.delete(watchlistItems).where(eq(watchlistItems.watchlistId, defaultWatchlistId))
+      }
       if (body.droppedShows) await tx.delete(droppedShows).where(eq(droppedShows.userId, userId))
     })
 

@@ -14,6 +14,7 @@ import {
 import type {
   ListLibraryMoviesResponse,
   ListLibraryShowsResponse,
+  ListWatchlistsResponse,
   MarkShowWatchedResponse,
   MovieDetail,
   OnDeckResponse,
@@ -21,6 +22,7 @@ import type {
   RemoveShowWatchesResponse,
   SeasonDetail,
   ShowDetail,
+  UpNextResponse,
   User,
   WatchedStatus,
   Watches,
@@ -698,6 +700,109 @@ describe('library', () => {
       const body = await json<OnDeckResponse>(res)
       expect(body.shows).toHaveLength(1)
       expect(body.shows[0]).toMatchObject({ slug: 'gap-show', seasonNumber: 1, episodeNumber: 3 })
+    })
+  })
+
+  describe('GET /library/up-next', () => {
+    function jsonResponse(body: unknown): Response {
+      return new Response(JSON.stringify(body), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    }
+
+    /** One season, one episode dated far in the future — "upcoming". */
+    function stubTmdbUpcomingSeason() {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (input: string | URL) => {
+          const url = new URL(input)
+          if (url.pathname === '/3/tv/61001/season/1') {
+            return jsonResponse({
+              episodes: [
+                { name: 'Ep 1', season_number: 1, episode_number: 1, air_date: '2099-01-01' },
+              ],
+            })
+          }
+          throw new Error(`Unexpected TMDB fetch in test: ${url}`)
+        }),
+      )
+    }
+
+    async function insertUpcomingShow(slug: string, title: string) {
+      const [show] = await db.insert(shows).values({ title, slug }).returning()
+      if (!show) throw new Error('failed to insert show')
+      await db
+        .insert(externalIds)
+        .values({ entityType: 'show', entityId: show.id, source: 'tmdb', externalId: '61001' })
+      await db.insert(seasons).values({ showId: show.id, seasonNumber: 1, episodeCount: 1 })
+      return show
+    }
+
+    async function addToDefaultWatchlist(cookie: string, slug: string) {
+      const listsRes = await app.request('/api/v1/watchlists', { headers: { cookie } })
+      const defaultId = (await json<ListWatchlistsResponse>(listsRes)).watchlists[0]!.id
+      const res = await app.request(`/api/v1/library/shows/${slug}/watchlists/${defaultId}`, {
+        method: 'PUT',
+        headers: { cookie },
+      })
+      expect(res.status).toBe(200)
+    }
+
+    it('surfaces a watchlisted show with no watch history at all — regression for the Slow Horses gap (2026-08-27)', async () => {
+      const cookie = await createUserAndCookie()
+      await insertUpcomingShow('slow-horses', 'Slow Horses')
+      stubTmdbUpcomingSeason()
+
+      await addToDefaultWatchlist(cookie, 'slow-horses')
+
+      const res = await app.request('/api/v1/library/up-next', { headers: { cookie } })
+      expect(res.status).toBe(200)
+      const body = await json<UpNextResponse>(res)
+      expect(body.shows).toHaveLength(1)
+      expect(body.shows[0]).toMatchObject({
+        slug: 'slow-horses',
+        seasonNumber: 1,
+        episodeNumber: 1,
+      })
+    })
+
+    it('does not show a watchlisted-and-recently-watched show twice', async () => {
+      const cookie = await createUserAndCookie()
+      const userId = await meId(cookie)
+      const show = await insertUpcomingShow('slow-horses', 'Slow Horses')
+      stubTmdbUpcomingSeason()
+
+      await addToDefaultWatchlist(cookie, 'slow-horses')
+      // A watch on some other, unrelated episode of the same show — just
+      // enough to make it a "recently watched" candidate too, from
+      // getRecentlyWatchedCandidates rather than getWatchlistedShowCandidates.
+      const [ep] = await db
+        .insert(episodes)
+        .values({ showId: show.id, seasonNumber: 0, episodeNumber: 1 })
+        .returning()
+      await db.insert(plays).values({ userId, episodeId: ep!.id, watchedAt: new Date() })
+
+      const res = await app.request('/api/v1/library/up-next', { headers: { cookie } })
+      const body = await json<UpNextResponse>(res)
+      expect(body.shows).toHaveLength(1)
+    })
+
+    it('excludes a watchlisted show that has also been dropped', async () => {
+      const cookie = await createUserAndCookie()
+      await insertUpcomingShow('slow-horses', 'Slow Horses')
+      stubTmdbUpcomingSeason()
+
+      await addToDefaultWatchlist(cookie, 'slow-horses')
+      const dropRes = await app.request('/api/v1/library/shows/slow-horses/dropped', {
+        method: 'POST',
+        headers: { cookie },
+      })
+      expect(dropRes.status).toBe(200)
+
+      const res = await app.request('/api/v1/library/up-next', { headers: { cookie } })
+      const body = await json<UpNextResponse>(res)
+      expect(body.shows).toHaveLength(0)
     })
   })
 

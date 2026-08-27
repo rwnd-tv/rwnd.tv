@@ -27,6 +27,7 @@ import {
 import { setSessionCookie, clearSessionCookie } from '../lib/cookies.js'
 import { serializeUser } from '../lib/serialize.js'
 import { hashSecret } from '../lib/tokens.js'
+import { ensureDefaultWatchlist } from '../lib/watchlists.js'
 import {
   createPasswordResetToken,
   redeemPasswordResetToken,
@@ -182,6 +183,7 @@ authRoutes.openapi(
     if (!user) throw new Error('Failed to create user')
 
     await db.insert(userCredentials).values({ userId: user.id, type: 'local', passwordHash })
+    await ensureDefaultWatchlist(db, user.id)
 
     if (usedInvite) {
       await db.update(invites).set({ usedBy: user.id }).where(eq(invites.id, usedInvite.id))

@@ -39,6 +39,12 @@ export const activityEntrySchema = z.object({
   rating: z.number().int().min(1).max(10).optional(),
   /** `watchlist` only — only ever populated by the CSV importer today. */
   notes: z.string().nullable().optional(),
+  /** `watchlist` only — which of the user's watchlists this add landed on
+   * (e.g. "Default", "Cool Sci-fi Stuff!"). Named lists shipped after
+   * `watchlist_items` did (packages/db/src/schema.ts's `watchlists` doc
+   * comment), so every pre-existing entry now names "Default" — nothing
+   * here is retroactively ambiguous, the list itself is just always known. */
+  listName: z.string().optional(),
 })
 export type ActivityEntry = z.infer<typeof activityEntrySchema>
 

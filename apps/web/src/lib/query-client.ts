@@ -28,12 +28,16 @@ export const queryClient = new QueryClient({
  * should show, so every call site that mutates one should invalidate
  * through here rather than a single query key by itself — easy to miss
  * otherwise, since the gallery/activity pages didn't exist when some call
- * sites were first written.
+ * sites were first written. `['watchlists']` covers both the Watchlists
+ * index (item counts, cover art) and any open watchlist detail page — added
+ * once watchlist membership became a real mutation, not just an import-only
+ * value with nothing in the UI to refresh.
  */
 export function invalidateWatchData(queryClient: QueryClient): Promise<void> {
   return Promise.all([
     queryClient.invalidateQueries({ queryKey: ['plays'] }),
     queryClient.invalidateQueries({ queryKey: ['activity'] }),
     queryClient.invalidateQueries({ queryKey: ['library'] }),
+    queryClient.invalidateQueries({ queryKey: ['watchlists'] }),
   ]).then(() => undefined)
 }

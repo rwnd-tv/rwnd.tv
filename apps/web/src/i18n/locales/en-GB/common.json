@@ -10,6 +10,7 @@
     "dashboard": "Dashboard",
     "shows": "TV Shows",
     "movies": "Films",
+    "watchlists": "Watchlists",
     "history": "History",
     "import": "Import",
     "settings": "Settings",
@@ -124,6 +125,16 @@
         "meaning": "Among the best you'll see. Drop everything and watch it."
       }
     }
+  },
+  "watchlist": {
+    "button": "Watchlist",
+    "addTooltip": "Add to your Default watchlist",
+    "removeTooltip": "Remove from your Default watchlist",
+    "manageTooltip": "Manage which watchlists this is on",
+    "dialogTitle": "Watchlists",
+    "newListLabel": "New watchlist name",
+    "newListPlaceholder": "New list…",
+    "newListButton": "Add"
   },
   "search": {
     "title": "Search",
@@ -331,6 +342,30 @@
     "refreshMetadataTooltip": "Refresh this film's title, poster, and other details from TMDB — use this if something looks wrong or out of date",
     "refreshMetadataDisabled": "This film has no TMDB match, so there's nothing to refresh",
     "refreshMetadataDone": "Refreshed."
+  },
+  "watchlists": {
+    "title": "Watchlists",
+    "newList": "New watchlist",
+    "newListNameLabel": "Name",
+    "newListCreate": "Create",
+    "itemCount_one": "{{count}} title",
+    "itemCount_other": "{{count}} titles",
+    "notFound": "This watchlist couldn't be found.",
+    "detailEmpty": "Nothing on this watchlist yet.",
+    "filterLabel": "Filter this watchlist",
+    "filterPlaceholder": "Filter by title…",
+    "sortLabel": "Sort by",
+    "sortAddedDesc": "Added (Newest First)",
+    "sortAddedAsc": "Added (Oldest First)",
+    "sortTitleAsc": "Title (A - Z)",
+    "sortTitleDesc": "Title (Z - A)",
+    "noMatches": "No titles match \"{{query}}\".",
+    "rename": "Rename",
+    "delete": "Delete",
+    "deleteConfirmBody": "Are you sure you want to delete \"{{name}}\"? The titles themselves aren't affected, only this list.",
+    "setCover": "Set as this watchlist's cover",
+    "unsetCover": "Unset as this watchlist's cover",
+    "removeItem": "Remove from this watchlist"
   },
   "history": {
     "title": "History",

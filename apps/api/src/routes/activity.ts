@@ -10,7 +10,16 @@ import {
   removeActivityRequestSchema,
 } from '@rwnd/shared'
 import type { Database } from '@rwnd/db'
-import { droppedShows, episodes, movies, plays, ratings, shows, watchlistItems } from '@rwnd/db'
+import {
+  droppedShows,
+  episodes,
+  movies,
+  plays,
+  ratings,
+  shows,
+  watchlistItems,
+  watchlists,
+} from '@rwnd/db'
 import type { AppEnv } from '../types.js'
 import { requireAuth } from '../middleware/auth.js'
 import { episodeDisplayTitle } from '../lib/media.js'
@@ -67,6 +76,7 @@ function watchBranch(db: Database, userId: string) {
       source: sql<string | null>`${plays.source}::text`.as('source'),
       rating: sql<number | null>`null::smallint`.as('rating'),
       notes: sql<string | null>`null::text`.as('notes'),
+      listName: sql<string | null>`null::text`.as('list_name'),
     })
     .from(plays)
     .leftJoin(movies, eq(plays.movieId, movies.id))
@@ -98,6 +108,7 @@ function ratingBranch(db: Database, userId: string) {
       source: sql<string | null>`null::text`.as('source'),
       rating: sql<number | null>`${ratings.rating}`.as('rating'),
       notes: sql<string | null>`null::text`.as('notes'),
+      listName: sql<string | null>`null::text`.as('list_name'),
     })
     .from(ratings)
     .leftJoin(movies, and(eq(ratings.entityType, 'movie'), eq(ratings.entityId, movies.id)))
@@ -134,8 +145,10 @@ function watchlistBranch(db: Database, userId: string) {
       source: sql<string | null>`null::text`.as('source'),
       rating: sql<number | null>`null::smallint`.as('rating'),
       notes: sql<string | null>`${watchlistItems.notes}`.as('notes'),
+      listName: sql<string | null>`${watchlists.name}`.as('list_name'),
     })
     .from(watchlistItems)
+    .innerJoin(watchlists, eq(watchlistItems.watchlistId, watchlists.id))
     .leftJoin(
       movies,
       and(eq(watchlistItems.entityType, 'movie'), eq(watchlistItems.entityId, movies.id)),
@@ -179,6 +192,7 @@ function droppedBranch(db: Database, userId: string) {
       source: sql<string | null>`null::text`.as('source'),
       rating: sql<number | null>`null::smallint`.as('rating'),
       notes: sql<string | null>`null::text`.as('notes'),
+      listName: sql<string | null>`null::text`.as('list_name'),
     })
     .from(droppedShows)
     .innerJoin(shows, eq(droppedShows.showId, shows.id))
@@ -316,6 +330,7 @@ activityRoutes.openapi(
         row.kind === 'watch' ? ((row.source ?? undefined) as ActivityEntry['source']) : undefined,
       rating: row.kind === 'rating' ? (row.rating ?? undefined) : undefined,
       notes: row.kind === 'watchlist' ? row.notes : undefined,
+      listName: row.kind === 'watchlist' ? (row.listName ?? undefined) : undefined,
     }))
 
     return c.json({ entries, total, hasMore: offset + entries.length < total })

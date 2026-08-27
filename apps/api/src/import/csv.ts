@@ -1,4 +1,4 @@
-import { eq, ne, or, sql } from 'drizzle-orm'
+import { and, eq, ne, or, sql } from 'drizzle-orm'
 import type { Database } from '@rwnd/db'
 import {
   droppedShows,
@@ -7,12 +7,14 @@ import {
   ratings,
   users,
   watchlistItems,
+  watchlists,
   type importJobStatusEnum,
 } from '@rwnd/db'
 import { UNKNOWN_WATCHED_AT } from '@rwnd/shared'
 import type { MetadataProvider } from '../providers/types.js'
 import { orderedProviders } from '../providers/priority.js'
 import type { ExternalIdBundle } from '../lib/external-match.js'
+import { ensureDefaultWatchlist } from '../lib/watchlists.js'
 import {
   createCsvImportCaches,
   matchCsvEpisode,
@@ -116,6 +118,40 @@ export async function runCsvImport(
 
   const providers = await orderedProviders(db, metadataProviders)
   const caches: CsvImportCaches = createCsvImportCaches()
+
+  // Cache of list name -> id for this job, so a CSV with hundreds of
+  // watchlist rows on the same custom list doesn't re-query per row.
+  // Get-or-create rather than a strict lookup: watchlist.csv's `list`
+  // column is new (older exports/imports predate it entirely, hence it's
+  // optional in REQUIRED_HEADERS — csv-zip-parse.ts), so a round-tripped
+  // custom list needs to spring back into existence on import, the same
+  // way the show/movie rows themselves do on an external-id miss. No
+  // race-safety concerns beyond what `watchlists_user_name_idx` already
+  // guarantees — one job, one user, rows processed sequentially.
+  const watchlistIdByName = new Map<string, string>()
+  async function resolveWatchlistId(name: string): Promise<string> {
+    const trimmed = name.trim()
+    if (!trimmed) return ensureDefaultWatchlist(db, userId)
+    const cached = watchlistIdByName.get(trimmed)
+    if (cached) return cached
+
+    const [existing] = await db
+      .select({ id: watchlists.id })
+      .from(watchlists)
+      .where(and(eq(watchlists.userId, userId), eq(watchlists.name, trimmed)))
+      .limit(1)
+    const id =
+      existing?.id ??
+      (
+        await db
+          .insert(watchlists)
+          .values({ userId, name: trimmed })
+          .returning({ id: watchlists.id })
+      )[0]?.id
+    if (!id) throw new Error(`Failed to resolve watchlist "${trimmed}"`)
+    watchlistIdByName.set(trimmed, id)
+    return id
+  }
 
   const enabledPhases = PHASES.filter(
     (phase) =>
@@ -351,18 +387,32 @@ export async function runCsvImport(
       return 'skipped'
     }
     const notes = field(row, 'notes') || null
+    // Absent on any export from before named lists shipped — falls back to
+    // Default via resolveWatchlistId's own empty-string handling, same as
+    // an export that has the column but left this particular row blank.
+    const watchlistId = await resolveWatchlistId(field(row, 'list'))
     // Unlike trakt.ts's own watchlist upsert (which never writes notes at
     // all), this one does — the CSV export carries real note data, so a
     // round-trip import should preserve it. `notes` is nullable, so the
     // change-detection uses IS DISTINCT FROM rather than drizzle's `ne()`
     // (which has ordinary SQL NULL semantics — `NULL != 'x'` is NULL, not
     // true, so a plain `ne` would silently never fire the update the first
-    // time a null note becomes a real one).
+    // time a null note becomes a real one). Target is
+    // (watchlistId, entityType, entityId) now, not (userId, entityType,
+    // entityId) — see watchlist_items' doc comment in
+    // packages/db/src/schema.ts.
     const written = await db
       .insert(watchlistItems)
-      .values({ userId, entityType: match.entityType, entityId: match.entityId, listedAt, notes })
+      .values({
+        userId,
+        watchlistId,
+        entityType: match.entityType,
+        entityId: match.entityId,
+        listedAt,
+        notes,
+      })
       .onConflictDoUpdate({
-        target: [watchlistItems.userId, watchlistItems.entityType, watchlistItems.entityId],
+        target: [watchlistItems.watchlistId, watchlistItems.entityType, watchlistItems.entityId],
         set: { listedAt, notes },
         setWhere: sql`${watchlistItems.listedAt} IS DISTINCT FROM ${listedAt.toISOString()}::timestamptz OR ${watchlistItems.notes} IS DISTINCT FROM ${notes}`,
       })

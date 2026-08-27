@@ -193,6 +193,12 @@ export const showDetailSchema = z.object({
   metadataRefreshedAt: z.string().datetime(),
   /** See libraryShowSchema's `myRating` for what this means. */
   myRating: z.number().int().min(1).max(10).nullable(),
+  /** Every one of the current user's watchlists this show is currently on
+   * (see packages/db/src/schema.ts's `watchlists` doc comment) — empty when
+   * it's on none. Drives ShowDetailPage.tsx's one-click Default toggle (its
+   * `onDefault` state is just `myWatchlistIds.includes(defaultWatchlistId)`)
+   * and the custom-lists dialog's checkbox state, without a second request. */
+  myWatchlistIds: z.array(z.string().uuid()),
   /** See libraryShowSchema's `dropped` for what this means. */
   dropped: z.boolean(),
   /** When the show was dropped — from Trakt's `hidden_at` if imported, or
@@ -540,6 +546,8 @@ export const movieDetailSchema = z.object({
   voteAverage: z.number().nullable(),
   /** See libraryShowSchema's `myRating` for what this means. */
   myRating: z.number().int().min(1).max(10).nullable(),
+  /** See showDetailSchema's field of the same name. */
+  myWatchlistIds: z.array(z.string().uuid()),
   /** TMDB's own numeric id for this movie, for linking to its TMDB page —
    * see showDetailSchema's `tmdbId` for the same convention. */
   tmdbId: z.string().nullable(),

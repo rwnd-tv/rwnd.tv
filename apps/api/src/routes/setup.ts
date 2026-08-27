@@ -9,6 +9,7 @@ import { createSession } from '../lib/session.js'
 import { setSessionCookie } from '../lib/cookies.js'
 import { serializeUser } from '../lib/serialize.js'
 import { isEmailConfigured } from '../lib/email.js'
+import { ensureDefaultWatchlist } from '../lib/watchlists.js'
 
 export const setupRoutes = new OpenAPIHono<AppEnv>()
 
@@ -90,6 +91,7 @@ setupRoutes.openapi(
     if (!user) throw new Error('Failed to create admin user')
 
     await db.insert(userCredentials).values({ userId: user.id, type: 'local', passwordHash })
+    await ensureDefaultWatchlist(db, user.id)
 
     const env = loadEnv()
     const { token, expiresAt } = await createSession(db, user.id, {

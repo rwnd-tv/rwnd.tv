@@ -1258,6 +1258,42 @@ currently-dropped shows, since a row can have both
       another page (History) lands on the Dashboard, header layout
       otherwise unchanged.
 
+- [x] **Build a real landing page for logged-out visitors** (2026-08-23 14:40 added, done 2026-08-28) — M3\
+      Done: new `LandingPage.tsx` route at `/`, ahead of
+      `ProtectedRoute` — signed-in visitors and instances still needing
+      setup redirect through unchanged (`/dashboard`, `/setup`). Hero, a
+      milestone status strip, feature highlights, a self-host
+      quick-start block, a screenshot gallery, the M1/M2/M3 roadmap
+      section, an FAQ and a footer with GitHub/docs/ADR/LICENSE links.
+      Sign-in/create-account CTAs gate on `canRegister` (same
+      `registrationMode`/`emailConfigured` check as `LoginPage`'s
+      register prompt) — the FAQ's "do I have to self-host it?" answer
+      now does too (`aOpen`/`aClosed` variants), after catching that it
+      unconditionally claimed the public instance was open for sign-ups
+      regardless of actual registration state.\
+      Screenshots are locale- _and_ theme-aware — `Shot` picks
+      `{name}-{locale}-{theme}.webp` from `i18n.language` (same
+      `detectedLocale` pattern as `RegisterPage`/`SetupPage`) and CSS
+      media-query selectors, since a signed-out visitor has no stored
+      theme preference. 24 screenshots (6 pages × en-GB/en-US ×
+      dark/light) resized to 1600px and converted PNG→WebP (~93%
+      smaller, 51MB→3.4MB) — reviewed for redaction leaks and
+      locale/theme consistency before wiring in.\
+      Fact-checked every copy claim and link against the real repo and
+      running instances before shipping: fixed a stale "seven sort
+      orders" figure (actual is twelve — six fields × asc/desc), an
+      overstated "a TMDB API key" requirement (`.env.example` actually
+      needs TMDB _or_ TheTVDB), and a season-page alt text claiming a
+      per-episode star rating that wasn't visible in that capture. All
+      GitHub/raw.githubusercontent.com links verified live.\
+      Verified signed-out on both dev.rwnd.tv and the real rwnd.tv:
+      correct registration-state branching on each (dev open, prod
+      closed), no console errors, `pnpm lint`/`typecheck`/
+      `format:check`/`build` clean throughout. Both instances promoted
+      to the shipping commit (dev rebuilt from source, prod pinned to
+      the new GHCR digest, revision label verified against the commit
+      SHA before promoting).
+
 ## Localization
 
 - [x] **Drop fr-FR** (2026-08-23 done)\

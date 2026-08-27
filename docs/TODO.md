@@ -31,18 +31,6 @@ Format:
       leading-article rules are a bigger job than this feature needed; left
       as a known simplification.
 
-## Landing page & branding
-
-- [ ] **Build a real landing page for logged-out visitors** (2026-08-23 14:40 added) — M3\
-      `LoginPage.tsx` today is just a bare login card — no explanation of
-      what rwnd.tv is, no artwork, no link to the GitHub repo, and the
-      create-account option only shows up depending on
-      `registrationMode`. Wants: an explainer of what the project is/does,
-      some real visual identity (see `docs/brand/` for the existing logo
-      work), a link to the GitHub repo, the create-account option when
-      registration is open, and the log-in option — one inviting page
-      instead of a bare form.
-
 ## Documentation
 
 - [ ] **Refresh the GitHub-facing docs** (2026-08-23 14:40 added) — M3\

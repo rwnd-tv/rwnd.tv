@@ -41,7 +41,7 @@ genuinely production-ready.
 - [x] **Ratings**: a 5-star picker for shows, movies and episodes, independent of watched status
 - [ ] Proactive per-episode data resolution, not just as a side effect of specific actions (see TODO.md)
 - [ ] Fix known metadata accuracy bugs affecting real usage — `airedEpisodeCount` for a currently-airing season (see TODO.md)
-- [ ] A real landing page for logged-out visitors (see TODO.md)
+- [x] **Landing page**: a real explainer page for logged-out visitors at `/` — hero, features, self-host quick start, screenshot gallery, milestone status and FAQ, with sign-in/create-account and the FAQ's public-instance answer both gated on the instance's actual registration state (see TODO_ARCHIVE.md)
 - [ ] Refresh the GitHub-facing docs to reflect where the project actually is (see TODO.md)
 - [ ] Self-hosting readiness pass — confirm `docker-compose.yml`/`.env.example`/self-hosting.md actually work end to end for a real self-hoster (see TODO.md)
 - [ ] Full security review (see TODO.md)

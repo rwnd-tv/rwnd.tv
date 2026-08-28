@@ -1,11 +1,10 @@
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import type { LibraryShow } from '@rwnd/shared'
 import { api } from '../lib/api-client.js'
 import { useAuth } from '../lib/use-auth.js'
 import {
-  collectGenres,
   collectStatuses,
   DROPPED_FILTER_MODES,
   filterByDropped,
@@ -20,23 +19,17 @@ import {
   lastWatchedComparatorDesc,
   myRatingComparatorAsc,
   myRatingComparatorDesc,
-  myRatingRange,
   ratingComparatorAsc,
   ratingComparatorDesc,
-  ratingRange,
   titleComparatorAsc,
   titleComparatorDesc,
-  UNKNOWN_WATCHED_MODES,
-  UNRATED_MODES,
-  watchedYearRange,
   yearComparatorAsc,
   yearComparatorDesc,
-  yearRange,
 } from '../lib/library-filter.js'
-import type { DroppedFilterMode, UnknownWatchedMode, UnratedMode } from '../lib/library-filter.js'
+import type { DroppedFilterMode } from '../lib/library-filter.js'
 import { useSortCookie } from '../lib/use-sort-cookie.js'
 import { useGenreFilterCookie } from '../lib/use-genre-filter-cookie.js'
-import { useYearRangeCookie } from '../lib/use-year-range-cookie.js'
+import { useLibraryFilterState } from '../lib/use-library-filter-state.js'
 import { PosterGrid } from '../components/library/PosterGrid.js'
 import { PosterTile } from '../components/library/PosterTile.js'
 import { ProgressBar } from '../components/library/ProgressBar.js'
@@ -123,20 +116,50 @@ export function ShowsPage() {
   const { t } = useTranslation()
   const { user } = useAuth()
   const locale = user?.locale ?? 'en-GB'
-  const [filter, setFilter] = useState('')
   const [sortBy, setSortBy] = useSortCookie('rwnd_shows_sort', SORT_KEYS, 'lastWatchedDesc')
-  const [genreFilters, setGenreFilters] = useGenreFilterCookie('rwnd_shows_genre_filters')
   // Reuses the genre cookie hook — its logic is already fully generic over
   // a Record<string, 'include'|'exclude'>, nothing genre-specific about it.
   const [statusFilters, setStatusFilters] = useGenreFilterCookie('rwnd_shows_status_filters')
-  const [filtersOpen, setFiltersOpen] = useState(false)
+  // Default 'exclude', unlike unknownWatchedMode's 'neutral' default —
+  // dropped shows are meant to be hidden from the gallery unless asked for.
+  const [droppedMode, setDroppedMode] = useSortCookie<DroppedFilterMode>(
+    'rwnd_shows_dropped_mode',
+    DROPPED_FILTER_MODES,
+    'exclude',
+  )
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['library', 'shows'],
     queryFn: () => api.library.shows(),
   })
 
-  const availableGenres = useMemo(() => collectGenres(data?.shows ?? [], locale), [data, locale])
+  const {
+    filter,
+    setFilter,
+    filtersOpen,
+    setFiltersOpen,
+    genreFilters,
+    setGenreFilters,
+    availableGenres,
+    libraryYearRange,
+    yearFilter,
+    setYearFilter,
+    libraryRatingRange,
+    ratingFilter,
+    setRatingFilter,
+    libraryMyRatingRange,
+    myRatingFilter,
+    setMyRatingFilter,
+    unratedMode,
+    setUnratedMode,
+    libraryWatchedYearRange,
+    watchedYearFilter,
+    setWatchedYearFilter,
+    unknownWatchedMode,
+    setUnknownWatchedMode,
+    resetShared,
+  } = useLibraryFilterState('rwnd_shows', data?.shows ?? [], locale)
+
   // TMDB doesn't localize `status` itself, so it's translated here rather
   // than at cache time — falls back to the raw string for a status this
   // app doesn't have a translation for yet (see refresh.ts's own comment
@@ -153,62 +176,6 @@ export function ShowsPage() {
       ),
     )
   }, [data, locale, t])
-  // null when nothing in the library has a known year — ShowsPage doesn't
-  // render the Released section at all in that case, so there's no slider
-  // with a broken/empty range to show.
-  const libraryYearRange = useMemo(() => yearRange(data?.shows ?? []), [data])
-  const [yearFilter, setYearFilter] = useYearRangeCookie(
-    'rwnd_shows_year_filter',
-    libraryYearRange?.min ?? 0,
-    libraryYearRange?.max ?? 0,
-    libraryYearRange !== null,
-  )
-  // null when nothing in the library has a cached rating yet — same
-  // "don't render a broken/empty slider" treatment as libraryYearRange.
-  const libraryRatingRange = useMemo(() => ratingRange(data?.shows ?? []), [data])
-  const [ratingFilter, setRatingFilter] = useYearRangeCookie(
-    'rwnd_shows_rating_filter',
-    libraryRatingRange?.min ?? 0,
-    libraryRatingRange?.max ?? 0,
-    libraryRatingRange !== null,
-  )
-  // Independent of libraryRatingRange above — see myRatingRange's own doc
-  // comment for why this is a separate field, not the same TMDB one.
-  const libraryMyRatingRange = useMemo(() => myRatingRange(data?.shows ?? []), [data])
-  const [myRatingFilter, setMyRatingFilter] = useYearRangeCookie(
-    'rwnd_shows_my_rating_filter',
-    libraryMyRatingRange?.min ?? 0,
-    libraryMyRatingRange?.max ?? 0,
-    libraryMyRatingRange !== null,
-  )
-  const [unratedMode, setUnratedMode] = useSortCookie<UnratedMode>(
-    'rwnd_shows_unrated_mode',
-    UNRATED_MODES,
-    'neutral',
-  )
-  // 1900 (Trakt's "I don't remember when" sentinel) is excluded from this
-  // range entirely — see watchedYearRange() — so the "After" slider can
-  // never be dragged back to it. Shows with that sentinel are governed by
-  // unknownWatchedMode instead, not by the slider.
-  const libraryWatchedYearRange = useMemo(() => watchedYearRange(data?.shows ?? []), [data])
-  const [watchedYearFilter, setWatchedYearFilter] = useYearRangeCookie(
-    'rwnd_shows_watched_year_filter',
-    libraryWatchedYearRange?.min ?? 0,
-    libraryWatchedYearRange?.max ?? 0,
-    libraryWatchedYearRange !== null,
-  )
-  const [unknownWatchedMode, setUnknownWatchedMode] = useSortCookie<UnknownWatchedMode>(
-    'rwnd_shows_watched_unknown_mode',
-    UNKNOWN_WATCHED_MODES,
-    'neutral',
-  )
-  // Default 'exclude', unlike unknownWatchedMode's 'neutral' default —
-  // dropped shows are meant to be hidden from the gallery unless asked for.
-  const [droppedMode, setDroppedMode] = useSortCookie<DroppedFilterMode>(
-    'rwnd_shows_dropped_mode',
-    DROPPED_FILTER_MODES,
-    'exclude',
-  )
 
   const shows = useMemo(() => {
     const byTitle = filterByTitle(data?.shows ?? [], filter)
@@ -247,25 +214,8 @@ export function ShowsPage() {
   ])
 
   function resetFilters() {
-    setGenreFilters(() => ({}))
+    resetShared()
     setStatusFilters(() => ({}))
-    if (libraryYearRange) {
-      setYearFilter({ after: libraryYearRange.min, before: libraryYearRange.max })
-    }
-    if (libraryRatingRange) {
-      setRatingFilter({ after: libraryRatingRange.min, before: libraryRatingRange.max })
-    }
-    if (libraryMyRatingRange) {
-      setMyRatingFilter({ after: libraryMyRatingRange.min, before: libraryMyRatingRange.max })
-    }
-    setUnratedMode('neutral')
-    if (libraryWatchedYearRange) {
-      setWatchedYearFilter({
-        after: libraryWatchedYearRange.min,
-        before: libraryWatchedYearRange.max,
-      })
-    }
-    setUnknownWatchedMode('neutral')
     setDroppedMode('exclude')
   }
 

@@ -1,11 +1,10 @@
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import type { LibraryMovie } from '@rwnd/shared'
 import { api } from '../lib/api-client.js'
 import { useAuth } from '../lib/use-auth.js'
 import {
-  collectGenres,
   filterByGenres,
   filterByMyRating,
   filterByRating,
@@ -16,23 +15,15 @@ import {
   lastWatchedComparatorDesc,
   myRatingComparatorAsc,
   myRatingComparatorDesc,
-  myRatingRange,
   ratingComparatorAsc,
   ratingComparatorDesc,
-  ratingRange,
   titleComparatorAsc,
   titleComparatorDesc,
-  UNKNOWN_WATCHED_MODES,
-  UNRATED_MODES,
-  watchedYearRange,
   yearComparatorAsc,
   yearComparatorDesc,
-  yearRange,
 } from '../lib/library-filter.js'
-import type { UnknownWatchedMode, UnratedMode } from '../lib/library-filter.js'
 import { useSortCookie } from '../lib/use-sort-cookie.js'
-import { useGenreFilterCookie } from '../lib/use-genre-filter-cookie.js'
-import { useYearRangeCookie } from '../lib/use-year-range-cookie.js'
+import { useLibraryFilterState } from '../lib/use-library-filter-state.js'
 import { PosterGrid } from '../components/library/PosterGrid.js'
 import { PosterTile } from '../components/library/PosterTile.js'
 import { LibraryControls } from '../components/library/LibraryControls.js'
@@ -95,65 +86,39 @@ export function MoviesPage() {
   const { t } = useTranslation()
   const { user } = useAuth()
   const locale = user?.locale ?? 'en-GB'
-  const [filter, setFilter] = useState('')
   const [sortBy, setSortBy] = useSortCookie('rwnd_movies_sort', SORT_KEYS, 'lastWatchedDesc')
-  const [genreFilters, setGenreFilters] = useGenreFilterCookie('rwnd_movies_genre_filters')
-  const [filtersOpen, setFiltersOpen] = useState(false)
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['library', 'movies'],
     queryFn: () => api.library.movies(),
   })
 
-  const availableGenres = useMemo(() => collectGenres(data?.movies ?? [], locale), [data, locale])
-  // null when nothing in the library has a known year — MoviesPage doesn't
-  // render the Released section at all in that case, same as ShowsPage.
-  const libraryYearRange = useMemo(() => yearRange(data?.movies ?? []), [data])
-  const [yearFilter, setYearFilter] = useYearRangeCookie(
-    'rwnd_movies_year_filter',
-    libraryYearRange?.min ?? 0,
-    libraryYearRange?.max ?? 0,
-    libraryYearRange !== null,
-  )
-  // null when nothing in the library has a cached rating yet — same
-  // "don't render a broken/empty slider" treatment as libraryYearRange.
-  const libraryRatingRange = useMemo(() => ratingRange(data?.movies ?? []), [data])
-  const [ratingFilter, setRatingFilter] = useYearRangeCookie(
-    'rwnd_movies_rating_filter',
-    libraryRatingRange?.min ?? 0,
-    libraryRatingRange?.max ?? 0,
-    libraryRatingRange !== null,
-  )
-  // Independent of libraryRatingRange above — see ShowsPage.tsx's identical
-  // field for the same reasoning.
-  const libraryMyRatingRange = useMemo(() => myRatingRange(data?.movies ?? []), [data])
-  const [myRatingFilter, setMyRatingFilter] = useYearRangeCookie(
-    'rwnd_movies_my_rating_filter',
-    libraryMyRatingRange?.min ?? 0,
-    libraryMyRatingRange?.max ?? 0,
-    libraryMyRatingRange !== null,
-  )
-  const [unratedMode, setUnratedMode] = useSortCookie<UnratedMode>(
-    'rwnd_movies_unrated_mode',
-    UNRATED_MODES,
-    'neutral',
-  )
-  // 1900 (Trakt's "I don't remember when" sentinel) is excluded from this
-  // range entirely — see watchedYearRange() — so the "After" slider can
-  // never be dragged back to it. Movies with that sentinel are governed by
-  // unknownWatchedMode instead, not by the slider.
-  const libraryWatchedYearRange = useMemo(() => watchedYearRange(data?.movies ?? []), [data])
-  const [watchedYearFilter, setWatchedYearFilter] = useYearRangeCookie(
-    'rwnd_movies_watched_year_filter',
-    libraryWatchedYearRange?.min ?? 0,
-    libraryWatchedYearRange?.max ?? 0,
-    libraryWatchedYearRange !== null,
-  )
-  const [unknownWatchedMode, setUnknownWatchedMode] = useSortCookie<UnknownWatchedMode>(
-    'rwnd_movies_watched_unknown_mode',
-    UNKNOWN_WATCHED_MODES,
-    'neutral',
-  )
+  const {
+    filter,
+    setFilter,
+    filtersOpen,
+    setFiltersOpen,
+    genreFilters,
+    setGenreFilters,
+    availableGenres,
+    libraryYearRange,
+    yearFilter,
+    setYearFilter,
+    libraryRatingRange,
+    ratingFilter,
+    setRatingFilter,
+    libraryMyRatingRange,
+    myRatingFilter,
+    setMyRatingFilter,
+    unratedMode,
+    setUnratedMode,
+    libraryWatchedYearRange,
+    watchedYearFilter,
+    setWatchedYearFilter,
+    unknownWatchedMode,
+    setUnknownWatchedMode,
+    resetShared,
+  } = useLibraryFilterState('rwnd_movies', data?.movies ?? [], locale)
 
   const movies = useMemo(() => {
     const byTitle = filterByTitle(data?.movies ?? [], filter)
@@ -188,24 +153,7 @@ export function MoviesPage() {
   ])
 
   function resetFilters() {
-    setGenreFilters(() => ({}))
-    if (libraryYearRange) {
-      setYearFilter({ after: libraryYearRange.min, before: libraryYearRange.max })
-    }
-    if (libraryRatingRange) {
-      setRatingFilter({ after: libraryRatingRange.min, before: libraryRatingRange.max })
-    }
-    if (libraryMyRatingRange) {
-      setMyRatingFilter({ after: libraryMyRatingRange.min, before: libraryMyRatingRange.max })
-    }
-    setUnratedMode('neutral')
-    if (libraryWatchedYearRange) {
-      setWatchedYearFilter({
-        after: libraryWatchedYearRange.min,
-        before: libraryWatchedYearRange.max,
-      })
-    }
-    setUnknownWatchedMode('neutral')
+    resetShared()
   }
 
   if (isLoading) return <Spinner label={t('common.loading')} />

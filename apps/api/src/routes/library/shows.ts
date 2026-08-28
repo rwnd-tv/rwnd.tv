@@ -13,7 +13,7 @@ import {
   showWatchesSchema,
   watchlistMembershipStatusSchema,
 } from '@rwnd/shared'
-import { droppedShows, episodes, plays, ratings, seasons, shows, watchlistItems } from '@rwnd/db'
+import { droppedShows, episodes, plays, ratings, seasons, shows } from '@rwnd/db'
 import type { AppEnv } from '../../types.js'
 import { requireAuth } from '../../middleware/auth.js'
 import { resolveShow, resolveShowEpisodes } from '../../lib/media.js'
@@ -21,7 +21,14 @@ import { pickRefreshTarget, refreshOneShow } from '../../metadata/refresh.js'
 import { orderedProviders } from '../../providers/priority.js'
 import { isProviderSource } from '../../lib/provider-source.js'
 import { getMyWatchlistIds, getOwnedWatchlist } from '../../lib/watchlists.js'
-import { getExternalId, getShowBySlug, logMissingWatches } from './shared.js'
+import {
+  addToWatchlist,
+  getExternalId,
+  getShowBySlug,
+  logMissingWatches,
+  removeFromWatchlist,
+  watchedRangeFragments,
+} from './shared.js'
 
 export const showRoutes = new OpenAPIHono<AppEnv>()
 
@@ -242,96 +249,104 @@ showRoutes.openapi(
     const show = await getShowBySlug(db, slug)
     if (!show) return c.json({ error: 'Show not found' }, 404)
 
-    // Backs the TMDB rating badge's link to the show's TMDB page (see
-    // ShowDetailPage.tsx) — null for a show resolved before TMDB was the
-    // only provider, or (in principle) a future non-TMDB provider match.
-    const tmdbExternalId = await getExternalId(db, 'show', show.id, 'tmdb')
+    // Every query below depends only on `show.id`/`userId`, not on each
+    // other — run them concurrently rather than as 8 sequential round
+    // trips on what's one of the app's highest-traffic pages.
+    const [
+      tmdbExternalId,
+      tvdbExternalId,
+      droppedRow,
+      ratingRow,
+      myWatchlistIds,
+      seasonRows,
+      watchedBySeason,
+      watchedRange,
+    ] = await Promise.all([
+      // Backs the TMDB rating badge's link to the show's TMDB page (see
+      // ShowDetailPage.tsx) — null for a show resolved before TMDB was
+      // the only provider, or (in principle) a future non-TMDB provider
+      // match.
+      getExternalId(db, 'show', show.id, 'tmdb'),
+      // Backs the TVDB link on the same page — see the tmdbExternalId
+      // query above for the identical convention. Independent of
+      // `tmdbExternalId`: a show can have either id, both, or neither on
+      // record.
+      getExternalId(db, 'show', show.id, 'tvdb'),
+      db
+        .select({
+          traktDropped: droppedShows.traktDropped,
+          traktDroppedAt: droppedShows.traktDroppedAt,
+          manualDropped: droppedShows.manualDropped,
+          manualDroppedAt: droppedShows.manualDroppedAt,
+        })
+        .from(droppedShows)
+        .where(and(eq(droppedShows.userId, userId), eq(droppedShows.showId, show.id)))
+        .limit(1)
+        .then((rows) => rows[0]),
+      // The current user's own rating — see libraryShowSchema's
+      // `myRating` doc comment for what this means and how it differs
+      // from `voteAverage`. Independent of watched status: this table
+      // has no relation to `plays` at all.
+      db
+        .select({ rating: ratings.rating })
+        .from(ratings)
+        .where(
+          and(
+            eq(ratings.userId, userId),
+            eq(ratings.entityType, 'show'),
+            eq(ratings.entityId, show.id),
+          ),
+        )
+        .limit(1)
+        .then((rows) => rows[0]),
+      getMyWatchlistIds(db, userId, 'show', show.id),
+      db
+        .select()
+        .from(seasons)
+        .where(eq(seasons.showId, show.id))
+        .orderBy(asc(seasons.seasonNumber)),
+      // Real per-season counts, specials included — unlike the
+      // gallery-style totals below, nothing here excludes season 0.
+      db
+        .select({
+          seasonNumber: episodes.seasonNumber,
+          watchedEpisodes: sql<number>`count(distinct ${episodes.id})`
+            .mapWith(Number)
+            .as('watched_episodes'),
+        })
+        .from(plays)
+        .innerJoin(episodes, eq(plays.episodeId, episodes.id))
+        .where(and(eq(plays.userId, userId), eq(episodes.showId, show.id)))
+        .groupBy(episodes.seasonNumber),
+      // First/most recent watch, across every season (specials
+      // included) — this is "when did I watch this show", not the
+      // gallery-style totals below, so nothing here excludes season 0.
+      // MIN/MAX over zero matching rows still returns one row (both
+      // columns null), not zero rows.
+      //
+      // A play dated exactly 1900-01-01 is Trakt's "I don't remember
+      // when" sentinel, not a real date — the FILTER clauses exclude it
+      // from both aggregates so it can't drag firstWatchedAt back to a
+      // bogus 1900; `hasUnknownWatchDate` separately says whether one
+      // exists at all, so the frontend can show "Watched: unknown" when
+      // that's *all* there is.
+      db
+        .select(watchedRangeFragments)
+        .from(plays)
+        .innerJoin(episodes, eq(plays.episodeId, episodes.id))
+        .where(and(eq(plays.userId, userId), eq(episodes.showId, show.id)))
+        .then((rows) => rows[0]),
+    ])
 
-    // Backs the TVDB link on the same page — see the tmdbExternalId query
-    // above for the identical convention. Independent of `tmdbExternalId`:
-    // a show can have either id, both, or neither on record.
-    const tvdbExternalId = await getExternalId(db, 'show', show.id, 'tvdb')
-
-    const [droppedRow] = await db
-      .select({
-        traktDropped: droppedShows.traktDropped,
-        traktDroppedAt: droppedShows.traktDroppedAt,
-        manualDropped: droppedShows.manualDropped,
-        manualDroppedAt: droppedShows.manualDroppedAt,
-      })
-      .from(droppedShows)
-      .where(and(eq(droppedShows.userId, userId), eq(droppedShows.showId, show.id)))
-      .limit(1)
     // manualDropped (when set) always wins over traktDropped — see
     // droppedShows's doc comment in packages/db/src/schema.ts.
     const dropped = droppedRow?.manualDropped ?? droppedRow?.traktDropped ?? false
     const droppedAt =
       droppedRow?.manualDropped != null ? droppedRow.manualDroppedAt : droppedRow?.traktDroppedAt
 
-    // The current user's own rating — see libraryShowSchema's `myRating`
-    // doc comment for what this means and how it differs from
-    // `voteAverage`. Independent of watched status: this table has no
-    // relation to `plays` at all.
-    const [ratingRow] = await db
-      .select({ rating: ratings.rating })
-      .from(ratings)
-      .where(
-        and(
-          eq(ratings.userId, userId),
-          eq(ratings.entityType, 'show'),
-          eq(ratings.entityId, show.id),
-        ),
-      )
-      .limit(1)
-
-    const myWatchlistIds = await getMyWatchlistIds(db, userId, 'show', show.id)
-
-    const seasonRows = await db
-      .select()
-      .from(seasons)
-      .where(eq(seasons.showId, show.id))
-      .orderBy(asc(seasons.seasonNumber))
-
-    // Real per-season counts, specials included — unlike the gallery-style
-    // totals below, nothing here excludes season 0.
-    const watchedBySeason = await db
-      .select({
-        seasonNumber: episodes.seasonNumber,
-        watchedEpisodes: sql<number>`count(distinct ${episodes.id})`
-          .mapWith(Number)
-          .as('watched_episodes'),
-      })
-      .from(plays)
-      .innerJoin(episodes, eq(plays.episodeId, episodes.id))
-      .where(and(eq(plays.userId, userId), eq(episodes.showId, show.id)))
-      .groupBy(episodes.seasonNumber)
     const watchedMap = new Map(
       watchedBySeason.map((row) => [row.seasonNumber, row.watchedEpisodes]),
     )
-
-    // First/most recent watch, across every season (specials included) —
-    // this is "when did I watch this show", not the gallery-style totals
-    // below, so nothing here excludes season 0. MIN/MAX over zero matching
-    // rows still returns one row (both columns null), not zero rows.
-    //
-    // A play dated exactly 1900-01-01 is Trakt's "I don't remember when"
-    // sentinel, not a real date — the FILTER clauses exclude it from both
-    // aggregates so it can't drag firstWatchedAt back to a bogus 1900;
-    // `hasUnknownWatchDate` separately says whether one exists at all, so
-    // the frontend can show "Watched: unknown" when that's *all* there is.
-    const [watchedRange] = await db
-      .select({
-        firstWatchedAt: sql<
-          string | null
-        >`min(${plays.watchedAt}) FILTER (WHERE extract(year from ${plays.watchedAt}) <> 1900)`,
-        lastWatchedAt: sql<
-          string | null
-        >`max(${plays.watchedAt}) FILTER (WHERE extract(year from ${plays.watchedAt}) <> 1900)`,
-        hasUnknownWatchDate: sql<boolean>`coalesce(bool_or(extract(year from ${plays.watchedAt}) = 1900), false)`,
-      })
-      .from(plays)
-      .innerJoin(episodes, eq(plays.episodeId, episodes.id))
-      .where(and(eq(plays.userId, userId), eq(episodes.showId, show.id)))
 
     // Header summary mirrors /library/shows' convention exactly (season 0
     // excluded from both halves, null total when no regular season is
@@ -720,12 +735,7 @@ showRoutes.openapi(
     const list = await getOwnedWatchlist(db, userId, watchlistId)
     if (!list) return c.json({ error: 'Watchlist not found' }, 404)
 
-    await db
-      .insert(watchlistItems)
-      .values({ userId, watchlistId, entityType: 'show', entityId: show.id, listedAt: new Date() })
-      .onConflictDoNothing({
-        target: [watchlistItems.watchlistId, watchlistItems.entityType, watchlistItems.entityId],
-      })
+    await addToWatchlist(db, userId, watchlistId, 'show', show.id)
 
     return c.json({ myWatchlistIds: await getMyWatchlistIds(db, userId, 'show', show.id) })
   },
@@ -760,15 +770,7 @@ showRoutes.openapi(
     const list = await getOwnedWatchlist(db, userId, watchlistId)
     if (!list) return c.json({ error: 'Watchlist not found' }, 404)
 
-    await db
-      .delete(watchlistItems)
-      .where(
-        and(
-          eq(watchlistItems.watchlistId, watchlistId),
-          eq(watchlistItems.entityType, 'show'),
-          eq(watchlistItems.entityId, show.id),
-        ),
-      )
+    await removeFromWatchlist(db, watchlistId, 'show', show.id)
 
     return c.json({ myWatchlistIds: await getMyWatchlistIds(db, userId, 'show', show.id) })
   },

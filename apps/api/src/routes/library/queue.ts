@@ -9,6 +9,7 @@ import { requireAuth } from '../../middleware/auth.js'
 import { findNextAiringEpisode, findNextUnwatchedEpisode } from '../../lib/media.js'
 import { pickRefreshTargets } from '../../metadata/refresh.js'
 import { orderedProviders } from '../../providers/priority.js'
+import { watchedRangeFragments } from './shared.js'
 
 export const queueRoutes = new OpenAPIHono<AppEnv>()
 
@@ -66,15 +67,15 @@ async function getRecentlyWatchedCandidates(
   // A play dated exactly 1900-01-01 is Trakt's "I don't remember when"
   // backfill sentinel (see showDetailSchema's doc comment), not real
   // recent activity — excluded from both aggregates the same way the
-  // show page's own watchedRange query excludes it.
+  // show page's own watchedRange query excludes it (watchedRangeFragments,
+  // shared.ts).
   const recentWatch = db.$with('recent_watch').as(
     db
       .select({
         showId: episodes.showId,
-        lastWatchedAt:
-          sql`max(${plays.watchedAt}) FILTER (WHERE extract(year from ${plays.watchedAt}) <> 1900)`
-            .mapWith((v: string) => new Date(v))
-            .as('last_watched_at'),
+        lastWatchedAt: watchedRangeFragments.lastWatchedAt
+          .mapWith((v: string) => new Date(v))
+          .as('last_watched_at'),
         maxWatchedSeason: sql<
           number | null
         >`max(case when ${episodes.seasonNumber} > 0 then ${episodes.seasonNumber} end)`.as(

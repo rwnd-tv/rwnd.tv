@@ -297,28 +297,18 @@ export interface NextEpisode {
 }
 
 /**
- * The next episode a user should watch for a show they're partway
- * through — the earliest aired-but-unwatched episode from
- * `startSeasonNumber` onward (specials excluded, same convention
- * resolveShowEpisodes uses), or null if there isn't one (nothing new has
- * aired since they caught up). Powers the Dashboard's On Deck row
- * (apps/api/src/routes/library/queue.ts). Scans forward season-by-season and
- * stops at the first hit, rather than resolving the whole show up front
- * like resolveShowEpisodes does for the "Watched" button — passing in the
- * caller's actual furthest-watched season means a many-season show only
- * costs a provider call per season near their real progress, not every
- * season from the start.
- *
- * `minEpisodeNumberInStartSeason` excludes an earlier, aired-but-unwatched
- * episode the viewer skipped over — a "gap" — from counting as the next
- * one, within `startSeasonNumber` only (every later season is already
- * guaranteed to be "after" it, since `startSeasonNumber` is by construction
- * the highest season with any watch at all — see
- * apps/api/src/routes/library/queue.ts's `maxWatchedSeason`). Pass null to
- * disable this and fall back to the plain "earliest unwatched" behaviour —
- * the user's own `onDeckFillGaps` preference (packages/db/src/schema.ts).
+ * Shared scan behind findNextUnwatchedEpisode/findNextAiringEpisode below —
+ * both walk seasons forward from `startSeasonNumber`, resolve each one
+ * (skipping any the provider has nothing for), build the set of this
+ * user's already-watched episode ids for that season, sort by episode
+ * number, and return the first one `matches` accepts — stopping at the
+ * first hit rather than resolving the whole show up front, so a many-
+ * season show only costs a provider call per season near the caller's
+ * actual progress. `matches` is the one thing that differs between the two
+ * callers — see each's own doc comment for why its predicate looks the way
+ * it does.
  */
-export async function findNextUnwatchedEpisode(
+async function scanSeasonsForEpisode(
   db: Database,
   provider: MetadataProvider,
   userId: string,
@@ -326,15 +316,20 @@ export async function findNextUnwatchedEpisode(
   showExternalId: string,
   startSeasonNumber: number,
   locale: string,
-  minEpisodeNumberInStartSeason: number | null,
+  matches: (
+    episode: ResolvedEpisode & { firstAired: string },
+    seasonNumber: number,
+    // Set<string | null>, not Set<string>: plays.episodeId (drizzle) is
+    // nullable — a play can reference a movie instead — even though every
+    // id actually landing in this particular set is a real episode id.
+    watchedIds: Set<string | null>,
+  ) => boolean,
 ): Promise<NextEpisode | null> {
   const seasonRows = await db
     .select({ seasonNumber: seasons.seasonNumber })
     .from(seasons)
     .where(and(eq(seasons.showId, showId), gte(seasons.seasonNumber, startSeasonNumber)))
     .orderBy(seasons.seasonNumber)
-
-  const now = new Date()
 
   for (const { seasonNumber } of seasonRows) {
     const resolved = await resolveSeason(db, provider, showId, showExternalId, seasonNumber, locale)
@@ -357,23 +352,65 @@ export async function findNextUnwatchedEpisode(
       ).map((row) => row.episodeId),
     )
 
-    const minEpisodeNumber =
-      seasonNumber === startSeasonNumber ? (minEpisodeNumberInStartSeason ?? 0) : 0
-
     const next = resolved
       .slice()
       .sort((a, b) => a.episodeNumber - b.episodeNumber)
-      .find(
-        (e): e is ResolvedEpisode & { firstAired: string } =>
-          e.firstAired !== null &&
-          new Date(e.firstAired) <= now &&
-          !watchedIds.has(e.id) &&
-          e.episodeNumber > minEpisodeNumber,
-      )
+      .find((e): e is ResolvedEpisode & { firstAired: string } => {
+        if (e.firstAired === null) return false
+        return matches({ ...e, firstAired: e.firstAired }, seasonNumber, watchedIds)
+      })
     if (next)
       return { seasonNumber, episodeNumber: next.episodeNumber, firstAired: next.firstAired }
   }
   return null
+}
+
+/**
+ * The next episode a user should watch for a show they're partway
+ * through — the earliest aired-but-unwatched episode from
+ * `startSeasonNumber` onward (specials excluded, same convention
+ * resolveShowEpisodes uses), or null if there isn't one (nothing new has
+ * aired since they caught up). Powers the Dashboard's On Deck row
+ * (apps/api/src/routes/library/queue.ts).
+ *
+ * `minEpisodeNumberInStartSeason` excludes an earlier, aired-but-unwatched
+ * episode the viewer skipped over — a "gap" — from counting as the next
+ * one, within `startSeasonNumber` only (every later season is already
+ * guaranteed to be "after" it, since `startSeasonNumber` is by construction
+ * the highest season with any watch at all — see
+ * apps/api/src/routes/library/queue.ts's `maxWatchedSeason`). Pass null to
+ * disable this and fall back to the plain "earliest unwatched" behaviour —
+ * the user's own `onDeckFillGaps` preference (packages/db/src/schema.ts).
+ */
+export async function findNextUnwatchedEpisode(
+  db: Database,
+  provider: MetadataProvider,
+  userId: string,
+  showId: string,
+  showExternalId: string,
+  startSeasonNumber: number,
+  locale: string,
+  minEpisodeNumberInStartSeason: number | null,
+): Promise<NextEpisode | null> {
+  const now = new Date()
+  return scanSeasonsForEpisode(
+    db,
+    provider,
+    userId,
+    showId,
+    showExternalId,
+    startSeasonNumber,
+    locale,
+    (episode, seasonNumber, watchedIds) => {
+      const minEpisodeNumber =
+        seasonNumber === startSeasonNumber ? (minEpisodeNumberInStartSeason ?? 0) : 0
+      return (
+        new Date(episode.firstAired) <= now &&
+        !watchedIds.has(episode.id) &&
+        episode.episodeNumber > minEpisodeNumber
+      )
+    },
+  )
 }
 
 /**
@@ -398,47 +435,19 @@ export async function findNextAiringEpisode(
   startSeasonNumber: number,
   locale: string,
 ): Promise<NextEpisode | null> {
-  const seasonRows = await db
-    .select({ seasonNumber: seasons.seasonNumber })
-    .from(seasons)
-    .where(and(eq(seasons.showId, showId), gte(seasons.seasonNumber, startSeasonNumber)))
-    .orderBy(seasons.seasonNumber)
-
   const now = new Date()
   const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-
-  for (const { seasonNumber } of seasonRows) {
-    const resolved = await resolveSeason(db, provider, showId, showExternalId, seasonNumber, locale)
-    if (resolved.length === 0) continue
-
-    const watchedIds = new Set(
-      (
-        await db
-          .select({ episodeId: plays.episodeId })
-          .from(plays)
-          .where(
-            and(
-              eq(plays.userId, userId),
-              inArray(
-                plays.episodeId,
-                resolved.map((e) => e.id),
-              ),
-            ),
-          )
-      ).map((row) => row.episodeId),
-    )
-
-    const next = resolved
-      .slice()
-      .sort((a, b) => a.episodeNumber - b.episodeNumber)
-      .find(
-        (e): e is ResolvedEpisode & { firstAired: string } =>
-          e.firstAired !== null && new Date(e.firstAired) >= startOfToday && !watchedIds.has(e.id),
-      )
-    if (next)
-      return { seasonNumber, episodeNumber: next.episodeNumber, firstAired: next.firstAired }
-  }
-  return null
+  return scanSeasonsForEpisode(
+    db,
+    provider,
+    userId,
+    showId,
+    showExternalId,
+    startSeasonNumber,
+    locale,
+    (episode, _seasonNumber, watchedIds) =>
+      new Date(episode.firstAired) >= startOfToday && !watchedIds.has(episode.id),
+  )
 }
 
 export async function resolveEpisode(

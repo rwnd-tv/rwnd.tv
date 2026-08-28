@@ -16,7 +16,13 @@ import { requireAuth } from '../../middleware/auth.js'
 import { resolveSeasonEpisodes } from '../../lib/media.js'
 import { pickRefreshTarget } from '../../metadata/refresh.js'
 import { orderedProviders } from '../../providers/priority.js'
-import { getEpisodeIdByNumbers, getExternalId, getShowBySlug, logMissingWatches } from './shared.js'
+import {
+  getEpisodeIdByNumbers,
+  getExternalId,
+  getShowBySlug,
+  logMissingWatches,
+  watchedRangeFragments,
+} from './shared.js'
 
 export const seasonRoutes = new OpenAPIHono<AppEnv>()
 
@@ -123,10 +129,8 @@ seasonRoutes.openapi(
         episodeNumber: episodes.episodeNumber,
         watchedCount: sql<number>`count(${plays.id})`.mapWith(Number),
         lastWatchedAt: sql<string | null>`max(${plays.watchedAt})`,
-        // Same "extract the year" check the show route's hasUnknownWatchDate
-        // uses above — cheaper than an exact-timestamp comparison and just
-        // as correct, since nothing else is ever dated in 1900.
-        hasUnknownWatch: sql<boolean>`coalesce(bool_or(extract(year from ${plays.watchedAt}) = 1900), false)`,
+        // Same fragment shows.ts's/movies.ts's watchedRange query uses.
+        hasUnknownWatch: watchedRangeFragments.hasUnknownWatchDate,
       })
       .from(episodes)
       .leftJoin(plays, and(eq(plays.episodeId, episodes.id), eq(plays.userId, user.id)))

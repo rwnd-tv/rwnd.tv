@@ -10,7 +10,7 @@ import {
   watchesSchema,
   watchlistMembershipStatusSchema,
 } from '@rwnd/shared'
-import { movies, plays, ratings, watchlistItems } from '@rwnd/db'
+import { movies, plays, ratings } from '@rwnd/db'
 import type { AppEnv } from '../../types.js'
 import { requireAuth } from '../../middleware/auth.js'
 import { resolveMovie } from '../../lib/media.js'
@@ -18,7 +18,13 @@ import { pickRefreshTarget, refreshOneMovie } from '../../metadata/refresh.js'
 import { orderedProviders } from '../../providers/priority.js'
 import { isProviderSource } from '../../lib/provider-source.js'
 import { getMyWatchlistIds, getOwnedWatchlist } from '../../lib/watchlists.js'
-import { getExternalId, getMovieBySlug } from './shared.js'
+import {
+  addToWatchlist,
+  getExternalId,
+  getMovieBySlug,
+  removeFromWatchlist,
+  watchedRangeFragments,
+} from './shared.js'
 
 export const movieRoutes = new OpenAPIHono<AppEnv>()
 
@@ -154,44 +160,39 @@ movieRoutes.openapi(
     const movie = await getMovieBySlug(db, slug)
     if (!movie) return c.json({ error: 'Movie not found' }, 404)
 
-    // Backs the TMDB rating badge's link to the movie's TMDB page — same
-    // convention as the show route's tmdbExternalId lookup above.
-    const tmdbExternalId = await getExternalId(db, 'movie', movie.id, 'tmdb')
-
-    // Backs the TVDB link — same convention as the show route's own
-    // tvdbExternalId query.
-    const tvdbExternalId = await getExternalId(db, 'movie', movie.id, 'tvdb')
-
-    // Same 1900-01-01 Trakt-sentinel exclusion as the show route's
-    // watchedRange query above — see that query's doc comment.
-    const [watchedRange] = await db
-      .select({
-        watchedCount: sql<number>`count(*)`.mapWith(Number),
-        firstWatchedAt: sql<
-          string | null
-        >`min(${plays.watchedAt}) FILTER (WHERE extract(year from ${plays.watchedAt}) <> 1900)`,
-        lastWatchedAt: sql<
-          string | null
-        >`max(${plays.watchedAt}) FILTER (WHERE extract(year from ${plays.watchedAt}) <> 1900)`,
-        hasUnknownWatchDate: sql<boolean>`coalesce(bool_or(extract(year from ${plays.watchedAt}) = 1900), false)`,
-      })
-      .from(plays)
-      .where(and(eq(plays.userId, userId), eq(plays.movieId, movie.id)))
-
-    // See the show detail route's identical lookup above.
-    const [ratingRow] = await db
-      .select({ rating: ratings.rating })
-      .from(ratings)
-      .where(
-        and(
-          eq(ratings.userId, userId),
-          eq(ratings.entityType, 'movie'),
-          eq(ratings.entityId, movie.id),
-        ),
-      )
-      .limit(1)
-
-    const myWatchlistIds = await getMyWatchlistIds(db, userId, 'movie', movie.id)
+    // Every query below depends only on `movie.id`/`userId`, not on each
+    // other — run them concurrently rather than as 6 sequential round
+    // trips on what's one of the app's highest-traffic pages.
+    const [tmdbExternalId, tvdbExternalId, watchedRange, ratingRow, myWatchlistIds] =
+      await Promise.all([
+        // Backs the TMDB rating badge's link to the movie's TMDB page —
+        // same convention as the show route's tmdbExternalId lookup above.
+        getExternalId(db, 'movie', movie.id, 'tmdb'),
+        // Backs the TVDB link — same convention as the show route's own
+        // tvdbExternalId query.
+        getExternalId(db, 'movie', movie.id, 'tvdb'),
+        // Same 1900-01-01 Trakt-sentinel exclusion as the show route's
+        // watchedRange query above — see that query's doc comment.
+        db
+          .select({ watchedCount: sql<number>`count(*)`.mapWith(Number), ...watchedRangeFragments })
+          .from(plays)
+          .where(and(eq(plays.userId, userId), eq(plays.movieId, movie.id)))
+          .then((rows) => rows[0]),
+        // See the show detail route's identical lookup above.
+        db
+          .select({ rating: ratings.rating })
+          .from(ratings)
+          .where(
+            and(
+              eq(ratings.userId, userId),
+              eq(ratings.entityType, 'movie'),
+              eq(ratings.entityId, movie.id),
+            ),
+          )
+          .limit(1)
+          .then((rows) => rows[0]),
+        getMyWatchlistIds(db, userId, 'movie', movie.id),
+      ])
 
     return c.json({
       id: movie.id,
@@ -393,18 +394,7 @@ movieRoutes.openapi(
     const list = await getOwnedWatchlist(db, userId, watchlistId)
     if (!list) return c.json({ error: 'Watchlist not found' }, 404)
 
-    await db
-      .insert(watchlistItems)
-      .values({
-        userId,
-        watchlistId,
-        entityType: 'movie',
-        entityId: movie.id,
-        listedAt: new Date(),
-      })
-      .onConflictDoNothing({
-        target: [watchlistItems.watchlistId, watchlistItems.entityType, watchlistItems.entityId],
-      })
+    await addToWatchlist(db, userId, watchlistId, 'movie', movie.id)
 
     return c.json({ myWatchlistIds: await getMyWatchlistIds(db, userId, 'movie', movie.id) })
   },
@@ -439,15 +429,7 @@ movieRoutes.openapi(
     const list = await getOwnedWatchlist(db, userId, watchlistId)
     if (!list) return c.json({ error: 'Watchlist not found' }, 404)
 
-    await db
-      .delete(watchlistItems)
-      .where(
-        and(
-          eq(watchlistItems.watchlistId, watchlistId),
-          eq(watchlistItems.entityType, 'movie'),
-          eq(watchlistItems.entityId, movie.id),
-        ),
-      )
+    await removeFromWatchlist(db, watchlistId, 'movie', movie.id)
 
     return c.json({ myWatchlistIds: await getMyWatchlistIds(db, userId, 'movie', movie.id) })
   },

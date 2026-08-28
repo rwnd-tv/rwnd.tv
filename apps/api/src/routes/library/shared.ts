@@ -1,7 +1,7 @@
-import { and, eq, inArray } from 'drizzle-orm'
+import { and, eq, inArray, sql } from 'drizzle-orm'
 import { UNKNOWN_WATCHED_AT } from '@rwnd/shared'
 import type { Database } from '@rwnd/db'
-import { episodes, externalIds, movies, plays, shows } from '@rwnd/db'
+import { episodes, externalIds, movies, plays, shows, watchlistItems } from '@rwnd/db'
 import type { ResolvedEpisode } from '../../lib/media.js'
 
 /** Looks up a show by slug — the "does this show exist, and what's its
@@ -66,6 +66,70 @@ export async function getExternalId(
     )
     .limit(1)
   return row?.externalId
+}
+
+/** Adds a show/movie to one of the current user's watchlists — the DB
+ * write shared by PUT .../watchlists/{watchlistId} in shows.ts/movies.ts.
+ * `onConflictDoNothing` (not `onConflictDoUpdate`, unlike the rating
+ * routes): there's no field to update on a repeat add — `listedAt`
+ * deliberately keeps the original add time, not the most recent one.
+ * Callers still do their own `getOwnedWatchlist` check and
+ * `getMyWatchlistIds` response — those need a route-specific 404 message,
+ * so only the write itself lives here. */
+export async function addToWatchlist(
+  db: Database,
+  userId: string,
+  watchlistId: string,
+  entityType: 'show' | 'movie',
+  entityId: string,
+) {
+  await db
+    .insert(watchlistItems)
+    .values({ userId, watchlistId, entityType, entityId, listedAt: new Date() })
+    .onConflictDoNothing({
+      target: [watchlistItems.watchlistId, watchlistItems.entityType, watchlistItems.entityId],
+    })
+}
+
+/** Removes a show/movie from one of the current user's watchlists — the DB
+ * write shared by DELETE .../watchlists/{watchlistId} in
+ * shows.ts/movies.ts. A no-op (nothing to delete) if it wasn't on the list,
+ * same convention as DELETE .../rating. Not scoped by `userId` in the
+ * `WHERE` — ownership of `watchlistId` is enforced by the caller's
+ * `getOwnedWatchlist` check first, same as the pre-extraction code. */
+export async function removeFromWatchlist(
+  db: Database,
+  watchlistId: string,
+  entityType: 'show' | 'movie',
+  entityId: string,
+) {
+  await db
+    .delete(watchlistItems)
+    .where(
+      and(
+        eq(watchlistItems.watchlistId, watchlistId),
+        eq(watchlistItems.entityType, entityType),
+        eq(watchlistItems.entityId, entityId),
+      ),
+    )
+}
+
+/** The three `sql` fragments behind `watchedRange` in shows.ts's/movies.ts's
+ * GET detail routes — excludes Trakt's 1900-01-01 "I don't remember when"
+ * backfill sentinel (see showDetailSchema's doc comment) from both the
+ * first/last-watched aggregates and reports whether it was ever seen at
+ * all, via `hasUnknownWatchDate`. Drizzle `sql` fragments are portable
+ * objects, not tied to one query, so this can be spread into a `.select()`
+ * alongside whatever else that query needs (movies.ts also wants a
+ * `watchedCount`; shows.ts doesn't). */
+export const watchedRangeFragments = {
+  firstWatchedAt: sql<
+    string | null
+  >`min(${plays.watchedAt}) FILTER (WHERE extract(year from ${plays.watchedAt}) <> 1900)`,
+  lastWatchedAt: sql<
+    string | null
+  >`max(${plays.watchedAt}) FILTER (WHERE extract(year from ${plays.watchedAt}) <> 1900)`,
+  hasUnknownWatchDate: sql<boolean>`coalesce(bool_or(extract(year from ${plays.watchedAt}) = 1900), false)`,
 }
 
 /**

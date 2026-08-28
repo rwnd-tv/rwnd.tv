@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { metadataProviderSourceSchema, playSourceSchema } from './common.js'
+import { metadataProviderSourceSchema, playSourceSchema, ratingValueSchema } from './common.js'
 
 /**
  * Per-user backup/restore for the four categories Clear database can also
@@ -131,7 +131,7 @@ export const backupRatingSchema = z
     show: externalRefSchema.optional(),
     season: z.number().int().min(0).optional(),
     episode: z.number().int().min(1).optional(),
-    rating: z.number().int().min(1).max(10),
+    rating: ratingValueSchema,
     ratedAt: z.string().datetime(),
   })
   .refine((v) => Boolean(v.movie) !== Boolean(v.show), {

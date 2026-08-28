@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { uuidSchema } from './common.js'
 
 export const importJobStatusSchema = z.enum([
   'pending',
@@ -72,7 +73,7 @@ export const importJobFailureSchema = z.object({
 export type ImportJobFailure = z.infer<typeof importJobFailureSchema>
 
 export const importJobSchema = z.object({
-  id: z.string().uuid(),
+  id: uuidSchema,
   source: importJobSourceSchema,
   status: importJobStatusSchema,
   includeHistory: z.boolean(),

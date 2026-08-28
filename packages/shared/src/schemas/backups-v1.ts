@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { backupCountsSchema, backupEpisodeSchema, backupSeasonSchema } from './backups.js'
-import { playSourceSchema } from './common.js'
+import { playSourceSchema, ratingValueSchema } from './common.js'
 
 /**
  * Frozen shape of BACKUP_FORMAT_VERSION 1 files — kept only so
@@ -58,7 +58,7 @@ const backupRatingSchemaV1 = z
     show: z.string().optional(),
     season: z.number().int().min(0).optional(),
     episode: z.number().int().min(1).optional(),
-    rating: z.number().int().min(1).max(10),
+    rating: ratingValueSchema,
     ratedAt: z.string().datetime(),
   })
   .refine((v) => Boolean(v.movie) !== Boolean(v.show), {

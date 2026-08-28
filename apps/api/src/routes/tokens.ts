@@ -7,6 +7,7 @@ import {
   listWebhookLinksResponseSchema,
   updateWebhookLinkRequestSchema,
   webhookAccountLinkSchema,
+  uuidSchema,
 } from '@rwnd/shared'
 import { apiTokens, pendingWebhookEvents, users, webhookAccountLinks } from '@rwnd/db'
 import type { Database } from '@rwnd/db'
@@ -113,7 +114,7 @@ tokenRoutes.openapi(
     path: '/tokens/{id}',
     summary: 'Revoke an API token',
     middleware: [requireAuth] as const,
-    request: { params: z.object({ id: z.string().uuid() }) },
+    request: { params: z.object({ id: uuidSchema }) },
     responses: {
       204: { description: 'Revoked' },
       404: { description: 'Token not found' },
@@ -144,7 +145,7 @@ tokenRoutes.openapi(
     path: '/tokens/{id}/webhook-links',
     summary: "A webhook token's linked external accounts, and who can be assigned to one",
     middleware: [requireAuth] as const,
-    request: { params: z.object({ id: z.string().uuid() }) },
+    request: { params: z.object({ id: uuidSchema }) },
     responses: {
       200: {
         description: 'Webhook links',
@@ -179,7 +180,7 @@ tokenRoutes.openapi(
     summary: 'Assign (or unassign) which rwnd.tv user a linked external account belongs to',
     middleware: [requireAuth] as const,
     request: {
-      params: z.object({ id: z.string().uuid(), linkId: z.string().uuid() }),
+      params: z.object({ id: uuidSchema, linkId: uuidSchema }),
       body: { content: { 'application/json': { schema: updateWebhookLinkRequestSchema } } },
     },
     responses: {
@@ -265,7 +266,7 @@ tokenRoutes.openapi(
     path: '/tokens/{id}/webhook-links/{linkId}',
     summary: 'Remove a linked external account',
     middleware: [requireAuth] as const,
-    request: { params: z.object({ id: z.string().uuid(), linkId: z.string().uuid() }) },
+    request: { params: z.object({ id: uuidSchema, linkId: uuidSchema }) },
     responses: {
       204: { description: 'Removed' },
       404: { description: 'Token or link not found' },

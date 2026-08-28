@@ -7,6 +7,7 @@ import {
   watchlistDetailSchema,
   watchlistSummarySchema,
   type WatchlistSummary,
+  uuidSchema,
 } from '@rwnd/shared'
 import type { Database } from '@rwnd/db'
 import { episodes, movies, shows, watchlistItems, watchlists } from '@rwnd/db'
@@ -239,7 +240,7 @@ watchlistRoutes.openapi(
     summary: 'Rename a watchlist or set its pinned cover, both optional in one request',
     middleware: [requireAuth] as const,
     request: {
-      params: z.object({ id: z.string().uuid() }),
+      params: z.object({ id: uuidSchema }),
       body: { content: { 'application/json': { schema: updateWatchlistRequestSchema } } },
     },
     responses: {
@@ -311,7 +312,7 @@ watchlistRoutes.openapi(
     path: '/watchlists/{id}',
     summary: 'Delete a watchlist',
     middleware: [requireAuth] as const,
-    request: { params: z.object({ id: z.string().uuid() }) },
+    request: { params: z.object({ id: uuidSchema }) },
     responses: {
       204: { description: 'Watchlist deleted' },
       400: { description: 'The Default watchlist cannot be deleted' },
@@ -343,7 +344,7 @@ watchlistRoutes.openapi(
     path: '/watchlists/{id}',
     summary: "One watchlist's shows and movies",
     middleware: [requireAuth] as const,
-    request: { params: z.object({ id: z.string().uuid() }) },
+    request: { params: z.object({ id: uuidSchema }) },
     responses: {
       200: {
         description: 'Watchlist detail',

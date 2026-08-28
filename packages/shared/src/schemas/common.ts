@@ -35,6 +35,12 @@ export type MetadataProviderSource = z.infer<typeof metadataProviderSourceSchema
 
 export const uuidSchema = z.string().uuid()
 
+/** A user's 1-10 rating for a show/movie/episode — matches the DB's
+ * `ratings_rating_range BETWEEN 1 AND 10` check (packages/db/src/schema.ts).
+ * Compose with `.nullable()`/`.optional()` as each call site needs — the
+ * response side is nullable (unrated), the request side is usually bare. */
+export const ratingValueSchema = z.number().int().min(1).max(10)
+
 export const paginationQuerySchema = z.object({
   cursor: z.string().datetime().optional(),
   limit: z.coerce.number().int().min(1).max(100).default(25),

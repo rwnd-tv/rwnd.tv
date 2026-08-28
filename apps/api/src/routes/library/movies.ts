@@ -9,6 +9,7 @@ import {
   watchedStatusSchema,
   watchesSchema,
   watchlistMembershipStatusSchema,
+  uuidSchema,
 } from '@rwnd/shared'
 import { movies, plays, ratings } from '@rwnd/db'
 import type { AppEnv } from '../../types.js'
@@ -374,7 +375,7 @@ movieRoutes.openapi(
     path: '/library/movies/{slug}/watchlists/{watchlistId}',
     summary: "Add a movie to one of the current user's watchlists",
     middleware: [requireAuth] as const,
-    request: { params: z.object({ slug: z.string(), watchlistId: z.string().uuid() }) },
+    request: { params: z.object({ slug: z.string(), watchlistId: uuidSchema }) },
     responses: {
       200: {
         description: 'Added to the watchlist',
@@ -409,7 +410,7 @@ movieRoutes.openapi(
     path: '/library/movies/{slug}/watchlists/{watchlistId}',
     summary: "Remove a movie from one of the current user's watchlists",
     middleware: [requireAuth] as const,
-    request: { params: z.object({ slug: z.string(), watchlistId: z.string().uuid() }) },
+    request: { params: z.object({ slug: z.string(), watchlistId: uuidSchema }) },
     responses: {
       200: {
         description: 'Removed from the watchlist',

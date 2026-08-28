@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { uuidSchema } from './common.js'
 
 export const createApiTokenRequestSchema = z.object({
   name: z.string().trim().min(1).max(100),
@@ -6,7 +7,7 @@ export const createApiTokenRequestSchema = z.object({
 export type CreateApiTokenRequest = z.infer<typeof createApiTokenRequestSchema>
 
 export const apiTokenSchema = z.object({
-  id: z.string().uuid(),
+  id: uuidSchema,
   name: z.string(),
   lastUsedAt: z.string().datetime().nullable(),
   createdAt: z.string().datetime(),
@@ -28,11 +29,11 @@ export type WebhookSource = z.infer<typeof webhookSourceSchema>
  * one token can have several of these. `userId` null means seen but not
  * yet claimed. */
 export const webhookAccountLinkSchema = z.object({
-  id: z.string().uuid(),
+  id: uuidSchema,
   source: webhookSourceSchema,
   externalAccountId: z.string(),
   externalAccountName: z.string(),
-  userId: z.string().uuid().nullable(),
+  userId: uuidSchema.nullable(),
   firstSeenAt: z.string().datetime(),
   lastSeenAt: z.string().datetime(),
 })
@@ -42,7 +43,7 @@ export type WebhookAccountLink = z.infer<typeof webhookAccountLinkSchema>
  * "list all users" shape (no email/role/etc.), since that's more exposure
  * than this feature needs. */
 export const assignableUserSchema = z.object({
-  id: z.string().uuid(),
+  id: uuidSchema,
   displayName: z.string(),
 })
 export type AssignableUser = z.infer<typeof assignableUserSchema>
@@ -55,6 +56,6 @@ export type ListWebhookLinksResponse = z.infer<typeof listWebhookLinksResponseSc
 
 /** `userId: null` clears a claim back to unclaimed. */
 export const updateWebhookLinkRequestSchema = z.object({
-  userId: z.string().uuid().nullable(),
+  userId: uuidSchema.nullable(),
 })
 export type UpdateWebhookLinkRequest = z.infer<typeof updateWebhookLinkRequestSchema>

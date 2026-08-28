@@ -12,6 +12,7 @@ import {
   showDetailSchema,
   showWatchesSchema,
   watchlistMembershipStatusSchema,
+  uuidSchema,
 } from '@rwnd/shared'
 import { droppedShows, episodes, plays, ratings, seasons, shows } from '@rwnd/db'
 import type { AppEnv } from '../../types.js'
@@ -715,7 +716,7 @@ showRoutes.openapi(
     path: '/library/shows/{slug}/watchlists/{watchlistId}',
     summary: "Add a show to one of the current user's watchlists",
     middleware: [requireAuth] as const,
-    request: { params: z.object({ slug: z.string(), watchlistId: z.string().uuid() }) },
+    request: { params: z.object({ slug: z.string(), watchlistId: uuidSchema }) },
     responses: {
       200: {
         description: 'Added to the watchlist',
@@ -750,7 +751,7 @@ showRoutes.openapi(
     path: '/library/shows/{slug}/watchlists/{watchlistId}',
     summary: "Remove a show from one of the current user's watchlists",
     middleware: [requireAuth] as const,
-    request: { params: z.object({ slug: z.string(), watchlistId: z.string().uuid() }) },
+    request: { params: z.object({ slug: z.string(), watchlistId: uuidSchema }) },
     responses: {
       200: {
         description: 'Removed from the watchlist',

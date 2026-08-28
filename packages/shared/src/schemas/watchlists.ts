@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { uuidSchema } from './common.js'
 
 /**
  * Named lists a user keeps titles on (apps/web/src/routes/WatchlistsPage.tsx,
@@ -10,7 +11,7 @@ import { z } from 'zod'
 export const watchlistNameSchema = z.string().trim().min(1).max(100)
 
 export const watchlistSummarySchema = z.object({
-  id: z.string().uuid(),
+  id: uuidSchema,
   name: z.string(),
   /** The one list that always exists, can't be renamed or deleted — see
    * packages/db/src/schema.ts's `watchlists` doc comment. */
@@ -42,7 +43,7 @@ export const updateWatchlistRequestSchema = z.object({
    * watchlistItemMediaSchema below — not the show/movie id) as the cover.
    * `null` clears the pin back to "most recently added". Omit to leave the
    * cover unchanged. */
-  coverItemId: z.string().uuid().nullable().optional(),
+  coverItemId: uuidSchema.nullable().optional(),
 })
 export type UpdateWatchlistRequest = z.infer<typeof updateWatchlistRequestSchema>
 
@@ -63,7 +64,7 @@ export const watchlistItemMediaSchema = z.object({
    * + `slug` are enough to link out, and removal from the list goes through
    * the same per-title DELETE /library/{shows,movies}/{slug}/watchlists/{id}
    * route the detail page's own toggle uses, not a separate route here. */
-  itemId: z.string().uuid(),
+  itemId: uuidSchema,
   type: z.enum(['movie', 'show']),
   slug: z.string(),
   title: z.string(),
@@ -74,10 +75,10 @@ export const watchlistItemMediaSchema = z.object({
 export type WatchlistItemMedia = z.infer<typeof watchlistItemMediaSchema>
 
 export const watchlistDetailSchema = z.object({
-  id: z.string().uuid(),
+  id: uuidSchema,
   name: z.string(),
   isDefault: z.boolean(),
-  coverItemId: z.string().uuid().nullable(),
+  coverItemId: uuidSchema.nullable(),
   items: z.array(watchlistItemMediaSchema),
 })
 export type WatchlistDetail = z.infer<typeof watchlistDetailSchema>
@@ -90,6 +91,6 @@ export type WatchlistDetail = z.infer<typeof watchlistDetailSchema>
  * `myRating` (see showDetailSchema's `myWatchlistIds`, schemas/library.ts).
  */
 export const watchlistMembershipStatusSchema = z.object({
-  myWatchlistIds: z.array(z.string().uuid()),
+  myWatchlistIds: z.array(uuidSchema),
 })
 export type WatchlistMembershipStatus = z.infer<typeof watchlistMembershipStatusSchema>

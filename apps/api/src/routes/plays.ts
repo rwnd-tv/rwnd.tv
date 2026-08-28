@@ -7,6 +7,7 @@ import {
   listPlaysResponseSchema,
   playSchema,
   updatePlayRequestSchema,
+  uuidSchema,
 } from '@rwnd/shared'
 import type { Database } from '@rwnd/db'
 import { episodes, movies, plays, shows } from '@rwnd/db'
@@ -249,7 +250,7 @@ playRoutes.openapi(
     path: '/plays/{id}',
     summary: 'Remove a logged play',
     middleware: [requireAuth] as const,
-    request: { params: z.object({ id: z.string().uuid() }) },
+    request: { params: z.object({ id: uuidSchema }) },
     responses: {
       204: { description: 'Removed' },
       404: { description: 'Play not found' },
@@ -274,7 +275,7 @@ playRoutes.openapi(
     summary: "Edit a logged play's watched date/time",
     middleware: [requireAuth] as const,
     request: {
-      params: z.object({ id: z.string().uuid() }),
+      params: z.object({ id: uuidSchema }),
       body: { content: { 'application/json': { schema: updatePlayRequestSchema } } },
     },
     responses: {

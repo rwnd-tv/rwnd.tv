@@ -1,5 +1,10 @@
 import { z } from 'zod'
-import { metadataProviderSourceSchema, playSourceSchema } from './common.js'
+import {
+  metadataProviderSourceSchema,
+  playSourceSchema,
+  ratingValueSchema,
+  uuidSchema,
+} from './common.js'
 
 /**
  * TV Shows / Movies gallery pages (apps/web/src/routes/ShowsPage.tsx,
@@ -38,7 +43,7 @@ export const resolveMediaResponseSchema = z.object({
 export type ResolveMediaResponse = z.infer<typeof resolveMediaResponseSchema>
 
 export const libraryShowSchema = z.object({
-  id: z.string().uuid(),
+  id: uuidSchema,
   /** URL-friendly identifier (e.g. "battlestar-galactica-1978") — links to
    * the show's page (apps/web/src/routes/ShowDetailPage.tsx) use this, not
    * `id`. */
@@ -65,7 +70,7 @@ export const libraryShowSchema = z.object({
    * (stars = rating / 2). Null means genuinely unrated, not "not loaded
    * yet" — there's no separate loading state for this field. Backs the
    * gallery's "my rating" filter/sort — see ShowsPage.tsx. */
-  myRating: z.number().int().min(1).max(10).nullable(),
+  myRating: ratingValueSchema.nullable(),
   /** Whether the current user has marked this show as "dropped" — partially
    * watched, no longer intending to finish (mirrors Trakt's own "Dropped"
    * feature). Hidden from the gallery by default — see ShowsPage.tsx's
@@ -154,7 +159,7 @@ export const showSeasonSchema = z.object({
 export type ShowSeason = z.infer<typeof showSeasonSchema>
 
 export const showDetailSchema = z.object({
-  id: z.string().uuid(),
+  id: uuidSchema,
   slug: z.string(),
   title: z.string(),
   year: z.number().int().nullable(),
@@ -192,13 +197,13 @@ export const showDetailSchema = z.object({
    * a question a user can reasonably ask. */
   metadataRefreshedAt: z.string().datetime(),
   /** See libraryShowSchema's `myRating` for what this means. */
-  myRating: z.number().int().min(1).max(10).nullable(),
+  myRating: ratingValueSchema.nullable(),
   /** Every one of the current user's watchlists this show is currently on
    * (see packages/db/src/schema.ts's `watchlists` doc comment) — empty when
    * it's on none. Drives ShowDetailPage.tsx's one-click Default toggle (its
    * `onDefault` state is just `myWatchlistIds.includes(defaultWatchlistId)`)
    * and the custom-lists dialog's checkbox state, without a second request. */
-  myWatchlistIds: z.array(z.string().uuid()),
+  myWatchlistIds: z.array(uuidSchema),
   /** See libraryShowSchema's `dropped` for what this means. */
   dropped: z.boolean(),
   /** When the show was dropped — from Trakt's `hidden_at` if imported, or
@@ -270,7 +275,7 @@ export const seasonEpisodeSchema = z.object({
   voteAverage: z.number().nullable(),
   /** See libraryShowSchema's `myRating` for what this means — this is the
    * episode's own rating, independent of the show's and season's. */
-  myRating: z.number().int().min(1).max(10).nullable(),
+  myRating: ratingValueSchema.nullable(),
   /** This episode's own TVDB numeric id, for linking to its exact TVDB page
    * (thetvdb.com/dereferrer/episode/{id} — see apps/web/src/lib/tvdb.ts).
    * Distinct from `episodeNumber`, which is what the primary provider
@@ -340,7 +345,7 @@ export type WatchedStatus = z.infer<typeof watchedStatusSchema>
 export const watchesSchema = z.object({
   watches: z.array(
     z.object({
-      id: z.string().uuid(),
+      id: uuidSchema,
       watchedAt: z.string().datetime(),
       source: playSourceSchema,
     }),
@@ -360,7 +365,7 @@ export type Watches = z.infer<typeof watchesSchema>
 export const seasonWatchesSchema = z.object({
   watches: z.array(
     z.object({
-      id: z.string().uuid(),
+      id: uuidSchema,
       watchedAt: z.string().datetime(),
       source: playSourceSchema,
       episodeNumber: z.number().int(),
@@ -383,7 +388,7 @@ export type SeasonWatches = z.infer<typeof seasonWatchesSchema>
 export const showWatchesSchema = z.object({
   watches: z.array(
     z.object({
-      id: z.string().uuid(),
+      id: uuidSchema,
       watchedAt: z.string().datetime(),
       source: playSourceSchema,
       seasonNumber: z.number().int(),
@@ -403,7 +408,7 @@ export type ShowWatches = z.infer<typeof showWatchesSchema>
  * in sync with the ticking UI.
  */
 export const removeWatchesRequestSchema = z.object({
-  ids: z.array(z.string().uuid()).min(1),
+  ids: z.array(uuidSchema).min(1),
 })
 export type RemoveWatchesRequest = z.infer<typeof removeWatchesRequestSchema>
 
@@ -429,14 +434,14 @@ export type DroppedStatus = z.infer<typeof droppedStatusSchema>
  * as droppedStatusSchema above.
  */
 export const ratingStatusSchema = z.object({
-  rating: z.number().int().min(1).max(10).nullable(),
+  rating: ratingValueSchema.nullable(),
   ratedAt: z.string().datetime().nullable(),
 })
 export type RatingStatus = z.infer<typeof ratingStatusSchema>
 
 /** Request body for PUT .../rating — see ratingStatusSchema above. */
 export const setRatingRequestSchema = z.object({
-  rating: z.number().int().min(1).max(10),
+  rating: ratingValueSchema,
 })
 export type SetRatingRequest = z.infer<typeof setRatingRequestSchema>
 
@@ -494,7 +499,7 @@ export const removeShowWatchesResponseSchema = z.object({
 export type RemoveShowWatchesResponse = z.infer<typeof removeShowWatchesResponseSchema>
 
 export const libraryMovieSchema = z.object({
-  id: z.string().uuid(),
+  id: uuidSchema,
   /** URL-friendly identifier (e.g. "the-matrix-1999") — links to the
    * movie's page (apps/web/src/routes/MovieDetailPage.tsx) use this, not
    * `id`. Same convention as libraryShowSchema's `slug` above. */
@@ -512,7 +517,7 @@ export const libraryMovieSchema = z.object({
    * for the same convention. */
   voteAverage: z.number().nullable(),
   /** See libraryShowSchema's `myRating` for what this means. */
-  myRating: z.number().int().min(1).max(10).nullable(),
+  myRating: ratingValueSchema.nullable(),
   /** Counts rewatches. */
   playCount: z.number().int(),
   lastWatchedAt: z.string().datetime(),
@@ -533,7 +538,7 @@ export type ListLibraryMoviesResponse = z.infer<typeof listLibraryMoviesResponse
  * thing with N plays rather than a fraction of episodes.
  */
 export const movieDetailSchema = z.object({
-  id: z.string().uuid(),
+  id: uuidSchema,
   slug: z.string(),
   title: z.string(),
   year: z.number().int().nullable(),
@@ -545,9 +550,9 @@ export const movieDetailSchema = z.object({
    * for the null-handling convention. */
   voteAverage: z.number().nullable(),
   /** See libraryShowSchema's `myRating` for what this means. */
-  myRating: z.number().int().min(1).max(10).nullable(),
+  myRating: ratingValueSchema.nullable(),
   /** See showDetailSchema's field of the same name. */
-  myWatchlistIds: z.array(z.string().uuid()),
+  myWatchlistIds: z.array(uuidSchema),
   /** TMDB's own numeric id for this movie, for linking to its TMDB page —
    * see showDetailSchema's `tmdbId` for the same convention. */
   tmdbId: z.string().nullable(),

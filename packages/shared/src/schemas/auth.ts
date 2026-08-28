@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { localeSchema, themeSchema, userRoleSchema } from './common.js'
+import { localeSchema, themeSchema, userRoleSchema, uuidSchema } from './common.js'
 
 export const emailSchema = z.string().trim().toLowerCase().email().max(320)
 
@@ -38,7 +38,7 @@ export const registerRequestSchema = z.object({
 export type RegisterRequest = z.infer<typeof registerRequestSchema>
 
 export const userSchema = z.object({
-  id: z.string().uuid(),
+  id: uuidSchema,
   email: z.string().email(),
   displayName: z.string(),
   locale: localeSchema,

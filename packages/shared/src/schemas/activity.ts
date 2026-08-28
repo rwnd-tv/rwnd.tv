@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { playMediaSummarySchema } from './plays.js'
-import { playSourceSchema } from './common.js'
+import { playSourceSchema, ratingValueSchema, uuidSchema } from './common.js'
 
 /**
  * The four kinds of user action the Activity page (formerly just "History",
@@ -30,14 +30,14 @@ export type ActivitySort = z.infer<typeof activitySortSchema>
  * so the looser optional-field shape here matches how it's actually used.
  */
 export const activityEntrySchema = z.object({
-  id: z.string().uuid(),
+  id: uuidSchema,
   kind: activityKindSchema,
   occurredAt: z.string().datetime(),
   media: playMediaSummarySchema,
   /** `watch` only. */
   source: playSourceSchema.optional(),
   /** `rating` only, 1-10. */
-  rating: z.number().int().min(1).max(10).optional(),
+  rating: ratingValueSchema.optional(),
   /** `watchlist` only — only ever populated by the CSV importer today. */
   notes: z.string().nullable().optional(),
   /** `watchlist` only — which of the user's watchlists this add landed on
@@ -89,7 +89,7 @@ export type ListActivityResponse = z.infer<typeof listActivityResponseSchema>
 
 export const activityEntryRefSchema = z.object({
   kind: activityKindSchema,
-  id: z.string().uuid(),
+  id: uuidSchema,
 })
 
 /**

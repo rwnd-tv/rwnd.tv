@@ -8,6 +8,7 @@ import {
   traktConnectionStatusSchema,
   traktDevicePairingSchema,
   type ImportJob,
+  uuidSchema,
 } from '@rwnd/shared'
 import { importJobs, traktConnections } from '@rwnd/db'
 import type { AppEnv } from '../types.js'
@@ -511,7 +512,7 @@ importRoutes.openapi(
     path: '/import/jobs/{id}',
     summary: 'Get one import job',
     middleware: [requireAuth] as const,
-    request: { params: z.object({ id: z.string().uuid() }) },
+    request: { params: z.object({ id: uuidSchema }) },
     responses: {
       200: { description: 'Job', content: { 'application/json': { schema: importJobSchema } } },
       404: { description: 'Job not found' },
@@ -536,7 +537,7 @@ importRoutes.openapi(
     path: '/import/jobs/{id}/cancel',
     summary: 'Cancel an in-progress import job',
     middleware: [requireAuth] as const,
-    request: { params: z.object({ id: z.string().uuid() }) },
+    request: { params: z.object({ id: uuidSchema }) },
     responses: {
       200: {
         description: 'Cancelled',

@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, Navigate, useNavigate } from 'react-router'
-import { useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { api, ApiError } from '../lib/api-client.js'
 import { usePublicSettings } from '../lib/use-public-settings.js'
 import { useAuth } from '../lib/use-auth.js'
@@ -23,7 +23,23 @@ export function RegisterPage() {
   const [password, setPassword] = useState('')
   const [inviteCode, setInviteCode] = useState('')
   const [error, setError] = useState<string>()
-  const [submitting, setSubmitting] = useState(false)
+
+  const register = useMutation({
+    mutationFn: () =>
+      api.auth.register({
+        displayName,
+        email,
+        password,
+        inviteCode: inviteCode || undefined,
+        locale: detectedLocale(i18n.language),
+      }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['auth', 'me'] })
+      void navigate('/dashboard')
+    },
+    onError: (err) =>
+      setError(err instanceof ApiError ? err.message : t('common.somethingWentWrong')),
+  })
 
   if (authLoading || settingsLoading) {
     return (
@@ -64,32 +80,17 @@ export function RegisterPage() {
     )
   }
 
-  async function handleSubmit(e: FormEvent) {
+  function handleSubmit(e: FormEvent) {
     e.preventDefault()
     setError(undefined)
-    setSubmitting(true)
-    try {
-      await api.auth.register({
-        displayName,
-        email,
-        password,
-        inviteCode: inviteCode || undefined,
-        locale: detectedLocale(i18n.language),
-      })
-      await queryClient.invalidateQueries({ queryKey: ['auth', 'me'] })
-      void navigate('/dashboard')
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : t('common.somethingWentWrong'))
-    } finally {
-      setSubmitting(false)
-    }
+    register.mutate()
   }
 
   return (
     <div className="flex min-h-screen items-center justify-center px-4">
       <Card className="w-full max-w-sm">
         <h1 className="mb-6 text-xl font-semibold">{t('register.title')}</h1>
-        <form onSubmit={(e) => void handleSubmit(e)} className="flex flex-col gap-4">
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <Field
             label={t('register.displayName')}
             value={displayName}
@@ -128,7 +129,7 @@ export function RegisterPage() {
               {error}
             </p>
           )}
-          <Button type="submit" isLoading={submitting}>
+          <Button type="submit" isLoading={register.isPending}>
             {t('register.submit')}
           </Button>
         </form>

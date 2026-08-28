@@ -4,6 +4,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router'
 import { api, ApiError } from '../../lib/api-client.js'
 import { useAuth } from '../../lib/use-auth.js'
+import { resetAuthCache } from '../../lib/reset-auth-cache.js'
 import { Card } from '../ui/Card.js'
 import { Field } from '../ui/Field.js'
 import { Button } from '../ui/Button.js'
@@ -56,8 +57,7 @@ export function DeleteAccountCard() {
       // Same query-cache handling as LogoutButton.tsx — the account (and
       // its session) no longer exists server-side either way, so this is
       // really just tidying up the client before the redirect.
-      queryClient.removeQueries({ predicate: (query) => query.queryKey[0] !== 'auth' })
-      await queryClient.invalidateQueries({ queryKey: ['auth', 'me'] })
+      await resetAuthCache(queryClient)
       void navigate('/login')
     },
     onError: (err) =>

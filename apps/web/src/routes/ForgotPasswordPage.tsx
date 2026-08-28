@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, Navigate } from 'react-router'
+import { useMutation } from '@tanstack/react-query'
 import { api, ApiError } from '../lib/api-client.js'
 import { useAuth } from '../lib/use-auth.js'
 import { Card } from '../components/ui/Card.js'
@@ -20,8 +21,12 @@ export function ForgotPasswordPage() {
 
   const [email, setEmail] = useState('')
   const [error, setError] = useState<string>()
-  const [submitting, setSubmitting] = useState(false)
-  const [submitted, setSubmitted] = useState(false)
+
+  const forgotPassword = useMutation({
+    mutationFn: () => api.auth.forgotPassword({ email }),
+    onError: (err) =>
+      setError(err instanceof ApiError ? err.message : t('common.somethingWentWrong')),
+  })
 
   if (authLoading) {
     return (
@@ -32,28 +37,20 @@ export function ForgotPasswordPage() {
   }
   if (user) return <Navigate to="/dashboard" replace />
 
-  async function handleSubmit(e: FormEvent) {
+  function handleSubmit(e: FormEvent) {
     e.preventDefault()
     setError(undefined)
-    setSubmitting(true)
-    try {
-      await api.auth.forgotPassword({ email })
-      setSubmitted(true)
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : t('common.somethingWentWrong'))
-    } finally {
-      setSubmitting(false)
-    }
+    forgotPassword.mutate()
   }
 
   return (
     <div className="flex min-h-screen items-center justify-center px-4">
       <Card className="w-full max-w-sm">
         <h1 className="mb-6 text-xl font-semibold">{t('forgotPassword.title')}</h1>
-        {submitted ? (
+        {forgotPassword.isSuccess ? (
           <p className="text-sm text-[var(--color-fg-muted)]">{t('forgotPassword.success')}</p>
         ) : (
-          <form onSubmit={(e) => void handleSubmit(e)} className="flex flex-col gap-4">
+          <form onSubmit={handleSubmit} className="flex flex-col gap-4">
             <Field
               label={t('forgotPassword.email')}
               type="email"
@@ -63,7 +60,7 @@ export function ForgotPasswordPage() {
               autoComplete="email"
               error={error}
             />
-            <Button type="submit" isLoading={submitting}>
+            <Button type="submit" isLoading={forgotPassword.isPending}>
               {t('forgotPassword.submit')}
             </Button>
           </form>

@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Navigate, useNavigate } from 'react-router'
-import { useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { api, ApiError } from '../lib/api-client.js'
 import { useSetupStatus } from '../lib/use-setup-status.js'
 import { usePublicSettings } from '../lib/use-public-settings.js'
@@ -21,7 +21,22 @@ export function SetupPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string>()
-  const [submitting, setSubmitting] = useState(false)
+
+  const setup = useMutation({
+    mutationFn: () =>
+      api.setup.create({
+        displayName,
+        email,
+        password,
+        locale: detectedLocale(i18n.language),
+      }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['auth', 'me'] })
+      void navigate('/dashboard')
+    },
+    onError: (err) =>
+      setError(err instanceof ApiError ? err.message : t('common.somethingWentWrong')),
+  })
 
   if (isLoading || settingsLoading) {
     return (
@@ -54,24 +69,10 @@ export function SetupPage() {
     )
   }
 
-  async function handleSubmit(e: FormEvent) {
+  function handleSubmit(e: FormEvent) {
     e.preventDefault()
     setError(undefined)
-    setSubmitting(true)
-    try {
-      await api.setup.create({
-        displayName,
-        email,
-        password,
-        locale: detectedLocale(i18n.language),
-      })
-      await queryClient.invalidateQueries({ queryKey: ['auth', 'me'] })
-      void navigate('/dashboard')
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : t('common.somethingWentWrong'))
-    } finally {
-      setSubmitting(false)
-    }
+    setup.mutate()
   }
 
   return (
@@ -79,7 +80,7 @@ export function SetupPage() {
       <Card className="w-full max-w-sm">
         <h1 className="mb-1 text-xl font-semibold">{t('setup.title')}</h1>
         <p className="mb-6 text-sm text-[var(--color-fg-muted)]">{t('setup.description')}</p>
-        <form onSubmit={(e) => void handleSubmit(e)} className="flex flex-col gap-4">
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <Field
             label={t('setup.displayName')}
             value={displayName}
@@ -105,7 +106,7 @@ export function SetupPage() {
             autoComplete="new-password"
             error={error}
           />
-          <Button type="submit" isLoading={submitting}>
+          <Button type="submit" isLoading={setup.isPending}>
             {t('setup.submit')}
           </Button>
         </form>

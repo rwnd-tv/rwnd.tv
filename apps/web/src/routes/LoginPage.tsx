@@ -1,11 +1,12 @@
 import { useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, Navigate, useNavigate } from 'react-router'
-import { useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { api, ApiError } from '../lib/api-client.js'
 import { useSetupStatus } from '../lib/use-setup-status.js'
 import { usePublicSettings } from '../lib/use-public-settings.js'
 import { useAuth } from '../lib/use-auth.js'
+import { resetAuthCache } from '../lib/reset-auth-cache.js'
 import { Card } from '../components/ui/Card.js'
 import { Field } from '../components/ui/Field.js'
 import { Button } from '../components/ui/Button.js'
@@ -22,7 +23,20 @@ export function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string>()
-  const [submitting, setSubmitting] = useState(false)
+
+  const login = useMutation({
+    mutationFn: () => api.auth.login({ email, password }),
+    onSuccess: async () => {
+      // See LogoutButton.tsx's handleLogout for why this is removeQueries on
+      // everything else + a plain invalidate on auth/me, not clear().
+      // Covers reaching /login without going through the logout button
+      // too (e.g. a session that expired server-side).
+      await resetAuthCache(queryClient)
+      void navigate('/dashboard')
+    },
+    onError: (err) =>
+      setError(err instanceof ApiError ? err.message : t('common.somethingWentWrong')),
+  })
 
   if (setupLoading || authLoading) {
     return (
@@ -34,31 +48,17 @@ export function LoginPage() {
   if (setupStatus?.required) return <Navigate to="/setup" replace />
   if (user) return <Navigate to="/dashboard" replace />
 
-  async function handleSubmit(e: FormEvent) {
+  function handleSubmit(e: FormEvent) {
     e.preventDefault()
     setError(undefined)
-    setSubmitting(true)
-    try {
-      await api.auth.login({ email, password })
-      // See LogoutButton.tsx's handleLogout for why this is removeQueries on
-      // everything else + a plain invalidate on auth/me, not clear().
-      // Covers reaching /login without going through the logout button
-      // too (e.g. a session that expired server-side).
-      queryClient.removeQueries({ predicate: (query) => query.queryKey[0] !== 'auth' })
-      await queryClient.invalidateQueries({ queryKey: ['auth', 'me'] })
-      void navigate('/dashboard')
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : t('common.somethingWentWrong'))
-    } finally {
-      setSubmitting(false)
-    }
+    login.mutate()
   }
 
   return (
     <div className="flex min-h-screen items-center justify-center px-4">
       <Card className="w-full max-w-sm">
         <h1 className="mb-6 text-xl font-semibold">{t('login.title')}</h1>
-        <form onSubmit={(e) => void handleSubmit(e)} className="flex flex-col gap-4">
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <Field
             label={t('login.email')}
             type="email"
@@ -84,7 +84,7 @@ export function LoginPage() {
               {t('login.forgotPasswordLink')}
             </Link>
           )}
-          <Button type="submit" isLoading={submitting}>
+          <Button type="submit" isLoading={login.isPending}>
             {t('login.submit')}
           </Button>
         </form>

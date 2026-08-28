@@ -48,6 +48,11 @@ genuinely production-ready.
 - [ ] Cut the first tagged release, moving `:latest` off tracking `:edge` (see TODO.md)
 - [x] **Redesign the History page as a full-width grid**, matching the Shows/Movies gallery treatment — shipped 2026-08-26 as the Activity page (merges watches, ratings, watchlist adds and drops into one feed)
 
+## M4 — Broader ingestion & upcoming episodes
+
+- [ ] **Tautulli/Jellyfin/Emby/Kodi webhook ingestion**: built on the same source-agnostic core (entity resolution, per-user API token auth) Plex's webhook (M2) already runs on, so each of these is "one payload parser + one route," not a rework. Tautulli's webhook body is fully user-templated (no fixed shape — needs its own JSON template + setup docs), unlike the others' fixed formats (see TODO.md).
+- [ ] **Calendar of upcoming episodes**: a view of what's airing next across the shows you're following (see TODO.md).
+
 ## Not yet scheduled
 
-Ideas that are in scope for the project eventually but don't have a milestone yet: stats and insights, a calendar of upcoming episodes, OIDC login (the `user_credentials` schema was designed for this from M1 — see [ADR 0003](adr/0003-auth-model.md)), additional locales beyond English, mobile-friendly PWA installability, public/shareable profile pages.
+Ideas that are in scope for the project eventually but don't have a milestone yet: stats and insights, OIDC login (the `user_credentials` schema was designed for this from M1 — see [ADR 0003](adr/0003-auth-model.md)), additional locales beyond English, mobile-friendly PWA installability, public/shareable profile pages.

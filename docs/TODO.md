@@ -98,7 +98,7 @@ Every open item from [ROADMAP.md](ROADMAP.md) that doesn't already have a
 more specific TODO elsewhere in this file. Kept brief — ROADMAP.md is the
 source of truth for scope; this is just so a TODO listing is complete.
 
-- [ ] **Tautulli/Jellyfin/Emby/Kodi webhook ingestion** (2026-08-24 16:25 added, un-M2'd 2026-08-24)\
+- [ ] **Tautulli/Jellyfin/Emby/Kodi webhook ingestion** (2026-08-24 16:25 added, un-M2'd 2026-08-24, M4'd 2026-08-28) — M4\
       Plex's own webhook shipped 2026-08-24 (see `docs/TODO_ARCHIVE.md`) —
       the entity-resolution/auth core it's built on
       (`apps/api/src/lib/external-match.ts`,
@@ -116,7 +116,7 @@ source of truth for scope; this is just so a TODO listing is complete.
       The reason to log anything in the first place, but not essential to
       the core logging loop M3 was narrowed to (2026-08-26 — see
       ROADMAP.md's M3 framing).
-- [ ] **Calendar of upcoming episodes** (2026-08-23 15:33 added, un-M3'd 2026-08-26) — Not yet scheduled\
+- [ ] **Calendar of upcoming episodes** (2026-08-23 15:33 added, un-M3'd 2026-08-26, M4'd 2026-08-28) — M4\
       A view of what's airing next across the shows you're following.
 - [ ] **OIDC login** (2026-08-23 15:34 added, un-M3'd 2026-08-26) — Not yet scheduled\
       The `user_credentials` schema was designed for this from M1 — see

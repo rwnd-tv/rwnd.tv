@@ -14,7 +14,7 @@ import {
 } from '@rwnd/shared'
 import { api } from '../lib/api-client.js'
 import { invalidateWatchData } from '../lib/query-client.js'
-import { useAuth } from '../lib/auth-context.js'
+import { useAuth } from '../lib/use-auth.js'
 import { useSortCookie } from '../lib/use-sort-cookie.js'
 import { useActivityKindFilterCookie } from '../lib/use-activity-kind-filter-cookie.js'
 import { useDateRangeCookie } from '../lib/use-date-range-cookie.js'
@@ -360,7 +360,7 @@ export function HistoryPage() {
           {hasSelectedKind && hasNextPage && (
             <Button
               variant="secondary"
-              onClick={() => fetchNextPage()}
+              onClick={() => void fetchNextPage()}
               isLoading={isFetchingNextPage}
             >
               {t('history.loadMore')}

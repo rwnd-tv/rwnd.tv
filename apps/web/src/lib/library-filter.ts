@@ -10,14 +10,14 @@
 /** Case- and accent-insensitive: "amelie" should match "Amélie" — matters
  * regardless of UI locale, since a title itself (from TMDB) can carry
  * diacritics the user typing a search query might not bother with. */
-export function foldForSearch(value: string): string {
+function foldForSearch(value: string): string {
   return value
     .toLocaleLowerCase()
     .normalize('NFD')
     .replace(/\p{Diacritic}/gu, '')
 }
 
-export function matchesFilter(title: string, query: string): boolean {
+function matchesFilter(title: string, query: string): boolean {
   const trimmed = query.trim()
   if (!trimmed) return true
   return foldForSearch(title).includes(foldForSearch(trimmed))
@@ -123,7 +123,8 @@ export function collectGenres<T extends { genres: string[] }>(
 ): string[] {
   const set = new Set<string>()
   for (const item of items) for (const genre of item.genres) set.add(genre)
-  return [...set].sort(new Intl.Collator(locale, { sensitivity: 'base' }).compare)
+  const collator = new Intl.Collator(locale, { sensitivity: 'base' })
+  return [...set].sort((a, b) => collator.compare(a, b))
 }
 
 /**
@@ -312,7 +313,7 @@ export function myRatingComparatorAsc(
  * Checked via UTC year so it can't be thrown off by the browser's timezone
  * shifting the calendar day around midnight.
  */
-export function watchedYearOf(item: { lastWatchedAt: string }): number | null {
+function watchedYearOf(item: { lastWatchedAt: string }): number | null {
   const year = new Date(item.lastWatchedAt).getUTCFullYear()
   return year === 1900 ? null : year
 }

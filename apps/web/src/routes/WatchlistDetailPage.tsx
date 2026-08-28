@@ -5,7 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { WatchlistItemMedia } from '@rwnd/shared'
 import { api, ApiError } from '../lib/api-client.js'
 import { invalidateWatchData } from '../lib/query-client.js'
-import { useAuth } from '../lib/auth-context.js'
+import { useAuth } from '../lib/use-auth.js'
 import { filterByTitle, titleComparatorAsc, titleComparatorDesc } from '../lib/library-filter.js'
 import { PosterGrid } from '../components/library/PosterGrid.js'
 import { PosterTile } from '../components/library/PosterTile.js'
@@ -121,7 +121,7 @@ export function WatchlistDetailPage() {
     mutationFn: () => api.watchlists.delete(id!),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['watchlists'] })
-      navigate('/watchlists')
+      void navigate('/watchlists')
     },
   })
 

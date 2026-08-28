@@ -3,5 +3,7 @@ packages:
   - 'packages/*'
 allowBuilds:
   esbuild: true
+minimumReleaseAgeExclude:
+  - knip@6.33.0
 onlyBuiltDependencies:
   - esbuild

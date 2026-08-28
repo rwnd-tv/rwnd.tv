@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import type { LibraryMovie } from '@rwnd/shared'
 import { api } from '../lib/api-client.js'
-import { useAuth } from '../lib/auth-context.js'
+import { useAuth } from '../lib/use-auth.js'
 import {
   collectGenres,
   filterByGenres,

@@ -7,7 +7,7 @@ import { watchlistItems, watchlists } from '@rwnd/db'
  * about it. This is the real, permanent name shown in the UI, not a
  * placeholder — migration 0022 seeds this exact string for every
  * pre-existing user, and it must stay in sync with that. */
-export const DEFAULT_WATCHLIST_NAME = 'Default'
+const DEFAULT_WATCHLIST_NAME = 'Default'
 
 /**
  * Returns the id of `userId`'s Default watchlist, creating it first if this

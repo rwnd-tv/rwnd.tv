@@ -7,7 +7,7 @@ import { invalidateWatchData } from '../lib/query-client.js'
 import { UNKNOWN_WATCHED_AT, formatHistoryDate, markWatchedRequestBody } from '../lib/date.js'
 import { averageEpisodeRatingStars } from '../lib/rating.js'
 import { TVDB_LOGO_DARK_BG_URL, TVDB_LOGO_LIGHT_BG_URL, tvdbSeasonUrl } from '../lib/tvdb.js'
-import { useAuth } from '../lib/auth-context.js'
+import { useAuth } from '../lib/use-auth.js'
 import { EpisodeCard } from '../components/library/EpisodeCard.js'
 import { MetadataAttribution } from '../components/library/MetadataAttribution.js'
 import { PosterGrid } from '../components/library/PosterGrid.js'
@@ -317,7 +317,9 @@ export function SeasonDetailPage() {
             disabled={!previousSeason}
             aria-label={t('showDetail.previousSeason')}
             title={t('showDetail.previousSeason')}
-            onClick={() => navigate(`/shows/${show!.slug}/season/${previousSeason!.seasonNumber}`)}
+            onClick={() =>
+              void navigate(`/shows/${show!.slug}/season/${previousSeason!.seasonNumber}`)
+            }
           >
             <ChevronLeftIcon />
           </Button>
@@ -328,7 +330,7 @@ export function SeasonDetailPage() {
             disabled={!nextSeason}
             aria-label={t('showDetail.nextSeason')}
             title={t('showDetail.nextSeason')}
-            onClick={() => navigate(`/shows/${show!.slug}/season/${nextSeason!.seasonNumber}`)}
+            onClick={() => void navigate(`/shows/${show!.slug}/season/${nextSeason!.seasonNumber}`)}
           >
             <ChevronRightIcon />
           </Button>

@@ -57,6 +57,7 @@ const requireEmailConfigured = createMiddleware<AppEnv>(async (c, next) => {
     return c.json({ error: 'Email is not configured on this instance' }, 404)
   }
   await next()
+  return
 })
 
 authRoutes.openapi(

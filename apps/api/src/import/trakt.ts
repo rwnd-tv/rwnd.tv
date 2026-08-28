@@ -506,7 +506,7 @@ export async function runTraktZipImport(
     watchlist: TraktWatchlistItem[]
   },
 ): Promise<void> {
-  const fetchPage: PageFetcher = async (_userId, phase, page, limit) => {
+  const fetchPage: PageFetcher = (_userId, phase, page, limit) => {
     const items =
       phase === 'history'
         ? data.history
@@ -516,12 +516,16 @@ export async function runTraktZipImport(
             ? data.ratings
             : data.watchlist
     const start = (page - 1) * limit
-    return {
+    // Not actually async — the ZIP export is already fully parsed in memory
+    // (unlike the live-API fetchPage above it) — but PageFetcher's shared
+    // signature returns a Promise, since runImportJob awaits it regardless
+    // of which entry point supplied it.
+    return Promise.resolve({
       items: items.slice(start, start + limit),
       page,
       pageCount: Math.max(1, Math.ceil(items.length / limit)),
       itemCount: items.length,
-    }
+    })
   }
   return runImportJob(db, metadataProviders, jobId, fetchPage)
 }

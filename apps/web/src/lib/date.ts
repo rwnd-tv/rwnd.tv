@@ -203,11 +203,11 @@ export function toTimeInputValue(date: Date): string {
  */
 export function localDayStartISO(dayString: string): string {
   const [year, month, day] = dayString.split('-').map(Number)
-  return new Date(year!, month! - 1, day!, 0, 0, 0, 0).toISOString()
+  return new Date(year!, month! - 1, day, 0, 0, 0, 0).toISOString()
 }
 
 /** Inverse of toDateInputValue — see localDayStartISO's doc comment. */
 export function localDayEndISO(dayString: string): string {
   const [year, month, day] = dayString.split('-').map(Number)
-  return new Date(year!, month! - 1, day!, 23, 59, 59, 999).toISOString()
+  return new Date(year!, month! - 1, day, 23, 59, 59, 999).toISOString()
 }

@@ -18,5 +18,3 @@ void i18n
     defaultNS: 'common',
     interpolation: { escapeValue: false },
   })
-
-export default i18n

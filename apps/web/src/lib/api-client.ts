@@ -89,9 +89,16 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
   if (res.status === 204) return undefined as T
 
-  const body = await res.json().catch(() => undefined)
+  const body: unknown = await res.json().catch(() => undefined)
   if (!res.ok) {
-    throw new ApiError(res.status, body?.error ?? res.statusText)
+    // Every API route error body is `{ error: string }` (see e.g.
+    // apps/api/src/middleware/auth.ts), but it's still just parsed JSON at
+    // this point — narrow it rather than trusting the shape.
+    const message =
+      body && typeof body === 'object' && 'error' in body && typeof body.error === 'string'
+        ? body.error
+        : res.statusText
+    throw new ApiError(res.status, message)
   }
   return body as T
 }

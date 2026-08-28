@@ -237,7 +237,7 @@ export function WatchDateDialog({
               if (!e.target.value) return
               const [year, month, day] = e.target.value.split('-').map(Number)
               const next = new Date(previewDate)
-              next.setFullYear(year!, month! - 1, day!)
+              next.setFullYear(year!, month! - 1, day)
               updatePreviewDate(next)
             }}
           />
@@ -250,7 +250,7 @@ export function WatchDateDialog({
               if (!e.target.value) return
               const [hours, minutes] = e.target.value.split(':').map(Number)
               const next = new Date(previewDate)
-              next.setHours(hours!, minutes!)
+              next.setHours(hours!, minutes)
               updatePreviewDate(next)
             }}
           />

@@ -39,7 +39,7 @@ export function LogoutButton() {
   }
 
   return (
-    <Button type="button" variant="secondary" onClick={handleLogout}>
+    <Button type="button" variant="secondary" onClick={() => void handleLogout()}>
       <LogoutIcon />
       {t('nav.logout')}
     </Button>

@@ -68,6 +68,9 @@ jobs:
       - name: Lint
         run: pnpm lint
 
+      - name: Knip (unused files/exports/dependencies)
+        run: pnpm knip
+
       - name: Format check
         run: pnpm format:check
 

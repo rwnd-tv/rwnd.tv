@@ -154,7 +154,7 @@ function isDefaultSeasonType(season: TvdbSeasonSummary, show: TvdbSeries): boole
  * HTTP status so callers that need to tell "not found" apart from other
  * failures (findByExternalId, translation() below) don't have to
  * string-match the message. */
-export class TvdbHttpError extends Error {
+class TvdbHttpError extends Error {
   constructor(
     readonly status: number,
     message: string,

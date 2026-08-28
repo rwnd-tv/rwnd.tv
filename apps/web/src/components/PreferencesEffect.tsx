@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useAuth } from '../lib/auth-context.js'
+import { useAuth } from '../lib/use-auth.js'
 
 /** Applies the logged-in user's theme and locale preferences to the document. */
 export function PreferencesEffect() {

@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { SUPPORTED_LOCALES, type Theme } from '@rwnd/shared'
 import { api } from '../../lib/api-client.js'
-import { useAuth } from '../../lib/auth-context.js'
+import { useAuth } from '../../lib/use-auth.js'
 import { Card } from '../ui/Card.js'
 import { Button } from '../ui/Button.js'
 

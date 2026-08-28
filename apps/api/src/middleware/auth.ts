@@ -4,17 +4,6 @@ import { resolveSession } from '../lib/session.js'
 import type { AppEnv } from '../types.js'
 import { loadEnv } from '../env.js'
 
-/** Populates `user` on the context if a valid session cookie is present. Never rejects. */
-export const optionalAuth = createMiddleware<AppEnv>(async (c, next) => {
-  const env = loadEnv()
-  const token = getCookie(c, env.SESSION_COOKIE_NAME)
-  if (token) {
-    const user = await resolveSession(c.get('db'), token)
-    if (user) c.set('user', user)
-  }
-  await next()
-})
-
 /** Requires a valid session; responds 401 otherwise. */
 export const requireAuth = createMiddleware<AppEnv>(async (c, next) => {
   const env = loadEnv()
@@ -25,6 +14,7 @@ export const requireAuth = createMiddleware<AppEnv>(async (c, next) => {
   }
   c.set('user', user)
   await next()
+  return
 })
 
 /** Requires an authenticated admin. Must run after requireAuth. */
@@ -34,4 +24,5 @@ export const requireAdmin = createMiddleware<AppEnv>(async (c, next) => {
     return c.json({ error: 'forbidden' }, 403)
   }
   await next()
+  return
 })

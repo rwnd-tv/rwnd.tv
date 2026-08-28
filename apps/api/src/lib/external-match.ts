@@ -30,7 +30,7 @@ function ownProviderId(provider: MetadataProvider, ids: ExternalIdBundle): strin
  * covers both movies and shows; `tvdb` is TV-only in practice, but there's
  * no harm asking either provider method for either entity type — the
  * provider itself returns null for a source it can't reverse-lookup. */
-export async function findViaAlternateIds(
+async function findViaAlternateIds(
   provider: MetadataProvider,
   entityType: 'movie' | 'show',
   ids: ExternalIdBundle,

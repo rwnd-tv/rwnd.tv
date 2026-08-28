@@ -1,15 +1,7 @@
-import { createContext, useContext, type ReactNode } from 'react'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
-import type { User } from '@rwnd/shared'
+import type { ReactNode } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { api, ApiError } from './api-client.js'
-
-interface AuthContextValue {
-  user: User | null
-  isLoading: boolean
-  refetch: () => Promise<unknown>
-}
-
-const AuthContext = createContext<AuthContextValue | undefined>(undefined)
+import { AuthContext } from './use-auth.js'
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const { data, isLoading, refetch } = useQuery({
@@ -29,15 +21,4 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       {children}
     </AuthContext.Provider>
   )
-}
-
-export function useAuth(): AuthContextValue {
-  const ctx = useContext(AuthContext)
-  if (!ctx) throw new Error('useAuth must be used within AuthProvider')
-  return ctx
-}
-
-export function useInvalidateAuth() {
-  const queryClient = useQueryClient()
-  return () => queryClient.invalidateQueries({ queryKey: ['auth', 'me'] })
 }

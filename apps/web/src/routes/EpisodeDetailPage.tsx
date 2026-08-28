@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { Link, useNavigate, useParams } from 'react-router'
 import { useQuery } from '@tanstack/react-query'
 import { api, ApiError } from '../lib/api-client.js'
-import { useAuth } from '../lib/auth-context.js'
+import { useAuth } from '../lib/use-auth.js'
 import { UNKNOWN_WATCHED_AT, formatHistoryDate } from '../lib/date.js'
 import { useEpisodeRatingActions } from '../lib/use-episode-rating-actions.js'
 import { useEpisodeWatchActions } from '../lib/use-episode-watch-actions.js'
@@ -241,7 +241,7 @@ export function EpisodeDetailPage() {
             aria-label={t('showDetail.episodeDetail.previousEpisode')}
             title={t('showDetail.episodeDetail.previousEpisode')}
             onClick={() =>
-              navigate(
+              void navigate(
                 `/shows/${slug}/season/${seasonNumber}/episode/${previousEpisode!.episodeNumber}`,
               )
             }
@@ -256,7 +256,7 @@ export function EpisodeDetailPage() {
             aria-label={t('showDetail.episodeDetail.nextEpisode')}
             title={t('showDetail.episodeDetail.nextEpisode')}
             onClick={() =>
-              navigate(
+              void navigate(
                 `/shows/${slug}/season/${seasonNumber}/episode/${nextEpisode!.episodeNumber}`,
               )
             }

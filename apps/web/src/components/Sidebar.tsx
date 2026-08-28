@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import { Link, NavLink } from 'react-router'
 import { useTranslation } from 'react-i18next'
-import { useAuth } from '../lib/auth-context.js'
+import { useAuth } from '../lib/use-auth.js'
 import { Avatar } from './Avatar.js'
 import {
   DashboardIcon,

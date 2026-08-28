@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../../lib/api-client.js'
-import { useAuth } from '../../lib/auth-context.js'
+import { useAuth } from '../../lib/use-auth.js'
 import { formatDashboardDate } from '../../lib/date.js'
 import { PosterTile } from './PosterTile.js'
 

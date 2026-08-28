@@ -245,7 +245,7 @@ describe('tokens', () => {
 
     it('replays pending events as real plays once claimed, then clears them', async () => {
       const customApp = createApp({ db, metadataProviders: [fakeTmdb()] })
-      const cookie = await extractCookie(
+      const cookie = extractCookie(
         await customApp.request('/api/v1/setup', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -322,7 +322,7 @@ describe('tokens', () => {
 
     it('replays every pending event even when one of them fails unexpectedly, and still clears all of them', async () => {
       const customApp = createApp({ db, metadataProviders: [fakeTmdb()] })
-      const cookie = await extractCookie(
+      const cookie = extractCookie(
         await customApp.request('/api/v1/setup', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

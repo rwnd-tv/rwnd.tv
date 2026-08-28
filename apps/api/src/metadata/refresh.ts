@@ -61,7 +61,7 @@ async function currentLocale(db: Database): Promise<string> {
   return row?.defaultLocale ?? 'en-US'
 }
 
-export interface RefreshCandidate {
+interface RefreshCandidate {
   id: string
 }
 

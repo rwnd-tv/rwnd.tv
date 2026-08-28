@@ -4,7 +4,7 @@ import { Link, Navigate, useNavigate } from 'react-router'
 import { useQueryClient } from '@tanstack/react-query'
 import { api, ApiError } from '../lib/api-client.js'
 import { usePublicSettings } from '../lib/use-public-settings.js'
-import { useAuth } from '../lib/auth-context.js'
+import { useAuth } from '../lib/use-auth.js'
 import { detectedLocale } from '../lib/detected-locale.js'
 import { Card } from '../components/ui/Card.js'
 import { Field } from '../components/ui/Field.js'
@@ -77,7 +77,7 @@ export function RegisterPage() {
         locale: detectedLocale(i18n.language),
       })
       await queryClient.invalidateQueries({ queryKey: ['auth', 'me'] })
-      navigate('/dashboard')
+      void navigate('/dashboard')
     } catch (err) {
       setError(err instanceof ApiError ? err.message : t('common.somethingWentWrong'))
     } finally {
@@ -89,7 +89,7 @@ export function RegisterPage() {
     <div className="flex min-h-screen items-center justify-center px-4">
       <Card className="w-full max-w-sm">
         <h1 className="mb-6 text-xl font-semibold">{t('register.title')}</h1>
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+        <form onSubmit={(e) => void handleSubmit(e)} className="flex flex-col gap-4">
           <Field
             label={t('register.displayName')}
             value={displayName}

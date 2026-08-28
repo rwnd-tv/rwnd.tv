@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router'
 import { api, ApiError } from '../../lib/api-client.js'
-import { useAuth } from '../../lib/auth-context.js'
+import { useAuth } from '../../lib/use-auth.js'
 import { Card } from '../ui/Card.js'
 import { Field } from '../ui/Field.js'
 import { Button } from '../ui/Button.js'
@@ -58,7 +58,7 @@ export function DeleteAccountCard() {
       // really just tidying up the client before the redirect.
       queryClient.removeQueries({ predicate: (query) => query.queryKey[0] !== 'auth' })
       await queryClient.invalidateQueries({ queryKey: ['auth', 'me'] })
-      navigate('/login')
+      void navigate('/login')
     },
     onError: (err) =>
       setError(err instanceof ApiError ? err.message : t('common.somethingWentWrong')),

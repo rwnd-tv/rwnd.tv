@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, Navigate } from 'react-router'
 import { api, ApiError } from '../lib/api-client.js'
-import { useAuth } from '../lib/auth-context.js'
+import { useAuth } from '../lib/use-auth.js'
 import { Card } from '../components/ui/Card.js'
 import { Field } from '../components/ui/Field.js'
 import { Button } from '../components/ui/Button.js'
@@ -53,7 +53,7 @@ export function ForgotPasswordPage() {
         {submitted ? (
           <p className="text-sm text-[var(--color-fg-muted)]">{t('forgotPassword.success')}</p>
         ) : (
-          <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          <form onSubmit={(e) => void handleSubmit(e)} className="flex flex-col gap-4">
             <Field
               label={t('forgotPassword.email')}
               type="email"

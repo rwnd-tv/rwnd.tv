@@ -10,15 +10,15 @@ import type {
 } from '../../trakt/types.js'
 
 // Fixed Trakt/TMDB ids reused across fixtures so tests can assert on them.
-export const MATRIX_TRAKT_ID = 1
+const MATRIX_TRAKT_ID = 1
 export const MATRIX_TMDB_ID = 603
-export const BREAKING_BAD_SHOW_TRAKT_ID = 2
+const BREAKING_BAD_SHOW_TRAKT_ID = 2
 export const BREAKING_BAD_SHOW_TMDB_ID = 1396
-export const BREAKING_BAD_SHOW_TVDB_ID = 81189
-export const PILOT_EPISODE_TRAKT_ID = 3
-export const SECOND_EPISODE_TRAKT_ID = 4
-export const OBSCURE_MOVIE_TRAKT_ID = 5
-export const SEASON_WATCHLIST_SHOW_TRAKT_ID = 6
+const BREAKING_BAD_SHOW_TVDB_ID = 81189
+const PILOT_EPISODE_TRAKT_ID = 3
+const SECOND_EPISODE_TRAKT_ID = 4
+const OBSCURE_MOVIE_TRAKT_ID = 5
+const SEASON_WATCHLIST_SHOW_TRAKT_ID = 6
 
 export const deviceCodeResponse: TraktDeviceCodeResponse = {
   device_code: 'test-device-code',
@@ -237,7 +237,7 @@ export const showFoundViaImdbHistoryItem: TraktHistoryItem = {
  * `showFailures` already gives the tmdb-based failure case (see
  * `undeadShowHistoryItem1`/`2` above).
  */
-export const UNFINDABLE_SHOW_IMDB_ID = 'tt0000001'
+const UNFINDABLE_SHOW_IMDB_ID = 'tt0000001'
 const unfindableShow: TraktShow = {
   title: 'A Show Nothing Can Find',
   year: 2017,

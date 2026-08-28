@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next'
-import { useAuth } from '../lib/auth-context.js'
+import { useAuth } from '../lib/use-auth.js'
 import { TokensPanel } from '../components/settings/TokensPanel.js'
 import { DatabasePanel } from '../components/settings/DatabasePanel.js'
 import { InstanceSettingsPanel } from '../components/settings/InstanceSettingsPanel.js'

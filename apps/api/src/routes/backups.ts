@@ -71,7 +71,7 @@ async function loadBackupFile(
     typeof raw === 'object' &&
     raw !== null &&
     'formatVersion' in raw &&
-    !knownVersions.includes((raw as { formatVersion: unknown }).formatVersion)
+    !knownVersions.includes(raw.formatVersion)
   return {
     ok: false,
     status: 400,
@@ -90,6 +90,7 @@ const requireBackupsConfigured = createMiddleware<AppEnv>(async (c, next) => {
     return c.json({ error: 'Backups are not configured on this instance' }, 404)
   }
   await next()
+  return
 })
 
 /**

@@ -127,7 +127,7 @@ async function buildWatchlistSummaries(
     return {
       ...row,
       itemCount: latest?.itemCount ?? 0,
-      entityType: (chosen?.entityType ?? null) as EntityType | null,
+      entityType: chosen?.entityType ?? null,
       entityId: chosen?.entityId ?? null,
     }
   })

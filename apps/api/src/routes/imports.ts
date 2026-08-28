@@ -118,6 +118,7 @@ const requireTraktConfigured = createMiddleware<AppEnv>(async (c, next) => {
     return c.json({ error: 'Trakt import is not configured on this instance' }, 404)
   }
   await next()
+  return
 })
 
 importRoutes.openapi(

@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next'
 import { Link, Navigate } from 'react-router'
 import type { Locale } from '@rwnd/shared'
-import { useAuth } from '../lib/auth-context.js'
+import { useAuth } from '../lib/use-auth.js'
 import { useSetupStatus } from '../lib/use-setup-status.js'
 import { usePublicSettings } from '../lib/use-public-settings.js'
 import { detectedLocale } from '../lib/detected-locale.js'

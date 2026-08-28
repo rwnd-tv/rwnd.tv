@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { metadataProviderSourceSchema } from './common.js'
+import { metadataProviderSourceSchema, playSourceSchema } from './common.js'
 
 /**
  * Per-user backup/restore for the four categories Clear database can also
@@ -92,8 +92,6 @@ export const backupShowSchema = z.object({
 })
 export type BackupShow = z.infer<typeof backupShowSchema>
 
-export const playSourceSchema = z.enum(['manual', 'plex', 'import'])
-
 /**
  * Points at a movie, or one episode of a show — the same two shapes a
  * `plays` row's exactly-one-of `movieId`/`episodeId` can be (see
@@ -142,6 +140,9 @@ export const backupRatingSchema = z
   .refine((v) => (v.season === undefined) === (v.episode === undefined), {
     message: 'season and episode must both be present or both absent',
   })
+  .refine((v) => !v.movie || (v.season === undefined && v.episode === undefined), {
+    message: 'season and episode are only valid for a show entry, not a movie entry',
+  })
 export type BackupRating = z.infer<typeof backupRatingSchema>
 
 export const backupWatchlistItemSchema = z
@@ -163,6 +164,9 @@ export const backupWatchlistItemSchema = z
   })
   .refine((v) => (v.season === undefined) === (v.episode === undefined), {
     message: 'season and episode must both be present or both absent',
+  })
+  .refine((v) => !v.movie || (v.season === undefined && v.episode === undefined), {
+    message: 'season and episode are only valid for a show entry, not a movie entry',
   })
 export type BackupWatchlistItem = z.infer<typeof backupWatchlistItemSchema>
 

@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { metadataProviderSourceSchema } from './common.js'
+import { metadataProviderSourceSchema, playSourceSchema } from './common.js'
 
 /**
  * TV Shows / Movies gallery pages (apps/web/src/routes/ShowsPage.tsx,
@@ -342,7 +342,7 @@ export const watchesSchema = z.object({
     z.object({
       id: z.string().uuid(),
       watchedAt: z.string().datetime(),
-      source: z.enum(['manual', 'plex', 'import']),
+      source: playSourceSchema,
     }),
   ),
 })
@@ -362,7 +362,7 @@ export const seasonWatchesSchema = z.object({
     z.object({
       id: z.string().uuid(),
       watchedAt: z.string().datetime(),
-      source: z.enum(['manual', 'plex', 'import']),
+      source: playSourceSchema,
       episodeNumber: z.number().int(),
       episodeTitle: z.string().nullable(),
     }),
@@ -385,7 +385,7 @@ export const showWatchesSchema = z.object({
     z.object({
       id: z.string().uuid(),
       watchedAt: z.string().datetime(),
-      source: z.enum(['manual', 'plex', 'import']),
+      source: playSourceSchema,
       seasonNumber: z.number().int(),
       episodeNumber: z.number().int(),
       episodeTitle: z.string().nullable(),

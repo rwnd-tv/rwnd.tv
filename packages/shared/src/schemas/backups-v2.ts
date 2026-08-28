@@ -24,7 +24,7 @@ import {
  * already follows for the fields v1 -> v2 didn't touch.
  */
 
-export const backupWatchlistItemSchemaV2 = z
+const backupWatchlistItemSchemaV2 = z
   .object({
     movie: externalRefSchema.optional(),
     show: externalRefSchema.optional(),
@@ -39,7 +39,6 @@ export const backupWatchlistItemSchemaV2 = z
   .refine((v) => (v.season === undefined) === (v.episode === undefined), {
     message: 'season and episode must both be present or both absent',
   })
-export type BackupWatchlistItemV2 = z.infer<typeof backupWatchlistItemSchemaV2>
 
 export const backupFileSchemaV2 = z.object({
   formatVersion: z.literal(2),

@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { paginationQuerySchema } from './common.js'
+import { paginationQuerySchema, playSourceSchema } from './common.js'
 
 /**
  * A play is logged against a *provider* result, not a local row directly —
@@ -61,7 +61,7 @@ export const playMediaSummarySchema = z.object({
 export const playSchema = z.object({
   id: z.string().uuid(),
   watchedAt: z.string().datetime(),
-  source: z.enum(['manual', 'plex', 'import']),
+  source: playSourceSchema,
   createdAt: z.string().datetime(),
   media: playMediaSummarySchema,
 })

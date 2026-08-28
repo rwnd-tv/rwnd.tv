@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { playMediaSummarySchema } from './plays.js'
+import { playSourceSchema } from './common.js'
 
 /**
  * The four kinds of user action the Activity page (formerly just "History",
@@ -34,7 +35,7 @@ export const activityEntrySchema = z.object({
   occurredAt: z.string().datetime(),
   media: playMediaSummarySchema,
   /** `watch` only. */
-  source: z.enum(['manual', 'plex', 'import']).optional(),
+  source: playSourceSchema.optional(),
   /** `rating` only, 1-10. */
   rating: z.number().int().min(1).max(10).optional(),
   /** `watchlist` only — only ever populated by the CSV importer today. */

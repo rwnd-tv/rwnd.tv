@@ -5,6 +5,27 @@ grouping, sorted oldest to newest.
 
 ## Repo hygiene
 
+- [x] **Code review & tidy-up pass** (2026-08-28 added, done 2026-08-28) — M3\
+      James, 2026-08-28: wanted a dedicated code-quality pass before the
+      first tagged release. Done as four staged commits, each verified
+      against the full local integration suite: (1) hardened the tooling
+      floor — `typescript-eslint`'s type-checked rules, `--max-warnings 0`,
+      stricter `tsconfig.base.json` flags, and `knip`, all wired into CI,
+      plus fixing everything they surfaced (5 Hono middleware functions,
+      ~16 web components' promise handling, a handful of dead exports);
+      (2) split `routes/library.ts` (2,847 lines, 35 routes) into
+      `routes/library/{shows,movies,seasons,ratings,queue}.ts`, verified
+      as a lossless move via a byte-identical OpenAPI diff; (3) a per-area
+      code review (API/web/shared+db) that found and fixed 37 duplicated
+      lookup call sites, a `packages/shared` barrel over-export, a
+      duplicated enum, and a real schema-validation gap — see "Code
+      review follow-ups" below for what got logged instead of fixed
+      inline; (4) stood up `apps/web`'s first-ever component-testing
+      infrastructure (jsdom + Testing Library) plus exemplar tests,
+      including one that found a real UI inconsistency (RegisterPage's
+      error alert renders in a different place depending on registration
+      mode) while being written.
+
 - [x] **Review Dependabot PRs** (2026-08-09 20:40)\
       8 open, incl. `node` 22→26-alpine again — that exact bump broke
       the Docker image build silently last time

@@ -42,7 +42,7 @@ genuinely production-ready.
 - [ ] Proactive per-episode data resolution, not just as a side effect of specific actions (see TODO.md)
 - [ ] Fix known metadata accuracy bugs affecting real usage — `airedEpisodeCount` for a currently-airing season (see TODO.md)
 - [x] **Landing page**: a real explainer page for logged-out visitors at `/` — hero, features, self-host quick start, screenshot gallery, milestone status and FAQ, with sign-in/create-account and the FAQ's public-instance answer both gated on the instance's actual registration state (see TODO_ARCHIVE.md)
-- [ ] Code review & tidy-up pass — dead code, lint/format backlog, stale TODOs, M1-vs-M3 pattern drift (see TODO.md)
+- [x] **Code review & tidy-up pass**: a tooling-floor hardening pass (type-checked lint, stricter tsconfig, `knip`, all wired into CI), splitting the 2,847-line `routes/library.ts` into five domain files, a per-area review that found and fixed 37 duplicated lookup call sites plus a real schema-validation gap, and `apps/web`'s first component-testing infrastructure with exemplar tests. See TODO_ARCHIVE.md for the full breakdown and TODO.md's "Code review follow-ups" for what got logged rather than fixed inline.
 - [ ] Full security review (see TODO.md)
 - [ ] Documentation & self-hosting readiness pass — refresh the GitHub-facing docs to reflect where the project actually is, and confirm `docker-compose.yml`/`.env.example`/self-hosting.md actually work end to end for a real self-hoster (see TODO.md)
 - [ ] Cut the first tagged release, moving `:latest` off tracking `:edge` (see TODO.md)

@@ -18,28 +18,13 @@ Format:
       `typescript-eslint` doesn't support TS 7 yet; leave any TS 7.0
       Dependabot bump open until it does.
 
-- [ ] **Code review & tidy-up pass** (2026-08-28 added) — M3\
-      James, 2026-08-28: wants a dedicated code-quality pass before the
-      first tagged release — it's an open-source project, and code
-      quality reflects project quality. Scope: automated hygiene (`knip`
-      for dead code/unused exports/deps, close out the `format:check`/
-      lint backlog), a `/code-review` pass per area (API routes, web
-      components, shared libs) rather than the whole repo in one shot, a
-      sweep for stale `TODO`/`FIXME`/`HACK` comments, and a consistency
-      check for pattern drift between code written in M1 and M3.
-      Explicitly excludes security findings (separate item below) and
-      docs content (separate item above) — bar is "clearly wrong or
-      inconsistent," not a stylistic rewrite. Run before the security
-      review and before cutting the release, so the reviewed code is the
-      release code.
-
 ## Code review follow-ups (2026-08-28)
 
-Findings from the M3 code review pass (see "Code review & tidy-up pass"
-above) that need a design decision rather than a mechanical fix, so they
-were logged here instead of fixed inline. Cross-confirmed by two
-independent review passes (a holistic per-area audit plus `/code-review`)
-unless noted otherwise.
+Findings from the M3 code review pass (see `docs/TODO_ARCHIVE.md`'s "Code
+review & tidy-up pass" for the full pass) that need a design decision
+rather than a mechanical fix, so they were logged here instead of fixed
+inline. Cross-confirmed by two independent review passes (a holistic
+per-area audit plus `/code-review`) unless noted otherwise.
 
 - [ ] **API: `findNextUnwatchedEpisode`/`findNextAiringEpisode` are ~90%
       duplicated** (2026-08-28 added)\

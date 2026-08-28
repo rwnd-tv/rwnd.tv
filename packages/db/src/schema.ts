@@ -144,29 +144,41 @@ export const userCredentials = pgTable(
 )
 
 /** Browser sessions. The cookie holds the raw token; only its hash is stored. */
-export const sessions = pgTable('sessions', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  userId: uuid('user_id')
-    .notNull()
-    .references(() => users.id, { onDelete: 'cascade' }),
-  tokenHash: text('token_hash').notNull().unique(),
-  userAgent: text('user_agent'),
-  ipAddress: text('ip_address'),
-  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-})
+export const sessions = pgTable(
+  'sessions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    tokenHash: text('token_hash').notNull().unique(),
+    userAgent: text('user_agent'),
+    ipAddress: text('ip_address'),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  // Backs "sign out" / "sign out everywhere" (apps/api/src/lib/session.ts),
+  // both delete-by-userId.
+  (table) => [index('sessions_user_idx').on(table.userId)],
+)
 
 /** Long-lived tokens for webhooks/scrobblers (Plex/Tautulli in M2, CLI/export clients later). */
-export const apiTokens = pgTable('api_tokens', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  userId: uuid('user_id')
-    .notNull()
-    .references(() => users.id, { onDelete: 'cascade' }),
-  name: text('name').notNull(),
-  tokenHash: text('token_hash').notNull().unique(),
-  lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-})
+export const apiTokens = pgTable(
+  'api_tokens',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    tokenHash: text('token_hash').notNull().unique(),
+    lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  // Backs every load of the API-tokens settings page
+  // (apps/api/src/routes/tokens.ts).
+  (table) => [index('api_tokens_user_idx').on(table.userId)],
+)
 
 /** Maps one external account (a Plex user, on one specific webhook
  * integration) to the rwnd.tv user its plays should be logged against.
@@ -311,15 +323,22 @@ export const passwordResetTokens = pgTable('password_reset_tokens', {
  * these outstanding at once isn't prevented at the schema level, but
  * `POST /auth/resend-verification` deletes any existing row for the user
  * before issuing a new one, so in practice there's only ever one live. */
-export const emailVerificationTokens = pgTable('email_verification_tokens', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  userId: uuid('user_id')
-    .notNull()
-    .references(() => users.id, { onDelete: 'cascade' }),
-  tokenHash: text('token_hash').notNull().unique(),
-  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-})
+export const emailVerificationTokens = pgTable(
+  'email_verification_tokens',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    tokenHash: text('token_hash').notNull().unique(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  // Backs createEmailVerificationToken's delete-by-userId
+  // (apps/api/src/lib/account-tokens.ts), which drops any token already
+  // outstanding for this user before issuing a new one.
+  (table) => [index('email_verification_tokens_user_idx').on(table.userId)],
+)
 
 /** One-shot email-*change* confirmation link — deliberately a separate
  * table from `emailVerificationTokens` above rather than reusing it with
@@ -333,16 +352,23 @@ export const emailVerificationTokens = pgTable('email_verification_tokens', {
  * `citext` to match `users.email`'s case-insensitive uniqueness — the
  * confirm route re-checks it's still free at redemption time, in case
  * someone else claimed it in the meantime. */
-export const emailChangeTokens = pgTable('email_change_tokens', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  userId: uuid('user_id')
-    .notNull()
-    .references(() => users.id, { onDelete: 'cascade' }),
-  newEmail: citext('new_email').notNull(),
-  tokenHash: text('token_hash').notNull().unique(),
-  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-})
+export const emailChangeTokens = pgTable(
+  'email_change_tokens',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    newEmail: citext('new_email').notNull(),
+    tokenHash: text('token_hash').notNull().unique(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  // Backs createEmailChangeToken's delete-by-userId
+  // (apps/api/src/lib/account-tokens.ts), same reasoning as
+  // emailVerificationTokens above.
+  (table) => [index('email_change_tokens_user_idx').on(table.userId)],
+)
 
 // ---------------------------------------------------------------------------
 // Metadata (sourced from a MetadataProvider — TMDB today, see

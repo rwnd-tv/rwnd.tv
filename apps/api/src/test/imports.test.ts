@@ -944,7 +944,7 @@ describe('Trakt import', () => {
     // The user manually undrops it in rwnd.tv — same effect as
     // DELETE /library/shows/{slug}/dropped, an active override since it
     // disagrees with Trakt's own (still "dropped") state — see
-    // apps/api/src/routes/library.ts.
+    // apps/api/src/routes/library/shows.ts.
     await db
       .update(droppedShows)
       .set({ manualDropped: false, manualDroppedAt: new Date('2024-02-15T00:00:00.000Z') })

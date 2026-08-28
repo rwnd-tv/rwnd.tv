@@ -56,7 +56,7 @@ function toPlayResponse(row: {
  * Two unknown-date watches of the same movie/episode are indistinguishable
  * from each other (same rounding-error-prone sentinel timestamp, see the
  * tie-break fix DELETE /library/shows/.../plays needed in
- * apps/api/src/routes/library.ts), so a second one adds nothing — reject
+ * apps/api/src/routes/library/shows.ts), so a second one adds nothing — reject
  * rather than silently create a duplicate the user can't tell apart from
  * the first. Shared by both the movie and episode branches of POST /plays
  * below. Only applies going forward through this route; doesn't touch
@@ -202,7 +202,7 @@ playRoutes.openapi(
     )
 
     // Same "no unaired episode" rule as the bulk "Watched" button's
-    // logMissingWatches (apps/api/src/routes/library.ts) — an episode with
+    // logMissingWatches (apps/api/src/routes/library/shared.ts) — an episode with
     // no known or future firstAired can't have been watched yet, no matter
     // what watchedAt is requested.
     if (episode.firstAired === null || new Date(episode.firstAired) > new Date()) {

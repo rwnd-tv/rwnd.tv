@@ -248,7 +248,7 @@ export async function resolveSeason(
 /**
  * Resolves every non-special (season > 0) episode of a show to a local
  * episode id. Used by the show page's "Watched" button
- * (apps/api/src/routes/library.ts), where every episode needs a local row
+ * (apps/api/src/routes/library/shows.ts), where every episode needs a local row
  * regardless of whether it's ever been individually logged before.
  */
 export async function resolveShowEpisodes(
@@ -277,7 +277,7 @@ export async function resolveShowEpisodes(
  * Resolves every episode of one season (specials included — unlike
  * resolveShowEpisodes, there's no whole-show "exclude specials" reasoning
  * at this scope) to a local episode id. Used by the season page's
- * "Watched" button (apps/api/src/routes/library.ts).
+ * "Watched" button (apps/api/src/routes/library/seasons.ts).
  */
 export async function resolveSeasonEpisodes(
   db: Database,
@@ -302,7 +302,7 @@ export interface NextEpisode {
  * `startSeasonNumber` onward (specials excluded, same convention
  * resolveShowEpisodes uses), or null if there isn't one (nothing new has
  * aired since they caught up). Powers the Dashboard's On Deck row
- * (apps/api/src/routes/library.ts). Scans forward season-by-season and
+ * (apps/api/src/routes/library/queue.ts). Scans forward season-by-season and
  * stops at the first hit, rather than resolving the whole show up front
  * like resolveShowEpisodes does for the "Watched" button — passing in the
  * caller's actual furthest-watched season means a many-season show only
@@ -314,7 +314,7 @@ export interface NextEpisode {
  * one, within `startSeasonNumber` only (every later season is already
  * guaranteed to be "after" it, since `startSeasonNumber` is by construction
  * the highest season with any watch at all — see
- * apps/api/src/routes/library.ts's `maxWatchedSeason`). Pass null to
+ * apps/api/src/routes/library/queue.ts's `maxWatchedSeason`). Pass null to
  * disable this and fall back to the plain "earliest unwatched" behaviour —
  * the user's own `onDeckFillGaps` preference (packages/db/src/schema.ts).
  */
@@ -380,7 +380,7 @@ export async function findNextUnwatchedEpisode(
  * The next *upcoming* (not yet available to watch) episode of a show a user
  * is following, from `startSeasonNumber` onward — or null if nothing's
  * scheduled yet. Powers the Dashboard's Up Next row
- * (apps/api/src/routes/library.ts). Includes an episode airing *today*
+ * (apps/api/src/routes/library/queue.ts). Includes an episode airing *today*
  * (`firstAired` is date-only, with no time-of-day — see schema.ts — so
  * "today" is the earliest point the app can call an episode available at
  * all, same convention findNextUnwatchedEpisode/`POST /plays` already use

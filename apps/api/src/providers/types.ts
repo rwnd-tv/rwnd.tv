@@ -22,7 +22,7 @@ export interface MetadataProvider {
   /**
    * All episodes of one season in a single call, plus the season's own
    * synopsis (both come back on the same provider response — see
-   * apps/api/src/routes/library.ts's season detail route, the only caller
+   * apps/api/src/routes/library/seasons.ts's season detail route, the only caller
    * that uses `overview`). Used by the Trakt importer
    * (apps/api/src/import/match.ts) instead of `getEpisode` per episode —
    * resolving a large history one episode at a time would mean thousands of
@@ -131,7 +131,7 @@ export interface ProviderEpisode {
   firstAired: string | null // YYYY-MM-DD
   /** Episode-level synopsis, or null if the provider has none yet (common
    * for unaired episodes). Not cached locally — see the season detail
-   * route in apps/api/src/routes/library.ts, which fetches this live. */
+   * route in apps/api/src/routes/library/seasons.ts, which fetches this live. */
   overview: string | null
   /** Episode thumbnail/still image, already a full URL — null if the
    * provider has none (again, common pre-air). */

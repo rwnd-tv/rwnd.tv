@@ -24,7 +24,7 @@ type EntityType = 'movie' | 'show' | 'episode'
  * it anyway, both from one grouped pass over `watchlist_items`). The
  * `array_agg(... order by ...)[1]` trick stands in for `DISTINCT ON`, which
  * has no precedent elsewhere in this codebase's query builder usage — see
- * `getRecentlyWatchedCandidates` (apps/api/src/routes/library.ts) for the
+ * `getRecentlyWatchedCandidates` (apps/api/src/routes/library/queue.ts) for the
  * same "aggregate CTE, cast with sql<T>" style this follows.
  */
 async function resolveLatestItemPerList(db: Database, userId: string) {

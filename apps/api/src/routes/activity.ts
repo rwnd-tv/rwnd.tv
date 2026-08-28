@@ -44,7 +44,7 @@ const showViaEpisode = alias(shows, 'show_via_episode')
  * it. `occurredAt` needs `.mapWith` because a raw `sql` fragment doesn't get
  * postgres.js's automatic timestamptz→Date parsing the way a plain typed
  * column reference does (see the `lastWatchedAt` comment on GET
- * /library/shows, apps/api/src/routes/library.ts).
+ * /library/shows, apps/api/src/routes/library/shows.ts).
  *
  * `title`/`posterPath`/`showSlug` are always the *show's* (not the
  * episode's) for an episode entry — that's what a title filter and a
@@ -366,7 +366,7 @@ activityRoutes.openapi(
     // POST /account/clear-data (apps/api/src/routes/account.ts). A stray id
     // (wrong owner, or already gone) is silently ignored rather than
     // erroring — same "re-scoped by userId in the WHERE clause" convention
-    // as the bulk watch-removal routes in apps/api/src/routes/library.ts.
+    // as the bulk watch-removal routes in apps/api/src/routes/library/.
     await db.transaction(async (tx) => {
       if (idsByKind.watch.length > 0) {
         await tx

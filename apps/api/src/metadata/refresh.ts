@@ -70,8 +70,8 @@ interface RefreshCandidate {
  * same "highest-priority provider with something to work with" choice
  * `pickRefreshTargets` below makes in bulk for the background sweep. Used
  * directly by the manual "refresh metadata" routes
- * (apps/api/src/routes/library.ts), which only ever need one entity at a
- * time. */
+ * (apps/api/src/routes/library/{shows,movies}.ts), which only ever need one
+ * entity at a time. */
 export async function pickRefreshTarget(
   db: Database,
   entityType: 'movie' | 'show',
@@ -94,7 +94,7 @@ export async function pickRefreshTarget(
  * external ids rather than one per entity. Originally just for the
  * background sweep below (which can cover hundreds of rows); also used by
  * the Dashboard's On Deck/Up Next candidate lookup
- * (apps/api/src/routes/library.ts), which has the same "N shows, one
+ * (apps/api/src/routes/library/queue.ts), which has the same "N shows, one
  * query" shape. */
 export async function pickRefreshTargets(
   db: Database,
@@ -233,7 +233,7 @@ async function findStaleMovies(db: Database): Promise<RefreshCandidate[]> {
 
 /**
  * Exported for the manual "refresh metadata" button
- * (apps/api/src/routes/library.ts's POST /library/shows/{slug}/refresh) —
+ * (apps/api/src/routes/library/shows.ts's POST /library/shows/{slug}/refresh) —
  * same fetch-and-upsert logic the background sweep above uses per show, so
  * a user fixing a show TMDB itself has wrong doesn't get different/lesser
  * results than waiting for the next automatic pass. Callers have already
@@ -340,7 +340,7 @@ export async function refreshOneShow(
 
 /**
  * Exported for the manual "refresh metadata" button
- * (apps/api/src/routes/library.ts's POST /library/movies/{slug}/refresh) —
+ * (apps/api/src/routes/library/movies.ts's POST /library/movies/{slug}/refresh) —
  * same fetch-and-upsert logic the background sweep above uses per movie, so
  * a user fixing a movie TMDB itself has wrong doesn't get different/lesser
  * results than waiting for the next automatic pass. Deliberately does NOT

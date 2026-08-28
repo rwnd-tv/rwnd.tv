@@ -294,7 +294,7 @@ export async function buildExportFiles(
   // Only rows currently *effectively* dropped — a dropped_shows row can
   // exist without meaning "dropped" (e.g. traktDropped=false, no manual
   // override), same "manualDropped wins, falls back to traktDropped"
-  // determination used everywhere else (apps/api/src/routes/library.ts).
+  // determination used everywhere else (apps/api/src/routes/library/).
   const droppedRowsOut: (string | number | null)[][] = []
   for (const row of droppedRows) {
     const dropped = row.manualDropped ?? row.traktDropped ?? false

@@ -43,8 +43,9 @@ export async function ensureDefaultWatchlist(db: Database | Tx, userId: string):
  * rather than distinguishing the two (same "don't leak whether another
  * user's id exists" reasoning as every other per-user lookup in this app).
  * Shared by routes/watchlists.ts's own PATCH/DELETE and
- * routes/library.ts's per-title membership routes, both of which need to
- * resolve and validate a `watchlistId` path/body value before writing.
+ * routes/library/{shows,movies}.ts's per-title membership routes, both of
+ * which need to resolve and validate a `watchlistId` path/body value before
+ * writing.
  */
 export async function getOwnedWatchlist(db: Database | Tx, userId: string, watchlistId: string) {
   const [row] = await db
@@ -58,7 +59,7 @@ export async function getOwnedWatchlist(db: Database | Tx, userId: string, watch
 /**
  * Every one of the current user's watchlists a given show/movie is
  * currently on — backs `myWatchlistIds` on the show/movie detail routes
- * (showDetailSchema/movieDetailSchema, apps/api/src/routes/library.ts).
+ * (showDetailSchema/movieDetailSchema, apps/api/src/routes/library/{shows,movies}.ts).
  * Scoped by `userId` via a join rather than trusting `watchlistItems.userId`
  * alone, since the two are always written together anyway (see
  * watchlistItems' doc comment in packages/db/src/schema.ts) — this just

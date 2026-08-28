@@ -13,16 +13,7 @@ import {
   showWatchesSchema,
   watchlistMembershipStatusSchema,
 } from '@rwnd/shared'
-import {
-  droppedShows,
-  episodes,
-  externalIds,
-  plays,
-  ratings,
-  seasons,
-  shows,
-  watchlistItems,
-} from '@rwnd/db'
+import { droppedShows, episodes, plays, ratings, seasons, shows, watchlistItems } from '@rwnd/db'
 import type { AppEnv } from '../../types.js'
 import { requireAuth } from '../../middleware/auth.js'
 import { resolveShow, resolveShowEpisodes } from '../../lib/media.js'
@@ -30,7 +21,7 @@ import { pickRefreshTarget, refreshOneShow } from '../../metadata/refresh.js'
 import { orderedProviders } from '../../providers/priority.js'
 import { isProviderSource } from '../../lib/provider-source.js'
 import { getMyWatchlistIds, getOwnedWatchlist } from '../../lib/watchlists.js'
-import { logMissingWatches } from './shared.js'
+import { getExternalId, getShowBySlug, logMissingWatches } from './shared.js'
 
 export const showRoutes = new OpenAPIHono<AppEnv>()
 
@@ -248,38 +239,18 @@ showRoutes.openapi(
     const userId = c.get('user')!.id
     const db = c.get('db')
 
-    const [show] = await db.select().from(shows).where(eq(shows.slug, slug)).limit(1)
+    const show = await getShowBySlug(db, slug)
     if (!show) return c.json({ error: 'Show not found' }, 404)
 
     // Backs the TMDB rating badge's link to the show's TMDB page (see
     // ShowDetailPage.tsx) — null for a show resolved before TMDB was the
     // only provider, or (in principle) a future non-TMDB provider match.
-    const [tmdbExternalId] = await db
-      .select({ externalId: externalIds.externalId })
-      .from(externalIds)
-      .where(
-        and(
-          eq(externalIds.entityType, 'show'),
-          eq(externalIds.entityId, show.id),
-          eq(externalIds.source, 'tmdb'),
-        ),
-      )
-      .limit(1)
+    const tmdbExternalId = await getExternalId(db, 'show', show.id, 'tmdb')
 
     // Backs the TVDB link on the same page — see the tmdbExternalId query
     // above for the identical convention. Independent of `tmdbExternalId`:
     // a show can have either id, both, or neither on record.
-    const [tvdbExternalId] = await db
-      .select({ externalId: externalIds.externalId })
-      .from(externalIds)
-      .where(
-        and(
-          eq(externalIds.entityType, 'show'),
-          eq(externalIds.entityId, show.id),
-          eq(externalIds.source, 'tvdb'),
-        ),
-      )
-      .limit(1)
+    const tvdbExternalId = await getExternalId(db, 'show', show.id, 'tvdb')
 
     const [droppedRow] = await db
       .select({
@@ -395,8 +366,8 @@ showRoutes.openapi(
       status: show.status,
       genres: show.genres,
       voteAverage: show.voteAverage,
-      tmdbId: tmdbExternalId?.externalId ?? null,
-      tvdbId: tvdbExternalId?.externalId ?? null,
+      tmdbId: tmdbExternalId ?? null,
+      tvdbId: tvdbExternalId ?? null,
       metadataSource:
         show.metadataSource && isProviderSource(show.metadataSource) ? show.metadataSource : null,
       metadataRefreshedAt: show.metadataRefreshedAt.toISOString(),
@@ -454,7 +425,7 @@ showRoutes.openapi(
     const user = c.get('user')!
     const db = c.get('db')
 
-    const [show] = await db.select().from(shows).where(eq(shows.slug, slug)).limit(1)
+    const show = await getShowBySlug(db, slug)
     if (!show) return c.json({ error: 'Show not found' }, 404)
 
     const ordered = await orderedProviders(db, c.get('metadataProviders'))
@@ -503,11 +474,7 @@ showRoutes.openapi(
     const userId = c.get('user')!.id
     const db = c.get('db')
 
-    const [show] = await db
-      .select({ id: shows.id })
-      .from(shows)
-      .where(eq(shows.slug, slug))
-      .limit(1)
+    const show = await getShowBySlug(db, slug)
     if (!show) return c.json({ error: 'Show not found' }, 404)
 
     const rows = await db
@@ -569,11 +536,7 @@ showRoutes.openapi(
     const userId = c.get('user')!.id
     const db = c.get('db')
 
-    const [show] = await db
-      .select({ id: shows.id })
-      .from(shows)
-      .where(eq(shows.slug, slug))
-      .limit(1)
+    const show = await getShowBySlug(db, slug)
     if (!show) return c.json({ error: 'Show not found' }, 404)
 
     const episodeRows = await db
@@ -630,11 +593,7 @@ showRoutes.openapi(
     const userId = c.get('user')!.id
     const db = c.get('db')
 
-    const [show] = await db
-      .select({ id: shows.id })
-      .from(shows)
-      .where(eq(shows.slug, slug))
-      .limit(1)
+    const show = await getShowBySlug(db, slug)
     if (!show) return c.json({ error: 'Show not found' }, 404)
 
     // manualDropped is only an *override* — if Trakt's own state for this
@@ -692,11 +651,7 @@ showRoutes.openapi(
     const userId = c.get('user')!.id
     const db = c.get('db')
 
-    const [show] = await db
-      .select({ id: shows.id })
-      .from(shows)
-      .where(eq(shows.slug, slug))
-      .limit(1)
+    const show = await getShowBySlug(db, slug)
     if (!show) return c.json({ error: 'Show not found' }, 404)
 
     // A no-op (0 rows affected) if the show was never dropped in the first
@@ -759,11 +714,7 @@ showRoutes.openapi(
     const userId = c.get('user')!.id
     const db = c.get('db')
 
-    const [show] = await db
-      .select({ id: shows.id })
-      .from(shows)
-      .where(eq(shows.slug, slug))
-      .limit(1)
+    const show = await getShowBySlug(db, slug)
     if (!show) return c.json({ error: 'Show not found' }, 404)
 
     const list = await getOwnedWatchlist(db, userId, watchlistId)
@@ -803,11 +754,7 @@ showRoutes.openapi(
     const userId = c.get('user')!.id
     const db = c.get('db')
 
-    const [show] = await db
-      .select({ id: shows.id })
-      .from(shows)
-      .where(eq(shows.slug, slug))
-      .limit(1)
+    const show = await getShowBySlug(db, slug)
     if (!show) return c.json({ error: 'Show not found' }, 404)
 
     const list = await getOwnedWatchlist(db, userId, watchlistId)
@@ -870,7 +817,7 @@ showRoutes.openapi(
       return c.json({ error: 'watchedAt cannot be in the future' }, 400)
     }
 
-    const [show] = await db.select().from(shows).where(eq(shows.slug, slug)).limit(1)
+    const show = await getShowBySlug(db, slug)
     if (!show) return c.json({ error: 'Show not found' }, 404)
 
     // Same "any configured provider, not just the primary" reasoning as
@@ -920,11 +867,7 @@ showRoutes.openapi(
     const userId = c.get('user')!.id
     const db = c.get('db')
 
-    const [show] = await db
-      .select({ id: shows.id })
-      .from(shows)
-      .where(eq(shows.slug, slug))
-      .limit(1)
+    const show = await getShowBySlug(db, slug)
     if (!show) return c.json({ error: 'Show not found' }, 404)
 
     const episodeRows = await db

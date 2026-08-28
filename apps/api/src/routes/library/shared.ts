@@ -1,8 +1,72 @@
 import { and, eq, inArray } from 'drizzle-orm'
 import { UNKNOWN_WATCHED_AT } from '@rwnd/shared'
 import type { Database } from '@rwnd/db'
-import { plays } from '@rwnd/db'
+import { episodes, externalIds, movies, plays, shows } from '@rwnd/db'
 import type { ResolvedEpisode } from '../../lib/media.js'
+
+/** Looks up a show by slug — the "does this show exist, and what's its
+ * current row" check every show-scoped route needs before doing anything
+ * else. Returns the full row (not just `id`) since a couple of callers
+ * (the show detail route) need it and a single indexed-slug lookup is cheap
+ * enough that there's no real cost to callers that only want `.id`. */
+export async function getShowBySlug(db: Database, slug: string) {
+  const [show] = await db.select().from(shows).where(eq(shows.slug, slug)).limit(1)
+  return show
+}
+
+/** Movie counterpart of getShowBySlug above. */
+export async function getMovieBySlug(db: Database, slug: string) {
+  const [movie] = await db.select().from(movies).where(eq(movies.slug, slug)).limit(1)
+  return movie
+}
+
+/** Looks up the local row for one specific episode (show id + season +
+ * episode number) — the "does a local row already exist for this episode"
+ * check, distinct from resolveEpisode (lib/media.ts), which creates the row
+ * if it doesn't exist yet. Returns just the id, which is all every caller
+ * needs. */
+export async function getEpisodeIdByNumbers(
+  db: Database,
+  showId: string,
+  seasonNumber: number,
+  episodeNumber: number,
+) {
+  const [episode] = await db
+    .select({ id: episodes.id })
+    .from(episodes)
+    .where(
+      and(
+        eq(episodes.showId, showId),
+        eq(episodes.seasonNumber, seasonNumber),
+        eq(episodes.episodeNumber, episodeNumber),
+      ),
+    )
+    .limit(1)
+  return episode?.id
+}
+
+/** Looks up one provider's external id for a show/movie — backs the TMDB/
+ * TVDB deep links on the show/movie/season detail pages. A show or movie
+ * can have either id, both, or neither on record. */
+export async function getExternalId(
+  db: Database,
+  entityType: 'show' | 'movie',
+  entityId: string,
+  source: 'tmdb' | 'tvdb',
+) {
+  const [row] = await db
+    .select({ externalId: externalIds.externalId })
+    .from(externalIds)
+    .where(
+      and(
+        eq(externalIds.entityType, entityType),
+        eq(externalIds.entityId, entityId),
+        eq(externalIds.source, source),
+      ),
+    )
+    .limit(1)
+  return row?.externalId
+}
 
 /**
  * Shared by the show- and season-level "Watched" button routes (shows.ts,

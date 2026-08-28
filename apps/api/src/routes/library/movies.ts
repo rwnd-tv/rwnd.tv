@@ -10,7 +10,7 @@ import {
   watchesSchema,
   watchlistMembershipStatusSchema,
 } from '@rwnd/shared'
-import { externalIds, movies, plays, ratings, watchlistItems } from '@rwnd/db'
+import { movies, plays, ratings, watchlistItems } from '@rwnd/db'
 import type { AppEnv } from '../../types.js'
 import { requireAuth } from '../../middleware/auth.js'
 import { resolveMovie } from '../../lib/media.js'
@@ -18,6 +18,7 @@ import { pickRefreshTarget, refreshOneMovie } from '../../metadata/refresh.js'
 import { orderedProviders } from '../../providers/priority.js'
 import { isProviderSource } from '../../lib/provider-source.js'
 import { getMyWatchlistIds, getOwnedWatchlist } from '../../lib/watchlists.js'
+import { getExternalId, getMovieBySlug } from './shared.js'
 
 export const movieRoutes = new OpenAPIHono<AppEnv>()
 
@@ -150,36 +151,16 @@ movieRoutes.openapi(
     const userId = c.get('user')!.id
     const db = c.get('db')
 
-    const [movie] = await db.select().from(movies).where(eq(movies.slug, slug)).limit(1)
+    const movie = await getMovieBySlug(db, slug)
     if (!movie) return c.json({ error: 'Movie not found' }, 404)
 
     // Backs the TMDB rating badge's link to the movie's TMDB page — same
     // convention as the show route's tmdbExternalId lookup above.
-    const [tmdbExternalId] = await db
-      .select({ externalId: externalIds.externalId })
-      .from(externalIds)
-      .where(
-        and(
-          eq(externalIds.entityType, 'movie'),
-          eq(externalIds.entityId, movie.id),
-          eq(externalIds.source, 'tmdb'),
-        ),
-      )
-      .limit(1)
+    const tmdbExternalId = await getExternalId(db, 'movie', movie.id, 'tmdb')
 
     // Backs the TVDB link — same convention as the show route's own
     // tvdbExternalId query.
-    const [tvdbExternalId] = await db
-      .select({ externalId: externalIds.externalId })
-      .from(externalIds)
-      .where(
-        and(
-          eq(externalIds.entityType, 'movie'),
-          eq(externalIds.entityId, movie.id),
-          eq(externalIds.source, 'tvdb'),
-        ),
-      )
-      .limit(1)
+    const tvdbExternalId = await getExternalId(db, 'movie', movie.id, 'tvdb')
 
     // Same 1900-01-01 Trakt-sentinel exclusion as the show route's
     // watchedRange query above — see that query's doc comment.
@@ -222,8 +203,8 @@ movieRoutes.openapi(
       posterPath: movie.posterPath,
       genres: movie.genres,
       voteAverage: movie.voteAverage,
-      tmdbId: tmdbExternalId?.externalId ?? null,
-      tvdbId: tvdbExternalId?.externalId ?? null,
+      tmdbId: tmdbExternalId ?? null,
+      tvdbId: tvdbExternalId ?? null,
       metadataSource:
         movie.metadataSource && isProviderSource(movie.metadataSource)
           ? movie.metadataSource
@@ -266,7 +247,7 @@ movieRoutes.openapi(
     const user = c.get('user')!
     const db = c.get('db')
 
-    const [movie] = await db.select().from(movies).where(eq(movies.slug, slug)).limit(1)
+    const movie = await getMovieBySlug(db, slug)
     if (!movie) return c.json({ error: 'Movie not found' }, 404)
 
     const ordered = await orderedProviders(db, c.get('metadataProviders'))
@@ -310,11 +291,7 @@ movieRoutes.openapi(
     const userId = c.get('user')!.id
     const db = c.get('db')
 
-    const [movie] = await db
-      .select({ id: movies.id })
-      .from(movies)
-      .where(eq(movies.slug, slug))
-      .limit(1)
+    const movie = await getMovieBySlug(db, slug)
     if (!movie) return c.json({ error: 'Movie not found' }, 404)
 
     // Same tie-break-by-id reasoning as the episode plays-list route above
@@ -366,11 +343,7 @@ movieRoutes.openapi(
     const userId = c.get('user')!.id
     const db = c.get('db')
 
-    const [movie] = await db
-      .select({ id: movies.id })
-      .from(movies)
-      .where(eq(movies.slug, slug))
-      .limit(1)
+    const movie = await getMovieBySlug(db, slug)
     if (!movie) return c.json({ error: 'Movie not found' }, 404)
 
     await db
@@ -414,11 +387,7 @@ movieRoutes.openapi(
     const userId = c.get('user')!.id
     const db = c.get('db')
 
-    const [movie] = await db
-      .select({ id: movies.id })
-      .from(movies)
-      .where(eq(movies.slug, slug))
-      .limit(1)
+    const movie = await getMovieBySlug(db, slug)
     if (!movie) return c.json({ error: 'Movie not found' }, 404)
 
     const list = await getOwnedWatchlist(db, userId, watchlistId)
@@ -464,11 +433,7 @@ movieRoutes.openapi(
     const userId = c.get('user')!.id
     const db = c.get('db')
 
-    const [movie] = await db
-      .select({ id: movies.id })
-      .from(movies)
-      .where(eq(movies.slug, slug))
-      .limit(1)
+    const movie = await getMovieBySlug(db, slug)
     if (!movie) return c.json({ error: 'Movie not found' }, 404)
 
     const list = await getOwnedWatchlist(db, userId, watchlistId)

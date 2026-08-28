@@ -1,12 +1,13 @@
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi'
 import { and, eq } from 'drizzle-orm'
 import { ratingStatusSchema, setRatingRequestSchema } from '@rwnd/shared'
-import { episodes, movies, ratings, shows } from '@rwnd/db'
+import { ratings } from '@rwnd/db'
 import type { AppEnv } from '../../types.js'
 import { requireAuth } from '../../middleware/auth.js'
 import { resolveEpisode } from '../../lib/media.js'
 import { pickRefreshTarget } from '../../metadata/refresh.js'
 import { orderedProviders } from '../../providers/priority.js'
+import { getEpisodeIdByNumbers, getMovieBySlug, getShowBySlug } from './shared.js'
 
 export const ratingRoutes = new OpenAPIHono<AppEnv>()
 
@@ -53,11 +54,7 @@ ratingRoutes.openapi(
     const db = c.get('db')
     const providers = await orderedProviders(db, c.get('metadataProviders'))
 
-    const [show] = await db
-      .select({ id: shows.id })
-      .from(shows)
-      .where(eq(shows.slug, slug))
-      .limit(1)
+    const show = await getShowBySlug(db, slug)
     if (!show) return c.json({ error: 'Show not found' }, 404)
 
     const target = await pickRefreshTarget(db, 'show', show.id, providers)
@@ -124,25 +121,11 @@ ratingRoutes.openapi(
     const userId = c.get('user')!.id
     const db = c.get('db')
 
-    const [show] = await db
-      .select({ id: shows.id })
-      .from(shows)
-      .where(eq(shows.slug, slug))
-      .limit(1)
+    const show = await getShowBySlug(db, slug)
     if (!show) return c.json({ error: 'Show not found' }, 404)
 
-    const [episodeRow] = await db
-      .select({ id: episodes.id })
-      .from(episodes)
-      .where(
-        and(
-          eq(episodes.showId, show.id),
-          eq(episodes.seasonNumber, seasonNumber),
-          eq(episodes.episodeNumber, episodeNumber),
-        ),
-      )
-      .limit(1)
-    if (!episodeRow) return c.json({ rating: null, ratedAt: null })
+    const episodeId = await getEpisodeIdByNumbers(db, show.id, seasonNumber, episodeNumber)
+    if (!episodeId) return c.json({ rating: null, ratedAt: null })
 
     await db
       .delete(ratings)
@@ -150,7 +133,7 @@ ratingRoutes.openapi(
         and(
           eq(ratings.userId, userId),
           eq(ratings.entityType, 'episode'),
-          eq(ratings.entityId, episodeRow.id),
+          eq(ratings.entityId, episodeId),
         ),
       )
 
@@ -197,11 +180,7 @@ ratingRoutes.openapi(
     const userId = c.get('user')!.id
     const db = c.get('db')
 
-    const [show] = await db
-      .select({ id: shows.id })
-      .from(shows)
-      .where(eq(shows.slug, slug))
-      .limit(1)
+    const show = await getShowBySlug(db, slug)
     if (!show) return c.json({ error: 'Show not found' }, 404)
 
     const ratedAt = new Date()
@@ -243,11 +222,7 @@ ratingRoutes.openapi(
     const userId = c.get('user')!.id
     const db = c.get('db')
 
-    const [show] = await db
-      .select({ id: shows.id })
-      .from(shows)
-      .where(eq(shows.slug, slug))
-      .limit(1)
+    const show = await getShowBySlug(db, slug)
     if (!show) return c.json({ error: 'Show not found' }, 404)
 
     await db
@@ -294,11 +269,7 @@ ratingRoutes.openapi(
     const userId = c.get('user')!.id
     const db = c.get('db')
 
-    const [movie] = await db
-      .select({ id: movies.id })
-      .from(movies)
-      .where(eq(movies.slug, slug))
-      .limit(1)
+    const movie = await getMovieBySlug(db, slug)
     if (!movie) return c.json({ error: 'Movie not found' }, 404)
 
     const ratedAt = new Date()
@@ -340,11 +311,7 @@ ratingRoutes.openapi(
     const userId = c.get('user')!.id
     const db = c.get('db')
 
-    const [movie] = await db
-      .select({ id: movies.id })
-      .from(movies)
-      .where(eq(movies.slug, slug))
-      .limit(1)
+    const movie = await getMovieBySlug(db, slug)
     if (!movie) return c.json({ error: 'Movie not found' }, 404)
 
     await db

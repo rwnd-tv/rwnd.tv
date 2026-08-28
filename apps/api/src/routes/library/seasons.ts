@@ -10,13 +10,13 @@ import {
   watchedStatusSchema,
   watchesSchema,
 } from '@rwnd/shared'
-import { episodes, externalIds, plays, ratings, seasons, shows } from '@rwnd/db'
+import { episodes, plays, ratings, seasons } from '@rwnd/db'
 import type { AppEnv } from '../../types.js'
 import { requireAuth } from '../../middleware/auth.js'
 import { resolveSeasonEpisodes } from '../../lib/media.js'
 import { pickRefreshTarget } from '../../metadata/refresh.js'
 import { orderedProviders } from '../../providers/priority.js'
-import { logMissingWatches } from './shared.js'
+import { getEpisodeIdByNumbers, getExternalId, getShowBySlug, logMissingWatches } from './shared.js'
 
 export const seasonRoutes = new OpenAPIHono<AppEnv>()
 
@@ -53,7 +53,7 @@ seasonRoutes.openapi(
     const db = c.get('db')
     const providers = await orderedProviders(db, c.get('metadataProviders'))
 
-    const [show] = await db.select().from(shows).where(eq(shows.slug, slug)).limit(1)
+    const show = await getShowBySlug(db, slug)
     if (!show) return c.json({ error: 'Show not found' }, 404)
 
     // Only reachable via a season card already rendered from show.seasons
@@ -91,24 +91,10 @@ seasonRoutes.openapi(
     let tvdbSeasonId: string | null = null
     const tvdbEpisodeIdByNumber = new Map<number, string>()
     if (tvdbProvider) {
-      const [tvdbExternalId] = await db
-        .select({ externalId: externalIds.externalId })
-        .from(externalIds)
-        .where(
-          and(
-            eq(externalIds.entityType, 'show'),
-            eq(externalIds.entityId, show.id),
-            eq(externalIds.source, 'tvdb'),
-          ),
-        )
-        .limit(1)
+      const tvdbExternalId = await getExternalId(db, 'show', show.id, 'tvdb')
       if (tvdbExternalId) {
         try {
-          const tvdbSeason = await tvdbProvider.getSeason(
-            tvdbExternalId.externalId,
-            seasonNumber,
-            user.locale,
-          )
+          const tvdbSeason = await tvdbProvider.getSeason(tvdbExternalId, seasonNumber, user.locale)
           tvdbSeasonId = tvdbSeason.externalId
           for (const episode of tvdbSeason.episodes) {
             if (episode.externalId)
@@ -252,28 +238,14 @@ seasonRoutes.openapi(
     const userId = c.get('user')!.id
     const db = c.get('db')
 
-    const [show] = await db
-      .select({ id: shows.id })
-      .from(shows)
-      .where(eq(shows.slug, slug))
-      .limit(1)
+    const show = await getShowBySlug(db, slug)
     if (!show) return c.json({ error: 'Show not found' }, 404)
 
     // No local episode row at all means it's never been logged — nothing
     // to list, same "harmless empty result" precedent as the DELETE route
     // below's no-op.
-    const [episodeRow] = await db
-      .select({ id: episodes.id })
-      .from(episodes)
-      .where(
-        and(
-          eq(episodes.showId, show.id),
-          eq(episodes.seasonNumber, seasonNumber),
-          eq(episodes.episodeNumber, episodeNumber),
-        ),
-      )
-      .limit(1)
-    if (!episodeRow) return c.json({ watches: [] })
+    const episodeId = await getEpisodeIdByNumbers(db, show.id, seasonNumber, episodeNumber)
+    if (!episodeId) return c.json({ watches: [] })
 
     // Tie-broken by id, not just watchedAt — two rewatches can share the
     // exact same timestamp (e.g. Trakt's 1900-01-01 "unknown date"
@@ -285,7 +257,7 @@ seasonRoutes.openapi(
     const rows = await db
       .select({ id: plays.id, watchedAt: plays.watchedAt, source: plays.source })
       .from(plays)
-      .where(and(eq(plays.userId, userId), eq(plays.episodeId, episodeRow.id)))
+      .where(and(eq(plays.userId, userId), eq(plays.episodeId, episodeId)))
       .orderBy(desc(plays.watchedAt), asc(plays.id))
 
     return c.json({
@@ -337,41 +309,27 @@ seasonRoutes.openapi(
     const userId = c.get('user')!.id
     const db = c.get('db')
 
-    const [show] = await db
-      .select({ id: shows.id })
-      .from(shows)
-      .where(eq(shows.slug, slug))
-      .limit(1)
+    const show = await getShowBySlug(db, slug)
     if (!show) return c.json({ error: 'Show not found' }, 404)
 
     // A no-op if this episode was never logged locally at all — nothing to
     // clear, same "harmless no-op" precedent as undropping a never-dropped
     // show above.
-    const [episodeRow] = await db
-      .select({ id: episodes.id })
-      .from(episodes)
-      .where(
-        and(
-          eq(episodes.showId, show.id),
-          eq(episodes.seasonNumber, seasonNumber),
-          eq(episodes.episodeNumber, episodeNumber),
-        ),
-      )
-      .limit(1)
+    const episodeId = await getEpisodeIdByNumbers(db, show.id, seasonNumber, episodeNumber)
 
-    if (episodeRow) {
+    if (episodeId) {
       await db
         .delete(plays)
         .where(
-          and(eq(plays.userId, userId), eq(plays.episodeId, episodeRow.id), inArray(plays.id, ids)),
+          and(eq(plays.userId, userId), eq(plays.episodeId, episodeId), inArray(plays.id, ids)),
         )
     }
 
-    const remaining = episodeRow
+    const remaining = episodeId
       ? await db
           .select({ watchedAt: plays.watchedAt })
           .from(plays)
-          .where(and(eq(plays.userId, userId), eq(plays.episodeId, episodeRow.id)))
+          .where(and(eq(plays.userId, userId), eq(plays.episodeId, episodeId)))
           .orderBy(desc(plays.watchedAt), asc(plays.id))
       : []
 
@@ -414,11 +372,7 @@ seasonRoutes.openapi(
     const userId = c.get('user')!.id
     const db = c.get('db')
 
-    const [show] = await db
-      .select({ id: shows.id })
-      .from(shows)
-      .where(eq(shows.slug, slug))
-      .limit(1)
+    const show = await getShowBySlug(db, slug)
     if (!show) return c.json({ error: 'Show not found' }, 404)
 
     const rows = await db
@@ -484,11 +438,7 @@ seasonRoutes.openapi(
     const userId = c.get('user')!.id
     const db = c.get('db')
 
-    const [show] = await db
-      .select({ id: shows.id })
-      .from(shows)
-      .where(eq(shows.slug, slug))
-      .limit(1)
+    const show = await getShowBySlug(db, slug)
     if (!show) return c.json({ error: 'Show not found' }, 404)
 
     const episodeRows = await db
@@ -557,7 +507,7 @@ seasonRoutes.openapi(
       return c.json({ error: 'watchedAt cannot be in the future' }, 400)
     }
 
-    const [show] = await db.select().from(shows).where(eq(shows.slug, slug)).limit(1)
+    const show = await getShowBySlug(db, slug)
     if (!show) return c.json({ error: 'Show not found' }, 404)
 
     // Same "any configured provider, not just the primary" reasoning as
@@ -607,11 +557,7 @@ seasonRoutes.openapi(
     const userId = c.get('user')!.id
     const db = c.get('db')
 
-    const [show] = await db
-      .select({ id: shows.id })
-      .from(shows)
-      .where(eq(shows.slug, slug))
-      .limit(1)
+    const show = await getShowBySlug(db, slug)
     if (!show) return c.json({ error: 'Show not found' }, 404)
 
     const episodeRows = await db

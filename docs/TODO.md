@@ -20,99 +20,15 @@ Format:
 
 ## Code review follow-ups (2026-08-28)
 
-Findings from the M3 code review pass (see `docs/TODO_ARCHIVE.md`'s "Code
-review & tidy-up pass" for the full pass) that need a design decision
-rather than a mechanical fix, so they were logged here instead of fixed
-inline. Cross-confirmed by two independent review passes (a holistic
-per-area audit plus `/code-review`) unless noted otherwise.
-
-- [ ] **API: `findNextUnwatchedEpisode`/`findNextAiringEpisode` are ~90%
-      duplicated** (2026-08-28 added)\
-      `apps/api/src/lib/media.ts` — both scan seasons forward from
-      `startSeasonNumber`, call `resolveSeason`, build the same
-      `watchedIds` set, and `.find()` with only the predicate (and the
-      gap-filling `minEpisodeNumberInStartSeason` logic) differing. Powers
-      the Dashboard's On Deck/Up Next rows (`routes/library/queue.ts`).
-      Unifying them means designing a shared scan/predicate signature that
-      still reads clearly for both callers — a real, if small, design
-      decision, not a pure extraction.
-- [ ] **API: watchlist add/remove and the `watchedRange` aggregate are
-      each duplicated between `shows.ts` and `movies.ts`** (2026-08-28
-      added)\
-      `routes/library/shows.ts`/`movies.ts` each independently implement
-      the PUT/DELETE watchlist-membership handlers (differing only in
-      table/entityType) and the same 1900-01-01-Trakt-sentinel-excluding
-      `watchedRange` SQL fragment. Both are real duplication with the same
-      "a fix applied to one and not the other" risk the split's
-      `shared.ts` helpers (added in this pass) were meant to close off —
-      worth a follow-up pass once the shape of a good shared
-      show/movie-agnostic abstraction is clearer.
-- [ ] **API: several show/movie detail-route queries could run via
-      `Promise.all` instead of sequentially** (2026-08-28 added)\
-      `GET /library/shows/{slug}` (5 queries) and `GET /library/movies/{slug}`
-      (8 queries) each await mutually-independent lookups (external ids,
-      watched range, rating, watchlist ids) one after another — a real,
-      avoidable latency cost on two of the app's highest-traffic pages.
-      Predates the library.ts split; not fixed inline because it touches
-      the two busiest detail routes and deserves its own focused pass
-      rather than being buried in a dedup commit.
-- [ ] **Shared: `uuidSchema` is unused, and the "1-10 int rating" shape is
-      duplicated ~10 times** (2026-08-28 added)\
-      `packages/shared/src/schemas/common.ts`'s `uuidSchema` has zero
-      importers — `z.string().uuid()` is hand-written 27 more times across
-      8 files instead. Separately, `z.number().int().min(1).max(10)`
-      (rating range, matching the DB's `ratings_rating_range` check) is
-      defined inline 10 times with no shared base to compose the
-      nullable/non-nullable variants from. Both are mechanical but touch
-      `library.ts` heavily enough (10+ of the sites) to warrant a
-      deliberate sweep rather than a silent inline edit — and worth
-      deciding whether to delete `uuidSchema` instead of wiring it up, if
-      nothing actually wants it.
-- [ ] **DB: `sessions`, `apiTokens`, `emailVerificationTokens`, and
-      `emailChangeTokens` have no index on `userId`, unlike sibling
-      per-user tables** (2026-08-28 added)\
-      `packages/db/src/schema.ts` — `plays`/`ratings`/`watchlistItems` all
-      carry a `<table>_user_<col>_idx` because per-user queries filter on
-      it; these four don't, despite `apps/api/src/lib/session.ts` (sign
-      out / sign out everywhere), `routes/tokens.ts` (every load of the
-      API-tokens settings page), and `lib/account-tokens.ts` (delete-by-
-      userId before issuing a new token) all filtering by `userId`.
-      `sessions` is the strongest case — no session-expiry cleanup job
-      exists anywhere in `apps/api`, so it only grows. Needs a migration
-      (`pnpm db:generate`), so logged rather than fixed inline.
-- [ ] **Web: the watch-history table (checkbox list + delete-selected
-      dialog) is duplicated across all four detail pages** (2026-08-28
-      added)\
-      `ShowDetailPage.tsx`, `SeasonDetailPage.tsx`, `MovieDetailPage.tsx`,
-      and `EpisodeDetailPage.tsx` each independently reimplement the same
-      `selectedWatchIds`/`deleteSelectedConfirmOpen` state pair, an
-      identical `toggleWatchSelected` closure, a checkbox/date/time/source
-      `<table>`, and the same delete-confirmation `<Dialog>` — ~90-110
-      lines duplicated four times, unlike this codebase's other,
-      deliberately-documented small-icon duplication. Extracting a shared
-      `<WatchHistoryTable>` needs a real design decision (which optional
-      columns to expose — Season/Episode aren't present on every page —
-      and how the delete mutation is threaded through), so it's a backlog
-      item, not a quick fix. Related, lower priority: `ShowsPage.tsx`/
-      `MoviesPage.tsx` also duplicate their sort/filter-cookie wiring
-      (~380-480 lines each) despite sharing well-factored filter logic
-      (`lib/library-filter.ts`) — the duplication is page-level glue, not
-      business logic.
-- [ ] **Web: the M1 auth pages (Login/Register/Setup/ForgotPassword/
-      ResetPassword) still hand-roll `async`/`try`/`catch` instead of the
-      `useMutation` pattern every M3 mutation uses** (2026-08-28 added)\
-      Confirmed across all five pages plus every M3-era mutation
-      (`DeleteAccountCard.tsx` and the rest of `components/account/`,
-      `settings/`, `import/`, `library/`) — a real, consistent split along
-      the M1/M3 line, not a one-off. Converting is mechanical per page but
-      touches five files' control flow, so logged rather than blind
-      find/replace. Related: three of those same files
-      (`LoginPage.tsx`, `DeleteAccountCard.tsx`, `LogoutButton.tsx`)
-      independently hand-roll the identical `removeQueries` + `invalidateQueries`
-      "wipe stale cross-account cache" sequence — worth extracting
-      alongside the `useMutation` conversion, given how security-sensitive
-      that logic is to keep in sync (see `LogoutButton.tsx`'s own doc
-      comment on why the exact ordering matters).
+- [ ] **Web: `ShowsPage.tsx`/`MoviesPage.tsx` duplicate their sort/
+      filter-cookie wiring** (2026-08-28 added)\
+      ~380-480 lines each, despite sharing well-factored filter logic
+      (`lib/library-filter.ts`). Confirmed while extracting
+      `<WatchHistoryTable>` (see `docs/TODO_ARCHIVE.md`): 10 of 12 sort
+      keys are shared and most cookie wiring is identical, but Shows'
+      extra genre/status/dropped dimensions make a clean shared
+      abstraction a bigger design question than the rest of that pass —
+      deliberately left out to keep it bounded.
 
 ## TV Shows / Movies gallery follow-ups
 

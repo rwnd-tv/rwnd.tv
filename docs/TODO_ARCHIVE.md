@@ -5,6 +5,40 @@ grouping, sorted oldest to newest.
 
 ## Repo hygiene
 
+- [x] **Code review follow-ups from the 2026-08-28 pass** (2026-08-28
+      added, done 2026-08-28)\
+      The 6 items logged from that pass (see "Code review & tidy-up pass"
+      below), worked through as 5 staged commits, each verified against
+      the full local integration suite: (A) unified
+      `findNextUnwatchedEpisode`/`findNextAiringEpisode` behind a shared
+      `scanSeasonsForEpisode` predicate, deduped watchlist add/remove and
+      the `watchedRange` aggregate into `routes/library/shared.ts` (also
+      adopted by `queue.ts`/`seasons.ts`), and parallelized the two detail
+      routes' independent queries via `Promise.all`; (B) wired up
+      `uuidSchema` at all 43 call sites and added `ratingValueSchema`,
+      replacing 10 inline "1-10 int" rating shapes; (C) added the missing
+      `userId` indexes on `sessions`/`apiTokens`/`emailVerificationTokens`/
+      `emailChangeTokens` — `passwordResetTokens` deliberately excluded
+      after confirming it's never actually queried by `userId`, unlike the
+      other three; (D) converted the 5 M1 auth pages
+      (Login/Register/Setup/ForgotPassword/ResetPassword) to `useMutation`
+      and extracted a `resetAuthCache()` helper, used by `LoginPage.tsx`/
+      `LogoutButton.tsx`/`DeleteAccountCard.tsx` (not `RegisterPage.tsx`/
+      `SetupPage.tsx`, which only run half that sequence for a fresh,
+      already-empty cache); (E) extracted a shared
+      `components/library/WatchHistoryTable.tsx` used by all 4 detail
+      pages (show/season/movie/episode), unifying two different delete-
+      mutation shapes behind an explicit `onDeleteSelected(ids, onSuccess)`
+      callback, plus its own exemplar test — which surfaced that jsdom
+      still doesn't implement `HTMLDialogElement.showModal()`/`close()` at
+      all, fixed with a small polyfill in the shared web test setup
+      (`apps/web/src/test/setup.ts`) rather than working around it
+      per-test. Deployed to dev.rwnd.tv and manually smoke-tested after D
+      (all 5 auth flows) and E (select-then-delete on all 4 detail-page
+      types, live — a throwaway account created, exercised, and deleted
+      afterward). The `ShowsPage.tsx`/`MoviesPage.tsx` sort/filter-cookie
+      duplication flagged alongside item E stays open — see `docs/TODO.md`.
+
 - [x] **Code review & tidy-up pass** (2026-08-28 added, done 2026-08-28) — M3\
       James, 2026-08-28: wanted a dedicated code-quality pass before the
       first tagged release. Done as four staged commits, each verified

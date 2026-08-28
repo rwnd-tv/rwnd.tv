@@ -21,7 +21,9 @@ import type {
   RatingStatus,
   RemoveShowWatchesResponse,
   SeasonDetail,
+  SeasonWatches,
   ShowDetail,
+  ShowWatches,
   UpNextResponse,
   User,
   WatchedStatus,
@@ -1369,6 +1371,193 @@ describe('library', () => {
         },
       )
       expect(res.status).toBe(400)
+    })
+  })
+
+  describe('GET/DELETE /library/shows/{slug}/seasons/{seasonNumber}/plays', () => {
+    async function insertShowWithEpisodesAcrossSeasons() {
+      const [show] = await db
+        .insert(shows)
+        .values({ title: 'Multi-Season Show', slug: 'multi-season-show' })
+        .returning()
+      if (!show) throw new Error('failed to insert show')
+      const [s1e1, s1e2, s2e1] = await db
+        .insert(episodes)
+        .values([
+          { showId: show.id, seasonNumber: 1, episodeNumber: 1, title: 'S1E1' },
+          { showId: show.id, seasonNumber: 1, episodeNumber: 2, title: 'S1E2' },
+          { showId: show.id, seasonNumber: 2, episodeNumber: 1, title: 'S2E1' },
+        ])
+        .returning()
+      if (!s1e1 || !s1e2 || !s2e1) throw new Error('failed to insert episodes')
+      return { show, s1e1, s1e2, s2e1 }
+    }
+
+    it('returns 404 for an unknown slug', async () => {
+      const cookie = await createUserAndCookie()
+      const res = await app.request('/api/v1/library/shows/no-such-show/seasons/1/plays', {
+        headers: { cookie },
+      })
+      expect(res.status).toBe(404)
+    })
+
+    it('lists watches for the given season only, with episode number/title, newest first', async () => {
+      const cookie = await createUserAndCookie()
+      const userId = await meId(cookie)
+      const { show, s1e1, s1e2, s2e1 } = await insertShowWithEpisodesAcrossSeasons()
+      await db.insert(plays).values([
+        { userId, episodeId: s1e1.id, watchedAt: new Date('2020-01-01T00:00:00.000Z') },
+        { userId, episodeId: s1e2.id, watchedAt: new Date('2021-01-01T00:00:00.000Z') },
+        // Same user, but season 2 — must not show up in a season-1 fetch.
+        { userId, episodeId: s2e1.id, watchedAt: new Date('2022-01-01T00:00:00.000Z') },
+      ])
+
+      const res = await app.request(`/api/v1/library/shows/${show.slug}/seasons/1/plays`, {
+        headers: { cookie },
+      })
+      expect(res.status).toBe(200)
+      const body = await json<SeasonWatches>(res)
+      expect(body.watches).toHaveLength(2)
+      expect(body.watches[0]).toMatchObject({ episodeNumber: 2, episodeTitle: 'S1E2' })
+      expect(body.watches[1]).toMatchObject({ episodeNumber: 1, episodeTitle: 'S1E1' })
+    })
+
+    it('returns an empty list for a season never logged locally', async () => {
+      const cookie = await createUserAndCookie()
+      const { show } = await insertShowWithEpisodesAcrossSeasons()
+      const res = await app.request(`/api/v1/library/shows/${show.slug}/seasons/1/plays`, {
+        headers: { cookie },
+      })
+      expect(await json<SeasonWatches>(res)).toEqual({ watches: [] })
+    })
+
+    it('removes only the named ids, ignoring a play from another season', async () => {
+      const cookie = await createUserAndCookie()
+      const userId = await meId(cookie)
+      const { show, s1e1, s2e1 } = await insertShowWithEpisodesAcrossSeasons()
+      const [keep, remove] = await db
+        .insert(plays)
+        .values([
+          { userId, episodeId: s1e1.id, watchedAt: new Date('2026-01-01') },
+          { userId, episodeId: s2e1.id, watchedAt: new Date('2026-02-01') },
+        ])
+        .returning()
+      if (!keep || !remove) throw new Error('failed to insert plays')
+
+      const res = await app.request(`/api/v1/library/shows/${show.slug}/seasons/1/plays`, {
+        method: 'DELETE',
+        headers: { cookie, 'Content-Type': 'application/json' },
+        // remove.id belongs to season 2 — scoped out, so nothing is deleted.
+        body: JSON.stringify({ ids: [keep.id, remove.id] }),
+      })
+      expect(await json<RemoveShowWatchesResponse>(res)).toEqual({ count: 1 })
+
+      const remaining = await db.select().from(plays).where(eq(plays.userId, userId))
+      expect(remaining.map((p) => p.id)).toEqual([remove.id])
+    })
+
+    it('returns 404 for an unknown slug on DELETE', async () => {
+      const cookie = await createUserAndCookie()
+      const res = await app.request('/api/v1/library/shows/no-such-show/seasons/1/plays', {
+        method: 'DELETE',
+        headers: { cookie, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: ['00000000-0000-0000-0000-000000000000'] }),
+      })
+      expect(res.status).toBe(404)
+    })
+  })
+
+  describe('GET/DELETE /library/shows/{slug}/plays', () => {
+    async function insertShowWithEpisodesAcrossSeasons() {
+      const [show] = await db
+        .insert(shows)
+        .values({ title: 'Whole-Show History', slug: 'whole-show-history' })
+        .returning()
+      if (!show) throw new Error('failed to insert show')
+      const [s1e1, s2e1] = await db
+        .insert(episodes)
+        .values([
+          { showId: show.id, seasonNumber: 1, episodeNumber: 1, title: 'S1E1' },
+          { showId: show.id, seasonNumber: 2, episodeNumber: 1, title: 'S2E1' },
+        ])
+        .returning()
+      if (!s1e1 || !s2e1) throw new Error('failed to insert episodes')
+      return { show, s1e1, s2e1 }
+    }
+
+    it('returns 404 for an unknown slug', async () => {
+      const cookie = await createUserAndCookie()
+      const res = await app.request('/api/v1/library/shows/no-such-show/plays', {
+        headers: { cookie },
+      })
+      expect(res.status).toBe(404)
+    })
+
+    it('lists watches across every season, with season/episode number and title, newest first', async () => {
+      const cookie = await createUserAndCookie()
+      const userId = await meId(cookie)
+      const { show, s1e1, s2e1 } = await insertShowWithEpisodesAcrossSeasons()
+      await db.insert(plays).values([
+        { userId, episodeId: s1e1.id, watchedAt: new Date('2020-01-01T00:00:00.000Z') },
+        { userId, episodeId: s2e1.id, watchedAt: new Date('2021-01-01T00:00:00.000Z') },
+      ])
+
+      const res = await app.request(`/api/v1/library/shows/${show.slug}/plays`, {
+        headers: { cookie },
+      })
+      expect(res.status).toBe(200)
+      const body = await json<ShowWatches>(res)
+      expect(body.watches).toHaveLength(2)
+      expect(body.watches[0]).toMatchObject({ seasonNumber: 2, episodeNumber: 1 })
+      expect(body.watches[1]).toMatchObject({ seasonNumber: 1, episodeNumber: 1 })
+    })
+
+    it('returns an empty list for a show never logged locally', async () => {
+      const cookie = await createUserAndCookie()
+      const { show } = await insertShowWithEpisodesAcrossSeasons()
+      const res = await app.request(`/api/v1/library/shows/${show.slug}/plays`, {
+        headers: { cookie },
+      })
+      expect(await json<ShowWatches>(res)).toEqual({ watches: [] })
+    })
+
+    it('removes only the named ids, ignoring ids for another user', async () => {
+      const cookie = await createUserAndCookie()
+      const userId = await meId(cookie)
+      const otherUserId = await createLocalUser(
+        db,
+        'other-show-history@example.com',
+        'correct-horse-battery-staple',
+      )
+      const { show, s1e1 } = await insertShowWithEpisodesAcrossSeasons()
+      const [keep, otherUsersPlay] = await db
+        .insert(plays)
+        .values([
+          { userId, episodeId: s1e1.id, watchedAt: new Date('2026-01-01') },
+          { userId: otherUserId, episodeId: s1e1.id, watchedAt: new Date('2026-02-01') },
+        ])
+        .returning()
+      if (!keep || !otherUsersPlay) throw new Error('failed to insert plays')
+
+      const res = await app.request(`/api/v1/library/shows/${show.slug}/plays`, {
+        method: 'DELETE',
+        headers: { cookie, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: [keep.id, otherUsersPlay.id] }),
+      })
+      expect(await json<RemoveShowWatchesResponse>(res)).toEqual({ count: 1 })
+
+      const remaining = await db.select().from(plays).where(eq(plays.userId, otherUserId))
+      expect(remaining.map((p) => p.id)).toEqual([otherUsersPlay.id])
+    })
+
+    it('returns 404 for an unknown slug on DELETE', async () => {
+      const cookie = await createUserAndCookie()
+      const res = await app.request('/api/v1/library/shows/no-such-show/plays', {
+        method: 'DELETE',
+        headers: { cookie, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: ['00000000-0000-0000-0000-000000000000'] }),
+      })
+      expect(res.status).toBe(404)
     })
   })
 
@@ -3154,6 +3343,86 @@ describe('library', () => {
     })
   })
 
+  describe('POST /library/shows/{slug}/refresh', () => {
+    it('returns 404 for an unknown slug', async () => {
+      const cookie = await createUserAndCookie()
+      const res = await app.request('/api/v1/library/shows/no-such-show/refresh', {
+        method: 'POST',
+        headers: { cookie },
+      })
+      expect(res.status).toBe(404)
+    })
+
+    it('returns 404 when the show has no tmdb external id', async () => {
+      const cookie = await createUserAndCookie()
+      await db.insert(shows).values({ title: 'No Match', slug: 'no-match-show' })
+      const res = await app.request('/api/v1/library/shows/no-match-show/refresh', {
+        method: 'POST',
+        headers: { cookie },
+      })
+      expect(res.status).toBe(404)
+    })
+
+    it('refetches genres/rating from the provider but leaves the slug unchanged even when the title changes', async () => {
+      const cookie = await createUserAndCookie()
+      const [show] = await db
+        .insert(shows)
+        .values({ title: 'Old Show Title', slug: 'old-show-title-slug' })
+        .returning()
+      if (!show) throw new Error('failed to insert show')
+      await db.insert(externalIds).values({
+        entityType: 'show',
+        entityId: show.id,
+        source: 'tmdb',
+        externalId: '9999',
+      })
+
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (input: string | URL) => {
+          const url = new URL(input)
+          if (url.pathname === '/3/tv/9999') {
+            return new Response(
+              JSON.stringify({
+                id: 9999,
+                name: 'New Show Title',
+                first_air_date: '2015-06-01',
+                overview: 'Updated overview.',
+                poster_path: '/poster.jpg',
+                status: 'Ended',
+                genres: [{ id: 18, name: 'Drama' }],
+                vote_average: 9.1,
+                vote_count: 100,
+                // Empty on purpose — refreshOneShow's episode-count-refresh
+                // branch is a separate concern from this route (covered by
+                // apps/api/src/test/metadata-refresh.test.ts); leaving this
+                // empty keeps this test to the one /3/tv/{id} fetch it's
+                // actually about.
+                seasons: [],
+              }),
+              { status: 200 },
+            )
+          }
+          throw new Error(`Unexpected TMDB fetch in test: ${url}`)
+        }),
+      )
+
+      const res = await app.request('/api/v1/library/shows/old-show-title-slug/refresh', {
+        method: 'POST',
+        headers: { cookie },
+      })
+      expect(res.status).toBe(204)
+
+      const [updated] = await db.select().from(shows).where(eq(shows.id, show.id))
+      expect(updated).toMatchObject({
+        title: 'New Show Title',
+        slug: 'old-show-title-slug',
+        genres: ['Drama'],
+        voteAverage: 9.1,
+      })
+    })
+  })
+
   describe('POST /library/movies/{slug}/refresh', () => {
     it('returns 404 for an unknown slug', async () => {
       const cookie = await createUserAndCookie()
@@ -3225,6 +3494,98 @@ describe('library', () => {
         genres: ['Action'],
         voteAverage: 8.7,
       })
+    })
+  })
+
+  describe('POST /library/shows/resolve', () => {
+    it('creates a show and external id, returning its slug', async () => {
+      const cookie = await createUserAndCookie()
+
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (input: string | URL) => {
+          const url = new URL(input)
+          if (url.pathname === '/3/tv/1399') {
+            return new Response(
+              JSON.stringify({
+                id: 1399,
+                name: 'Game of Thrones',
+                first_air_date: '2011-04-17',
+                overview: 'Nine noble families fight for control.',
+                poster_path: '/poster.jpg',
+                status: 'Ended',
+                genres: [{ id: 18, name: 'Drama' }],
+                vote_average: 8.4,
+                vote_count: 100,
+                seasons: [],
+              }),
+              { status: 200 },
+            )
+          }
+          throw new Error(`Unexpected TMDB fetch in test: ${url}`)
+        }),
+      )
+
+      const res = await app.request('/api/v1/library/shows/resolve', {
+        method: 'POST',
+        headers: { cookie, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ source: 'tmdb', externalId: '1399' }),
+      })
+      expect(res.status).toBe(200)
+      const { slug } = await json<{ slug: string }>(res)
+      expect(slug).toBe('game-of-thrones-2011')
+
+      const [external] = await db
+        .select()
+        .from(externalIds)
+        .where(and(eq(externalIds.entityType, 'show'), eq(externalIds.externalId, '1399')))
+      expect(external).toBeTruthy()
+    })
+
+    it('is idempotent — resolving the same external id twice returns the same slug and creates no second row', async () => {
+      const cookie = await createUserAndCookie()
+
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (input: string | URL) => {
+          const url = new URL(input)
+          if (url.pathname === '/3/tv/1399') {
+            return new Response(
+              JSON.stringify({
+                id: 1399,
+                name: 'Game of Thrones',
+                first_air_date: '2011-04-17',
+                overview: null,
+                poster_path: null,
+                status: 'Ended',
+                genres: [],
+                vote_average: 0,
+                vote_count: 0,
+                seasons: [],
+              }),
+              { status: 200 },
+            )
+          }
+          throw new Error(`Unexpected TMDB fetch in test: ${url}`)
+        }),
+      )
+
+      const first = await app.request('/api/v1/library/shows/resolve', {
+        method: 'POST',
+        headers: { cookie, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ source: 'tmdb', externalId: '1399' }),
+      })
+      const second = await app.request('/api/v1/library/shows/resolve', {
+        method: 'POST',
+        headers: { cookie, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ source: 'tmdb', externalId: '1399' }),
+      })
+      const { slug: slug1 } = await json<{ slug: string }>(first)
+      const { slug: slug2 } = await json<{ slug: string }>(second)
+      expect(slug1).toBe(slug2)
+
+      const rows = await db.select().from(shows).where(eq(shows.slug, slug1))
+      expect(rows).toHaveLength(1)
     })
   })
 

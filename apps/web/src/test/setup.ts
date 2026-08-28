@@ -15,6 +15,21 @@ if (!i18next.isInitialized) {
   await new Promise<void>((resolve) => i18next.on('initialized', () => resolve()))
 }
 
+// jsdom (still, as of v30) doesn't implement HTMLDialogElement's
+// showModal()/close() at all — Dialog.tsx calls both directly, so any test
+// rendering a component that opens one throws "showModal is not a
+// function" without this. Good enough for jsdom's own non-modal `open`
+// attribute + a real 'close' event (Dialog.tsx's own onClose is wired to
+// that), which is all component tests need — no focus trapping or
+// top-layer/::backdrop behaviour to fake.
+HTMLDialogElement.prototype.showModal = function (this: HTMLDialogElement) {
+  this.setAttribute('open', '')
+}
+HTMLDialogElement.prototype.close = function (this: HTMLDialogElement) {
+  this.removeAttribute('open')
+  this.dispatchEvent(new Event('close'))
+}
+
 afterEach(() => {
   cleanup()
 })

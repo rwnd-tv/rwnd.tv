@@ -5,7 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { ShowDetail } from '@rwnd/shared'
 import { api, ApiError } from '../lib/api-client.js'
 import { invalidateWatchData } from '../lib/query-client.js'
-import { UNKNOWN_WATCHED_AT, formatHistoryDate, markWatchedRequestBody } from '../lib/date.js'
+import { markWatchedRequestBody } from '../lib/date.js'
 import { TMDB_LOGO_URL } from '../lib/tmdb.js'
 import { TVDB_LOGO_DARK_BG_URL, TVDB_LOGO_LIGHT_BG_URL, tvdbSeriesUrl } from '../lib/tvdb.js'
 import { useAuth } from '../lib/use-auth.js'
@@ -16,6 +16,7 @@ import { ProgressBar } from '../components/library/ProgressBar.js'
 import { RatingPicker } from '../components/library/RatingPicker.js'
 import { SpoilerGuard } from '../components/library/SpoilerGuard.js'
 import { WatchDateDialog } from '../components/library/WatchDateDialog.js'
+import { WatchHistoryTable } from '../components/library/WatchHistoryTable.js'
 import { WatchlistButton } from '../components/library/WatchlistButton.js'
 import { Button } from '../components/ui/Button.js'
 import { Dialog } from '../components/ui/Dialog.js'
@@ -100,8 +101,6 @@ export function ShowDetailPage() {
   const [logAdditionalWatchOpen, setLogAdditionalWatchOpen] = useState(false)
   const [removeWatchesConfirmOpen, setRemoveWatchesConfirmOpen] = useState(false)
   const [overviewRevealed, setOverviewRevealed] = useState(false)
-  const [selectedWatchIds, setSelectedWatchIds] = useState<Set<string>>(new Set())
-  const [deleteSelectedConfirmOpen, setDeleteSelectedConfirmOpen] = useState(false)
 
   const {
     data: show,
@@ -237,24 +236,14 @@ export function ShowDetailPage() {
     enabled: Boolean(slug) && showHasWatches,
   })
 
-  function toggleWatchSelected(id: string) {
-    setSelectedWatchIds((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
-  }
-
   // Invalidating ['show', slug] (a prefix match) already covers the
   // showWatchesData query above alongside the show detail/season queries,
   // same as markWatched/removeWatches do — no need to invalidate it
-  // separately.
+  // separately. Closing the confirm dialog and clearing selection is
+  // WatchHistoryTable's own job now (see its onDeleteSelected doc comment).
   const removeSelectedWatches = useMutation({
     mutationFn: (ids: string[]) => api.library.removeShowWatchesByIds(slug!, ids),
     onSuccess: () => {
-      setDeleteSelectedConfirmOpen(false)
-      setSelectedWatchIds(new Set())
       void invalidateWatchData(queryClient)
       void queryClient.invalidateQueries({ queryKey: ['show', slug] })
     },
@@ -666,121 +655,15 @@ export function ShowDetailPage() {
       )}
 
       {showHasWatches && (
-        // Native <details>/<summary> — same collapsible pattern as
-        // SeasonDetailPage.tsx's own History table below (closed by
-        // default, no extra state to manage). Adds a Season column on top
-        // of that one's own Episode column, since this one spans every
-        // season of the show.
-        <details>
-          <summary className="cursor-pointer text-lg font-semibold">
-            {t('showDetail.historyTable.title')}
-          </summary>
-          {showWatchesData === undefined ? (
-            <Spinner label={t('common.loading')} />
-          ) : (
-            <div className="mt-3 flex flex-col gap-3">
-              <div className="max-w-2xl overflow-x-auto">
-                <table className="w-full text-left text-sm">
-                  <thead>
-                    <tr className="text-[var(--color-fg-muted)]">
-                      <th className="w-8 py-1.5" />
-                      <th className="py-1.5 pr-4 font-medium">
-                        {t('showDetail.historyTable.seasonColumn')}
-                      </th>
-                      <th className="py-1.5 pr-4 font-medium">
-                        {t('showDetail.historyTable.episodeColumn')}
-                      </th>
-                      <th className="py-1.5 pr-4 font-medium">
-                        {t('showDetail.historyTable.dateColumn')}
-                      </th>
-                      <th className="py-1.5 pr-4 font-medium">
-                        {t('showDetail.historyTable.timeColumn')}
-                      </th>
-                      <th className="py-1.5 font-medium">
-                        {t('showDetail.historyTable.typeColumn')}
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {showWatchesData.watches.map((watch) => {
-                      const isUnknown = watch.watchedAt === UNKNOWN_WATCHED_AT
-                      const watchedAt = new Date(watch.watchedAt)
-                      const watchSeasonName =
-                        watch.seasonNumber === 0
-                          ? t('showDetail.specials')
-                          : t('import.progress.season', { number: watch.seasonNumber })
-                      return (
-                        <tr key={watch.id} className="border-t border-[var(--color-border)]">
-                          <td className="py-2">
-                            <input
-                              type="checkbox"
-                              checked={selectedWatchIds.has(watch.id)}
-                              onChange={() => toggleWatchSelected(watch.id)}
-                              aria-label={t('showDetail.unwatchDialog.remove')}
-                            />
-                          </td>
-                          <td className="py-2 pr-4">{watchSeasonName}</td>
-                          <td className="py-2 pr-4">
-                            {watch.episodeTitle ??
-                              t('import.progress.episode', { number: watch.episodeNumber })}
-                          </td>
-                          <td className="py-2 pr-4">
-                            {isUnknown
-                              ? t('history.unknownDate')
-                              : formatHistoryDate(watchedAt, locale, t)}
-                          </td>
-                          <td className="py-2 pr-4">
-                            {isUnknown
-                              ? ''
-                              : watchedAt.toLocaleTimeString(locale, {
-                                  hour: 'numeric',
-                                  minute: '2-digit',
-                                })}
-                          </td>
-                          <td className="py-2">{t(`history.sourceLabel.${watch.source}`)}</td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </div>
-              <Button
-                type="button"
-                variant="danger"
-                className="w-fit"
-                disabled={selectedWatchIds.size === 0}
-                onClick={() => setDeleteSelectedConfirmOpen(true)}
-              >
-                {t('showDetail.historyTable.deleteSelectedWatches')}
-              </Button>
-            </div>
-          )}
-        </details>
+        <WatchHistoryTable
+          watches={showWatchesData?.watches}
+          showSeasonColumn
+          showEpisodeColumn
+          locale={locale}
+          isDeleting={removeSelectedWatches.isPending}
+          onDeleteSelected={(ids, onSuccess) => removeSelectedWatches.mutate(ids, { onSuccess })}
+        />
       )}
-
-      <Dialog
-        open={deleteSelectedConfirmOpen}
-        onClose={() => setDeleteSelectedConfirmOpen(false)}
-        title={t('showDetail.unwatchDialog.titleSelected')}
-      >
-        <div className="mt-6 flex justify-end gap-2">
-          <Button
-            type="button"
-            variant="secondary"
-            onClick={() => setDeleteSelectedConfirmOpen(false)}
-          >
-            {t('showDetail.watchDialog.cancel')}
-          </Button>
-          <Button
-            type="button"
-            variant="danger"
-            isLoading={removeSelectedWatches.isPending}
-            onClick={() => removeSelectedWatches.mutate([...selectedWatchIds])}
-          >
-            {t('showDetail.unwatchDialog.removeSelected')}
-          </Button>
-        </div>
-      </Dialog>
     </div>
   )
 }

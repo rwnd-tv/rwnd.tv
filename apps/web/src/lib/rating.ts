@@ -1,9 +1,8 @@
 /**
  * Pure 1-10-rating <-> 5-star maths shared by RatingPicker.tsx and the
  * gallery's poster-tile rating display — pulled out as plain functions, no
- * React, same reasoning as library-filter.ts's own doc comment: it's
- * worth unit-testing and apps/web's test project has no jsdom to render a
- * component in anyway.
+ * React, same reasoning as library-filter.ts's own doc comment: worth
+ * unit-testing on its own, independent of how RatingPicker renders it.
  */
 export const STAR_COUNT = 5
 

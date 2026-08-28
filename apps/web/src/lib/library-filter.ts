@@ -1,10 +1,9 @@
 /**
  * Filter/sort logic for the TV Shows and Movies gallery pages. Pulled out
- * as plain functions — with no React, no DOM — for two reasons: it's the
- * only non-trivial logic in the web layer worth unit-testing, and apps/web
- * has no test project set up yet (no vitest config, no jsdom), so a
- * DOM-free pure function is the one piece of this feature that can be
- * covered without standing that up first.
+ * as plain functions — with no React, no DOM — because it's the only
+ * non-trivial logic in this feature worth unit-testing on its own;
+ * component-level behavior (wiring these into the actual filter panels)
+ * belongs in a component test instead, not here.
  */
 
 /** Case- and accent-insensitive: "amelie" should match "Amélie" — matters

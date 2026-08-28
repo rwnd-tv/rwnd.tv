@@ -42,10 +42,9 @@ genuinely production-ready.
 - [ ] Proactive per-episode data resolution, not just as a side effect of specific actions (see TODO.md)
 - [ ] Fix known metadata accuracy bugs affecting real usage — `airedEpisodeCount` for a currently-airing season (see TODO.md)
 - [x] **Landing page**: a real explainer page for logged-out visitors at `/` — hero, features, self-host quick start, screenshot gallery, milestone status and FAQ, with sign-in/create-account and the FAQ's public-instance answer both gated on the instance's actual registration state (see TODO_ARCHIVE.md)
-- [ ] Refresh the GitHub-facing docs to reflect where the project actually is (see TODO.md)
-- [ ] Self-hosting readiness pass — confirm `docker-compose.yml`/`.env.example`/self-hosting.md actually work end to end for a real self-hoster (see TODO.md)
 - [ ] Code review & tidy-up pass — dead code, lint/format backlog, stale TODOs, M1-vs-M3 pattern drift (see TODO.md)
 - [ ] Full security review (see TODO.md)
+- [ ] Documentation & self-hosting readiness pass — refresh the GitHub-facing docs to reflect where the project actually is, and confirm `docker-compose.yml`/`.env.example`/self-hosting.md actually work end to end for a real self-hoster (see TODO.md)
 - [ ] Cut the first tagged release, moving `:latest` off tracking `:edge` (see TODO.md)
 - [x] **Redesign the History page as a full-width grid**, matching the Shows/Movies gallery treatment — shipped 2026-08-26 as the Activity page (merges watches, ratings, watchlist adds and drops into one feed)
 

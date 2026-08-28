@@ -48,7 +48,7 @@ Format:
 
 ## Documentation
 
-- [ ] **Refresh the GitHub-facing docs** (2026-08-23 14:40 added) — M3\
+- [ ] **Refresh the GitHub-facing docs, and a self-hosting readiness pass** (2026-08-23 14:40 added, self-hosting pass folded in 2026-08-28) — M3\
       `README.md`'s "Status" section still says M1 is the only thing
       shipped and Trakt import is "next" — both M1 and M2 are done now
       (see `docs/TODO_ARCHIVE.md` for the real history). Update
@@ -56,7 +56,11 @@ Format:
       project actually is, give the roadmap more visibility (right now
       it's just a linked doc, easy to miss from the README), and
       generally make the repo read as more current and inviting to
-      someone landing on it cold.
+      someone landing on it cold. Last of the M3 content items — run
+      after the code review and security review so it describes the
+      actual end state instead of needing a second pass. Also confirm
+      `docker-compose.yml`/`.env.example`/`docs/self-hosting.md` actually
+      work end to end for a real self-hoster.
 
 ## Auth & accounts
 

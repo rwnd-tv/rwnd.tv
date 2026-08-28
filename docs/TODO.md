@@ -18,18 +18,6 @@ Format:
       `typescript-eslint` doesn't support TS 7 yet; leave any TS 7.0
       Dependabot bump open until it does.
 
-## Code review follow-ups (2026-08-28)
-
-- [ ] **Web: `ShowsPage.tsx`/`MoviesPage.tsx` duplicate their sort/
-      filter-cookie wiring** (2026-08-28 added)\
-      ~380-480 lines each, despite sharing well-factored filter logic
-      (`lib/library-filter.ts`). Confirmed while extracting
-      `<WatchHistoryTable>` (see `docs/TODO_ARCHIVE.md`): 10 of 12 sort
-      keys are shared and most cookie wiring is identical, but Shows'
-      extra genre/status/dropped dimensions make a clean shared
-      abstraction a bigger design question than the rest of that pass —
-      deliberately left out to keep it bounded.
-
 ## TV Shows / Movies gallery follow-ups
 
 - [ ] **Virtualize the gallery grid if libraries grow** (2026-08-19 15:25)\

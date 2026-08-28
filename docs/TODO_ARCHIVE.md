@@ -37,7 +37,31 @@ grouping, sorted oldest to newest.
       (all 5 auth flows) and E (select-then-delete on all 4 detail-page
       types, live — a throwaway account created, exercised, and deleted
       afterward). The `ShowsPage.tsx`/`MoviesPage.tsx` sort/filter-cookie
-      duplication flagged alongside item E stays open — see `docs/TODO.md`.
+      duplication flagged alongside item E was picked up separately, same
+      day — see the next entry.
+
+- [x] **`ShowsPage.tsx`/`MoviesPage.tsx` filter-cookie dedup** (2026-08-28
+      added, done 2026-08-28)\
+      The one item left open from the pass above. Fresh read of both files
+      (not the earlier pass's summary) confirmed the shareable part was
+      narrower than it first looked: 7 cookie-backed filter fields (genre,
+      release year, TMDB rating, my rating + unrated mode, watched year +
+      unknown mode) plus the library-derived ranges/genre list they're
+      seeded from — `filtersOpen` and the plain title-filter text too.
+      Extracted to a new `lib/use-library-filter-state.ts` hook,
+      parameterized on a `cookiePrefix` so it reproduces each page's
+      existing cookie names exactly (no stored preference invalidated).
+      Deliberately left alone: `sortBy` (the two pages' sort-key sets
+      differ enough not to be worth forcing together), the filter pipeline
+      itself (Shows interleaves two extra status/dropped steps), and all
+      JSX/per-item tile rendering — genuinely different, not accidental
+      duplication. Added `use-library-filter-state.test.ts` via
+      `renderHook` (first hook-only test in this codebase). Deployed to
+      dev.rwnd.tv and manually verified live on both `/shows` and
+      `/movies`: genre include/exclude actually narrows the results, the
+      TMDB-rating slider's derived min/max matched the two watched movies
+      exactly, Reset restored the library-derived defaults, and a genre
+      filter survived a page reload via its cookie.
 
 - [x] **Code review & tidy-up pass** (2026-08-28 added, done 2026-08-28) — M3\
       James, 2026-08-28: wanted a dedicated code-quality pass before the

@@ -18,6 +18,21 @@ Format:
       `typescript-eslint` doesn't support TS 7 yet; leave any TS 7.0
       Dependabot bump open until it does.
 
+- [ ] **Code review & tidy-up pass** (2026-08-28 added) — M3\
+      James, 2026-08-28: wants a dedicated code-quality pass before the
+      first tagged release — it's an open-source project, and code
+      quality reflects project quality. Scope: automated hygiene (`knip`
+      for dead code/unused exports/deps, close out the `format:check`/
+      lint backlog), a `/code-review` pass per area (API routes, web
+      components, shared libs) rather than the whole repo in one shot, a
+      sweep for stale `TODO`/`FIXME`/`HACK` comments, and a consistency
+      check for pattern drift between code written in M1 and M3.
+      Explicitly excludes security findings (separate item below) and
+      docs content (separate item above) — bar is "clearly wrong or
+      inconsistent," not a stylistic rewrite. Run before the security
+      review and before cutting the release, so the reviewed code is the
+      release code.
+
 ## TV Shows / Movies gallery follow-ups
 
 - [ ] **Virtualize the gallery grid if libraries grow** (2026-08-19 15:25)\

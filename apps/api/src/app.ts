@@ -3,13 +3,18 @@ import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { OpenAPIHono } from '@hono/zod-openapi'
 import { swaggerUI } from '@hono/swagger-ui'
+import type { MiddlewareHandler } from 'hono'
 import { cors } from 'hono/cors'
+import { csrf } from 'hono/csrf'
+import { createMiddleware } from 'hono/factory'
+import { HTTPException } from 'hono/http-exception'
 import { serveStatic } from '@hono/node-server/serve-static'
 import { createDatabase, type Database } from '@rwnd/db'
 import type { AppEnv } from './types.js'
 import type { MetadataProvider } from './providers/types.js'
 import { loadEnv } from './env.js'
 import { requireSession } from './middleware/auth.js'
+import { jsonBodyLimit } from './lib/body-limit.js'
 import { createMetadataProviders } from './providers/index.js'
 import { healthRoutes } from './routes/health.js'
 import { setupRoutes } from './routes/setup.js'
@@ -45,8 +50,12 @@ export function createApp(services?: { db: Database; metadataProviders: Metadata
   const app = new OpenAPIHono<AppEnv>()
 
   // Without this, an uncaught exception in a handler becomes a bare 500
-  // with nothing in the logs to debug from.
+  // with nothing in the logs to debug from. HTTPException is special-cased
+  // first — hono/csrf throws one on rejection with its own pre-built
+  // response (403), and letting it fall through to the generic handler
+  // below would turn that into a misleading 500.
   app.onError((err, c) => {
+    if (err instanceof HTTPException) return err.getResponse()
     console.error(err)
     return c.json({ error: 'Internal Server Error' }, 500)
   })
@@ -54,6 +63,51 @@ export function createApp(services?: { db: Database; metadataProviders: Metadata
   if (env.CORS_ORIGINS.length > 0) {
     app.use('/api/*', cors({ origin: env.CORS_ORIGINS, credentials: true }))
   }
+
+  // hono/csrf only enforces itself on state-changing requests whose
+  // Content-Type is form-encodable (multipart/form-data,
+  // application/x-www-form-urlencoded, text/plain) — see its source. Every
+  // other route here is application/json, so this lands on the 5
+  // cookie-authenticated hand-written multipart routes (avatar, imports)
+  // that JSON's preflight requirement + SameSite=Lax don't otherwise
+  // cover. Origin is widened to CORS_ORIGINS for dev's cross-port setup;
+  // default (same-origin only) is correct for production's single-origin
+  // serving. The Plex webhook is deliberately exempt: it's bearer-token
+  // authenticated in the URL, not cookie-authenticated, and Plex itself
+  // (a server, not a browser) never sends Origin/Sec-Fetch-Site — CSRF
+  // exists to protect ambient browser credentials, which this route has
+  // none of, so applying it here would only ever break the real feature.
+  const csrfMiddleware: MiddlewareHandler<AppEnv> = csrf({
+    origin: env.CORS_ORIGINS.length > 0 ? env.CORS_ORIGINS : undefined,
+  })
+  app.use(
+    '/api/*',
+    createMiddleware<AppEnv>(async (c, next) => {
+      if (c.req.path.startsWith('/api/v1/webhooks/plex/')) return next()
+      return csrfMiddleware(c, next)
+    }),
+  )
+
+  // A default cap for the ordinary JSON API — nothing bounded request
+  // bodies before this. The four routes that legitimately need more
+  // (avatar upload, the two ZIP imports, the Plex webhook) carry their own
+  // wider bodyLimit directly on the route instead of being caught by this
+  // one; a single global limit can't be "overridden" wider downstream,
+  // since whichever bodyLimit runs first and rejects wins.
+  const DEFAULT_BODY_LIMIT_BYTES = 1024 * 1024 // 1MB
+  const bodyLimitExempt = (path: string) =>
+    path === '/api/v1/auth/me/avatar' ||
+    path === '/api/v1/import/trakt/zip' ||
+    path === '/api/v1/import/csv' ||
+    path.startsWith('/api/v1/webhooks/plex/')
+  const defaultBodyLimit: MiddlewareHandler<AppEnv> = jsonBodyLimit(DEFAULT_BODY_LIMIT_BYTES)
+  app.use(
+    '/api/*',
+    createMiddleware<AppEnv>(async (c, next) => {
+      if (bodyLimitExempt(c.req.path)) return next()
+      return defaultBodyLimit(c, next)
+    }),
+  )
 
   app.use('*', async (c, next) => {
     c.set('db', db)

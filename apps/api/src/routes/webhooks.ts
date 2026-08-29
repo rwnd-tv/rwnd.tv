@@ -1,6 +1,7 @@
 import { OpenAPIHono } from '@hono/zod-openapi'
 import { pendingWebhookEvents } from '@rwnd/db'
 import type { AppEnv } from '../types.js'
+import { jsonBodyLimit } from '../lib/body-limit.js'
 import { resolveApiToken } from '../lib/api-tokens.js'
 import { resolveWebhookAccount } from '../lib/webhook-accounts.js'
 import { logWebhookPlay } from '../lib/webhook-plays.js'
@@ -33,7 +34,11 @@ export const webhookRoutes = new OpenAPIHono<AppEnv>()
  * claim route) — see `resolveWebhookAccount`'s doc comment for why
  * there's no way to know who it belongs to up front.
  */
-webhookRoutes.post('/webhooks/plex/:token', async (c) => {
+// A real Plex scrobble payload is a few KB; generous headroom over that
+// without leaving this the one route in the app with no body cap at all
+// (it's the only one that was, pre-review — see docs/security/asvs-l1.md).
+const MAX_WEBHOOK_BODY_BYTES = 64 * 1024
+webhookRoutes.post('/webhooks/plex/:token', jsonBodyLimit(MAX_WEBHOOK_BODY_BYTES), async (c) => {
   const db = c.get('db')
   const token = c.req.param('token')
   const resolvedToken = await resolveApiToken(db, token)

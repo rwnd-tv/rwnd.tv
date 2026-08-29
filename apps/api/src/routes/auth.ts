@@ -17,6 +17,7 @@ import {
 import { users, userCredentials, instanceSettings, invites } from '@rwnd/db'
 import type { AppEnv } from '../types.js'
 import { loadEnv } from '../env.js'
+import { jsonBodyLimit } from '../lib/body-limit.js'
 import { hashPassword, verifyPassword } from '../lib/password.js'
 import {
   createSession,
@@ -498,8 +499,11 @@ authRoutes.openapi(
 /** 2MB — generous for a profile photo (most phone camera apps' own
  * "share"/messaging-size export already lands well under this) without
  * risking an unbounded row in `users.avatar_image`. No resizing/compression
- * happens server-side (no image-processing dependency in this codebase),
- * so this is the only real cap on stored size. */
+ * happens server-side (no image-processing dependency in this codebase).
+ * Enforced twice: jsonBodyLimit below rejects an oversized request before
+ * `parseBody()` ever buffers it into memory; the `file.size` check further
+ * down is what actually applies once parsed (a multipart body's overall
+ * size includes headers/boundaries, not just the file itself). */
 const MAX_AVATAR_BYTES = 2 * 1024 * 1024
 const ALLOWED_AVATAR_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp'])
 
@@ -509,7 +513,7 @@ const ALLOWED_AVATAR_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp'])
  * upload and a raw-binary response don't fit the typed-JSON-body/response
  * convention every other route here uses.
  */
-authRoutes.put('/auth/me/avatar', async (c) => {
+authRoutes.put('/auth/me/avatar', jsonBodyLimit(MAX_AVATAR_BYTES), async (c) => {
   let form: Awaited<ReturnType<typeof c.req.parseBody>>
   try {
     form = await c.req.parseBody()

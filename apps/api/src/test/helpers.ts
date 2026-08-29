@@ -41,8 +41,30 @@ export async function resetDb(db: Database): Promise<void> {
   }
 }
 
+/**
+ * A real browser attaches `Sec-Fetch-Site` to every fetch automatically —
+ * it's computed by the browser itself, not settable by page JS — so a
+ * legitimate same-origin request always carries `same-origin` and passes
+ * hono/csrf's default check (Stage C, M3 security review). vitest's fetch
+ * harness has no browser underneath it and never sends this header, so
+ * every test in this suite is a same-origin request (the app calling its
+ * own API, exactly what every one of these tests exercises) that would
+ * otherwise be misclassified as an unheadered cross-site one and 403 —
+ * hono/csrf treats a request with no Content-Type as `text/plain`
+ * (form-encodable) by default, which is what a bodyless POST/DELETE call
+ * ends up as. This restores that default at the harness level so tests
+ * reflect real browser behaviour; apps/api/src/test/hardening.test.ts's
+ * CSRF tests explicitly override it to exercise the rejection path.
+ */
 export function testApp() {
-  return createApp()
+  const app = createApp()
+  return {
+    request: async (input: string | Request, init?: RequestInit): Promise<Response> => {
+      const headers = new Headers(init?.headers)
+      if (!headers.has('sec-fetch-site')) headers.set('sec-fetch-site', 'same-origin')
+      return app.request(input, { ...init, headers })
+    },
+  }
 }
 
 export function extractCookie(res: Response): string | undefined {

@@ -13,6 +13,7 @@ import {
 import { importJobs, traktConnections } from '@rwnd/db'
 import type { AppEnv } from '../types.js'
 import { loadEnv } from '../env.js'
+import { jsonBodyLimit } from '../lib/body-limit.js'
 import { encryptSecret } from '../lib/crypto.js'
 import { pollDeviceToken, requestDeviceCode } from '../trakt/auth.js'
 import { TraktClient } from '../trakt/client.js'
@@ -254,7 +255,7 @@ const MAX_ZIP_UPLOAD_BYTES = 25 * 1024 * 1024
  * createImportJobRequestSchema's own fields (sent as `'true'`/`'false'` form
  * values, not JSON booleans, since this is a form).
  */
-importRoutes.post('/import/trakt/zip', async (c) => {
+importRoutes.post('/import/trakt/zip', jsonBodyLimit(MAX_ZIP_UPLOAD_BYTES), async (c) => {
   const db = c.get('db')
   const metadataProviders = c.get('metadataProviders')
   const userId = c.get('user')!.id
@@ -332,7 +333,7 @@ const MAX_CSV_ZIP_UPLOAD_BYTES = 25 * 1024 * 1024
  * Plain route, not `.openapi()` — same multipart-upload reasoning as
  * `POST /import/trakt/zip` above.
  */
-importRoutes.post('/import/csv', async (c) => {
+importRoutes.post('/import/csv', jsonBodyLimit(MAX_CSV_ZIP_UPLOAD_BYTES), async (c) => {
   const db = c.get('db')
   const metadataProviders = c.get('metadataProviders')
   const userId = c.get('user')!.id

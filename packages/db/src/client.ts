@@ -20,6 +20,13 @@ export function createDatabase(connectionString: string) {
   // Postgres NOTICE messages (e.g. "truncate cascades to table X") are
   // informational, not warnings — the default handler logs them to stderr,
   // which is just noise for behaviour this app relies on intentionally.
-  const client = postgres(connectionString, { onnotice: () => {} })
+  //
+  // `max` matches postgres-js's own default (10) — made explicit rather
+  // than left implicit, so it's an intentional, tunable bound rather than
+  // whatever the library happens to default to (M3 security review).
+  // Generous for a single-container self-hosted instance; raise it only
+  // alongside Postgres's own max_connections if a self-hoster ever needs
+  // to.
+  const client = postgres(connectionString, { onnotice: () => {}, max: 10 })
   return drizzle(client, { schema })
 }

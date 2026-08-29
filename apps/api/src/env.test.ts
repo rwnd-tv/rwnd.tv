@@ -21,6 +21,72 @@ describe('COOKIE_SECURE parsing', () => {
   it('defaults to false outside production when unset', () => {
     expect(parseEnv({ ...base, NODE_ENV: 'development' }).COOKIE_SECURE).toBe(false)
   })
+
+  it('defaults to true in production when unset', () => {
+    expect(parseEnv({ ...base, NODE_ENV: 'production' }).COOKIE_SECURE).toBe(true)
+  })
+
+  // Regression test (M3 security review, F-01, found via a real
+  // end-to-end docker-compose deploy): a `.env` file's `COOKIE_SECURE=`
+  // (present, nothing after the `=` — exactly what .env.example ships)
+  // is a *defined* empty string once docker-compose passes it through,
+  // not an absent variable. Treating that the same as unset — rather
+  // than as an explicit "false" — is what makes the NODE_ENV-based
+  // default actually reachable in a real deployment.
+  it('treats an empty string the same as unset, in production too', () => {
+    expect(parseEnv({ ...base, NODE_ENV: 'production', COOKIE_SECURE: '' }).COOKIE_SECURE).toBe(
+      true,
+    )
+  })
+
+  it('treats an empty string the same as unset, outside production too', () => {
+    expect(parseEnv({ ...base, NODE_ENV: 'development', COOKIE_SECURE: '' }).COOKIE_SECURE).toBe(
+      false,
+    )
+  })
+})
+
+describe('APP_URL parsing', () => {
+  // Regression test (M3 security review, found via the same real
+  // end-to-end deploy as the COOKIE_SECURE one above): every self-hosted
+  // instance that didn't configure SMTP used to crash on startup with
+  // "APP_URL: Invalid URL" — an eager `.url()` check on the raw schema
+  // ran unconditionally, even though APP_URL is only actually needed
+  // once SMTP_HOST is set, and .env.example ships an empty (but present)
+  // APP_URL= line by default.
+  it('does not reject an empty APP_URL when SMTP is not configured', () => {
+    expect(() => parseEnv({ ...base, APP_URL: '' })).not.toThrow()
+  })
+
+  it('does not require APP_URL to be present at all when SMTP is not configured', () => {
+    expect(() => parseEnv(base)).not.toThrow()
+  })
+
+  it('requires a syntactically valid URL once SMTP_HOST is set', () => {
+    expect(() =>
+      parseEnv({
+        ...base,
+        SMTP_HOST: 'smtp.example.com',
+        SMTP_USER: 'u',
+        SMTP_PASS: 'p',
+        SMTP_FROM: 'rwnd.tv <noreply@example.com>',
+        APP_URL: 'not-a-url',
+      }),
+    ).toThrow(/APP_URL must be a valid URL/)
+  })
+
+  it('accepts a valid APP_URL alongside a fully configured SMTP setup', () => {
+    expect(() =>
+      parseEnv({
+        ...base,
+        SMTP_HOST: 'smtp.example.com',
+        SMTP_USER: 'u',
+        SMTP_PASS: 'p',
+        SMTP_FROM: 'rwnd.tv <noreply@example.com>',
+        APP_URL: 'https://rwnd.tv',
+      }),
+    ).not.toThrow()
+  })
 })
 
 describe('TRUST_PROXY parsing', () => {

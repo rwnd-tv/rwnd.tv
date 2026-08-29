@@ -9,46 +9,86 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    # List form (bare `- VAR`, no `=value`) rather than a `KEY: ${VAR:-x}`
+    # mapping — deliberately, for every one of these. A bare entry passes
+    # the host/.env value through if set, and otherwise leaves the
+    # variable genuinely *absent* from the container's environment, not
+    # merely empty — confirmed empirically (`docker compose run … env`),
+    # since compose's own "defaulting to a blank string" warning message
+    # is misleading. That distinction is exactly what COOKIE_SECURE below
+    # needs: apps/api/src/env.ts only applies its own NODE_ENV-based
+    # default when the var is `undefined`, and a `${COOKIE_SECURE:-false}`
+    # mapping (this file's previous shape) *always* defined it, silently
+    # overriding that default to `false` on every deployment regardless
+    # of NODE_ENV=production — M3 security review, F-01.
     environment:
-      DATABASE_URL: ${DATABASE_URL}
-      TMDB_API_KEY: ${TMDB_API_KEY}
-      TVDB_API_KEY: ${TVDB_API_KEY:-}
-      TVDB_PIN: ${TVDB_PIN:-}
-      COOKIE_SECURE: ${COOKIE_SECURE:-false}
-      TRAKT_CLIENT_ID: ${TRAKT_CLIENT_ID:-}
-      TRAKT_CLIENT_SECRET: ${TRAKT_CLIENT_SECRET:-}
-      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-}
-      ENVIRONMENT_LABEL: ${ENVIRONMENT_LABEL:-}
+      - DATABASE_URL
+      - TMDB_API_KEY
+      - TVDB_API_KEY
+      - TVDB_PIN
+      # Recommended `true` once this instance is reachable over HTTPS
+      # (behind a reverse proxy — see "Securing your instance" in
+      # docs/self-hosting.md) — set it explicitly in your .env; there is
+      # deliberately no compose-level default that could quietly override
+      # env.ts's own NODE_ENV-derived one.
+      - COOKIE_SECURE
+      # Only set this to `true` if a reverse proxy you trust sits in
+      # front of this container and sets X-Forwarded-For itself — see
+      # "Securing your instance" in docs/self-hosting.md. Trusting that
+      # header unconditionally would let any client spoof its own
+      # rate-limit bucket.
+      - TRUST_PROXY
+      - TRAKT_CLIENT_ID
+      - TRAKT_CLIENT_SECRET
+      - ENCRYPTION_KEY
+      - ENVIRONMENT_LABEL
       # Optional, same "set the group or leave the whole group unset" shape
       # as the TRAKT_* vars above — enables account verification and
       # "Forgot password?" emails. See .env.example for what each does.
-      SMTP_HOST: ${SMTP_HOST:-}
-      SMTP_PORT: ${SMTP_PORT:-587}
-      SMTP_USER: ${SMTP_USER:-}
-      SMTP_PASS: ${SMTP_PASS:-}
-      SMTP_FROM: ${SMTP_FROM:-}
-      APP_URL: ${APP_URL:-}
+      - SMTP_HOST
+      - SMTP_PORT
+      - SMTP_USER
+      - SMTP_PASS
+      - SMTP_FROM
+      - APP_URL
       # Uncomment to enable Settings > Database's per-user backup/restore —
       # BACKUP_DIR must match the mount path on the right of the volume
       # line below. Leave both commented out and that section just doesn't
       # appear (see instanceSettingsSchema's backupsConfigured). See
       # docs/self-hosting.md's Backups section.
-      # BACKUP_DIR: /data/backups
+      # - BACKUP_DIR=/data/backups
     ports:
-      - '3000:3000'
+      # Bound to all interfaces by default, same as before — set
+      # BIND_ADDRESS=127.0.0.1 in .env to restrict this to the host only
+      # (e.g. when a reverse proxy on the same machine is the only thing
+      # that should ever reach this container directly). Left as a config
+      # option rather than a flipped default, since dev.rwnd.tv's own
+      # deployment relies on direct LAN access without a proxy in front.
+      - '${BIND_ADDRESS:-0.0.0.0}:3000:3000'
     # Uncomment alongside BACKUP_DIR above — ./backups is a path on this
     # host, relative to wherever you run `docker compose` from.
     # volumes:
     #   - ./backups:/data/backups
     restart: unless-stopped
+    # M3 security review — the app needs no elevated privileges at all
+    # (already runs as the unprivileged `rwnd` user, Dockerfile) and no
+    # Linux capabilities beyond what's needed to bind a plain TCP socket
+    # on an unprivileged port, which requires none of the ones a
+    # container gets by default.
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    mem_limit: 1g
+    pids_limit: 256
 
   db:
     image: postgres:16-alpine
     container_name: rwnd-tv-postgres
     environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB}
+      - POSTGRES_USER
+      - POSTGRES_PASSWORD
+      - POSTGRES_DB
     volumes:
       - db-data:/var/lib/postgresql/data
     healthcheck:
@@ -57,6 +97,18 @@ services:
       timeout: 5s
       retries: 5
     restart: unless-stopped
+    # Not cap_drop: [ALL] here, unlike the app service above — tried it
+    # against a real deploy first and it doesn't work: the official
+    # postgres:16-alpine image's entrypoint needs capabilities to chown
+    # its data directory and switch from root to the postgres user during
+    # init ("chmod: /var/lib/postgresql/data: Operation not permitted...
+    # error: failed switching to 'postgres': operation not permitted").
+    # no-new-privileges alone is confirmed safe (starts healthy) and
+    # still closes off privilege escalation via a setuid binary.
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 1g
+    pids_limit: 256
 
 volumes:
   db-data:

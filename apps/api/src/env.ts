@@ -93,18 +93,43 @@ const rawEnvSchema = z.object({
   // actually points at (there's no reliable way to derive this from a
   // request's own Host header behind an arbitrary reverse proxy setup, so
   // it's explicit rather than guessed). No trailing slash.
-  APP_URL: z.string().url().optional(),
+  //
+  // Deliberately not `.url()` here — a docker-compose `.env` file's
+  // `APP_URL=` (present, nothing after the `=`, exactly what
+  // .env.example ships) is a *defined* empty string, not an absent
+  // variable, and `.optional()` alone only special-cases `undefined`
+  // (M3 security review — found by an actual end-to-end deploy test:
+  // every self-hosted instance that didn't configure SMTP crashed on
+  // startup with "APP_URL: Invalid URL", since an eager `.url()` check
+  // here ran unconditionally, before parseEnv()'s below "only actually
+  // needed alongside SMTP_HOST" logic ever got a chance to apply). The
+  // real URL-shape check happens below, only once SMTP_HOST makes this
+  // field load-bearing.
+  APP_URL: z.string().optional(),
 })
 
 const envSchema = rawEnvSchema.transform((data) => ({
   ...data,
+  // Treats an empty string the same as undefined, not just undefined
+  // itself — confirmed the hard way (M3 security review, F-01): a
+  // docker-compose `.env` file's `COOKIE_SECURE=` (present, nothing
+  // after the `=`, exactly what .env.example ships) passes an empty
+  // string into the container, genuinely distinct from the variable
+  // being absent — bare `- VAR` list-style pass-through in
+  // docker-compose.yml only omits it when the line isn't in `.env` at
+  // all. An empty string is never a meaningful choice here, so treating
+  // it as "unspecified" closes that gap regardless of how the empty
+  // value got there (a `.env` file, a shell export with no value, a
+  // systemd EnvironmentFile, ...), not just this one template file.
   COOKIE_SECURE:
-    data.COOKIE_SECURE === undefined
+    data.COOKIE_SECURE === undefined || data.COOKIE_SECURE === ''
       ? data.NODE_ENV === 'production'
       : data.COOKIE_SECURE === 'true',
   // Unlike COOKIE_SECURE, no NODE_ENV-derived default makes sense here —
   // "production" doesn't imply "behind a reverse proxy". Explicit opt-in
-  // only, defaulting false.
+  // only, defaulting false — which an empty string already produces
+  // (unlike COOKIE_SECURE above, TRUST_PROXY's default doesn't depend on
+  // telling undefined and '' apart).
   TRUST_PROXY: data.TRUST_PROXY === 'true',
 }))
 
@@ -151,6 +176,14 @@ export function parseEnv(source: NodeJS.ProcessEnv): Env {
       throw new Error(
         `${missing.join(', ')} ${missing.length > 1 ? 'are' : 'is'} required when SMTP_HOST is set`,
       )
+    }
+    // APP_URL's shape is only checked here, once SMTP_HOST makes it
+    // actually load-bearing — see its doc comment above for why it isn't
+    // a `.url()` field on the raw schema itself.
+    try {
+      new URL(parsed.data.APP_URL!)
+    } catch {
+      throw new Error('APP_URL must be a valid URL, e.g. https://rwnd.tv')
     }
   }
   return parsed.data

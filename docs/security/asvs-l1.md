@@ -172,8 +172,7 @@ James directly, or explicit go-ahead to make the change over SSH.
 
 ## Deferred items (tracked in `docs/TODO.md`'s Security section)
 
-Accepted-risk items (F-14, F-15, the `__Host-` cookie prefix, no
-breached-password check) are documented in `docs/adr/0007-security-
+Accepted-risk items (F-14, F-15) are documented in `docs/adr/0007-security-
 posture.md`, not tracked as open TODO work — see that ADR for why each
 one is a deliberate decision, not an oversight. Genuine follow-up work,
 logged to `docs/TODO.md`:
@@ -183,6 +182,8 @@ logged to `docs/TODO.md`:
 - F-25 — unify `packages/db`'s scripts on the validated `env.ts` loader;
   explicit Postgres SSL option
 - F-27 / V2.1.7 — breached-password check (HIBP k-anonymity)
+- V3.4.4 — adopt the `__Host-` cookie prefix conditionally on
+  `COOKIE_SECURE` being true
 - V4.3.1 — admin MFA (no MFA exists anywhere in the app)
 - V2.5.5 — email notification when a password or email address changes
 - V8.2.1 — anti-caching headers on API responses

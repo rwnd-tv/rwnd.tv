@@ -44,7 +44,7 @@ Summarized here; `docs/security/asvs-l1.md` has the full requirement-by-requirem
 
 ### Left to the repository owner, not this ADR
 
-These are GitHub repository settings, not files this review can commit — naming them here so they aren't assumed done because `codeql.yml` exists. Status as of 2026-08-29: private vulnerability reporting and secret scanning alerts are **enabled**; push protection (block, not just alert, on a recognized secret pattern), Dependabot security updates, and branch protection requiring the CodeQL check to pass before merge remain **not enabled**.
+These are GitHub repository settings, not files this review can commit — naming them here so they aren't assumed done because `codeql.yml` exists. Status as of 2026-08-29: private vulnerability reporting, secret scanning alerts, and push protection (block, not just alert, on a recognized secret pattern) are **enabled**; Dependabot security updates and branch protection requiring the CodeQL check to pass before merge remain **not enabled**.
 
 ## Consequences
 

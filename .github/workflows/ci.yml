@@ -9,6 +9,13 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# M3 security review (F-19): previously absent, so this job inherited the
+# repository default GITHUB_TOKEN scope. contents: read is all it needs —
+# it never pushes anything (that's release.yml, which already scopes its
+# own token).
+permissions:
+  contents: read
+
 jobs:
   ci:
     runs-on: ubuntu-latest
@@ -53,11 +60,11 @@ jobs:
       APP_URL: http://localhost:3000
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - uses: pnpm/action-setup@v6
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 22
           cache: pnpm
@@ -77,6 +84,18 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
+      # M3 security review (F-19): fails the build on a known-vulnerable
+      # dependency at high severity or above — complements Dependabot's
+      # weekly bumps (.github/dependabot.yml) rather than replacing them.
+      - name: Audit dependencies (high/critical)
+        run: pnpm audit --prod --audit-level=high
+
+      # Non-blocking: surfaces lower-severity and dev-only findings without
+      # wedging main over something like the already-tracked "Hold TS 7
+      # bump" item (docs/TODO.md) — visibility, not a gate.
+      - name: Audit dependencies (informational)
+        run: pnpm audit --audit-level=low || true
+
       - name: Run database migrations
         run: pnpm db:migrate
 
@@ -87,8 +106,34 @@ jobs:
         run: pnpm build
 
       - name: Build Docker image
-        # Not pushed anywhere — this exists purely to catch a broken
-        # Dockerfile (e.g. a base image bump that drops something the build
-        # relies on) before it reaches the release workflow, which actually
-        # publishes the image.
-        run: docker build .
+        # Tagged (not pushed — that's release.yml) so the Trivy step below
+        # can scan it. Also still catches a broken Dockerfile (e.g. a base
+        # image bump that drops something the build relies on) before it
+        # reaches the release workflow, same as before this review.
+        run: docker build -t rwnd-tv:ci .
+
+      # M3 security review (F-19): the image build already happens above,
+      # so scanning it here is nearly free — catches a vulnerable OS/base
+      # package the source-level audit above can't see.
+      - name: Scan Docker image for vulnerabilities
+        uses: aquasecurity/trivy-action@76071ef0d7ec797419534a183b498b4d6366cf37 # v0.31.0
+        with:
+          image-ref: rwnd-tv:ci
+          severity: HIGH,CRITICAL
+          exit-code: '1'
+          ignore-unfixed: true
+
+  dependency-review:
+    # Catches a vulnerable dependency a PR *introduces* — pnpm audit above
+    # only ever looks at main's current lockfile, not what a PR is about
+    # to change it to (M3 security review, F-19).
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/dependency-review-action@2031cfc080254a8a887f58cffee85186f0e49e48 # v4.9.0
+        with:
+          fail-on-severity: high

@@ -202,6 +202,28 @@ describe('hardening', () => {
     })
   })
 
+  describe('Cache-Control (Stage F, M3 security-review follow-up)', () => {
+    it('sends no-store on an ordinary API response', async () => {
+      const res = await app.request('/api/v1/health')
+      expect(res.headers.get('cache-control')).toBe('no-store')
+    })
+
+    it('lets the avatar route override it with its own long-lived, private value', async () => {
+      const cookie = await createUserAndLogin()
+      await app.request('/api/v1/auth/me/avatar', {
+        method: 'PUT',
+        headers: { cookie },
+        body: (() => {
+          const form = new FormData()
+          form.set('file', jpegFile(1024))
+          return form
+        })(),
+      })
+      const res = await app.request('/api/v1/auth/me/avatar', { headers: { cookie } })
+      expect(res.headers.get('cache-control')).toBe('private, max-age=31536000, immutable')
+    })
+  })
+
   describe('anti-automation (Stage E)', () => {
     it('rate-limits POST /auth/login at 10/15min per IP', async () => {
       for (let i = 0; i < 10; i++) {

@@ -23,6 +23,7 @@ services:
     # of NODE_ENV=production — M3 security review, F-01.
     environment:
       - DATABASE_URL
+      - DATABASE_SSL
       - TMDB_API_KEY
       - TVDB_API_KEY
       - TVDB_PIN

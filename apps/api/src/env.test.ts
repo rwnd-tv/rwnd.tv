@@ -103,6 +103,20 @@ describe('TRUST_PROXY parsing', () => {
   })
 })
 
+describe('DATABASE_SSL parsing', () => {
+  it('defaults to false when unset', () => {
+    expect(parseEnv(base).DATABASE_SSL).toBe(false)
+  })
+
+  it('treats the literal string "false" as false', () => {
+    expect(parseEnv({ ...base, DATABASE_SSL: 'false' }).DATABASE_SSL).toBe(false)
+  })
+
+  it('treats the literal string "true" as true', () => {
+    expect(parseEnv({ ...base, DATABASE_SSL: 'true' }).DATABASE_SSL).toBe(true)
+  })
+})
+
 describe('metadata provider config', () => {
   it('requires at least one of TMDB_API_KEY or TVDB_API_KEY', () => {
     expect(() => parseEnv({ DATABASE_URL: base.DATABASE_URL })).toThrow(

@@ -1,13 +1,11 @@
 import { createDatabase } from './client.js'
+import { loadDbEnv } from './env.js'
 import { instanceSettings } from './schema.js'
 
-const connectionString = process.env.DATABASE_URL
-if (!connectionString) {
-  throw new Error('DATABASE_URL is required to run the seed script')
-}
+const { databaseUrl, ssl } = loadDbEnv()
 
 async function main() {
-  const db = createDatabase(connectionString!)
+  const db = createDatabase(databaseUrl, { ssl })
 
   // Ensure the singleton settings row exists. Actual first-run admin
   // creation happens through the API's POST /setup flow, not here.

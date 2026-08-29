@@ -2641,3 +2641,37 @@ api`, not guessed).\
       HTTPS redirect — a home-server reverse-proxy config change, not
       something in this repository. Needs James directly, or explicit
       go-ahead to do it over SSH.
+- [x] **Smaller security-review follow-ups** (2026-08-29 added, done 2026-08-29)\
+      Four unrelated fixes from the 2026-08-29 ASVS pass
+      (`docs/security/asvs-l1.md`), bundled per the item's own grouping:
+      (1) `Cache-Control: no-store` now sent on every `/api/*` response by
+      default (`apps/api/src/app.ts`), set before route handlers run so
+      the avatar route's own long-lived `private, max-age=31536000,
+      immutable` still overrides it (V8.2.1); (2) `packages/db`'s
+      `migrate.ts`/`seed.ts`/`reset-dev.ts`/`drizzle.config.ts` now share
+      one validated `loadDbEnv()` (new `packages/db/src/env.ts`, exported
+      from the package) instead of four independent
+      `process.env.DATABASE_URL` reads that had already drifted; added an
+      explicit, opt-in `DATABASE_SSL` var threaded through
+      `createDatabase()`'s `postgres()` call (default off — the bundled
+      `db` service shares a docker-compose network with `app`, an
+      unencrypted link both already trust implicitly) and through
+      `apps/api`'s own `env.ts`/`docker-compose.yml`; (3) reassessed the
+      password-reset/email-change tokens' 1h TTL against ASVS V2.7.2's
+      10-minute out-of-band guidance and kept it — that guidance targets a
+      true out-of-band channel (SMS, push), not an emailed link the user
+      may not open immediately, recorded as a comment in
+      `lib/account-tokens.ts`; (4) structured logging: left as-is
+      deliberately, not silently — a general request-logging pipeline
+      stays out of scope, narrower than the item's own framing suggested
+      it might land, so `docs/security/asvs-l1.md`'s deferred-items list
+      keeps that one open rather than marking it closed. Also fixed two
+      stale bullets in that same list left over from "Further container
+      hardening" (image signing, `read_only: true`) that were closed in an
+      earlier same-day pass but never checked off there.\
+      **Verified**: new tests (`hardening.test.ts`'s Cache-Control block,
+      `packages/db/src/env.test.ts`, `apps/api/src/env.test.ts`'s
+      `DATABASE_SSL` block) plus the full existing suite, against a
+      migrated local Postgres; lint/typecheck/format clean; deployed to
+      dev.rwnd.tv and confirmed a live response carries `no-store` while
+      the avatar image doesn't.

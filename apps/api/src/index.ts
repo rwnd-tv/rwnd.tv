@@ -9,7 +9,7 @@ import { scheduleMetadataRefresh } from './metadata/refresh.js'
 import { scheduleWebhookRetention } from './lib/webhook-retention.js'
 
 const env = loadEnv()
-const db = createDatabase(env.DATABASE_URL)
+const db = createDatabase(env.DATABASE_URL, { ssl: env.DATABASE_SSL })
 const metadataProviders = createMetadataProviders(env)
 const app = createApp({ db, metadataProviders })
 

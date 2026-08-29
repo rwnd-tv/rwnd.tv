@@ -16,7 +16,7 @@ export type Database = ReturnType<typeof createDatabase>
  */
 export type Tx = Parameters<Parameters<Database['transaction']>[0]>[0]
 
-export function createDatabase(connectionString: string) {
+export function createDatabase(connectionString: string, options?: { ssl?: boolean }) {
   // Postgres NOTICE messages (e.g. "truncate cascades to table X") are
   // informational, not warnings — the default handler logs them to stderr,
   // which is just noise for behaviour this app relies on intentionally.
@@ -27,6 +27,18 @@ export function createDatabase(connectionString: string) {
   // Generous for a single-container self-hosted instance; raise it only
   // alongside Postgres's own max_connections if a self-hoster ever needs
   // to.
-  const client = postgres(connectionString, { onnotice: () => {}, max: 10 })
+  //
+  // `ssl` defaults off (undefined here, not `false`) — postgres-js treats
+  // `false` the same as `undefined` (no TLS attempted), so this is purely
+  // about not making a claim either way when the caller hasn't set
+  // DATABASE_SSL. `'require'` rather than `true`: postgres-js accepts
+  // either, but `'require'` reads unambiguously as "fail the connection
+  // rather than silently fall back to plaintext" (M3 security review
+  // follow-up, docs/TODO.md — see packages/db/src/env.ts's DbEnv.ssl).
+  const client = postgres(connectionString, {
+    onnotice: () => {},
+    max: 10,
+    ssl: options?.ssl ? 'require' : undefined,
+  })
   return drizzle(client, { schema })
 }

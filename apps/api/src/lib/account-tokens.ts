@@ -3,6 +3,13 @@ import type { Database } from '@rwnd/db'
 import { passwordResetTokens, emailVerificationTokens, emailChangeTokens } from '@rwnd/db'
 import { generateSecret, hashSecret } from './tokens.js'
 
+// Reassessed against ASVS V2.7.2's 10-minute out-of-band guidance (M3
+// security review follow-up, docs/TODO.md) and kept at 1h: that guidance is
+// aimed at a true out-of-band channel (SMS, push, a hardware token) the user
+// is expected to be looking at right now, not an emailed link — email
+// delivery itself can lag, and a user may not open their inbox immediately
+// after requesting a reset. 1h stays the better usability/security tradeoff
+// for this channel; revisit only if this ever moves off email.
 export const PASSWORD_RESET_TTL_MS = 60 * 60 * 1000 // 1 hour
 export const EMAIL_VERIFICATION_TTL_MS = 24 * 60 * 60 * 1000 // 24 hours
 // 1 hour, same as a password reset — not verification's 24h. This is

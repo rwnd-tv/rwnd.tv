@@ -2,9 +2,9 @@
 // Not part of the shipped package; not exported from index.ts.
 import { sql } from 'drizzle-orm'
 import { createDatabase } from './client.js'
+import { loadDbEnv } from './env.js'
 
-const url = process.env.DATABASE_URL
-if (!url) throw new Error('DATABASE_URL required')
+const { databaseUrl, ssl } = loadDbEnv()
 
 const TABLES = [
   'plays',
@@ -29,7 +29,7 @@ const TABLES = [
   'instance_settings',
 ]
 
-const db = createDatabase(url)
+const db = createDatabase(databaseUrl, { ssl })
 for (const table of TABLES) {
   await db.execute(sql.raw(`TRUNCATE TABLE "${table}" CASCADE`))
 }

@@ -40,7 +40,7 @@ import { webhookRoutes } from './routes/webhooks.js'
  */
 export function createApp(services?: { db: Database; metadataProviders: MetadataProvider[] }) {
   const env = loadEnv()
-  const db = services?.db ?? createDatabase(env.DATABASE_URL)
+  const db = services?.db ?? createDatabase(env.DATABASE_URL, { ssl: env.DATABASE_SSL })
   const metadataProviders = services?.metadataProviders ?? createMetadataProviders(env)
   // The primary provider — every request path that doesn't yet do
   // cross-provider fallback (search, resolve, episode/season fetches) uses
@@ -151,6 +151,19 @@ export function createApp(services?: { db: Database; metadataProviders: Metadata
       return defaultBodyLimit(c, next)
     }),
   )
+
+  // Blanket `no-store` on every API response (M3 security review follow-up,
+  // docs/TODO.md, ASVS V8.2.1) — nothing under /api/* is safe for a shared
+  // cache or browser back-forward cache to keep around by default (session
+  // data, watch history, tokens). Set before the route handlers run, not
+  // after, so the one deliberate exception — the avatar route's own
+  // `private, max-age=31536000, immutable` (routes/auth.ts) — overwrites
+  // this rather than the other way around; `c.header()` replaces a
+  // previously-set value unless called with `{ append: true }`.
+  app.use('/api/*', async (c, next) => {
+    c.header('Cache-Control', 'no-store')
+    await next()
+  })
 
   app.use('*', async (c, next) => {
     c.set('db', db)

@@ -1,3 +1,5 @@
 export * from './schema.js'
 export { createDatabase } from './client.js'
 export type { Database, Tx } from './client.js'
+export { loadDbEnv } from './env.js'
+export type { DbEnv } from './env.js'

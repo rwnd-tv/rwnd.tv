@@ -4,6 +4,13 @@ const rawEnvSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().int().positive().default(3000),
   DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
+  // Same string-not-boolean parsing as COOKIE_SECURE/TRUST_PROXY below, same
+  // reasoning. Defaults false: the bundled `db` service sits on the same
+  // docker-compose network as this one, an unencrypted link both containers
+  // already trust implicitly — see packages/db/src/env.ts's DbEnv.ssl (M3
+  // security review follow-up, docs/TODO.md). Set true for a remote/managed
+  // Postgres that requires or offers TLS.
+  DATABASE_SSL: z.string().optional(),
   // Comma-separated origins allowed to make credentialed requests. Only
   // needed in dev, where the Vite dev server (5173) and API (3000) are on
   // different origins — in production the API serves the built SPA itself.
@@ -131,6 +138,9 @@ const envSchema = rawEnvSchema.transform((data) => ({
   // (unlike COOKIE_SECURE above, TRUST_PROXY's default doesn't depend on
   // telling undefined and '' apart).
   TRUST_PROXY: data.TRUST_PROXY === 'true',
+  // Same "default false, no NODE_ENV-derived default" reasoning as
+  // TRUST_PROXY — see the DATABASE_SSL field comment above.
+  DATABASE_SSL: data.DATABASE_SSL === 'true',
 }))
 
 export type Env = z.infer<typeof envSchema>

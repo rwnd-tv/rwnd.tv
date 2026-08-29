@@ -61,7 +61,7 @@ project, rather than scattering that reasoning across this table.
 | V2.5.5             | Deferred → `docs/TODO.md` | No email notification is sent when a password or email address changes — a real feature addition, not a targeted fix; see `docs/adr/0007-security-posture.md`                                            |
 | V2.5.6             | Pass                      | Token-based reset via `apps/api/src/lib/account-tokens.ts`, 1h TTL, single-use                                                                                                                           |
 | V2.6.1–3           | Pass                      | Account-recovery tokens are 256-bit CSPRNG (`generateSecret(32)`), single-use, hashed at rest                                                                                                            |
-| V2.7.2             | Fail → fixed Stage F      | Password-reset/email-change tokens are 1h, not the 10-minute out-of-band window ASVS specifies — reassess TTL                                                                                            |
+| V2.7.2             | Pass (reassessed)         | Password-reset/email-change tokens keep their 1h TTL — ASVS's 10-minute guidance targets a true out-of-band channel (SMS, push), not an emailed link the user may not open immediately; see `apps/api/src/lib/account-tokens.ts` |
 | V4.3.1 (admin MFA) | Deferred → `docs/TODO.md` | No MFA exists anywhere in the app; `requireAdmin` is password-only. Real feature gap, not a quick fix — log as a follow-up                                                                               |
 
 ## V3 — Session Management
@@ -117,7 +117,7 @@ project, rather than scattering that reasoning across this table.
 
 | Req    | Status                                               | Evidence / rationale                                                                                                                                                                                                                                      |
 | ------ | ---------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| V8.2.1 | Deferred → `docs/TODO.md`                            | No explicit anti-caching headers on API responses generally (only the avatar route sets `Cache-Control` deliberately, for a different reason) — needs a decision on scope (all API responses vs. just auth-sensitive ones) bigger than a review-scope fix |
+| V8.2.1 | Fail → fixed                                         | `Cache-Control: no-store` on every `/api/*` response by default (`apps/api/src/app.ts`), set before route handlers run so the avatar route's own long-lived, private value still overrides it                                                             |
 | V8.2.2 | Pass                                                 | Zero real `localStorage`/`sessionStorage` use in `apps/web` (confirmed by grep); auth state lives only in the httpOnly cookie + in-memory React Query cache                                                                                               |
 | V8.2.3 | Pass                                                 | React Query cache is reset on logout — `apps/web/src/lib/reset-auth-cache.ts`                                                                                                                                                                             |
 | V8.3.1 | Accepted risk (webhook), Fail → fixed Stage G (TMDB) | Plex webhook token is a URL path segment by necessity (Plex allows no custom headers) — documented rationale in `apps/api/src/routes/webhooks.ts:12-22`; `TMDB_API_KEY` in the outbound query string is unrelated and gets fixed (F-09)                   |
@@ -179,21 +179,22 @@ logged to `docs/TODO.md`:
 
 - F-22 — invite mode is unreachable (no route creates an invite code)
 - F-24 / V3.3.2 — session list/revoke-my-sessions UI, sliding expiry
-- F-25 — unify `packages/db`'s scripts on the validated `env.ts` loader;
-  explicit Postgres SSL option
 - F-27 / V2.1.7 — breached-password check (HIBP k-anonymity)
 - V3.4.4 — adopt the `__Host-` cookie prefix conditionally on
   `COOKIE_SECURE` being true
 - V4.3.1 — admin MFA (no MFA exists anywhere in the app)
 - V2.5.5 — email notification when a password or email address changes
-- V8.2.1 — anti-caching headers on API responses
-- V2.7.2 — password-reset/email-change tokens are 1h TTL vs. ASVS's
-  10-minute out-of-band guidance; worth reassessing whether that guidance
-  actually applies to an emailed link vs. a true out-of-band channel
-  before treating this as a real gap
-- Image signing (cosign/OIDC keyless) for published container images
-- `read_only: true` on the `app` container (needs a full write-path audit
-  first)
-- Full structured request logging (this review added minimal
-  `[security]`-prefixed event logging, not a general request-logging
-  pipeline)
+- Full structured request logging remains out of scope — this review (and
+  the 2026-08-29 follow-up pass closing the rest of this list) only ever
+  added minimal `[security]`-prefixed event logging, not a general
+  request-logging pipeline; that stays a real gap, not a narrowing worth
+  hiding
+
+Closed in the 2026-08-29 follow-up pass (see `docs/TODO_ARCHIVE.md`):
+F-25 (`packages/db`'s scripts now share one validated `env.ts` loader, plus
+an explicit `DATABASE_SSL` option), V8.2.1 (blanket `Cache-Control: no-store`
+on `/api/*`), and V2.7.2 (1h token TTL reassessed and kept, see the V2.7.2
+row above). Image signing (cosign/OIDC keyless) and `read_only: true` on the
+`app` container were also closed, in an earlier same-day pass — see
+`docs/TODO_ARCHIVE.md`'s "Further container hardening" entry — this list
+had gone stale rather than being updated at the time.

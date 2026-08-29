@@ -139,21 +139,6 @@ Format:
       2026-08-29 security review's invite-redemption race fix included),
       but no route anywhere actually creates an invite code for an admin
       to hand out.
-- [ ] **Smaller security-review follow-ups** (2026-08-29 added)\
-      Left deliberately deferred rather than fixed inline, all from the
-      2026-08-29 ASVS pass (`docs/security/asvs-l1.md`): anti-caching
-      headers (`Cache-Control: no-store`) on API responses generally
-      (V8.2.1) — needs a decision on scope (every response, or just
-      auth-sensitive ones); `packages/db`'s `migrate.ts`/`seed.ts`/
-      `reset-dev.ts`/`drizzle.config.ts` read `process.env.DATABASE_URL`
-      directly rather than the validated `env.ts` loader, and
-      `client.ts` has no explicit Postgres `ssl` option; reassess whether
-      the password-reset/email-change tokens' 1h TTL genuinely needs to
-      match ASVS's 10-minute out-of-band guidance (V2.7.2), which may be
-      aimed at true out-of-band channels rather than an emailed link;
-      full structured request logging (the review added only minimal
-      `[security]`-prefixed event logging on login/admin-settings, not a
-      general request-logging pipeline).
 
 ## Roadmap
 

@@ -2,13 +2,11 @@ import { fileURLToPath } from 'node:url'
 import { drizzle } from 'drizzle-orm/postgres-js'
 import { migrate } from 'drizzle-orm/postgres-js/migrator'
 import postgres from 'postgres'
+import { loadDbEnv } from './env.js'
 
-const connectionString = process.env.DATABASE_URL
-if (!connectionString) {
-  throw new Error('DATABASE_URL is required to run migrations')
-}
+const { databaseUrl, ssl } = loadDbEnv()
 
-const migrationClient = postgres(connectionString, { max: 1 })
+const migrationClient = postgres(databaseUrl, { max: 1, ssl: ssl ? 'require' : undefined })
 
 async function main() {
   const db = drizzle(migrationClient)

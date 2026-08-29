@@ -26,6 +26,13 @@ Areas of particular interest given how rwnd.tv is used:
 
 - Authentication and session handling (`apps/api/src/lib/session.ts`,
   `apps/api/src/middleware/auth.ts`)
-- API token handling for webhook ingestion (`apps/api/src/lib/tokens.ts`)
+- API token handling for webhook ingestion (`apps/api/src/lib/tokens.ts`
+  mints/hashes tokens; `apps/api/src/lib/api-tokens.ts` resolves one on an
+  incoming webhook request)
 - Multi-user data isolation (every query that touches `plays`, `api_tokens`,
   etc. should be scoped to the authenticated user)
+
+A structured security review (OWASP ASVS 4.0.3 Level 1) was completed for
+M3 — see `docs/security/asvs-l1.md` for the requirement-by-requirement
+record and `docs/adr/0007-security-posture.md` for the trust model and
+which findings were fixed vs. deliberately accepted.

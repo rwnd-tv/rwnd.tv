@@ -2521,3 +2521,106 @@ DATABASE` ×2) — zero residue.\
       typechecked) — worth calling out since a past session's own retro
       noted this sandbox previously had no live Postgres to verify
       against at all. `pnpm lint`/`typecheck`/`format:check` all clean.
+
+## Security
+
+- [x] **Full security review before M3 closes** (2026-08-26 added, done 2026-08-29) — M3\
+      James, 2026-08-26: wanted a full review as part of "ready for real
+      use," not just `SECURITY.md`'s existing reporting policy. Ran as a
+      structured OWASP ASVS 4.0.3 Level 1 pass — see
+      `docs/security/asvs-l1.md` for the full requirement-by-requirement
+      record and `docs/adr/0007-security-posture.md` for the trust model
+      and every accepted-risk decision — delivered as ten staged,
+      individually-verified commits (Stages A–J), each gated on the full
+      test suite (grew from 411 to 485 tests over the review) plus
+      lint/typecheck/format/knip, several also verified against a live
+      dev.rwnd.tv or rwnd.tv deploy rather than code review alone.\
+      **A** — characterization tests for session/account-token behaviour
+      that had none, plus the ASVS record scaffold.\
+      **B** — the real structural fix: replaced auth being opt-in per
+      route (`middleware: [requireAuth]`, 100 call sites across 17
+      files — forgetting the line silently published a route) with a
+      single fail-closed `requireSession` gate and an explicit
+      `PUBLIC_ROUTES` allow-list, plus a `route-coverage.test.ts` that
+      walks the generated OpenAPI document and fails CI if a future route
+      is added without an auth decision. Also closed `/api/docs` and the
+      OpenAPI document, previously unauthenticated.\
+      **C** — CSRF (`hono/csrf`) and body-size limits (`hono/body-limit`)
+      on the 6 hand-written multipart routes and a 1MB JSON default
+      everywhere else; the Plex webhook deliberately exempted from CSRF
+      (bearer-token authenticated, not cookie-based, and Plex itself
+      sends none of the fetch-metadata headers CSRF checks).\
+      **D** — `hono/secure-headers`: a strict CSP (`script-src`/
+      `style-src 'self'`, no `unsafe-inline` — the Vite build emits no
+      inline scripts/styles), X-Frame-Options, nosniff, Permissions-
+      Policy, and HSTS gated on `COOKIE_SECURE`. Verified against a real
+      dev.rwnd.tv deploy: zero console errors, posters/avatar rendering
+      normally under the enforcing policy.\
+      **E** — anti-automation: an in-memory per-IP rate limiter (login,
+      register/setup, forgot-password — both per-IP and per-target-
+      email, the Plex webhook per-token) plus a new DB-backed
+      `login_attempts` table (migration 0024) for per-account exponential
+      backoff after 5 failed logins, returning the identical generic
+      error a wrong password gets so the lockout itself can't become a
+      new enumeration oracle. Also gave `pending_webhook_events` a
+      90-day retention sweep, closing a "no retention policy" gap its own
+      schema comment used to document as accepted.\
+      **F** — avatar uploads now sniff real file-signature bytes rather
+      than trusting the client-declared type (new `lib/image-sniff.ts`);
+      a login-timing fix (`verifyDummyPassword`) so an unknown email
+      doesn't resolve measurably faster than a wrong password; TMDB/TVDB
+      `externalId` constrained to 12 numeric digits across all three
+      request shapes; the invite-redemption race closed by making the
+      claim itself atomic inside a transaction (verified with a real
+      `Promise.all` concurrency test, which caught a genuine ordering bug
+      — the FK from `invites.usedBy` to `users.id` — during development,
+      not just a sequential-replay test). Register's enumeration surface
+      was deliberately _not_ replaced with a generic response after
+      discussing the tradeoff — GitHub keeps a distinct 409 too, Google's
+      Identity Platform has moved the other way; kept the 409 but added a
+      notification email to the _existing_ account when someone tries to
+      register with its address, rate-limited to one per day so
+      registration itself can't become an inbox-bombing vector.\
+      **G** — the TMDB API key (query-string auth, unlike TVDB's Bearer
+      header) is now redacted before a network-level fetch failure could
+      ever let it reach a log line; the two remaining `console.error`
+      calls that logged a user's email now log the user id instead;
+      minimal `[security]`-prefixed event logging on login and admin
+      settings changes.\
+      **H** — CodeQL (`javascript-typescript`, weekly cron), `pnpm audit`
+      (blocking at high/critical, informational below that — verified
+      locally first, both the current clean pass and the two known dev-
+      only esbuild advisories it correctly doesn't gate on), a
+      `dependency-review` job on PRs, Trivy image scanning in both CI and
+      release, SBOM + provenance attestation on published images, and
+      every workflow `uses:` pinned to a commit SHA (resolved via `gh
+api`, not guessed).\
+      **I** — the actual highest-impact finding of the review:
+      `docker-compose.yml`'s `COOKIE_SECURE: ${COOKIE_SECURE:-false}`
+      silently overrode `env.ts`'s own NODE_ENV-based production default
+      on every real deployment. Fixed at two layers after verifying each
+      against real isolated Docker deploys on the home-server, not just
+      reasoning about it: switched `environment:` to bare `- VAR`
+      list-style (confirmed via `docker compose run … env` that this
+      genuinely omits an unset variable, unlike compose's misleading
+      "defaulting to a blank string" warning text), _and_ made `env.ts`
+      treat an empty string the same as unset — because a self-hoster's
+      real `.env` file (copied from `.env.example`, which ships
+      `COOKIE_SECURE=` with nothing after the `=`) defines an empty
+      string, not an absent variable, which the first fix alone didn't
+      catch. The same empty-string testing surfaced a genuine pre-
+      existing bug unrelated to this review's own changes: `APP_URL`'s
+      eager `.url()` check crashed any self-hosted instance that didn't
+      configure SMTP. Also made `TRUST_PROXY`/`BIND_ADDRESS` actually
+      configurable, hardened both containers (`no-new-privileges` on
+      both; `cap_drop: [ALL]` on the app only — confirmed by testing that
+      it breaks Postgres's own entrypoint before deciding against it on
+      `db`), an explicit Postgres pool `max`, and a new "Securing your
+      instance" section in `docs/self-hosting.md`.\
+      **J** — this record: `docs/adr/0007-security-posture.md`, the ASVS
+      record finalized with no `Pending` rows left, `SECURITY.md`'s stale
+      `lib/tokens.ts` path fixed, and deferred items logged below.\
+      **Left open**: `http://rwnd.tv/` still serves the app with no
+      HTTPS redirect — a home-server reverse-proxy config change, not
+      something in this repository. Needs James directly, or explicit
+      go-ahead to do it over SSH.

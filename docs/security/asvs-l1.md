@@ -1,25 +1,29 @@
 # ASVS 4.0.3 Level 1 coverage
 
-The audit record for rwnd.tv's M3 security review (see `docs/TODO.md` / the
-"Full security review before M3 closes" item). One table per in-scope
+The audit record for rwnd.tv's M3 security review (see `docs/TODO_ARCHIVE.md`'s
+"Full security review before M3 closes" entry for the staged-commit summary,
+and `docs/adr/0007-security-posture.md` for the trust model and accepted-risk
+reasoning). One table per in-scope
 [OWASP ASVS](https://owasp.org/www-project-application-security-verification-standard/)
 4.0.3 chapter, Level 1 requirements plus the handful of Level 2 items called
 out explicitly where relevant to a self-hosted multi-user app (session
 revocation UI, `__Host-` cookies).
 
 - **Review started:** 2026-08-29
+- **Review completed:** 2026-08-29 (Stages A–J, ten staged commits)
 - **ASVS version:** [4.0.3](https://github.com/OWASP/ASVS/blob/master/4.0/docs_en/OWASP%20Application%20Security%20Verification%20Standard%204.0.3-en.pdf)
-- **Reviewed against commit:** `16e867464ed709195caf3e44bd1218c47026d029` (updated as later stages land)
+- **Reviewed against commit:** `6fd743a7aab30df92b065b170ca1c4075bab795e` (Stage I; this record itself lands in Stage J — see `git log` for the current HEAD)
 - **Target level:** L1 throughout, plus named L2 items
+- **See also:** `docs/adr/0007-security-posture.md` for the trust model and the reasoning behind every accepted-risk row below
 - **In scope:** `apps/api`, `apps/web`, `packages/db`, `packages/shared`, CI (`.github/workflows`), Docker packaging (`Dockerfile`, `docker-compose.yml`)
 - **Out of scope:** host OS hardening, the reverse proxy itself (only its expected config is documented), Postgres server hardening, the metadata providers' own security (TMDB/TVDB/Trakt)
 
 Status vocabulary (closed set): `Pass` / `Fail → fixed Stage X` / `Deferred`
-/ `Accepted risk` / `N/A` / `Pending`. Every non-`Pass`, non-`Pending` row
-links to a file, a `docs/TODO.md` item title, or an ADR. `Pending` rows are
-filled in as later stages land; none should remain by Stage J. This file is
-the single source of truth for review status — the findings register in the
-plan is a working document, this is the record.
+/ `Accepted risk` / `N/A`. Every non-`Pass` row links to a file, a
+`docs/TODO.md` item title, or an ADR. This file is the durable audit
+record — update it in place as further items are addressed, rather than
+superseding it with a new document, so a future reviewer can diff against
+a known baseline.
 
 ## V1 — Architecture, Design and Threat Modeling
 
@@ -42,23 +46,23 @@ project, rather than scattering that reasoning across this table.
 
 ## V2 — Authentication
 
-| Req                | Status                    | Evidence / rationale                                                                                                                              |
-| ------------------ | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| V2.1.1             | Pass                      | `passwordSchema = z.string().min(12).max(256)` — `packages/shared/src/schemas/auth.ts:8`                                                          |
-| V2.1.2             | Pending                   | Long passwords aren't truncated (Argon2id hashes the full input), but nothing explicitly denies >128 chars beyond the 256 cap — assess in Stage F |
-| V2.1.3             | Pass                      | Argon2id via `@node-rs/argon2` never truncates input                                                                                              |
-| V2.1.7             | Deferred → `docs/TODO.md` | No breached-password check (HIBP k-anonymity) — a network dependency + design decision, not a quick fix                                           |
-| V2.1.9–11          | Pass                      | No composition rules, no rotation requirement, no paste-blocking anywhere in `apps/web`                                                           |
-| V2.2.1             | Fail → fixed Stage E      | No rate limiting/lockout anywhere — confirmed by repo-wide grep                                                                                   |
-| V2.4.1             | Pass                      | Argon2id, `apps/api/src/lib/password.ts` — `memoryCost: 19456, timeCost: 2, parallelism: 1`                                                       |
-| V2.4.2             | Pass                      | `@node-rs/argon2` generates a unique random salt per hash internally                                                                              |
-| V2.5.3             | Pass                      | Reset flow never reveals the current password; generic responses throughout                                                                       |
-| V2.5.4             | Pass                      | No shared/default accounts; first admin created via one-time `POST /setup`                                                                        |
-| V2.5.5             | Pending                   | No email notification is sent when a password or email address changes — assess whether to add in Stage G                                         |
-| V2.5.6             | Pass                      | Token-based reset via `apps/api/src/lib/account-tokens.ts`, 1h TTL, single-use                                                                    |
-| V2.6.1–3           | Pass                      | Account-recovery tokens are 256-bit CSPRNG (`generateSecret(32)`), single-use, hashed at rest                                                     |
-| V2.7.2             | Fail → fixed Stage F      | Password-reset/email-change tokens are 1h, not the 10-minute out-of-band window ASVS specifies — reassess TTL                                     |
-| V4.3.1 (admin MFA) | Deferred → `docs/TODO.md` | No MFA exists anywhere in the app; `requireAdmin` is password-only. Real feature gap, not a quick fix — log as a follow-up                        |
+| Req                | Status                    | Evidence / rationale                                                                                                                                                                                     |
+| ------------------ | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| V2.1.1             | Pass                      | `passwordSchema = z.string().min(12).max(256)` — `packages/shared/src/schemas/auth.ts:8`                                                                                                                 |
+| V2.1.2             | Pass                      | Long passwords aren't truncated (Argon2id hashes the full input); the 256-char cap satisfies the requirement's intent (permit 64+, deny unbounded) without the specific 128 threshold being load-bearing |
+| V2.1.3             | Pass                      | Argon2id via `@node-rs/argon2` never truncates input                                                                                                                                                     |
+| V2.1.7             | Deferred → `docs/TODO.md` | No breached-password check (HIBP k-anonymity) — a network dependency + design decision, not a quick fix                                                                                                  |
+| V2.1.9–11          | Pass                      | No composition rules, no rotation requirement, no paste-blocking anywhere in `apps/web`                                                                                                                  |
+| V2.2.1             | Fail → fixed Stage E      | No rate limiting/lockout anywhere — confirmed by repo-wide grep                                                                                                                                          |
+| V2.4.1             | Pass                      | Argon2id, `apps/api/src/lib/password.ts` — `memoryCost: 19456, timeCost: 2, parallelism: 1`                                                                                                              |
+| V2.4.2             | Pass                      | `@node-rs/argon2` generates a unique random salt per hash internally                                                                                                                                     |
+| V2.5.3             | Pass                      | Reset flow never reveals the current password; generic responses throughout                                                                                                                              |
+| V2.5.4             | Pass                      | No shared/default accounts; first admin created via one-time `POST /setup`                                                                                                                               |
+| V2.5.5             | Deferred → `docs/TODO.md` | No email notification is sent when a password or email address changes — a real feature addition, not a targeted fix; see `docs/adr/0007-security-posture.md`                                            |
+| V2.5.6             | Pass                      | Token-based reset via `apps/api/src/lib/account-tokens.ts`, 1h TTL, single-use                                                                                                                           |
+| V2.6.1–3           | Pass                      | Account-recovery tokens are 256-bit CSPRNG (`generateSecret(32)`), single-use, hashed at rest                                                                                                            |
+| V2.7.2             | Fail → fixed Stage F      | Password-reset/email-change tokens are 1h, not the 10-minute out-of-band window ASVS specifies — reassess TTL                                                                                            |
+| V4.3.1 (admin MFA) | Deferred → `docs/TODO.md` | No MFA exists anywhere in the app; `requireAdmin` is password-only. Real feature gap, not a quick fix — log as a follow-up                                                                               |
 
 ## V3 — Session Management
 
@@ -69,7 +73,7 @@ project, rather than scattering that reasoning across this table.
 | V3.2.2 | Pass                             | 256-bit CSPRNG token (`generateSecret(32)`), far above the 64-bit minimum                                                                                                 |
 | V3.2.3 | Pass                             | httpOnly cookie; `apps/api/src/lib/cookies.ts`                                                                                                                            |
 | V3.3.1 | Pass                             | Logout deletes the session row; password reset/change revoke sessions — `session.test.ts`                                                                                 |
-| V3.3.2 | Pending                          | No re-authentication on idle/periodic basis (30-day fixed TTL, no sliding expiry) — assess as part of F-24                                                                |
+| V3.3.2 | Deferred → `docs/TODO.md`        | No re-authentication on idle/periodic basis (30-day fixed TTL, no sliding expiry) — F-24, a UI feature (session list/revoke), not a targeted fix                          |
 | V3.4.1 | **Fail → fixed Stage I**         | `docker-compose.yml`'s `${COOKIE_SECURE:-false}` overrides `env.ts`'s production default — session cookie ships without `Secure` on the documented deployment path (F-01) |
 | V3.4.2 | Pass                             | `httpOnly: true` — `apps/api/src/lib/cookies.ts:7`                                                                                                                        |
 | V3.4.3 | Pass                             | `sameSite: 'Lax'` — `apps/api/src/lib/cookies.ts:9`                                                                                                                       |
@@ -111,20 +115,20 @@ project, rather than scattering that reasoning across this table.
 
 ## V8 — Data Protection
 
-| Req    | Status                                               | Evidence / rationale                                                                                                                                                                                                                    |
-| ------ | ---------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| V8.2.1 | Pending                                              | No explicit anti-caching headers on API responses generally (only the avatar route sets `Cache-Control` deliberately, for a different reason) — assess in Stage D                                                                       |
-| V8.2.2 | Pass                                                 | Zero real `localStorage`/`sessionStorage` use in `apps/web` (confirmed by grep); auth state lives only in the httpOnly cookie + in-memory React Query cache                                                                             |
-| V8.2.3 | Pass                                                 | React Query cache is reset on logout — `apps/web/src/lib/reset-auth-cache.ts`                                                                                                                                                           |
-| V8.3.1 | Accepted risk (webhook), Fail → fixed Stage G (TMDB) | Plex webhook token is a URL path segment by necessity (Plex allows no custom headers) — documented rationale in `apps/api/src/routes/webhooks.ts:12-22`; `TMDB_API_KEY` in the outbound query string is unrelated and gets fixed (F-09) |
-| V8.3.2 | Pass                                                 | Full CSV export (`GET /account/export`) and account deletion both exist                                                                                                                                                                 |
+| Req    | Status                                               | Evidence / rationale                                                                                                                                                                                                                                      |
+| ------ | ---------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| V8.2.1 | Deferred → `docs/TODO.md`                            | No explicit anti-caching headers on API responses generally (only the avatar route sets `Cache-Control` deliberately, for a different reason) — needs a decision on scope (all API responses vs. just auth-sensitive ones) bigger than a review-scope fix |
+| V8.2.2 | Pass                                                 | Zero real `localStorage`/`sessionStorage` use in `apps/web` (confirmed by grep); auth state lives only in the httpOnly cookie + in-memory React Query cache                                                                                               |
+| V8.2.3 | Pass                                                 | React Query cache is reset on logout — `apps/web/src/lib/reset-auth-cache.ts`                                                                                                                                                                             |
+| V8.3.1 | Accepted risk (webhook), Fail → fixed Stage G (TMDB) | Plex webhook token is a URL path segment by necessity (Plex allows no custom headers) — documented rationale in `apps/api/src/routes/webhooks.ts:12-22`; `TMDB_API_KEY` in the outbound query string is unrelated and gets fixed (F-09)                   |
+| V8.3.2 | Pass                                                 | Full CSV export (`GET /account/export`) and account deletion both exist                                                                                                                                                                                   |
 
 ## V9 — Communication
 
-| Req      | Status                   | Evidence / rationale                                                                                                                                               |
-| -------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| V9.1.1   | **Fail — live instance** | `http://rwnd.tv/` serves the full app with no HTTPS redirect and no HSTS (F-00). Fixed on the reverse proxy, not in this repo — see the plan's "Note on the proxy" |
-| V9.1.2–3 | Pending                  | TLS cipher/version posture not yet observed against the live instance — `openssl s_client -connect rwnd.tv:443` or testssl.sh, per the plan's verification section |
+| Req      | Status                               | Evidence / rationale                                                                                                                                                                                                                                                                                                                                                               |
+| -------- | ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| V9.1.1   | **Fail — live instance, still open** | `http://rwnd.tv/` still serves the full app with no HTTPS redirect (re-confirmed at review close-out, 2026-08-29). This is a home-server reverse-proxy config change, not something in this repository — needs James's hands on the proxy, or explicit go-ahead to do it over SSH. The application's own half (HSTS, sent once `COOKIE_SECURE` confirms HTTPS) shipped in Stage D. |
+| V9.1.2–3 | Pass                                 | Observed live via `openssl s_client -connect rwnd.tv:443`: negotiates TLS 1.3 (TLS_AES_256_GCM_SHA384) by default; TLS 1.2 also available with a strong cipher (ECDHE-ECDSA-AES256-GCM-SHA384); Let's Encrypt certificate, correct CN                                                                                                                                              |
 
 ## V12 — Files and Resources
 
@@ -145,27 +149,50 @@ project, rather than scattering that reasoning across this table.
 
 ## V14 — Configuration
 
-| Req     | Status                 | Evidence / rationale                                                                                                                      |
-| ------- | ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| V14.2.1 | Fail → fixed Stage H   | Dependabot exists but no CodeQL, `pnpm audit`, or image scan in CI (F-19)                                                                 |
-| V14.3.2 | Pass                   | `NODE_ENV=production` set in `Dockerfile:38`; no debug endpoints found                                                                    |
-| V14.3.3 | Pending                | Swagger UI's `info.version: '1.0.0'` is static metadata, not a real version leak — confirm nothing else exposes build/dependency versions |
-| V14.4.1 | Pass                   | Hono sets `Content-Type` on every response                                                                                                |
-| V14.4.2 | Fail → fixed Stage D/F | No `Content-Disposition` on the avatar response (F-06)                                                                                    |
-| V14.4.3 | Fail → fixed Stage D   | No CSP anywhere (F-04)                                                                                                                    |
-| V14.4.4 | Fail → fixed Stage D   | No `X-Content-Type-Options: nosniff` anywhere (F-04)                                                                                      |
-| V14.4.5 | Fail → fixed Stage D/I | No HSTS in the app; also missing at the proxy (F-00, F-04)                                                                                |
-| V14.4.6 | Fail → fixed Stage D   | No `Referrer-Policy` (F-04)                                                                                                               |
-| V14.4.7 | Fail → fixed Stage D   | No `X-Frame-Options`/`frame-ancestors` (F-04)                                                                                             |
-| V14.5.2 | Pass                   | Auth decisions are session-cookie-based, never derived from the `Origin` header                                                           |
+| Req     | Status                              | Evidence / rationale                                                                                                                                                                                                                                             |
+| ------- | ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| V14.2.1 | Fail → fixed Stage H                | Dependabot exists but no CodeQL, `pnpm audit`, or image scan in CI (F-19)                                                                                                                                                                                        |
+| V14.3.2 | Pass                                | `NODE_ENV=production` set in `Dockerfile:38`; no debug endpoints found                                                                                                                                                                                           |
+| V14.3.3 | Pass                                | Swagger UI's `info.version: '1.0.0'` is static metadata, not a real version leak — and `/api/docs`/`/openapi.json` are gated behind a session now (Stage B, F-10), so this is unauthenticated-unreachable regardless; no other version/build info exposure found |
+| V14.4.1 | Pass                                | Hono sets `Content-Type` on every response                                                                                                                                                                                                                       |
+| V14.4.2 | Fail → fixed Stage D/F              | No `Content-Disposition` on the avatar response (F-06)                                                                                                                                                                                                           |
+| V14.4.3 | Fail → fixed Stage D                | No CSP anywhere (F-04)                                                                                                                                                                                                                                           |
+| V14.4.4 | Fail → fixed Stage D                | No `X-Content-Type-Options: nosniff` anywhere (F-04)                                                                                                                                                                                                             |
+| V14.4.5 | App fixed Stage D; proxy still open | HSTS now sent by the app once `COOKIE_SECURE` confirms HTTPS (F-04); the reverse proxy itself still needs the HTTP→HTTPS redirect — see V9.1.1 above (F-00)                                                                                                      |
+| V14.4.6 | Fail → fixed Stage D                | No `Referrer-Policy` (F-04)                                                                                                                                                                                                                                      |
+| V14.4.7 | Fail → fixed Stage D                | No `X-Frame-Options`/`frame-ancestors` (F-04)                                                                                                                                                                                                                    |
+| V14.5.2 | Pass                                | Auth decisions are session-cookie-based, never derived from the `Origin` header                                                                                                                                                                                  |
 
-## Deferred items (tracked in `docs/TODO.md`)
+## Still open at review close-out
 
-F-14, F-15 (accepted risk, documented in ADR 0007 not TODO), F-22 (invite
-mode unreachable), F-24 (session `lastUsedAt`/sliding expiry/revoke-my-
-sessions UI, V3.3.2), F-25 (`packages/db` env unification, Postgres SSL),
-F-27 (breached-password check, V2.1.7), V4.3.1/admin MFA (new gap surfaced
-by this table, not yet in the findings register — add it), V2.5.5 (no
-change-notification email), V2.7.2 (1h token TTL vs ASVS's 10-minute
-out-of-band guidance — reassess whether that guidance actually applies to
-email-based links vs. true out-of-band channels before treating as a gap).
+**V9.1.1 — plain HTTP still served on the live instance.** The one finding
+this review could not close: it's a home-server reverse-proxy
+configuration change, not something in this repository. Needs either
+James directly, or explicit go-ahead to make the change over SSH.
+
+## Deferred items (tracked in `docs/TODO.md`'s Security section)
+
+Accepted-risk items (F-14, F-15, the `__Host-` cookie prefix, no
+breached-password check) are documented in `docs/adr/0007-security-
+posture.md`, not tracked as open TODO work — see that ADR for why each
+one is a deliberate decision, not an oversight. Genuine follow-up work,
+logged to `docs/TODO.md`:
+
+- F-22 — invite mode is unreachable (no route creates an invite code)
+- F-24 / V3.3.2 — session list/revoke-my-sessions UI, sliding expiry
+- F-25 — unify `packages/db`'s scripts on the validated `env.ts` loader;
+  explicit Postgres SSL option
+- F-27 / V2.1.7 — breached-password check (HIBP k-anonymity)
+- V4.3.1 — admin MFA (no MFA exists anywhere in the app)
+- V2.5.5 — email notification when a password or email address changes
+- V8.2.1 — anti-caching headers on API responses
+- V2.7.2 — password-reset/email-change tokens are 1h TTL vs. ASVS's
+  10-minute out-of-band guidance; worth reassessing whether that guidance
+  actually applies to an emailed link vs. a true out-of-band channel
+  before treating this as a real gap
+- Image signing (cosign/OIDC keyless) for published container images
+- `read_only: true` on the `app` container (needs a full write-path audit
+  first)
+- Full structured request logging (this review added minimal
+  `[security]`-prefixed event logging, not a general request-logging
+  pipeline)

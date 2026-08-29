@@ -71,7 +71,7 @@ Format:
 
 ## Self-hosting & deployment
 
-- [ ] **Cut the first tagged release** (2026-08-26 added) — M3\
+- [ ] **Cut the first tagged release** (2026-08-26 added, GHCR cleanup folded in 2026-08-29) — M3\
       `SECURITY.md` says rwnd.tv is "pre-1.0... until the first stable
       release," and `docker-compose.yml`'s own comment already
       anticipates this: "`edge` tracks main until the first tagged
@@ -80,21 +80,82 @@ Format:
       natural point to actually do this. Needs deciding: version number
       (v1.0.0?), what "stable" means for a pre-1.0 project moving this
       fast (semver commitment level), and whether `release.yml` needs
-      changes beyond what the existing comment already implies.
+      changes beyond what the existing comment already implies. Also add
+      a GHCR cleanup step (e.g. `actions/delete-package-versions` or
+      `dataaxiom/ghcr-cleanup-action`) — every push to `main` leaves the
+      previous `edge` digest behind as an untagged version, and the
+      multi-arch build (`linux/amd64`+`linux/arm64`) fans each push into
+      several untagged per-platform images on top of that, so the
+      [pkgs/container/rwnd.tv/versions](https://github.com/rwnd-tv/rwnd.tv/pkgs/container/rwnd.tv/versions)
+      page has been accumulating unbounded with no retention policy in
+      place.
+- [ ] **Further container hardening: image signing + read-only root filesystem** (2026-08-29 added)\
+      Two items deferred from the 2026-08-29 security review rather than
+      done inline: cosign/OIDC keyless signing of published container
+      images (a bigger call than fit mid-review — pairs naturally with
+      "Cut the first tagged release" above); and `read_only: true` on the
+      `app` service in `docker-compose.yml`, which needs a full audit of
+      every path the container writes to first (right now: nothing
+      beyond stdout/stderr and the optional `BACKUP_DIR` mount, as far as
+      the review established, but that wants confirming properly before
+      flipping it).
 
 ## Security
 
-- [ ] **Full security review before M3 closes** (2026-08-26 added) — M3\
-      James, 2026-08-26: wants a full security review as part of "ready
-      for real use," not just the existing `SECURITY.md` policy
-      (reporting process) and its named areas of interest (session
-      handling, API token handling, multi-user data isolation). Scope not
-      yet defined — worth deciding whether this is a self-review, an
-      external audit, or a structured pass (e.g. OWASP ASVS/Top 10
-      checklist) against auth, session/cookie handling, API tokens,
-      webhook ingestion auth, multi-user data isolation, secrets handling
-      (`ENCRYPTION_KEY`, SMTP/OAuth credentials), and dependency
-      vulnerabilities, before scheduling the work itself.
+- [ ] **Force HTTPS + HSTS on the rwnd.tv reverse proxy** (2026-08-29 added)\
+      The one finding the 2026-08-29 security review (see
+      `docs/TODO_ARCHIVE.md`) couldn't close: `http://rwnd.tv/` still
+      serves the full app with no redirect to HTTPS. This is a
+      home-server nginx-pm config change, not something in this
+      repository — needs James directly, or explicit go-ahead to do it
+      over SSH. The application's own half (sending HSTS once
+      `COOKIE_SECURE` confirms HTTPS) already shipped. See
+      `docs/security/asvs-l1.md`'s V9.1.1 row.
+- [ ] **Admin MFA** (2026-08-29 added)\
+      No multi-factor authentication exists anywhere in the app —
+      `requireAdmin` is password-only. Surfaced by the security review's
+      ASVS pass (V4.3.1, `docs/security/asvs-l1.md`) rather than
+      previously planned work; a real feature addition (a TOTP adapter,
+      most likely, alongside `user_credentials`'
+      `local`/`oidc`-adapter design — see [ADR 0003](adr/0003-auth-model.md)),
+      not a quick fix.
+- [ ] **Session management: list and revoke active sessions** (2026-08-29 added)\
+      No UI or route lets a user see or revoke their own other active
+      sessions, and sessions have no `lastUsedAt`/sliding expiry — just a
+      fixed 30-day TTL with lazy delete-on-resolve. ASVS V3.3.2/3.3.4
+      (Level 2), `docs/security/asvs-l1.md`.
+- [ ] **Breached-password check on registration/password change** (2026-08-29 added)\
+      Password policy is length-only (`min(12)`) — no check against known
+      breached passwords (HIBP's k-anonymity API, most likely). Deferred
+      during the security review rather than fixed inline: it's a network
+      dependency and a design decision (should a self-hosted instance
+      call out to a third party on every password change?) bigger than a
+      review-scope fix. ASVS V2.1.7.
+- [ ] **Notify on password/email change** (2026-08-29 added)\
+      No email is sent when a user's password or email address changes —
+      unlike the equivalent GitHub/Google-style "someone changed your
+      password" pattern. ASVS V2.5.5, surfaced by the security review.
+- [ ] **Invite-creation route** (2026-08-29 added)\
+      `registration_mode: 'invite'` is functionally unreachable — the
+      `invites` table and redemption path both exist and are tested (the
+      2026-08-29 security review's invite-redemption race fix included),
+      but no route anywhere actually creates an invite code for an admin
+      to hand out.
+- [ ] **Smaller security-review follow-ups** (2026-08-29 added)\
+      Left deliberately deferred rather than fixed inline, all from the
+      2026-08-29 ASVS pass (`docs/security/asvs-l1.md`): anti-caching
+      headers (`Cache-Control: no-store`) on API responses generally
+      (V8.2.1) — needs a decision on scope (every response, or just
+      auth-sensitive ones); `packages/db`'s `migrate.ts`/`seed.ts`/
+      `reset-dev.ts`/`drizzle.config.ts` read `process.env.DATABASE_URL`
+      directly rather than the validated `env.ts` loader, and
+      `client.ts` has no explicit Postgres `ssl` option; reassess whether
+      the password-reset/email-change tokens' 1h TTL genuinely needs to
+      match ASVS's 10-minute out-of-band guidance (V2.7.2), which may be
+      aimed at true out-of-band channels rather than an emailed link;
+      full structured request logging (the review added only minimal
+      `[security]`-prefixed event logging on login/admin-settings, not a
+      general request-logging pipeline).
 
 ## Roadmap
 

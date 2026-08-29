@@ -14,7 +14,6 @@ import {
   restoreBackupResponseSchema,
 } from '@rwnd/shared'
 import type { AppEnv } from '../types.js'
-import { requireAuth } from '../middleware/auth.js'
 import { loadEnv } from '../env.js'
 import { buildBackupFile } from '../backup/build.js'
 import { restoreBackupFile } from '../backup/restore.js'
@@ -105,7 +104,7 @@ backupRoutes.openapi(
     method: 'get',
     path: '/backups',
     summary: "List the current user's database backups, newest first",
-    middleware: [requireAuth, requireBackupsConfigured] as const,
+    middleware: [requireBackupsConfigured] as const,
     responses: {
       200: {
         description: 'Backups',
@@ -161,7 +160,7 @@ backupRoutes.openapi(
     method: 'post',
     path: '/backups',
     summary: "Create a backup of the current user's watch history/ratings/watchlist/dropped shows",
-    middleware: [requireAuth, requireBackupsConfigured] as const,
+    middleware: [requireBackupsConfigured] as const,
     request: { body: { content: { 'application/json': { schema: createBackupRequestSchema } } } },
     responses: {
       201: {
@@ -201,7 +200,7 @@ backupRoutes.openapi(
     path: '/backups/{id}/restore',
     summary:
       "Wipe and rewrite the current user's watch history/ratings/watchlist/dropped shows from a backup",
-    middleware: [requireAuth, requireBackupsConfigured] as const,
+    middleware: [requireBackupsConfigured] as const,
     request: { params: z.object({ id: backupIdSchema }) },
     responses: {
       200: {
@@ -231,7 +230,7 @@ backupRoutes.openapi(
     path: '/backups/{id}/diff',
     summary:
       "Compare a backup against the current user's live watch history/ratings/watchlist/dropped shows",
-    middleware: [requireAuth, requireBackupsConfigured] as const,
+    middleware: [requireBackupsConfigured] as const,
     request: { params: z.object({ id: backupIdSchema }) },
     responses: {
       200: {
@@ -260,7 +259,7 @@ backupRoutes.openapi(
     method: 'delete',
     path: '/backups/{id}',
     summary: 'Delete one of the current user’s database backups',
-    middleware: [requireAuth, requireBackupsConfigured] as const,
+    middleware: [requireBackupsConfigured] as const,
     request: { params: z.object({ id: backupIdSchema }) },
     responses: {
       204: { description: 'Deleted' },

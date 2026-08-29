@@ -21,7 +21,6 @@ import {
   watchlists,
 } from '@rwnd/db'
 import type { AppEnv } from '../types.js'
-import { requireAuth } from '../middleware/auth.js'
 import { episodeDisplayTitle } from '../lib/media.js'
 import { effectiveDroppedAtExpr, effectiveDroppedExpr, undropShow } from '../lib/dropped.js'
 
@@ -252,7 +251,6 @@ activityRoutes.openapi(
     method: 'get',
     path: '/activity-feed',
     summary: "List the current user's activity (watches, ratings, watchlist adds, drops)",
-    middleware: [requireAuth] as const,
     request: { query: listActivityQuerySchema },
     responses: {
       200: {
@@ -342,7 +340,6 @@ activityRoutes.openapi(
     method: 'delete',
     path: '/activity-feed',
     summary: 'Remove one or more activity entries',
-    middleware: [requireAuth] as const,
     request: { body: { content: { 'application/json': { schema: removeActivityRequestSchema } } } },
     responses: {
       204: { description: 'Removed' },

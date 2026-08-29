@@ -12,7 +12,6 @@ import {
 } from '@rwnd/shared'
 import { importJobs, traktConnections } from '@rwnd/db'
 import type { AppEnv } from '../types.js'
-import { requireAuth } from '../middleware/auth.js'
 import { loadEnv } from '../env.js'
 import { encryptSecret } from '../lib/crypto.js'
 import { pollDeviceToken, requestDeviceCode } from '../trakt/auth.js'
@@ -127,7 +126,7 @@ importRoutes.openapi(
     method: 'post',
     path: '/import/trakt/device',
     summary: 'Start pairing this account with Trakt (device flow)',
-    middleware: [requireAuth, requireTraktConfigured] as const,
+    middleware: [requireTraktConfigured] as const,
     responses: {
       202: {
         description: 'Pairing started',
@@ -182,7 +181,6 @@ importRoutes.openapi(
     method: 'get',
     path: '/import/trakt/connection',
     summary: 'Current Trakt connection / pairing status',
-    middleware: [requireAuth] as const,
     responses: {
       200: {
         description: 'Connection status',
@@ -221,7 +219,6 @@ importRoutes.openapi(
     method: 'delete',
     path: '/import/trakt/connection',
     summary: 'Disconnect Trakt (deletes stored tokens)',
-    middleware: [requireAuth] as const,
     responses: { 204: { description: 'Disconnected' } },
   }),
   async (c) => {
@@ -257,7 +254,7 @@ const MAX_ZIP_UPLOAD_BYTES = 25 * 1024 * 1024
  * createImportJobRequestSchema's own fields (sent as `'true'`/`'false'` form
  * values, not JSON booleans, since this is a form).
  */
-importRoutes.post('/import/trakt/zip', requireAuth, async (c) => {
+importRoutes.post('/import/trakt/zip', async (c) => {
   const db = c.get('db')
   const metadataProviders = c.get('metadataProviders')
   const userId = c.get('user')!.id
@@ -335,7 +332,7 @@ const MAX_CSV_ZIP_UPLOAD_BYTES = 25 * 1024 * 1024
  * Plain route, not `.openapi()` — same multipart-upload reasoning as
  * `POST /import/trakt/zip` above.
  */
-importRoutes.post('/import/csv', requireAuth, async (c) => {
+importRoutes.post('/import/csv', async (c) => {
   const db = c.get('db')
   const metadataProviders = c.get('metadataProviders')
   const userId = c.get('user')!.id
@@ -421,7 +418,7 @@ importRoutes.openapi(
     method: 'post',
     path: '/import/trakt',
     summary: 'Start a Trakt import job',
-    middleware: [requireAuth, requireTraktConfigured] as const,
+    middleware: [requireTraktConfigured] as const,
     request: {
       body: { content: { 'application/json': { schema: createImportJobRequestSchema } } },
     },
@@ -487,7 +484,6 @@ importRoutes.openapi(
     method: 'get',
     path: '/import/jobs',
     summary: "List the current user's import jobs, newest first",
-    middleware: [requireAuth] as const,
     responses: {
       200: {
         description: 'Jobs',
@@ -511,7 +507,6 @@ importRoutes.openapi(
     method: 'get',
     path: '/import/jobs/{id}',
     summary: 'Get one import job',
-    middleware: [requireAuth] as const,
     request: { params: z.object({ id: uuidSchema }) },
     responses: {
       200: { description: 'Job', content: { 'application/json': { schema: importJobSchema } } },
@@ -536,7 +531,6 @@ importRoutes.openapi(
     method: 'post',
     path: '/import/jobs/{id}/cancel',
     summary: 'Cancel an in-progress import job',
-    middleware: [requireAuth] as const,
     request: { params: z.object({ id: uuidSchema }) },
     responses: {
       200: {

@@ -18,7 +18,7 @@ export type AppEnv = {
      * orderedProviders() wherever fallback across providers actually
      * matters. */
     metadataProviders: MetadataProvider[]
-    /** Populated by requireAuth; absent means unauthenticated. */
+    /** Populated by requireSession; absent means unauthenticated. */
     user?: UserRecord
   }
 }

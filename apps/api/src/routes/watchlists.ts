@@ -12,7 +12,6 @@ import {
 import type { Database } from '@rwnd/db'
 import { episodes, movies, shows, watchlistItems, watchlists } from '@rwnd/db'
 import type { AppEnv } from '../types.js'
-import { requireAuth } from '../middleware/auth.js'
 import { ensureDefaultWatchlist, getOwnedWatchlist } from '../lib/watchlists.js'
 
 export const watchlistRoutes = new OpenAPIHono<AppEnv>()
@@ -152,7 +151,6 @@ watchlistRoutes.openapi(
     method: 'get',
     path: '/watchlists',
     summary: "List the current user's watchlists",
-    middleware: [requireAuth] as const,
     responses: {
       200: {
         description: 'Watchlists',
@@ -193,7 +191,6 @@ watchlistRoutes.openapi(
     method: 'post',
     path: '/watchlists',
     summary: 'Create a new watchlist',
-    middleware: [requireAuth] as const,
     request: {
       body: { content: { 'application/json': { schema: createWatchlistRequestSchema } } },
     },
@@ -238,7 +235,6 @@ watchlistRoutes.openapi(
     method: 'patch',
     path: '/watchlists/{id}',
     summary: 'Rename a watchlist or set its pinned cover, both optional in one request',
-    middleware: [requireAuth] as const,
     request: {
       params: z.object({ id: uuidSchema }),
       body: { content: { 'application/json': { schema: updateWatchlistRequestSchema } } },
@@ -311,7 +307,6 @@ watchlistRoutes.openapi(
     method: 'delete',
     path: '/watchlists/{id}',
     summary: 'Delete a watchlist',
-    middleware: [requireAuth] as const,
     request: { params: z.object({ id: uuidSchema }) },
     responses: {
       204: { description: 'Watchlist deleted' },
@@ -343,7 +338,6 @@ watchlistRoutes.openapi(
     method: 'get',
     path: '/watchlists/{id}',
     summary: "One watchlist's shows and movies",
-    middleware: [requireAuth] as const,
     request: { params: z.object({ id: uuidSchema }) },
     responses: {
       200: {

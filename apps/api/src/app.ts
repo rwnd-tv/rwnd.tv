@@ -9,6 +9,7 @@ import { createDatabase, type Database } from '@rwnd/db'
 import type { AppEnv } from './types.js'
 import type { MetadataProvider } from './providers/types.js'
 import { loadEnv } from './env.js'
+import { requireSession } from './middleware/auth.js'
 import { createMetadataProviders } from './providers/index.js'
 import { healthRoutes } from './routes/health.js'
 import { setupRoutes } from './routes/setup.js'
@@ -62,6 +63,11 @@ export function createApp(services?: { db: Database; metadataProviders: Metadata
   })
 
   const v1 = new OpenAPIHono<AppEnv>()
+  // Fail closed: every route below requires a session unless it's in
+  // requireSession's PUBLIC_ROUTES allow-list — see middleware/auth.ts.
+  // Mounted before any route registration so it's the first thing in the
+  // chain for every request under /api/v1.
+  v1.use('*', requireSession)
   v1.route('/', healthRoutes)
   v1.route('/', setupRoutes)
   v1.route('/', authRoutes)
@@ -87,7 +93,10 @@ export function createApp(services?: { db: Database; metadataProviders: Metadata
   })
 
   app.route('/api/v1', v1)
-  app.get('/api/docs', swaggerUI({ url: '/api/v1/openapi.json' }))
+  // Full route-surface disclosure otherwise (F-10, M3 security review) —
+  // requireSession also covers /api/v1/openapi.json since that's mounted
+  // on v1 itself via v1.doc() above.
+  app.get('/api/docs', requireSession, swaggerUI({ url: '/api/v1/openapi.json' }))
 
   // In production the API serves the built SPA itself, so a self-hosted
   // instance is a single container. In dev, the Vite dev server (5173)

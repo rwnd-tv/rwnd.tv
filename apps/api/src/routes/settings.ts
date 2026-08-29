@@ -8,7 +8,7 @@ import {
 } from '@rwnd/shared'
 import { instanceSettings } from '@rwnd/db'
 import type { AppEnv } from '../types.js'
-import { requireAdmin, requireAuth } from '../middleware/auth.js'
+import { requireAdmin } from '../middleware/auth.js'
 import { loadEnv } from '../env.js'
 import { availableProviderSources } from '../providers/index.js'
 import { isProviderSource } from '../lib/provider-source.js'
@@ -97,7 +97,7 @@ settingsRoutes.openapi(
     method: 'patch',
     path: '/settings',
     summary: 'Update instance settings (admin only)',
-    middleware: [requireAuth, requireAdmin] as const,
+    middleware: [requireAdmin] as const,
     request: {
       body: { content: { 'application/json': { schema: updateInstanceSettingsRequestSchema } } },
     },

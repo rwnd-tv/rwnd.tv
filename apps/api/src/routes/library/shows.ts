@@ -16,7 +16,6 @@ import {
 } from '@rwnd/shared'
 import { droppedShows, episodes, plays, ratings, seasons, shows } from '@rwnd/db'
 import type { AppEnv } from '../../types.js'
-import { requireAuth } from '../../middleware/auth.js'
 import { resolveShow, resolveShowEpisodes } from '../../lib/media.js'
 import { pickRefreshTarget, refreshOneShow } from '../../metadata/refresh.js'
 import { orderedProviders } from '../../providers/priority.js'
@@ -61,7 +60,6 @@ showRoutes.openapi(
     method: 'get',
     path: '/library/shows',
     summary: 'List every show the current user has watched, with watch progress',
-    middleware: [requireAuth] as const,
     responses: {
       200: {
         description: 'Shows library',
@@ -199,7 +197,6 @@ showRoutes.openapi(
     method: 'post',
     path: '/library/shows/resolve',
     summary: 'Resolve a show search result to its local page slug',
-    middleware: [requireAuth] as const,
     request: { body: { content: { 'application/json': { schema: resolveMediaRequestSchema } } } },
     responses: {
       200: {
@@ -232,7 +229,6 @@ showRoutes.openapi(
     method: 'get',
     path: '/library/shows/{slug}',
     summary: "Get a show, with the current user's watch progress",
-    middleware: [requireAuth] as const,
     request: { params: z.object({ slug: z.string() }) },
     responses: {
       200: {
@@ -429,7 +425,6 @@ showRoutes.openapi(
     method: 'post',
     path: '/library/shows/{slug}/refresh',
     summary: "Refresh a show's cached metadata from the provider now",
-    middleware: [requireAuth] as const,
     request: { params: z.object({ slug: z.string() }) },
     responses: {
       204: { description: 'Refreshed' },
@@ -475,7 +470,6 @@ showRoutes.openapi(
     method: 'get',
     path: '/library/shows/{slug}/plays',
     summary: "List the current user's individual watches for a whole show",
-    middleware: [requireAuth] as const,
     request: { params: z.object({ slug: z.string() }) },
     responses: {
       200: {
@@ -533,7 +527,6 @@ showRoutes.openapi(
     method: 'delete',
     path: '/library/shows/{slug}/plays',
     summary: "Remove some of the current user's watches for a whole show",
-    middleware: [requireAuth] as const,
     request: {
       params: z.object({ slug: z.string() }),
       body: { content: { 'application/json': { schema: removeWatchesRequestSchema } } },
@@ -594,7 +587,6 @@ showRoutes.openapi(
     method: 'post',
     path: '/library/shows/{slug}/dropped',
     summary: 'Mark a show as dropped for the current user',
-    middleware: [requireAuth] as const,
     request: { params: z.object({ slug: z.string() }) },
     responses: {
       200: {
@@ -652,7 +644,6 @@ showRoutes.openapi(
     method: 'delete',
     path: '/library/shows/{slug}/dropped',
     summary: 'Un-drop a show for the current user',
-    middleware: [requireAuth] as const,
     request: { params: z.object({ slug: z.string() }) },
     responses: {
       200: {
@@ -715,7 +706,6 @@ showRoutes.openapi(
     method: 'put',
     path: '/library/shows/{slug}/watchlists/{watchlistId}',
     summary: "Add a show to one of the current user's watchlists",
-    middleware: [requireAuth] as const,
     request: { params: z.object({ slug: z.string(), watchlistId: uuidSchema }) },
     responses: {
       200: {
@@ -750,7 +740,6 @@ showRoutes.openapi(
     method: 'delete',
     path: '/library/shows/{slug}/watchlists/{watchlistId}',
     summary: "Remove a show from one of the current user's watchlists",
-    middleware: [requireAuth] as const,
     request: { params: z.object({ slug: z.string(), watchlistId: uuidSchema }) },
     responses: {
       200: {
@@ -792,7 +781,6 @@ showRoutes.openapi(
     method: 'post',
     path: '/library/shows/{slug}/watched',
     summary: 'Log a new watch for every non-special episode of a show',
-    middleware: [requireAuth] as const,
     request: {
       params: z.object({ slug: z.string() }),
       body: { content: { 'application/json': { schema: markShowWatchedRequestSchema } } },
@@ -855,7 +843,6 @@ showRoutes.openapi(
     method: 'delete',
     path: '/library/shows/{slug}/watched',
     summary: "Remove every one of the current user's watches for a show (specials excluded)",
-    middleware: [requireAuth] as const,
     request: { params: z.object({ slug: z.string() }) },
     responses: {
       200: {

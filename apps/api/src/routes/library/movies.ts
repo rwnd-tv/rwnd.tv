@@ -13,7 +13,6 @@ import {
 } from '@rwnd/shared'
 import { movies, plays, ratings } from '@rwnd/db'
 import type { AppEnv } from '../../types.js'
-import { requireAuth } from '../../middleware/auth.js'
 import { resolveMovie } from '../../lib/media.js'
 import { pickRefreshTarget, refreshOneMovie } from '../../metadata/refresh.js'
 import { orderedProviders } from '../../providers/priority.js'
@@ -40,7 +39,6 @@ movieRoutes.openapi(
     method: 'post',
     path: '/library/movies/resolve',
     summary: 'Resolve a movie search result to its local page slug',
-    middleware: [requireAuth] as const,
     request: { body: { content: { 'application/json': { schema: resolveMediaRequestSchema } } } },
     responses: {
       200: {
@@ -68,7 +66,6 @@ movieRoutes.openapi(
     method: 'get',
     path: '/library/movies',
     summary: 'List every movie the current user has watched, with play count',
-    middleware: [requireAuth] as const,
     responses: {
       200: {
         description: 'Movies library',
@@ -143,7 +140,6 @@ movieRoutes.openapi(
     method: 'get',
     path: '/library/movies/{slug}',
     summary: "Get a movie, with the current user's watch status",
-    middleware: [requireAuth] as const,
     request: { params: z.object({ slug: z.string() }) },
     responses: {
       200: {
@@ -237,7 +233,6 @@ movieRoutes.openapi(
     method: 'post',
     path: '/library/movies/{slug}/refresh',
     summary: "Refresh a movie's cached metadata from the provider now",
-    middleware: [requireAuth] as const,
     request: { params: z.object({ slug: z.string() }) },
     responses: {
       204: { description: 'Refreshed' },
@@ -278,7 +273,6 @@ movieRoutes.openapi(
     method: 'get',
     path: '/library/movies/{slug}/plays',
     summary: "List the current user's individual watches for one movie",
-    middleware: [requireAuth] as const,
     request: { params: z.object({ slug: z.string() }) },
     responses: {
       200: {
@@ -326,7 +320,6 @@ movieRoutes.openapi(
     method: 'delete',
     path: '/library/movies/{slug}/plays',
     summary: "Remove some or all of the current user's watches for one movie",
-    middleware: [requireAuth] as const,
     request: {
       params: z.object({ slug: z.string() }),
       body: { content: { 'application/json': { schema: removeWatchesRequestSchema } } },
@@ -374,7 +367,6 @@ movieRoutes.openapi(
     method: 'put',
     path: '/library/movies/{slug}/watchlists/{watchlistId}',
     summary: "Add a movie to one of the current user's watchlists",
-    middleware: [requireAuth] as const,
     request: { params: z.object({ slug: z.string(), watchlistId: uuidSchema }) },
     responses: {
       200: {
@@ -409,7 +401,6 @@ movieRoutes.openapi(
     method: 'delete',
     path: '/library/movies/{slug}/watchlists/{watchlistId}',
     summary: "Remove a movie from one of the current user's watchlists",
-    middleware: [requireAuth] as const,
     request: { params: z.object({ slug: z.string(), watchlistId: uuidSchema }) },
     responses: {
       200: {

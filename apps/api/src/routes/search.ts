@@ -1,7 +1,6 @@
 import { OpenAPIHono, createRoute } from '@hono/zod-openapi'
 import { searchQuerySchema, searchResponseSchema } from '@rwnd/shared'
 import type { AppEnv } from '../types.js'
-import { requireAuth } from '../middleware/auth.js'
 
 export const searchRoutes = new OpenAPIHono<AppEnv>()
 
@@ -10,7 +9,6 @@ searchRoutes.openapi(
     method: 'get',
     path: '/search',
     summary: 'Search for movies and shows via the configured metadata provider',
-    middleware: [requireAuth] as const,
     request: { query: searchQuerySchema },
     responses: {
       200: {

@@ -5,7 +5,6 @@ import type { Database } from '@rwnd/db'
 import { droppedShows, episodes, plays, shows, watchlistItems, watchlists } from '@rwnd/db'
 import type { AppEnv } from '../../types.js'
 import type { MetadataProvider } from '../../providers/types.js'
-import { requireAuth } from '../../middleware/auth.js'
 import { findNextAiringEpisode, findNextUnwatchedEpisode } from '../../lib/media.js'
 import { pickRefreshTargets } from '../../metadata/refresh.js'
 import { orderedProviders } from '../../providers/priority.js'
@@ -250,7 +249,6 @@ queueRoutes.openapi(
     method: 'get',
     path: '/library/on-deck',
     summary: "The current user's On Deck row",
-    middleware: [requireAuth] as const,
     responses: {
       200: {
         description: 'On Deck shows',
@@ -323,7 +321,6 @@ queueRoutes.openapi(
     method: 'get',
     path: '/library/up-next',
     summary: "The current user's Up Next row",
-    middleware: [requireAuth] as const,
     responses: {
       200: {
         description: 'Up Next shows',

@@ -3,7 +3,6 @@ import { and, eq } from 'drizzle-orm'
 import { ratingStatusSchema, setRatingRequestSchema } from '@rwnd/shared'
 import { ratings } from '@rwnd/db'
 import type { AppEnv } from '../../types.js'
-import { requireAuth } from '../../middleware/auth.js'
 import { resolveEpisode } from '../../lib/media.js'
 import { pickRefreshTarget } from '../../metadata/refresh.js'
 import { orderedProviders } from '../../providers/priority.js'
@@ -30,7 +29,6 @@ ratingRoutes.openapi(
     method: 'put',
     path: '/library/shows/{slug}/seasons/{seasonNumber}/episodes/{episodeNumber}/rating',
     summary: "Set the current user's rating for one episode",
-    middleware: [requireAuth] as const,
     request: {
       params: z.object({
         slug: z.string(),
@@ -100,7 +98,6 @@ ratingRoutes.openapi(
     method: 'delete',
     path: '/library/shows/{slug}/seasons/{seasonNumber}/episodes/{episodeNumber}/rating',
     summary: "Clear the current user's rating for one episode",
-    middleware: [requireAuth] as const,
     request: {
       params: z.object({
         slug: z.string(),
@@ -161,7 +158,6 @@ ratingRoutes.openapi(
     method: 'put',
     path: '/library/shows/{slug}/rating',
     summary: "Set the current user's rating for a show",
-    middleware: [requireAuth] as const,
     request: {
       params: z.object({ slug: z.string() }),
       body: { content: { 'application/json': { schema: setRatingRequestSchema } } },
@@ -207,7 +203,6 @@ ratingRoutes.openapi(
     method: 'delete',
     path: '/library/shows/{slug}/rating',
     summary: "Clear the current user's rating for a show",
-    middleware: [requireAuth] as const,
     request: { params: z.object({ slug: z.string() }) },
     responses: {
       200: {
@@ -250,7 +245,6 @@ ratingRoutes.openapi(
     method: 'put',
     path: '/library/movies/{slug}/rating',
     summary: "Set the current user's rating for a movie",
-    middleware: [requireAuth] as const,
     request: {
       params: z.object({ slug: z.string() }),
       body: { content: { 'application/json': { schema: setRatingRequestSchema } } },
@@ -296,7 +290,6 @@ ratingRoutes.openapi(
     method: 'delete',
     path: '/library/movies/{slug}/rating',
     summary: "Clear the current user's rating for a movie",
-    middleware: [requireAuth] as const,
     request: { params: z.object({ slug: z.string() }) },
     responses: {
       200: {

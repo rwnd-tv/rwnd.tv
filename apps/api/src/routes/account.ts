@@ -4,7 +4,6 @@ import { strToU8, zipSync } from 'fflate'
 import { accountDataCountsSchema, clearDataRequestSchema } from '@rwnd/shared'
 import { droppedShows, plays, ratings, watchlistItems, watchlists } from '@rwnd/db'
 import type { AppEnv } from '../types.js'
-import { requireAuth } from '../middleware/auth.js'
 import { buildExportFiles } from '../export/build.js'
 import { ensureDefaultWatchlist } from '../lib/watchlists.js'
 
@@ -19,7 +18,6 @@ accountRoutes.openapi(
     method: 'get',
     path: '/account/data-counts',
     summary: "Count the current user's own tracked data, by category",
-    middleware: [requireAuth] as const,
     responses: {
       200: {
         description: 'Counts',
@@ -50,10 +48,10 @@ accountRoutes.openapi(
 
 /**
  * Bulk-deletes the current user's own tracked data (Settings > Database —
- * see apps/web/src/components/settings/DatabasePanel.tsx). Scoped to
- * `requireAuth` only, not `requireAdmin` — every category here is
- * per-user data (each table has its own `userId` column), same tier as
- * the Profile/API-tokens settings, not an instance-wide action. The
+ * see apps/web/src/components/settings/DatabasePanel.tsx). Not
+ * `requireAdmin`-gated — every category here is per-user data (each table
+ * has its own `userId` column), same tier as the Profile/API-tokens
+ * settings, not an instance-wide action. The
  * frontend's confirmation dialog is the only safety net; this route
  * itself does exactly what it's asked, no soft-delete/undo.
  */
@@ -62,7 +60,6 @@ accountRoutes.openapi(
     method: 'post',
     path: '/account/clear-data',
     summary: "Delete the current user's own watch history/ratings/watchlist/dropped shows",
-    middleware: [requireAuth] as const,
     request: { body: { content: { 'application/json': { schema: clearDataRequestSchema } } } },
     responses: {
       204: { description: 'Cleared' },
@@ -104,7 +101,7 @@ accountRoutes.openapi(
  * apps/api/src/export/build.ts's doc comment for why this is a separate,
  * flatter CSV shape from the JSON Backup feature rather than reusing it.
  */
-accountRoutes.get('/account/export', requireAuth, async (c) => {
+accountRoutes.get('/account/export', async (c) => {
   const userId = c.get('user')!.id
   const db = c.get('db')
 

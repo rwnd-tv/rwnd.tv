@@ -12,7 +12,6 @@ import {
 import type { Database } from '@rwnd/db'
 import { episodes, movies, plays, shows } from '@rwnd/db'
 import type { AppEnv } from '../types.js'
-import { requireAuth } from '../middleware/auth.js'
 import { episodeDisplayTitle, resolveEpisode, resolveMovie } from '../lib/media.js'
 
 export const playRoutes = new OpenAPIHono<AppEnv>()
@@ -88,7 +87,6 @@ playRoutes.openapi(
     method: 'get',
     path: '/plays',
     summary: "List the current user's watch history, newest first",
-    middleware: [requireAuth] as const,
     request: { query: listPlaysQuerySchema },
     responses: {
       200: {
@@ -129,7 +127,6 @@ playRoutes.openapi(
     method: 'post',
     path: '/plays',
     summary: 'Log a watch',
-    middleware: [requireAuth] as const,
     request: { body: { content: { 'application/json': { schema: createPlayRequestSchema } } } },
     responses: {
       201: { description: 'Play logged', content: { 'application/json': { schema: playSchema } } },
@@ -249,7 +246,6 @@ playRoutes.openapi(
     method: 'delete',
     path: '/plays/{id}',
     summary: 'Remove a logged play',
-    middleware: [requireAuth] as const,
     request: { params: z.object({ id: uuidSchema }) },
     responses: {
       204: { description: 'Removed' },
@@ -273,7 +269,6 @@ playRoutes.openapi(
     method: 'patch',
     path: '/plays/{id}',
     summary: "Edit a logged play's watched date/time",
-    middleware: [requireAuth] as const,
     request: {
       params: z.object({ id: uuidSchema }),
       body: { content: { 'application/json': { schema: updatePlayRequestSchema } } },

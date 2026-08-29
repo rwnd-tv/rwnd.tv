@@ -12,7 +12,6 @@ import {
 import { apiTokens, pendingWebhookEvents, users, webhookAccountLinks } from '@rwnd/db'
 import type { Database } from '@rwnd/db'
 import type { AppEnv } from '../types.js'
-import { requireAuth } from '../middleware/auth.js'
 import { generateApiToken } from '../lib/tokens.js'
 import { logWebhookPlay } from '../lib/webhook-plays.js'
 import { orderedProviders } from '../providers/priority.js'
@@ -61,7 +60,6 @@ tokenRoutes.openapi(
     method: 'get',
     path: '/tokens',
     summary: "List the current user's API tokens",
-    middleware: [requireAuth] as const,
     responses: {
       200: {
         description: 'Tokens',
@@ -84,7 +82,6 @@ tokenRoutes.openapi(
     method: 'post',
     path: '/tokens',
     summary: 'Create a new API token (shown once)',
-    middleware: [requireAuth] as const,
     request: {
       body: { content: { 'application/json': { schema: createApiTokenRequestSchema } } },
     },
@@ -113,7 +110,6 @@ tokenRoutes.openapi(
     method: 'delete',
     path: '/tokens/{id}',
     summary: 'Revoke an API token',
-    middleware: [requireAuth] as const,
     request: { params: z.object({ id: uuidSchema }) },
     responses: {
       204: { description: 'Revoked' },
@@ -144,7 +140,6 @@ tokenRoutes.openapi(
     method: 'get',
     path: '/tokens/{id}/webhook-links',
     summary: "A webhook token's linked external accounts, and who can be assigned to one",
-    middleware: [requireAuth] as const,
     request: { params: z.object({ id: uuidSchema }) },
     responses: {
       200: {
@@ -178,7 +173,6 @@ tokenRoutes.openapi(
     method: 'patch',
     path: '/tokens/{id}/webhook-links/{linkId}',
     summary: 'Assign (or unassign) which rwnd.tv user a linked external account belongs to',
-    middleware: [requireAuth] as const,
     request: {
       params: z.object({ id: uuidSchema, linkId: uuidSchema }),
       body: { content: { 'application/json': { schema: updateWebhookLinkRequestSchema } } },
@@ -265,7 +259,6 @@ tokenRoutes.openapi(
     method: 'delete',
     path: '/tokens/{id}/webhook-links/{linkId}',
     summary: 'Remove a linked external account',
-    middleware: [requireAuth] as const,
     request: { params: z.object({ id: uuidSchema, linkId: uuidSchema }) },
     responses: {
       204: { description: 'Removed' },

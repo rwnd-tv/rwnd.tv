@@ -42,7 +42,6 @@ import {
   sendPasswordResetEmail,
   sendEmailChangeVerification,
 } from '../lib/email.js'
-import { requireAuth } from '../middleware/auth.js'
 import { getCookie } from 'hono/cookie'
 
 export const authRoutes = new OpenAPIHono<AppEnv>()
@@ -234,7 +233,6 @@ authRoutes.openapi(
     method: 'get',
     path: '/auth/me',
     summary: 'The current user',
-    middleware: [requireAuth] as const,
     responses: {
       200: { description: 'Current user', content: { 'application/json': { schema: userSchema } } },
       401: { description: 'Not logged in' },
@@ -248,7 +246,6 @@ authRoutes.openapi(
     method: 'patch',
     path: '/auth/me',
     summary: "Update the current user's profile",
-    middleware: [requireAuth] as const,
     request: {
       body: { content: { 'application/json': { schema: updateProfileRequestSchema } } },
     },
@@ -275,7 +272,6 @@ authRoutes.openapi(
     method: 'post',
     path: '/auth/me/password',
     summary: "Change the current user's password",
-    middleware: [requireAuth] as const,
     request: {
       body: { content: { 'application/json': { schema: changePasswordRequestSchema } } },
     },
@@ -328,7 +324,7 @@ authRoutes.openapi(
     method: 'post',
     path: '/auth/me/email',
     summary: "Request changing the current user's email address",
-    middleware: [requireAuth, requireEmailConfigured] as const,
+    middleware: [requireEmailConfigured] as const,
     request: {
       body: { content: { 'application/json': { schema: changeEmailRequestSchema } } },
     },
@@ -435,7 +431,6 @@ authRoutes.openapi(
     method: 'delete',
     path: '/auth/me',
     summary: "Permanently delete the current user's account",
-    middleware: [requireAuth] as const,
     request: {
       body: { content: { 'application/json': { schema: deleteAccountRequestSchema } } },
     },
@@ -514,7 +509,7 @@ const ALLOWED_AVATAR_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp'])
  * upload and a raw-binary response don't fit the typed-JSON-body/response
  * convention every other route here uses.
  */
-authRoutes.put('/auth/me/avatar', requireAuth, async (c) => {
+authRoutes.put('/auth/me/avatar', async (c) => {
   let form: Awaited<ReturnType<typeof c.req.parseBody>>
   try {
     form = await c.req.parseBody()
@@ -543,7 +538,7 @@ authRoutes.put('/auth/me/avatar', requireAuth, async (c) => {
   return c.json(serializeUser(updated), 200)
 })
 
-authRoutes.delete('/auth/me/avatar', requireAuth, async (c) => {
+authRoutes.delete('/auth/me/avatar', async (c) => {
   const db = c.get('db')
   const [updated] = await db
     .update(users)
@@ -554,7 +549,7 @@ authRoutes.delete('/auth/me/avatar', requireAuth, async (c) => {
   return c.json(serializeUser(updated), 200)
 })
 
-authRoutes.get('/auth/me/avatar', requireAuth, async (c) => {
+authRoutes.get('/auth/me/avatar', async (c) => {
   const db = c.get('db')
   const [row] = await db
     .select({ avatarImage: users.avatarImage, avatarMimeType: users.avatarMimeType })
@@ -690,7 +685,7 @@ authRoutes.openapi(
     method: 'post',
     path: '/auth/resend-verification',
     summary: "Resend the current user's email verification link",
-    middleware: [requireAuth, requireEmailConfigured] as const,
+    middleware: [requireEmailConfigured] as const,
     responses: {
       204: { description: 'Verification email sent' },
       400: { description: 'Email is already verified' },

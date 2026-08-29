@@ -12,7 +12,6 @@ import {
 } from '@rwnd/shared'
 import { episodes, plays, ratings, seasons } from '@rwnd/db'
 import type { AppEnv } from '../../types.js'
-import { requireAuth } from '../../middleware/auth.js'
 import { resolveSeasonEpisodes } from '../../lib/media.js'
 import { pickRefreshTarget } from '../../metadata/refresh.js'
 import { orderedProviders } from '../../providers/priority.js'
@@ -41,7 +40,6 @@ seasonRoutes.openapi(
     method: 'get',
     path: '/library/shows/{slug}/seasons/{seasonNumber}',
     summary: 'Get one season of a show, with the current user’s per-episode watch status',
-    middleware: [requireAuth] as const,
     request: {
       params: z.object({ slug: z.string(), seasonNumber: z.coerce.number().int().min(0) }),
     },
@@ -221,7 +219,6 @@ seasonRoutes.openapi(
     method: 'get',
     path: '/library/shows/{slug}/seasons/{seasonNumber}/episodes/{episodeNumber}/plays',
     summary: "List the current user's individual watches for one episode",
-    middleware: [requireAuth] as const,
     request: {
       params: z.object({
         slug: z.string(),
@@ -290,7 +287,6 @@ seasonRoutes.openapi(
     method: 'delete',
     path: '/library/shows/{slug}/seasons/{seasonNumber}/episodes/{episodeNumber}/plays',
     summary: "Remove some or all of the current user's watches for one episode",
-    middleware: [requireAuth] as const,
     request: {
       params: z.object({
         slug: z.string(),
@@ -359,7 +355,6 @@ seasonRoutes.openapi(
     method: 'get',
     path: '/library/shows/{slug}/seasons/{seasonNumber}/plays',
     summary: "List the current user's individual watches for one season",
-    middleware: [requireAuth] as const,
     request: {
       params: z.object({ slug: z.string(), seasonNumber: z.coerce.number().int().min(0) }),
     },
@@ -423,7 +418,6 @@ seasonRoutes.openapi(
     method: 'delete',
     path: '/library/shows/{slug}/seasons/{seasonNumber}/plays',
     summary: "Remove some of the current user's watches for one season",
-    middleware: [requireAuth] as const,
     request: {
       params: z.object({ slug: z.string(), seasonNumber: z.coerce.number().int().min(0) }),
       body: { content: { 'application/json': { schema: removeWatchesRequestSchema } } },
@@ -483,7 +477,6 @@ seasonRoutes.openapi(
     method: 'post',
     path: '/library/shows/{slug}/seasons/{seasonNumber}/watched',
     summary: 'Log a new watch for every episode of one season',
-    middleware: [requireAuth] as const,
     request: {
       params: z.object({ slug: z.string(), seasonNumber: z.coerce.number().int().min(0) }),
       body: { content: { 'application/json': { schema: markShowWatchedRequestSchema } } },
@@ -544,7 +537,6 @@ seasonRoutes.openapi(
     method: 'delete',
     path: '/library/shows/{slug}/seasons/{seasonNumber}/watched',
     summary: "Remove every one of the current user's watches for one season",
-    middleware: [requireAuth] as const,
     request: {
       params: z.object({ slug: z.string(), seasonNumber: z.coerce.number().int().min(0) }),
     },

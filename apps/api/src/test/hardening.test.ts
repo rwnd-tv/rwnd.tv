@@ -19,8 +19,16 @@ async function createUserAndLogin(): Promise<string> {
   return extractCookie(res)!
 }
 
+// Real JPEG magic bytes (FF D8 FF) up front — Stage F's magic-byte sniff
+// (lib/image-sniff.ts) rejects a file whose actual bytes don't match a
+// known image signature, regardless of its declared Content-Type or
+// filename, so a plain zero-filled buffer no longer passes here.
 function jpegFile(bytes: number): File {
-  return new File([new Uint8Array(bytes)], 'avatar.jpg', { type: 'image/jpeg' })
+  const buf = new Uint8Array(bytes)
+  buf[0] = 0xff
+  buf[1] = 0xd8
+  buf[2] = 0xff
+  return new File([buf], 'avatar.jpg', { type: 'image/jpeg' })
 }
 
 /**

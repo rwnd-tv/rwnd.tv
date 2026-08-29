@@ -20,7 +20,8 @@ import { loadEnv } from '../env.js'
 import { jsonBodyLimit } from '../lib/body-limit.js'
 import { rateLimit, tryConsume } from '../middleware/rate-limit.js'
 import { isLoginLocked, recordFailedLogin, clearLoginAttempts } from '../lib/login-lockout.js'
-import { hashPassword, verifyPassword } from '../lib/password.js'
+import { hashPassword, verifyPassword, verifyDummyPassword } from '../lib/password.js'
+import { sniffImageType, extensionFor } from '../lib/image-sniff.js'
 import {
   createSession,
   revokeSession,
@@ -44,10 +45,16 @@ import {
   sendVerificationEmail,
   sendPasswordResetEmail,
   sendEmailChangeVerification,
+  sendAccountAlreadyExistsNotice,
 } from '../lib/email.js'
 import { getCookie } from 'hono/cookie'
 
 export const authRoutes = new OpenAPIHono<AppEnv>()
+
+/** Thrown inside POST /auth/register's transaction to roll it back when
+ * an invite code can't be claimed — see that route for why the user row
+ * is created before the claim is attempted. */
+class InvalidInviteCodeError extends Error {}
 
 /** Gates the routes that actually send mail (forgot-password,
  * resend-verification, and initiating an email change) — see
@@ -100,8 +107,14 @@ authRoutes.openapi(
       .limit(1)
 
     // Same generic error whether the email is unknown or the password is
-    // wrong — don't let login responses reveal which accounts exist.
+    // wrong — don't let login responses reveal which accounts exist. The
+    // dummy verify on the unknown branch does the same Argon2id work a
+    // real check would, so the two cases don't differ in response time
+    // either (M3 security review, F-12) — without it, this branch
+    // returns as soon as the DB lookup misses, well before a wrong-
+    // password branch that has to hash first.
     if (!row || !row.credential.passwordHash) {
+      await verifyDummyPassword(password)
       await recordFailedLogin(db, email)
       return c.json({ error: 'Invalid email or password' }, 401)
     }
@@ -152,29 +165,11 @@ authRoutes.openapi(
     const [settings] = await db.select().from(instanceSettings).limit(1)
     const registrationMode = settings?.registrationMode ?? 'closed'
 
-    let usedInvite: { id: string } | undefined
     if (registrationMode === 'closed') {
       return c.json({ error: 'Registration is not open on this instance' }, 403)
     }
-    if (registrationMode === 'invite') {
-      if (!body.inviteCode) {
-        return c.json({ error: 'An invite code is required' }, 403)
-      }
-      const [invite] = await db
-        .select()
-        .from(invites)
-        .where(
-          and(
-            eq(invites.codeHash, hashSecret(body.inviteCode)),
-            isNull(invites.usedBy),
-            gt(invites.expiresAt, new Date()),
-          ),
-        )
-        .limit(1)
-      if (!invite) {
-        return c.json({ error: 'Invalid or expired invite code' }, 403)
-      }
-      usedInvite = invite
+    if (registrationMode === 'invite' && !body.inviteCode) {
+      return c.json({ error: 'An invite code is required' }, 403)
     }
 
     const [existing] = await db
@@ -183,29 +178,77 @@ authRoutes.openapi(
       .where(eq(users.email, body.email))
       .limit(1)
     if (existing) {
+      // Kept distinct (not the generic pattern login/forgot-password use)
+      // — GitHub takes the same approach, and the UX cost of hiding it
+      // here is real (a real user has no way to know to log in instead).
+      // The compensating control is the notice below: the account owner
+      // gets told someone tried this, rather than the attempt being
+      // invisible. Rate-limited to one such email per address per day so
+      // registration itself can't become an inbox-bombing vector.
+      if (tryConsume(`auth:register:already-exists-notice:${body.email}`, 1, 24 * 60 * 60 * 1000)) {
+        try {
+          await sendAccountAlreadyExistsNotice(body.email)
+        } catch (err) {
+          console.error(`Failed to send "already exists" notice to ${existing.id}:`, err)
+        }
+      }
       return c.json({ error: 'Email already in use' }, 409)
     }
 
     const passwordHash = await hashPassword(body.password)
-    const [user] = await db
-      .insert(users)
-      .values({
-        email: body.email,
-        displayName: body.displayName,
-        role: 'user',
-        // Falls back to the users.locale column default when the browser's
-        // language didn't match a supported locale — see
-        // setupRequestSchema's doc comment on `locale`.
-        ...(body.locale ? { locale: body.locale } : {}),
+
+    // The invite claim and user creation happen in one transaction so a
+    // concurrent double-redemption of the same invite code can't create
+    // two accounts from it — the UPDATE's WHERE usedBy IS NULL clause is
+    // what makes the claim itself atomic; a plain select-then-update had
+    // a race between the two steps (M3 security review, F-13). The user
+    // has to be created *before* the claim, not after — `invites.usedBy`
+    // has a foreign key to `users.id`, so claiming with a not-yet-real id
+    // would violate it. If the claim then fails, throwing rolls back the
+    // user/credential/watchlist inserts too, so a losing race leaves no
+    // orphaned account behind.
+    let user: typeof users.$inferSelect
+    try {
+      user = await db.transaction(async (tx) => {
+        const [created] = await tx
+          .insert(users)
+          .values({
+            email: body.email,
+            displayName: body.displayName,
+            role: 'user',
+            // Falls back to the users.locale column default when the
+            // browser's language didn't match a supported locale — see
+            // setupRequestSchema's doc comment on `locale`.
+            ...(body.locale ? { locale: body.locale } : {}),
+          })
+          .returning()
+        if (!created) throw new Error('Failed to create user')
+
+        await tx.insert(userCredentials).values({ userId: created.id, type: 'local', passwordHash })
+        await ensureDefaultWatchlist(tx, created.id)
+
+        if (registrationMode === 'invite') {
+          const [claimed] = await tx
+            .update(invites)
+            .set({ usedBy: created.id })
+            .where(
+              and(
+                eq(invites.codeHash, hashSecret(body.inviteCode!)),
+                isNull(invites.usedBy),
+                gt(invites.expiresAt, new Date()),
+              ),
+            )
+            .returning({ id: invites.id })
+          if (!claimed) throw new InvalidInviteCodeError()
+        }
+
+        return created
       })
-      .returning()
-    if (!user) throw new Error('Failed to create user')
-
-    await db.insert(userCredentials).values({ userId: user.id, type: 'local', passwordHash })
-    await ensureDefaultWatchlist(db, user.id)
-
-    if (usedInvite) {
-      await db.update(invites).set({ usedBy: user.id }).where(eq(invites.id, usedInvite.id))
+    } catch (err) {
+      if (err instanceof InvalidInviteCodeError) {
+        return c.json({ error: 'Invalid or expired invite code' }, 403)
+      }
+      throw err
     }
 
     // Best-effort: a transient SMTP relay failure shouldn't fail the
@@ -523,7 +566,6 @@ authRoutes.openapi(
  * down is what actually applies once parsed (a multipart body's overall
  * size includes headers/boundaries, not just the file itself). */
 const MAX_AVATAR_BYTES = 2 * 1024 * 1024
-const ALLOWED_AVATAR_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp'])
 
 /**
  * Plain routes, not `.openapi()` — same reasoning as
@@ -542,18 +584,23 @@ authRoutes.put('/auth/me/avatar', jsonBodyLimit(MAX_AVATAR_BYTES), async (c) => 
   if (!(file instanceof File)) {
     return c.json({ error: 'Missing file field' }, 400)
   }
-  if (!ALLOWED_AVATAR_TYPES.has(file.type)) {
-    return c.json({ error: 'Unsupported image type — use JPEG, PNG, or WebP' }, 400)
-  }
   if (file.size > MAX_AVATAR_BYTES) {
     return c.json({ error: 'Image is too large — 2MB maximum' }, 400)
   }
 
-  const db = c.get('db')
   const buffer = Buffer.from(await file.arrayBuffer())
+  // The client-declared `file.type` is never trusted (M3 security
+  // review, F-06) — what actually gets stored and later served back as
+  // Content-Type is derived from the file's own signature bytes.
+  const sniffedType = sniffImageType(buffer)
+  if (!sniffedType) {
+    return c.json({ error: 'Unsupported image type — use JPEG, PNG, or WebP' }, 400)
+  }
+
+  const db = c.get('db')
   const [updated] = await db
     .update(users)
-    .set({ avatarImage: buffer, avatarMimeType: file.type, avatarUpdatedAt: new Date() })
+    .set({ avatarImage: buffer, avatarMimeType: sniffedType, avatarUpdatedAt: new Date() })
     .where(eq(users.id, c.get('user')!.id))
     .returning()
   if (!updated) throw new Error('Failed to update user')
@@ -586,6 +633,10 @@ authRoutes.get('/auth/me/avatar', async (c) => {
   // new URL, never a stale cache hit.
   c.header('Content-Type', row.avatarMimeType)
   c.header('Cache-Control', 'private, max-age=31536000, immutable')
+  // `inline` (not `attachment`) — the frontend renders this directly as
+  // an <img src>, not a download. Explicit Content-Disposition rather
+  // than leaving it unset (M3 security review, ASVS V14.4.2).
+  c.header('Content-Disposition', `inline; filename="avatar.${extensionFor(row.avatarMimeType)}"`)
   // Node's Buffer (ArrayBufferLike-backed) isn't assignable to Hono's
   // Data type (Uint8Array<ArrayBuffer>-backed) — copy into a plain one.
   return c.body(Uint8Array.from(row.avatarImage))

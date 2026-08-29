@@ -1,5 +1,10 @@
 import { z } from 'zod'
-import { metadataProviderSourceSchema, playSourceSchema, ratingValueSchema } from './common.js'
+import {
+  metadataProviderSourceSchema,
+  playSourceSchema,
+  providerExternalIdSchema,
+  ratingValueSchema,
+} from './common.js'
 
 /**
  * Per-user backup/restore for the four categories Clear database can also
@@ -36,7 +41,7 @@ import { metadataProviderSourceSchema, playSourceSchema, ratingValueSchema } fro
  * up-converted to `{source: 'tmdb', externalId}` on read. */
 export const externalRefSchema = z.object({
   source: metadataProviderSourceSchema,
-  externalId: z.string(),
+  externalId: providerExternalIdSchema,
 })
 export type ExternalRef = z.infer<typeof externalRefSchema>
 

@@ -3542,6 +3542,20 @@ describe('library', () => {
       expect(external).toBeTruthy()
     })
 
+    it('rejects a non-numeric externalId at the schema boundary (M3 security review, F-18)', async () => {
+      const cookie = await createUserAndCookie()
+      const res = await app.request('/api/v1/library/shows/resolve', {
+        method: 'POST',
+        headers: { cookie, 'Content-Type': 'application/json' },
+        // Both providers only ever hand out numeric ids — this shape
+        // (an id containing '/', which would otherwise reach a provider
+        // request's URL path unconstrained) must never reach the fetch
+        // to TMDB/TVDB at all.
+        body: JSON.stringify({ source: 'tmdb', externalId: '../../etc/passwd' }),
+      })
+      expect(res.status).toBe(400)
+    })
+
     it('is idempotent — resolving the same external id twice returns the same slug and creates no second row', async () => {
       const cookie = await createUserAndCookie()
 

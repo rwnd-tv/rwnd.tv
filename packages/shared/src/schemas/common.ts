@@ -35,6 +35,22 @@ export type MetadataProviderSource = z.infer<typeof metadataProviderSourceSchema
 
 export const uuidSchema = z.string().uuid()
 
+/** A TMDB or TVDB id, as it flows from a search/resolve response back
+ * into a resolve/play/import request — both providers only ever hand out
+ * `String(numericId)` (see apps/api/src/providers/tmdb.ts and tvdb.ts's
+ * `externalId: String(...)`), so an unconstrained `z.string()` here was
+ * wider than the value can ever legitimately be. It's interpolated
+ * straight into a provider request's URL *path*
+ * (`/movie/${externalId}`), so this also bounds what an attacker-
+ * supplied value could otherwise smuggle into that path segment (M3
+ * security review, F-18) — the host itself was never attacker-
+ * controlled (it's env-configured), so this was endpoint confusion
+ * within api.themoviedb.org/api4.thetvdb.com, not classic SSRF. 12
+ * digits is generous headroom over either provider's current id range. */
+export const providerExternalIdSchema = z
+  .string()
+  .regex(/^\d{1,12}$/, 'Must be a numeric provider id')
+
 /** A user's 1-10 rating for a show/movie/episode — matches the DB's
  * `ratings_rating_range BETWEEN 1 AND 10` check (packages/db/src/schema.ts).
  * Compose with `.nullable()`/`.optional()` as each call site needs — the

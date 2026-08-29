@@ -1,5 +1,10 @@
 import { z } from 'zod'
-import { paginationQuerySchema, playSourceSchema, uuidSchema } from './common.js'
+import {
+  paginationQuerySchema,
+  playSourceSchema,
+  providerExternalIdSchema,
+  uuidSchema,
+} from './common.js'
 
 /**
  * A play is logged against a *provider* result, not a local row directly —
@@ -19,11 +24,11 @@ import { paginationQuerySchema, playSourceSchema, uuidSchema } from './common.js
  */
 export const createPlayRequestSchema = z
   .object({
-    movie: z.object({ source: z.literal('tmdb'), externalId: z.string() }).optional(),
+    movie: z.object({ source: z.literal('tmdb'), externalId: providerExternalIdSchema }).optional(),
     episode: z
       .object({
         source: z.literal('tmdb'),
-        showExternalId: z.string(),
+        showExternalId: providerExternalIdSchema,
         seasonNumber: z.number().int().min(0),
         episodeNumber: z.number().int().min(1),
       })

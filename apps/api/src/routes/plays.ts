@@ -301,13 +301,18 @@ playRoutes.openapi(
       .returning({ id: plays.id })
     if (!updated) return c.json({ error: 'Play not found' }, 404)
 
+    // Scoped by userId too, not just id, even though the preceding UPDATE
+    // already 404'd unless this row was the caller's own (id is the PK,
+    // so this can only ever re-select the row just proven to belong to
+    // them) — defense in depth against the pattern being copy-pasted
+    // somewhere it would matter (M3 security review, F-21).
     const [row] = await db
       .select({ play: plays, movie: movies, episode: episodes, show: shows })
       .from(plays)
       .leftJoin(movies, eq(plays.movieId, movies.id))
       .leftJoin(episodes, eq(plays.episodeId, episodes.id))
       .leftJoin(shows, eq(episodes.showId, shows.id))
-      .where(eq(plays.id, id))
+      .where(and(eq(plays.id, id), eq(plays.userId, userId)))
       .limit(1)
 
     return c.json(toPlayResponse(row!))

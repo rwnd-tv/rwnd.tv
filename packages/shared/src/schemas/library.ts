@@ -2,6 +2,7 @@ import { z } from 'zod'
 import {
   metadataProviderSourceSchema,
   playSourceSchema,
+  providerExternalIdSchema,
   ratingValueSchema,
   uuidSchema,
 } from './common.js'
@@ -33,7 +34,7 @@ import {
  */
 export const resolveMediaRequestSchema = z.object({
   source: metadataProviderSourceSchema,
-  externalId: z.string(),
+  externalId: providerExternalIdSchema,
 })
 export type ResolveMediaRequest = z.infer<typeof resolveMediaRequestSchema>
 

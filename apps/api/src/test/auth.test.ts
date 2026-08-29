@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import { instanceSettings } from '@rwnd/db'
+import { inArray } from 'drizzle-orm'
+import { instanceSettings, invites, users } from '@rwnd/db'
 import type { User } from '@rwnd/shared'
+import { generateSecret, hashSecret } from '../lib/tokens.js'
 import { extractCookie, json, resetDb, testApp, testDb } from './helpers.js'
 
 const db = testDb()
@@ -130,5 +132,84 @@ describe('auth', () => {
       }),
     })
     expect(res.status).toBe(403)
+  })
+
+  it('returns 409 for a duplicate email, without letting it enumerate accounts via a different response for a real one', async () => {
+    await createUser('admin@example.com', 'correct-horse-battery-staple')
+    await db
+      .insert(instanceSettings)
+      .values({ id: 1, registrationMode: 'open' })
+      .onConflictDoUpdate({ target: instanceSettings.id, set: { registrationMode: 'open' } })
+
+    const res = await app.request('/api/v1/auth/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: 'admin@example.com',
+        password: 'another-password-123',
+        displayName: 'Impersonator',
+      }),
+    })
+    expect(res.status).toBe(409)
+    expect(await json(res)).toEqual({ error: 'Email already in use' })
+  })
+
+  describe('invite redemption (M3 security review, F-13)', () => {
+    async function setUpInvite(): Promise<{ code: string; adminId: string }> {
+      const adminRes = await createUser('admin@example.com', 'correct-horse-battery-staple')
+      const admin = await json<User>(adminRes)
+      await db
+        .insert(instanceSettings)
+        .values({ id: 1, registrationMode: 'invite' })
+        .onConflictDoUpdate({ target: instanceSettings.id, set: { registrationMode: 'invite' } })
+
+      const code = generateSecret(16)
+      await db.insert(invites).values({
+        codeHash: hashSecret(code),
+        createdBy: admin.id,
+        expiresAt: new Date(Date.now() + 60_000),
+      })
+      return { code, adminId: admin.id }
+    }
+
+    function registerWithCode(email: string, code: string) {
+      return app.request('/api/v1/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email,
+          password: 'correct-horse-battery-staple',
+          displayName: 'Invitee',
+          inviteCode: code,
+        }),
+      })
+    }
+
+    it('rejects a second, sequential attempt to redeem an already-used code', async () => {
+      const { code } = await setUpInvite()
+
+      const first = await registerWithCode('first@example.com', code)
+      expect(first.status).toBe(201)
+
+      const second = await registerWithCode('second@example.com', code)
+      expect(second.status).toBe(403)
+    })
+
+    it('lets exactly one of two concurrent redemptions of the same code succeed', async () => {
+      const { code } = await setUpInvite()
+
+      const [a, b] = await Promise.all([
+        registerWithCode('racer-a@example.com', code),
+        registerWithCode('racer-b@example.com', code),
+      ])
+
+      expect([a.status, b.status].sort()).toEqual([201, 403])
+
+      const created = await db
+        .select({ id: users.id })
+        .from(users)
+        .where(inArray(users.email, ['racer-a@example.com', 'racer-b@example.com']))
+      expect(created).toHaveLength(1)
+    })
   })
 })

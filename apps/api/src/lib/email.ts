@@ -59,6 +59,26 @@ export async function sendPasswordResetEmail(to: string, token: string): Promise
   )
 }
 
+/** Sent to an *existing* account when someone tries to register a new
+ * account with its email address (POST /auth/register). rwnd.tv keeps
+ * the "email already in use" response on that route rather than hiding
+ * it (GitHub takes the same approach) — the UX cost of a fully generic
+ * response is real, and this is the compensating control: the account
+ * owner gets visibility into being targeted, which matters more for a
+ * small self-hosted instance than pure enumeration-hiding does. Rate-
+ * limited to one per targeted email per day (routes/auth.ts) so
+ * registration itself can't be turned into an inbox-bombing vector. */
+export async function sendAccountAlreadyExistsNotice(to: string): Promise<void> {
+  await sendMail(
+    to,
+    'Someone tried to sign up with your rwnd.tv email address',
+    `Someone just tried to create a new rwnd.tv account using this email address, which already has an account.\n\nIf this was you, log in instead — or reset your password if you've forgotten it.\n\nIf it wasn't you, no action is needed: no account was created, and nothing about your existing account has changed.`,
+    `<p>Someone just tried to create a new rwnd.tv account using this email address, which already has an account.</p>` +
+      `<p>If this was you, log in instead — or reset your password if you've forgotten it.</p>` +
+      `<p>If it wasn't you, no action is needed: no account was created, and nothing about your existing account has changed.</p>`,
+  )
+}
+
 /** Sent to the *new* address someone's asked to change their account's
  * email to (POST /auth/me/email) — never to the account's current
  * address, since the whole point is confirming ownership of this new

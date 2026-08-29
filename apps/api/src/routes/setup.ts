@@ -4,6 +4,7 @@ import { setupRequestSchema, userSchema } from '@rwnd/shared'
 import { users, userCredentials } from '@rwnd/db'
 import type { AppEnv } from '../types.js'
 import { loadEnv } from '../env.js'
+import { rateLimit } from '../middleware/rate-limit.js'
 import { hashPassword } from '../lib/password.js'
 import { createSession } from '../lib/session.js'
 import { setSessionCookie } from '../lib/cookies.js'
@@ -45,6 +46,7 @@ setupRoutes.openapi(
     method: 'post',
     path: '/setup',
     summary: 'Create the first admin account',
+    middleware: [rateLimit({ name: 'setup', limit: 5, windowMs: 60 * 60 * 1000 })] as const,
     request: { body: { content: { 'application/json': { schema: setupRequestSchema } } } },
     responses: {
       201: {

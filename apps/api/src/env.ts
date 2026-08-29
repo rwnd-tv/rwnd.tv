@@ -17,6 +17,13 @@ const rawEnvSchema = z.object({
   // by value below instead, defaulting off the schema's own NODE_ENV
   // rather than the ambient process.env at module-load time.
   COOKIE_SECURE: z.string().optional(),
+  // Whether to trust X-Forwarded-For for rate limiting (lib/client-ip.ts).
+  // Same string-not-boolean parsing as COOKIE_SECURE, same reasoning.
+  // Defaults false — a self-hoster running directly on 3000 with no
+  // reverse proxy in front would otherwise let any client spoof its own
+  // rate-limit bucket via that header. Must be explicitly turned on once
+  // a trusted reverse proxy is actually in place (docs/self-hosting.md).
+  TRUST_PROXY: z.string().optional(),
   // Purely cosmetic: shown as a badge in the UI and prefixed on the
   // browser tab title, so multiple deployments (e.g. rwnd.tv vs
   // dev.rwnd.tv) don't get confused for one another. Unset by default —
@@ -95,6 +102,10 @@ const envSchema = rawEnvSchema.transform((data) => ({
     data.COOKIE_SECURE === undefined
       ? data.NODE_ENV === 'production'
       : data.COOKIE_SECURE === 'true',
+  // Unlike COOKIE_SECURE, no NODE_ENV-derived default makes sense here —
+  // "production" doesn't imply "behind a reverse proxy". Explicit opt-in
+  // only, defaulting false.
+  TRUST_PROXY: data.TRUST_PROXY === 'true',
 }))
 
 export type Env = z.infer<typeof envSchema>

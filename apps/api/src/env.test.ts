@@ -23,6 +23,20 @@ describe('COOKIE_SECURE parsing', () => {
   })
 })
 
+describe('TRUST_PROXY parsing', () => {
+  it('defaults to false when unset', () => {
+    expect(parseEnv(base).TRUST_PROXY).toBe(false)
+  })
+
+  it('treats the literal string "false" as false', () => {
+    expect(parseEnv({ ...base, TRUST_PROXY: 'false' }).TRUST_PROXY).toBe(false)
+  })
+
+  it('treats the literal string "true" as true', () => {
+    expect(parseEnv({ ...base, TRUST_PROXY: 'true' }).TRUST_PROXY).toBe(true)
+  })
+})
+
 describe('metadata provider config', () => {
   it('requires at least one of TMDB_API_KEY or TVDB_API_KEY', () => {
     expect(() => parseEnv({ DATABASE_URL: base.DATABASE_URL })).toThrow(

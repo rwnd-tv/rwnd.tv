@@ -233,9 +233,11 @@ export const webhookAccountLinks = pgTable(
  * defined structurally here rather than imported, since this package
  * has no dependency on the app layer. `watchedAt` is when the event
  * actually happened, not when it's eventually replayed — see
- * `apps/api/src/lib/webhook-plays.ts`. No retention policy for a link
- * that's never claimed: at this app's scale an indefinitely-growing
- * table of unclaimed events isn't a real concern. */
+ * `apps/api/src/lib/webhook-plays.ts`. Retention: a daily sweep
+ * (apps/api/src/lib/webhook-retention.ts) deletes rows older than 90
+ * days for a link that's never been claimed — see that file's doc
+ * comment for why an account left permanently unclaimed shouldn't grow
+ * this table forever (M3 security review). */
 export const pendingWebhookEvents = pgTable(
   'pending_webhook_events',
   {
@@ -288,6 +290,25 @@ export const instanceSettings = pgTable(
   },
   (table) => [check('instance_settings_singleton', sql`${table.id} = 1`)],
 )
+
+/** Per-account exponential login backoff (M3 security review — nothing
+ * throttled failed logins before this). One row per email that has ever
+ * failed a login, upserted rather than one-row-per-attempt so this stays
+ * a fixed-size table rather than growing unbounded. Keyed by the
+ * *attempted* email, not `users.id` — this has to apply identically
+ * whether or not that email belongs to a real account, or the lockout
+ * itself becomes a new account-enumeration side channel (see
+ * apps/api/src/lib/login-lockout.ts). Deliberately DB-backed rather than
+ * in-memory (unlike the IP-based limiters in
+ * apps/api/src/middleware/rate-limit.ts) — this is the credential-stuffing
+ * defence, so it needs to survive a container restart. Cleared (row
+ * deleted) on a successful login. */
+export const loginAttempts = pgTable('login_attempts', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  email: citext('email').notNull().unique(),
+  failedCount: integer('failed_count').notNull().default(0),
+  lastFailedAt: timestamp('last_failed_at', { withTimezone: true }).notNull().defaultNow(),
+})
 
 export const invites = pgTable('invites', {
   id: uuid('id').primaryKey().defaultRandom(),

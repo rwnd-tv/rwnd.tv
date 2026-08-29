@@ -4,6 +4,7 @@ import { createApp } from '../app.js'
 import { hashPassword } from '../lib/password.js'
 import { encryptSecret } from '../lib/crypto.js'
 import { loadEnv } from '../env.js'
+import { resetRateLimits } from '../middleware/rate-limit.js'
 
 /** Tables that accumulate rows across tests, in FK-safe delete order. */
 const TABLES = [
@@ -20,6 +21,7 @@ const TABLES = [
   'shows',
   'movies',
   'invites',
+  'login_attempts',
   'pending_webhook_events',
   'webhook_account_links',
   'api_tokens',
@@ -39,6 +41,16 @@ export async function resetDb(db: Database): Promise<void> {
   for (const table of TABLES) {
     await db.execute(sql.raw(`TRUNCATE TABLE "${table}" CASCADE`))
   }
+  // Rate-limit buckets (middleware/rate-limit.ts) are in-memory and keyed
+  // by client IP — every request through Hono's fetch-based test harness
+  // falls back to the same 'unknown' IP (there's no real socket for
+  // getConnInfo to read), so without this every test file sharing one
+  // process (fileParallelism is off, see vitest.config.ts) would drain
+  // the same buckets. Almost every test file's beforeEach already calls
+  // resetDb(), which is what makes bundling this in here — rather than a
+  // second reset call every test file would need to remember — the
+  // simplest fix.
+  resetRateLimits()
 }
 
 /**

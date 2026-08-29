@@ -6,6 +6,7 @@ import { loadEnv } from './env.js'
 import { createMetadataProviders } from './providers/index.js'
 import { runTraktImport } from './import/trakt.js'
 import { scheduleMetadataRefresh } from './metadata/refresh.js'
+import { scheduleWebhookRetention } from './lib/webhook-retention.js'
 
 const env = loadEnv()
 const db = createDatabase(env.DATABASE_URL)
@@ -56,6 +57,9 @@ void resumeInterruptedImports()
 // shows, and TMDB's 6-month cache-retention limit — see
 // apps/api/src/metadata/refresh.ts.
 scheduleMetadataRefresh(db, metadataProviders)
+
+// Same reasoning as the two schedule*/resume* calls above.
+scheduleWebhookRetention(db)
 
 serve({ fetch: app.fetch, port: env.PORT }, (info) => {
   console.log(`rwnd.tv API listening on http://localhost:${info.port}`)

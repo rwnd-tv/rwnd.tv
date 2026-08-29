@@ -18,6 +18,8 @@ import { users, userCredentials, instanceSettings, invites } from '@rwnd/db'
 import type { AppEnv } from '../types.js'
 import { loadEnv } from '../env.js'
 import { jsonBodyLimit } from '../lib/body-limit.js'
+import { rateLimit, tryConsume } from '../middleware/rate-limit.js'
+import { isLoginLocked, recordFailedLogin, clearLoginAttempts } from '../lib/login-lockout.js'
 import { hashPassword, verifyPassword } from '../lib/password.js'
 import {
   createSession,
@@ -65,6 +67,11 @@ authRoutes.openapi(
     method: 'post',
     path: '/auth/login',
     summary: 'Log in with email and password',
+    // Paired with the per-account backoff below (lib/login-lockout.ts) —
+    // this catches broad guessing across many accounts from one IP, the
+    // lockout catches sustained guessing against one account from
+    // anywhere. Neither existed before the M3 security review (F-02).
+    middleware: [rateLimit({ name: 'auth:login', limit: 10, windowMs: 15 * 60 * 1000 })] as const,
     request: { body: { content: { 'application/json': { schema: loginRequestSchema } } } },
     responses: {
       200: { description: 'Logged in', content: { 'application/json': { schema: userSchema } } },
@@ -74,6 +81,13 @@ authRoutes.openapi(
   async (c) => {
     const db = c.get('db')
     const { email, password } = c.req.valid('json')
+
+    // Same generic error as a wrong password below — a distinct response
+    // here would turn the lockout itself into a new account-enumeration
+    // oracle ("keep guessing until it locks" reveals the email exists).
+    if (await isLoginLocked(db, email)) {
+      return c.json({ error: 'Invalid email or password' }, 401)
+    }
 
     const [row] = await db
       .select({ user: users, credential: userCredentials })
@@ -88,12 +102,15 @@ authRoutes.openapi(
     // Same generic error whether the email is unknown or the password is
     // wrong — don't let login responses reveal which accounts exist.
     if (!row || !row.credential.passwordHash) {
+      await recordFailedLogin(db, email)
       return c.json({ error: 'Invalid email or password' }, 401)
     }
     const valid = await verifyPassword(row.credential.passwordHash, password)
     if (!valid) {
+      await recordFailedLogin(db, email)
       return c.json({ error: 'Invalid email or password' }, 401)
     }
+    await clearLoginAttempts(db, email)
 
     const env = loadEnv()
     const { token, expiresAt } = await createSession(db, row.user.id, {
@@ -111,6 +128,7 @@ authRoutes.openapi(
     method: 'post',
     path: '/auth/register',
     summary: 'Create an account, subject to the instance registration policy',
+    middleware: [rateLimit({ name: 'auth:register', limit: 5, windowMs: 60 * 60 * 1000 })] as const,
     request: { body: { content: { 'application/json': { schema: registerRequestSchema } } } },
     responses: {
       201: {
@@ -578,16 +596,29 @@ authRoutes.openapi(
     method: 'post',
     path: '/auth/forgot-password',
     summary: 'Request a password reset email',
-    middleware: [requireEmailConfigured] as const,
+    middleware: [
+      requireEmailConfigured,
+      rateLimit({ name: 'auth:forgot-password', limit: 5, windowMs: 60 * 60 * 1000 }),
+    ] as const,
     request: { body: { content: { 'application/json': { schema: forgotPasswordRequestSchema } } } },
     responses: {
       204: { description: 'Always returned, whether or not the email matched an account' },
       404: { description: 'Email is not configured on this instance' },
+      429: { description: 'Too many requests, either from this IP or for this email address' },
     },
   }),
   async (c) => {
     const db = c.get('db')
     const { email } = c.req.valid('json')
+
+    // A second dimension alongside the IP limit above — this one catches
+    // requests spread across many IPs but aimed at one target address.
+    // Safe from an enumeration standpoint: it counts any submitted email
+    // identically whether or not it belongs to a real account, same as
+    // the "always 204" response below.
+    if (!tryConsume(`auth:forgot-password:email:${email}`, 5, 60 * 60 * 1000)) {
+      return c.json({ error: 'Too many requests — please try again later' }, 429)
+    }
 
     const [row] = await db
       .select({ user: users, credential: userCredentials })

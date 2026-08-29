@@ -2702,3 +2702,34 @@ immutable` still overrides it (V8.2.1); (2) `packages/db`'s
       (which runs with `COOKIE_SECURE=true`, confirmed via its `Strict-
 Transport-Security` header) and confirmed the app stays healthy and
       an unauthenticated request to a protected route still 401s.
+- [x] **Session management: list and revoke active sessions** (2026-08-29 added, done 2026-08-29)\
+      ASVS V3.3.2/F-24. `sessions` gained a `lastUsedAt` column (migration
+      0025); `resolveSession()` (`apps/api/src/lib/session.ts`) bumps it on
+      use, throttled to once a minute so an ordinary browsing session
+      doesn't turn every request into a write. Went further than the TODO's
+      own framing while the throttle infrastructure was already there: this
+      also slides the session's `expiresAt` forward on the same throttled
+      touch (both the DB row and the cookie's own `Expires`, re-sent by
+      `middleware/auth.ts`'s `requireSession` whenever `resolveSession()`
+      reports a renewal) — a session now expires 30 days after its _last_
+      use, not 30 days after login, fully closing V3.3.2 rather than the
+      list/revoke half alone. New `GET`/`DELETE /auth/me/sessions` routes
+      (`listSessions`/`revokeSessionById`/`findSessionId` in `session.ts`)
+      back a new `SessionsCard.tsx` in the web account page, sitting right
+      after Change Password — revoking is scoped by `userId` so one user can
+      never touch another's session, and the API itself allows revoking the
+      current session too (no special-casing), though the UI only offers
+      Revoke on the _other_ rows since LogoutButton already covers ending
+      the current one with clearer wording.\
+      **Verified**: new tests in `session.test.ts` (list/revoke, cross-user
+      isolation, 404s, the lastUsedAt throttle, and the sliding-expiry
+      renewal including that the cookie itself gets re-sent) plus the full
+      existing suite, against a migrated local Postgres; lint/typecheck/
+      format clean. Live on dev.rwnd.tv: registered a throwaway
+      `@mailinator.com` account, confirmed the session list renders with
+      the live User-Agent/IP/timestamps, created a second session via
+      `curl` and revoked it from the UI (list refreshed automatically), and
+      deleted the throwaway account afterward. That live check caught a
+      real bug in the _previous_ commit — see "Fix a 500 on every
+      cookie-clearing route once COOKIE_SECURE is true" — which a UI-only
+      review would have missed entirely.

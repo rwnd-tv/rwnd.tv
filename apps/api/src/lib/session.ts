@@ -1,9 +1,22 @@
-import { and, eq, ne } from 'drizzle-orm'
+import { and, desc, eq, ne } from 'drizzle-orm'
 import type { Database } from '@rwnd/db'
 import { sessions, users } from '@rwnd/db'
 import { generateSecret, hashSecret } from './tokens.js'
 
-const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000 // 30 days
+// 30 days — both the fixed TTL a freshly-created session gets, and (since
+// the M3 security review's session-management follow-up, ASVS V3.3.2/
+// V3.3.4, docs/TODO.md) the sliding window resolveSession() renews on each
+// throttled touch below: an active session now expires 30 days after its
+// *last* use, not 30 days after login. An idle session still expires on
+// schedule — nothing renews it if nobody's using it.
+const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000
+
+// How often resolveSession() below actually writes a lastUsedAt/expiresAt
+// update — an ordinary browsing session makes many requests a minute, and
+// neither the session list UI nor the sliding expiry above need per-request
+// precision. Keeps both meaningful without turning every authenticated
+// request into a write.
+const LAST_USED_THROTTLE_MS = 60 * 1000
 
 export async function createSession(
   db: Database,
@@ -24,7 +37,18 @@ export async function createSession(
   return { token, expiresAt }
 }
 
-export async function resolveSession(db: Database, token: string) {
+/**
+ * `renewedExpiresAt` is non-null exactly when this call extended the
+ * session's server-side TTL (the throttle below) — the caller
+ * (middleware/auth.ts's requireSession) uses it to also re-send the session
+ * cookie with a matching new `Expires`, since a sliding *server-side*
+ * expiry alone would be pointless once the browser drops the cookie at its
+ * original, un-renewed expiry.
+ */
+export async function resolveSession(
+  db: Database,
+  token: string,
+): Promise<{ user: typeof users.$inferSelect; renewedExpiresAt: Date | null } | null> {
   const tokenHash = hashSecret(token)
   const [row] = await db
     .select({ session: sessions, user: users })
@@ -38,7 +62,76 @@ export async function resolveSession(db: Database, token: string) {
     await db.delete(sessions).where(eq(sessions.id, row.session.id))
     return null
   }
-  return row.user
+
+  let renewedExpiresAt: Date | null = null
+  const lastUsedAt = row.session.lastUsedAt?.getTime() ?? 0
+  if (Date.now() - lastUsedAt > LAST_USED_THROTTLE_MS) {
+    renewedExpiresAt = new Date(Date.now() + SESSION_TTL_MS)
+    await db
+      .update(sessions)
+      .set({ lastUsedAt: new Date(), expiresAt: renewedExpiresAt })
+      .where(eq(sessions.id, row.session.id))
+  }
+
+  return { user: row.user, renewedExpiresAt }
+}
+
+/** GET /auth/me/sessions marks which row is the caller's own session by
+ * comparing ids against this — a session token can't be reversed back to
+ * an id without a DB round-trip, and `SessionSummary` deliberately doesn't
+ * carry `tokenHash` for the route to compare against directly. */
+export async function findSessionId(db: Database, token: string): Promise<string | null> {
+  const [row] = await db
+    .select({ id: sessions.id })
+    .from(sessions)
+    .where(eq(sessions.tokenHash, hashSecret(token)))
+    .limit(1)
+  return row?.id ?? null
+}
+
+export interface SessionSummary {
+  id: string
+  userAgent: string | null
+  ipAddress: string | null
+  createdAt: Date
+  lastUsedAt: Date | null
+  expiresAt: Date
+}
+
+/** Newest first — GET /auth/me/sessions. Never returns `tokenHash`; the
+ * caller marks which row is the current session by comparing ids, not by
+ * anything returned here (a session token can't be reversed back to an id
+ * without a DB round-trip anyway, so the route does that comparison itself
+ * — see routes/auth.ts). */
+export async function listSessions(db: Database, userId: string): Promise<SessionSummary[]> {
+  return db
+    .select({
+      id: sessions.id,
+      userAgent: sessions.userAgent,
+      ipAddress: sessions.ipAddress,
+      createdAt: sessions.createdAt,
+      lastUsedAt: sessions.lastUsedAt,
+      expiresAt: sessions.expiresAt,
+    })
+    .from(sessions)
+    .where(eq(sessions.userId, userId))
+    .orderBy(desc(sessions.createdAt))
+}
+
+/** DELETE /auth/me/sessions/{id} — scoped by `userId` so one user can never
+ * revoke another's session by guessing/enumerating ids. Returns whether a
+ * row was actually deleted, so the route can 404 rather than silently
+ * no-op on an id that doesn't belong to the caller. */
+export async function revokeSessionById(
+  db: Database,
+  userId: string,
+  sessionId: string,
+): Promise<boolean> {
+  const deleted = await db
+    .delete(sessions)
+    .where(and(eq(sessions.id, sessionId), eq(sessions.userId, userId)))
+    .returning({ id: sessions.id })
+  return deleted.length > 0
 }
 
 export async function revokeSession(db: Database, token: string): Promise<void> {

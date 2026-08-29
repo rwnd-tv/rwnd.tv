@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { eq } from 'drizzle-orm'
 import { sessions } from '@rwnd/db'
 import { revokeAllSessions, revokeOtherSessions } from '../lib/session.js'
-import { extractCookie, resetDb, testApp, testDb } from './helpers.js'
+import { createLocalUser, extractCookie, json, resetDb, testApp, testDb } from './helpers.js'
 
 const db = testDb()
 const app = testApp()
@@ -131,5 +131,163 @@ describe('session cookie and lifecycle', () => {
     const afterB = await app.request('/api/v1/auth/me', { headers: { cookie: cookieB } })
     expect(afterA.status).toBe(200)
     expect(afterB.status).toBe(401)
+  })
+
+  describe('session list and revoke (M3 security review follow-up, F-24)', () => {
+    it('lists every session for the account, newest first, marking which one is current', async () => {
+      await createUserAndLogin('user@example.com', 'correct-horse-battery-staple')
+      const second = await login('user@example.com', 'correct-horse-battery-staple')
+      const cookieB = extractCookie(second)!
+
+      const res = await app.request('/api/v1/auth/me/sessions', { headers: { cookie: cookieB } })
+      expect(res.status).toBe(200)
+      const body = await json<{ sessions: { id: string; current: boolean }[] }>(res)
+      expect(body.sessions).toHaveLength(2)
+      // Newest (the one making this request) first.
+      expect(body.sessions[0]!.current).toBe(true)
+      expect(body.sessions[1]!.current).toBe(false)
+    })
+
+    it('never returns another user’s sessions', async () => {
+      // The setup-based createUserAndLogin only works once per instance —
+      // a second user is created directly instead, same as other
+      // multi-user tests in this suite (see createLocalUser's own doc
+      // comment in helpers.ts).
+      await createUserAndLogin('user-a@example.com', 'correct-horse-battery-staple')
+      await createLocalUser(db, 'user-b@example.com', 'correct-horse-battery-staple')
+      const cookieB = extractCookie(
+        await login('user-b@example.com', 'correct-horse-battery-staple'),
+      )!
+
+      const res = await app.request('/api/v1/auth/me/sessions', { headers: { cookie: cookieB } })
+      const body = await json<{ sessions: { id: string }[] }>(res)
+      expect(body.sessions).toHaveLength(1)
+    })
+
+    it('revokes one session by id, without affecting the others', async () => {
+      const cookieA = await createUserAndLogin('user@example.com', 'correct-horse-battery-staple')
+      const second = await login('user@example.com', 'correct-horse-battery-staple')
+      const cookieB = extractCookie(second)!
+
+      const list = await json<{ sessions: { id: string; current: boolean }[] }>(
+        await app.request('/api/v1/auth/me/sessions', { headers: { cookie: cookieB } }),
+      )
+      const otherSessionId = list.sessions.find((s) => !s.current)!.id
+
+      const del = await app.request(`/api/v1/auth/me/sessions/${otherSessionId}`, {
+        method: 'DELETE',
+        headers: { cookie: cookieB },
+      })
+      expect(del.status).toBe(204)
+
+      const afterA = await app.request('/api/v1/auth/me', { headers: { cookie: cookieA } })
+      const afterB = await app.request('/api/v1/auth/me', { headers: { cookie: cookieB } })
+      expect(afterA.status).toBe(401) // the revoked session
+      expect(afterB.status).toBe(200) // untouched
+    })
+
+    it('404s revoking a session id that belongs to a different user', async () => {
+      const cookieA = await createUserAndLogin('user-a@example.com', 'correct-horse-battery-staple')
+      await createLocalUser(db, 'user-b@example.com', 'correct-horse-battery-staple')
+      const cookieB = extractCookie(
+        await login('user-b@example.com', 'correct-horse-battery-staple'),
+      )!
+      const listA = await json<{ sessions: { id: string }[] }>(
+        await app.request('/api/v1/auth/me/sessions', { headers: { cookie: cookieA } }),
+      )
+
+      const res = await app.request(`/api/v1/auth/me/sessions/${listA.sessions[0]!.id}`, {
+        method: 'DELETE',
+        headers: { cookie: cookieB },
+      })
+      expect(res.status).toBe(404)
+
+      // A's session is still there — B's attempt didn't touch it.
+      const stillA = await app.request('/api/v1/auth/me', { headers: { cookie: cookieA } })
+      expect(stillA.status).toBe(200)
+    })
+
+    it('404s revoking an id that never existed', async () => {
+      const cookie = await createUserAndLogin('user@example.com', 'correct-horse-battery-staple')
+      const res = await app.request(
+        '/api/v1/auth/me/sessions/00000000-0000-0000-0000-000000000000',
+        { method: 'DELETE', headers: { cookie } },
+      )
+      expect(res.status).toBe(404)
+    })
+
+    it('allows revoking the current session — the next request with it then 401s', async () => {
+      const cookie = await createUserAndLogin('user@example.com', 'correct-horse-battery-staple')
+      const list = await json<{ sessions: { id: string; current: boolean }[] }>(
+        await app.request('/api/v1/auth/me/sessions', { headers: { cookie } }),
+      )
+      const currentId = list.sessions.find((s) => s.current)!.id
+
+      const del = await app.request(`/api/v1/auth/me/sessions/${currentId}`, {
+        method: 'DELETE',
+        headers: { cookie },
+      })
+      expect(del.status).toBe(204)
+
+      const after = await app.request('/api/v1/auth/me', { headers: { cookie } })
+      expect(after.status).toBe(401)
+    })
+
+    it('bumps lastUsedAt on use, throttled rather than on every single request', async () => {
+      const cookie = await createUserAndLogin('user@example.com', 'correct-horse-battery-staple')
+      const [row] = await db.select().from(sessions).limit(1)
+      expect(row!.lastUsedAt).toBeNull()
+
+      await db
+        .update(sessions)
+        .set({ lastUsedAt: new Date(Date.now() - 10 * 60 * 1000) })
+        .where(eq(sessions.id, row!.id))
+
+      await app.request('/api/v1/auth/me', { headers: { cookie } })
+
+      const [updated] = await db.select().from(sessions).limit(1)
+      expect(updated!.lastUsedAt).not.toBeNull()
+      expect(updated!.lastUsedAt!.getTime()).toBeGreaterThan(Date.now() - 5000)
+    })
+
+    it('slides expiresAt forward on a throttled touch, and re-sends the cookie to match', async () => {
+      const cookie = await createUserAndLogin('user@example.com', 'correct-horse-battery-staple')
+      const [row] = await db.select().from(sessions).limit(1)
+
+      // Simulate a session nearing its original expiry, last touched well
+      // outside the throttle window — the shape a genuinely active but
+      // infrequently-checking-in session would be in.
+      const nearExpiry = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000) // 2 days out
+      await db
+        .update(sessions)
+        .set({ lastUsedAt: new Date(Date.now() - 10 * 60 * 1000), expiresAt: nearExpiry })
+        .where(eq(sessions.id, row!.id))
+
+      const res = await app.request('/api/v1/auth/me', { headers: { cookie } })
+      expect(res.status).toBe(200)
+
+      const [updated] = await db.select().from(sessions).limit(1)
+      // Renewed to ~30 days out again, not left at the 2-day mark.
+      const twentyNineDaysMs = 29 * 24 * 60 * 60 * 1000
+      expect(updated!.expiresAt.getTime()).toBeGreaterThan(Date.now() + twentyNineDaysMs)
+
+      // The cookie itself is re-sent with a matching new Expires — a
+      // server-side-only extension would be moot once the browser drops
+      // the original cookie at its un-renewed expiry.
+      const setCookie = res.headers.get('set-cookie')!
+      const expiresMatch = /Expires=([^;]+)/i.exec(setCookie)
+      expect(expiresMatch).toBeTruthy()
+      expect(new Date(expiresMatch![1]!).getTime()).toBeGreaterThan(Date.now() + twentyNineDaysMs)
+    })
+
+    it('does not re-send the cookie on a request inside the throttle window', async () => {
+      const cookie = await createUserAndLogin('user@example.com', 'correct-horse-battery-staple')
+      // The very next request is well inside the 60s throttle (lastUsedAt
+      // is null → first touch always renews, so this asserts the *second*
+      // request in quick succession, not the first).
+      await app.request('/api/v1/auth/me', { headers: { cookie } })
+      const res = await app.request('/api/v1/auth/me', { headers: { cookie } })
+      expect(res.headers.get('set-cookie')).toBeNull()
+    })
   })
 })

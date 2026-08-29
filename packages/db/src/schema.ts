@@ -156,6 +156,14 @@ export const sessions = pgTable(
     ipAddress: text('ip_address'),
     expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    // Backs the session list UI (GET /auth/me/sessions) — nullable rather
+    // than defaulting to createdAt's value, so "never used since login" is
+    // representable rather than indistinguishable from "used at login
+    // time". Bumped by resolveSession() (lib/session.ts), throttled to at
+    // most once a minute so an ordinary browsing session doesn't turn every
+    // request into a write. M3 security review follow-up (F-24, ASVS
+    // V3.3.2), docs/TODO.md.
+    lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
   },
   // Backs "sign out" / "sign out everywhere" (apps/api/src/lib/session.ts),
   // both delete-by-userId.

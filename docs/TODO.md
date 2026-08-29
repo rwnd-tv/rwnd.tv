@@ -109,11 +109,6 @@ Format:
       most likely, alongside `user_credentials`'
       `local`/`oidc`-adapter design — see [ADR 0003](adr/0003-auth-model.md)),
       not a quick fix.
-- [ ] **Session management: list and revoke active sessions** (2026-08-29 added)\
-      No UI or route lets a user see or revoke their own other active
-      sessions, and sessions have no `lastUsedAt`/sliding expiry — just a
-      fixed 30-day TTL with lazy delete-on-resolve. ASVS V3.3.2/3.3.4
-      (Level 2), `docs/security/asvs-l1.md`.
 - [ ] **Breached-password check on registration/password change** (2026-08-29 added)\
       Password policy is length-only (`min(12)`) — no check against known
       breached passwords (HIBP's k-anonymity API, most likely). Deferred

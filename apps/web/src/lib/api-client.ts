@@ -26,6 +26,7 @@ import {
   type ListLibraryMoviesResponse,
   type ListLibraryShowsResponse,
   type ListPlaysResponse,
+  type ListSessionsResponse,
   type ListWatchlistsResponse,
   type ListWebhookLinksResponse,
   type LoginRequest,
@@ -164,6 +165,8 @@ export const api = {
     confirmEmailChange: (body: ConfirmEmailChangeRequest) =>
       post<void>('/auth/confirm-email-change', body),
     deleteAccount: (body: DeleteAccountRequest) => del<void>('/auth/me', body),
+    listSessions: () => get<ListSessionsResponse>('/auth/me/sessions'),
+    revokeSession: (id: string) => del<void>(`/auth/me/sessions/${encodeURIComponent(id)}`),
   },
   tokens: {
     list: () => get<{ tokens: ApiToken[] }>('/tokens'),

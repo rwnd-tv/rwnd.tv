@@ -1,4 +1,4 @@
-import { OpenAPIHono, createRoute } from '@hono/zod-openapi'
+import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi'
 import { createMiddleware } from 'hono/factory'
 import { and, eq, isNull, gt } from 'drizzle-orm'
 import {
@@ -13,6 +13,7 @@ import {
   confirmEmailChangeRequestSchema,
   deleteAccountRequestSchema,
   userSchema,
+  listSessionsResponseSchema,
 } from '@rwnd/shared'
 import { users, userCredentials, instanceSettings, invites } from '@rwnd/db'
 import type { AppEnv } from '../types.js'
@@ -28,6 +29,9 @@ import {
   revokeSession,
   revokeAllSessions,
   revokeOtherSessions,
+  findSessionId,
+  listSessions,
+  revokeSessionById,
 } from '../lib/session.js'
 import { setSessionCookie, clearSessionCookie, getSessionToken } from '../lib/cookies.js'
 import { serializeUser } from '../lib/serialize.js'
@@ -381,6 +385,76 @@ authRoutes.openapi(
     const currentToken = getSessionToken(c, env)
     if (currentToken) await revokeOtherSessions(db, user.id, currentToken)
 
+    return c.body(null, 204)
+  },
+)
+
+/**
+ * Session management (M3 security review follow-up, F-24, ASVS V3.3.2),
+ * docs/TODO.md. Lets a user see and revoke their own other active sessions
+ * — there was previously no way to do either short of "log out
+ * everywhere" (revokeAllSessions via password reset).
+ */
+authRoutes.openapi(
+  createRoute({
+    method: 'get',
+    path: '/auth/me/sessions',
+    summary: "List the current user's active sessions, newest first",
+    responses: {
+      200: {
+        description: 'Sessions',
+        content: { 'application/json': { schema: listSessionsResponseSchema } },
+      },
+    },
+  }),
+  async (c) => {
+    const db = c.get('db')
+    const user = c.get('user')!
+    const env = loadEnv()
+
+    const currentToken = getSessionToken(c, env)
+    const currentSessionId = currentToken ? await findSessionId(db, currentToken) : null
+
+    const rows = await listSessions(db, user.id)
+    return c.json({
+      sessions: rows.map((s) => ({
+        id: s.id,
+        userAgent: s.userAgent,
+        ipAddress: s.ipAddress,
+        createdAt: s.createdAt.toISOString(),
+        lastUsedAt: s.lastUsedAt?.toISOString() ?? null,
+        expiresAt: s.expiresAt.toISOString(),
+        current: s.id === currentSessionId,
+      })),
+    })
+  },
+)
+
+authRoutes.openapi(
+  createRoute({
+    method: 'delete',
+    path: '/auth/me/sessions/{id}',
+    summary: 'Revoke one of the current user’s sessions',
+    // Deliberately allows revoking the caller's own current session, same
+    // as any other — no special-casing. Doing so just means the next
+    // request with that cookie 401s, the same outcome POST /auth/logout
+    // produces; simpler than inventing a distinct "can't revoke yourself"
+    // rule for one row in the list.
+    request: { params: z.object({ id: z.string().uuid() }) },
+    responses: {
+      204: { description: 'Revoked' },
+      404: { description: 'Session not found' },
+    },
+  }),
+  async (c) => {
+    const { id } = c.req.valid('param')
+    const db = c.get('db')
+    const user = c.get('user')!
+
+    const revoked = await revokeSessionById(db, user.id, id)
+    if (!revoked) return c.json({ error: 'Session not found' }, 404)
+
+    logSecurityEvent('session_revoked', { userId: user.id })
     return c.body(null, 204)
   },
 )

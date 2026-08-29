@@ -2,7 +2,7 @@ import { createMiddleware } from 'hono/factory'
 import { resolveSession } from '../lib/session.js'
 import type { AppEnv } from '../types.js'
 import { loadEnv } from '../env.js'
-import { getSessionToken } from '../lib/cookies.js'
+import { getSessionToken, setSessionCookie } from '../lib/cookies.js'
 
 /**
  * Every `/api/v1/*` route not listed here requires a valid session — see
@@ -57,11 +57,22 @@ export const requireSession = createMiddleware<AppEnv>(async (c, next) => {
 
   const env = loadEnv()
   const token = getSessionToken(c, env)
-  const user = token ? await resolveSession(c.get('db'), token) : null
-  if (!user) {
+  if (!token) {
     return c.json({ error: 'unauthenticated' }, 401)
   }
-  c.set('user', user)
+  const resolved = await resolveSession(c.get('db'), token)
+  if (!resolved) {
+    return c.json({ error: 'unauthenticated' }, 401)
+  }
+  c.set('user', resolved.user)
+  // Sliding session expiry (ASVS V3.3.2/V3.3.4, docs/TODO.md) — resolveSession()
+  // already renewed the row's server-side expiresAt on this throttled touch;
+  // re-sending the cookie with a matching new Expires is what makes that
+  // renewal actually matter, since the browser would otherwise still drop
+  // the cookie at its original, un-renewed expiry regardless.
+  if (resolved.renewedExpiresAt) {
+    setSessionCookie(c, env, token, resolved.renewedExpiresAt)
+  }
   await next()
   return
 })

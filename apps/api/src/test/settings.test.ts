@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { instanceSettings } from '@rwnd/db'
 import type { InstanceSettings } from '@rwnd/shared'
-import { extractCookie, json, resetDb, testApp, testDb } from './helpers.js'
+import { createLocalUser, extractCookie, json, resetDb, testApp, testDb } from './helpers.js'
 
 const db = testDb()
 const app = testApp()
@@ -55,6 +55,35 @@ describe('/api/v1/settings — metadata provider priority', () => {
       body: JSON.stringify({ metadataProviderPriority: ['tvdb'] }),
     })
     expect(res.status).toBe(400)
+  })
+
+  it('PATCH rejects a non-admin, even when logged in', async () => {
+    await createLocalUser(db, 'regular@example.com', 'correct-horse-battery-staple')
+    const login = await app.request('/api/v1/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: 'regular@example.com',
+        password: 'correct-horse-battery-staple',
+      }),
+    })
+    const cookie = extractCookie(login)!
+
+    const res = await app.request('/api/v1/settings', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', cookie },
+      body: JSON.stringify({ metadataProviderPriority: ['tmdb'] }),
+    })
+    expect(res.status).toBe(403)
+  })
+
+  it('PATCH rejects an unauthenticated request', async () => {
+    const res = await app.request('/api/v1/settings', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ metadataProviderPriority: ['tmdb'] }),
+    })
+    expect(res.status).toBe(401)
   })
 
   it('narrows a row with junk in the priority column back to the default rather than erroring', async () => {

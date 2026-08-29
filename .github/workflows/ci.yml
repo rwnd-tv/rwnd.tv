@@ -136,7 +136,11 @@ jobs:
   dependency-review:
     # Catches a vulnerable dependency a PR *introduces* — pnpm audit above
     # only ever looks at main's current lockfile, not what a PR is about
-    # to change it to (M3 security review, F-19).
+    # to change it to (M3 security review, F-19). Currently inert in
+    # practice: this project pushes directly to main rather than merging
+    # PRs against itself, so this job has never actually run. Left in
+    # place rather than removed — it starts working the moment an outside
+    # contributor opens a PR, with no further setup needed.
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     permissions:

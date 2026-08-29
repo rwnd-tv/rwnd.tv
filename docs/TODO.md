@@ -109,13 +109,6 @@ Format:
       most likely, alongside `user_credentials`'
       `local`/`oidc`-adapter design — see [ADR 0003](adr/0003-auth-model.md)),
       not a quick fix.
-- [ ] **Breached-password check on registration/password change** (2026-08-29 added)\
-      Password policy is length-only (`min(12)`) — no check against known
-      breached passwords (HIBP's k-anonymity API, most likely). Deferred
-      during the security review rather than fixed inline: it's a network
-      dependency and a design decision (should a self-hosted instance
-      call out to a third party on every password change?) bigger than a
-      review-scope fix. ASVS V2.1.7.
 
 ## Roadmap
 

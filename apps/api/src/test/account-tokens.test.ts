@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { createHash } from 'node:crypto'
 import { eq } from 'drizzle-orm'
 import { emailChangeTokens, emailVerificationTokens, passwordResetTokens, users } from '@rwnd/db'
 import {
@@ -13,6 +14,7 @@ const app = testApp()
 
 describe('account-recovery token flows (reset / verify / email-change)', () => {
   beforeEach(() => resetDb(db))
+  afterEach(() => vi.unstubAllGlobals())
 
   describe('password reset', () => {
     it('is single-use — redeeming twice fails the second time', async () => {
@@ -69,6 +71,33 @@ describe('account-recovery token flows (reset / verify / email-change)', () => {
         body: JSON.stringify({ token: 'not-a-real-token', password: 'new-password-123456' }),
       })
       expect(res.status).toBe(400)
+    })
+
+    it('rejects a breached new password without consuming the token (ASVS V2.1.7)', async () => {
+      const userId = await createLocalUser(db, 'user@example.com', 'correct-horse-battery-staple')
+      const token = await createPasswordResetToken(db, userId)
+
+      const password = 'a-password-this-test-pretends-is-breached'
+      const suffix = createHash('sha1').update(password).digest('hex').toUpperCase().slice(5)
+      vi.stubGlobal('fetch', () => Promise.resolve(new Response(`${suffix}:1`)))
+
+      const rejected = await app.request('/api/v1/auth/reset-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, password }),
+      })
+      expect(rejected.status).toBe(400)
+
+      // The single-use token is still valid — checked before redemption
+      // specifically so a rejected weak password doesn't force a whole new
+      // "forgot password" round trip (see routes/auth.ts's doc comment).
+      vi.unstubAllGlobals()
+      const succeeds = await app.request('/api/v1/auth/reset-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, password: 'new-correct-horse-battery-staple' }),
+      })
+      expect(succeeds.status).toBe(204)
     })
 
     it('creating a new token does not invalidate a previous one (no delete-on-create, unlike verification)', async () => {

@@ -22,6 +22,7 @@ import { jsonBodyLimit } from '../lib/body-limit.js'
 import { rateLimit, tryConsume } from '../middleware/rate-limit.js'
 import { isLoginLocked, recordFailedLogin, clearLoginAttempts } from '../lib/login-lockout.js'
 import { hashPassword, verifyPassword, verifyDummyPassword } from '../lib/password.js'
+import { isPasswordPwned } from '../lib/hibp.js'
 import { sniffImageType, extensionFor } from '../lib/image-sniff.js'
 import { logSecurityEvent } from '../lib/security-log.js'
 import {
@@ -158,6 +159,7 @@ authRoutes.openapi(
         description: 'Account created',
         content: { 'application/json': { schema: userSchema } },
       },
+      400: { description: 'Password has appeared in a known data breach' },
       403: { description: 'Registration is not open, or email is not configured' },
       409: { description: 'Email already in use' },
     },
@@ -203,6 +205,13 @@ authRoutes.openapi(
         }
       }
       return c.json({ error: 'Email already in use' }, 409)
+    }
+
+    if (await isPasswordPwned(body.password)) {
+      return c.json(
+        { error: 'This password has appeared in a data breach — please choose a different one' },
+        400,
+      )
     }
 
     const passwordHash = await hashPassword(body.password)
@@ -349,7 +358,7 @@ authRoutes.openapi(
     },
     responses: {
       204: { description: 'Password changed' },
-      400: { description: 'Current password is incorrect' },
+      400: { description: 'Current password is incorrect, or the new one has been breached' },
       401: { description: 'Not logged in' },
     },
   }),
@@ -372,6 +381,13 @@ authRoutes.openapi(
       !(await verifyPassword(credential.passwordHash, currentPassword))
     ) {
       return c.json({ error: 'Current password is incorrect' }, 400)
+    }
+
+    if (await isPasswordPwned(newPassword)) {
+      return c.json(
+        { error: 'This password has appeared in a data breach — please choose a different one' },
+        400,
+      )
     }
 
     const passwordHash = await hashPassword(newPassword)
@@ -822,12 +838,23 @@ authRoutes.openapi(
     request: { body: { content: { 'application/json': { schema: resetPasswordRequestSchema } } } },
     responses: {
       204: { description: 'Password reset' },
-      400: { description: 'Invalid or expired reset link' },
+      400: { description: 'Invalid or expired reset link, or the password has been breached' },
     },
   }),
   async (c) => {
     const db = c.get('db')
     const { token, password } = c.req.valid('json')
+
+    // Checked before redeeming the token, deliberately — the token is
+    // single-use, and burning it on a rejected weak password would force
+    // a whole new "forgot password" round trip just to pick a different
+    // one, rather than letting the same link be retried.
+    if (await isPasswordPwned(password)) {
+      return c.json(
+        { error: 'This password has appeared in a data breach — please choose a different one' },
+        400,
+      )
+    }
 
     const userId = await redeemPasswordResetToken(db, token)
     if (!userId) {

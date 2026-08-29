@@ -7,6 +7,7 @@ export default defineConfig({
     name: '@rwnd/api',
     environment: 'node',
     include: ['src/**/*.test.ts'],
+    setupFiles: ['./src/test/fetch-defaults.ts'],
     hookTimeout: 20_000,
     // All test files share one real Postgres database and truncate tables
     // in beforeEach — running files in parallel races those truncations

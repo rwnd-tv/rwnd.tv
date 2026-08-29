@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { inArray } from 'drizzle-orm'
+import { createHash } from 'node:crypto'
+import { eq, inArray } from 'drizzle-orm'
 import { instanceSettings, invites, users } from '@rwnd/db'
 import type { User } from '@rwnd/shared'
 import { generateSecret, hashSecret } from '../lib/tokens.js'
@@ -19,6 +20,7 @@ async function createUser(email: string, password: string) {
 
 describe('auth', () => {
   beforeEach(() => resetDb(db))
+  afterEach(() => vi.unstubAllGlobals())
 
   it('logs in with correct credentials and rejects wrong ones', async () => {
     await createUser('user@example.com', 'correct-horse-battery-staple')
@@ -141,6 +143,37 @@ describe('auth', () => {
     expect(res.status).toBe(201)
     const body = await json<User>(res)
     expect(body.role).toBe('user')
+  })
+
+  it('rejects registration with a breached password (ASVS V2.1.7)', async () => {
+    await createUser('admin@example.com', 'correct-horse-battery-staple')
+    await db
+      .insert(instanceSettings)
+      .values({ id: 1, registrationMode: 'open' })
+      .onConflictDoUpdate({ target: instanceSettings.id, set: { registrationMode: 'open' } })
+
+    // Overrides fetch-defaults.ts's default "not found" stub. The real
+    // isPasswordPwned() only ever checks the SHA-1 suffix it computed from
+    // the submitted password, so the stub has to answer with that exact
+    // suffix (range response format is SUFFIX:COUNT, one per line) to
+    // simulate a genuine match rather than an unrelated one.
+    const password = 'a-password-this-test-pretends-is-breached'
+    const suffix = createHash('sha1').update(password).digest('hex').toUpperCase().slice(5)
+    vi.stubGlobal('fetch', () => Promise.resolve(new Response(`${suffix}:1`)))
+
+    const res = await app.request('/api/v1/auth/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: 'newuser@example.com',
+        password,
+        displayName: 'New User',
+      }),
+    })
+    expect(res.status).toBe(400)
+
+    const rows = await db.select().from(users).where(eq(users.email, 'newuser@example.com'))
+    expect(rows).toHaveLength(0)
   })
 
   it('rejects an invite-gated registration without a valid code', async () => {

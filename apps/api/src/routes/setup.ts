@@ -6,6 +6,7 @@ import type { AppEnv } from '../types.js'
 import { loadEnv } from '../env.js'
 import { rateLimit } from '../middleware/rate-limit.js'
 import { hashPassword } from '../lib/password.js'
+import { isPasswordPwned } from '../lib/hibp.js'
 import { createSession } from '../lib/session.js'
 import { setSessionCookie } from '../lib/cookies.js'
 import { serializeUser } from '../lib/serialize.js'
@@ -53,6 +54,7 @@ setupRoutes.openapi(
         description: 'Admin account created',
         content: { 'application/json': { schema: userSchema } },
       },
+      400: { description: 'Password has appeared in a known data breach' },
       403: { description: 'Email is not configured on this instance' },
       409: { description: 'Setup has already been completed' },
     },
@@ -72,6 +74,17 @@ setupRoutes.openapi(
     }
 
     const body = c.req.valid('json')
+
+    // Same breach check as /auth/register (ASVS V2.1.7, docs/TODO.md) — the
+    // first admin account is the highest-value credential on a self-hosted
+    // instance, no reason to exempt it.
+    if (await isPasswordPwned(body.password)) {
+      return c.json(
+        { error: 'This password has appeared in a data breach — please choose a different one' },
+        400,
+      )
+    }
+
     const passwordHash = await hashPassword(body.password)
 
     const [user] = await db

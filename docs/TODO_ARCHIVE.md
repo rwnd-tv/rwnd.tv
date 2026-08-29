@@ -2779,3 +2779,34 @@ Transport-Security` header) and confirmed the app stays healthy and
       fails, e.g. no SMTP listening in the test env) against a migrated
       local Postgres; lint/typecheck/format/knip clean. Both throwaway
       accounts deleted after.
+- [x] **Breached-password check on registration/password change** (2026-08-29 added, done 2026-08-30)\
+      ASVS V2.1.7. New `isPasswordPwned()` (`apps/api/src/lib/hibp.ts`) —
+      HIBP's k-anonymity range API, only a 5-char SHA-1 prefix ever leaves
+      the instance. Fails open (network error, timeout, or non-200 all
+      allow the password) so an offline self-hosted instance can still set
+      one — documented in `docs/self-hosting.md`. Wired into all four
+      places a password gets set: `/setup`, `/auth/register`,
+      `POST /auth/me/password`, and `POST /auth/reset-password` — the
+      reset-password check runs _before_ redeeming the single-use token,
+      deliberately, so a rejected weak password doesn't force a whole new
+      "forgot password" round trip.\
+      Also added `apps/api/src/test/fetch-defaults.ts` (a new Vitest
+      `setupFiles` entry) — without it, this check would have made nearly
+      every test in the suite hit the real network on every user-creation-
+      shaped test, since `/setup`/`/auth/register` run throughout via
+      helper functions. Checked the suite's actual fixture passwords
+      (`correct-horse-battery-staple` and its variants) against the real
+      HIBP API by hand before relying on this — all currently clean — but
+      a global stub means the suite doesn't quietly depend on that staying
+      true forever.\
+      **Verified**: new tests — `hibp.test.ts` (6, unit-level: match/no-
+      match, fails open on network error/timeout/non-200, confirms only
+      the 5-char prefix ever gets sent) plus one rejection test at each of
+      the four call sites, including one confirming the reset token
+      survives a rejected password — against a migrated local Postgres;
+      full existing suite unchanged and passing; lint/typecheck/format/
+      knip clean. Live on dev.rwnd.tv against the real HIBP API (not
+      mocked): a registration attempt with a genuinely breached password
+      (`password123456`) was rejected with the same 400, then a strong
+      random password succeeded normally — throwaway account deleted
+      after.

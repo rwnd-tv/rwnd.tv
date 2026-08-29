@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { createHash } from 'node:crypto'
 import { eq } from 'drizzle-orm'
 import { sessions } from '@rwnd/db'
 import { revokeAllSessions, revokeOtherSessions } from '../lib/session.js'
@@ -26,6 +27,7 @@ async function login(email: string, password: string): Promise<Response> {
 
 describe('session cookie and lifecycle', () => {
   beforeEach(() => resetDb(db))
+  afterEach(() => vi.unstubAllGlobals())
 
   it('sets HttpOnly, SameSite=Lax, Path=/, and a ~30-day expiry on the session cookie', async () => {
     const res = await app.request('/api/v1/setup', {
@@ -131,6 +133,29 @@ describe('session cookie and lifecycle', () => {
     const afterB = await app.request('/api/v1/auth/me', { headers: { cookie: cookieB } })
     expect(afterA.status).toBe(200)
     expect(afterB.status).toBe(401)
+  })
+
+  it('rejects a breached new password on POST /auth/me/password (ASVS V2.1.7)', async () => {
+    const cookie = await createUserAndLogin('user@example.com', 'correct-horse-battery-staple')
+
+    const password = 'a-password-this-test-pretends-is-breached'
+    const suffix = createHash('sha1').update(password).digest('hex').toUpperCase().slice(5)
+    vi.stubGlobal('fetch', () => Promise.resolve(new Response(`${suffix}:1`)))
+
+    const res = await app.request('/api/v1/auth/me/password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', cookie },
+      body: JSON.stringify({
+        currentPassword: 'correct-horse-battery-staple',
+        newPassword: password,
+      }),
+    })
+    expect(res.status).toBe(400)
+
+    // Old password still works — nothing was actually changed.
+    vi.unstubAllGlobals()
+    const loginRes = await login('user@example.com', 'correct-horse-battery-staple')
+    expect(loginRes.status).toBe(200)
   })
 
   describe('session list and revoke (M3 security review follow-up, F-24)', () => {

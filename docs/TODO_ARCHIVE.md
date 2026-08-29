@@ -2647,7 +2647,7 @@ api`, not guessed).\
       (1) `Cache-Control: no-store` now sent on every `/api/*` response by
       default (`apps/api/src/app.ts`), set before route handlers run so
       the avatar route's own long-lived `private, max-age=31536000,
-      immutable` still overrides it (V8.2.1); (2) `packages/db`'s
+immutable` still overrides it (V8.2.1); (2) `packages/db`'s
       `migrate.ts`/`seed.ts`/`reset-dev.ts`/`drizzle.config.ts` now share
       one validated `loadDbEnv()` (new `packages/db/src/env.ts`, exported
       from the package) instead of four independent

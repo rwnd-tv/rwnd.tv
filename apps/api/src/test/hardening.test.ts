@@ -22,12 +22,13 @@ function jpegFile(bytes: number): File {
 }
 
 /**
- * Stage C of the M3 security review (docs/security/asvs-l1.md) — CSRF
- * (hono/csrf) and body-size limits (hono/body-limit), both wired in
- * app.ts. Grows through later stages (security headers, rate limiting) as
- * they land; see each `it`'s comment for which stage added it.
+ * The M3 security review (docs/security/asvs-l1.md), all wired in app.ts.
+ * Grows stage by stage — see each describe block's heading for which one
+ * added it: Stage C is CSRF (hono/csrf) and body-size limits
+ * (hono/body-limit); Stage D is security response headers and CSP
+ * (hono/secure-headers).
  */
-describe('hardening — CSRF and body limits', () => {
+describe('hardening', () => {
   beforeEach(() => resetDb(db))
 
   describe('CSRF (Stage C)', () => {
@@ -136,6 +137,54 @@ describe('hardening — CSRF and body limits', () => {
         body: form,
       })
       expect(res.status).toBe(413)
+    })
+  })
+
+  describe('security headers and CSP (Stage D)', () => {
+    // secureHeaders() is mounted on '*' (outermost) in app.ts specifically
+    // so these apply to every response shape, not just successful JSON
+    // ones — checked against both a 200 and a 401 here. The SPA
+    // fallback's HTML response isn't reachable from these unit tests
+    // (testApp() never builds a `public/` dir for it to serve — see
+    // app.ts's `existsSync(webDistDir)` guard), so that path is verified
+    // live against dev.rwnd.tv instead, per the plan's verification step.
+    it.each([
+      ['a 200 JSON response', () => app.request('/api/v1/health')],
+      ['a 401 JSON response', () => app.request('/api/v1/tokens')],
+    ])('sets CSP, nosniff, and frame-ancestors/X-Frame-Options on %s', async (_label, make) => {
+      const res = await make()
+      expect(res.headers.get('x-content-type-options')).toBe('nosniff')
+      expect(res.headers.get('x-frame-options')).toBe('DENY')
+      expect(res.headers.get('referrer-policy')).toBe('strict-origin-when-cross-origin')
+
+      const csp = res.headers.get('content-security-policy')!
+      expect(csp).toContain("default-src 'self'")
+      expect(csp).toContain("script-src 'self'")
+      expect(csp).toContain("style-src 'self'")
+      expect(csp).toContain("frame-ancestors 'none'")
+      expect(csp).toContain('https://image.tmdb.org')
+      expect(csp).toContain('https://artworks.thetvdb.com')
+    })
+
+    it('does not send HSTS when COOKIE_SECURE is off (this test env is plain HTTP)', async () => {
+      const res = await app.request('/api/v1/health')
+      // Only asserts the false branch, since env.ts's loadEnv() caches on
+      // first call — COOKIE_SECURE can't be flipped mid-process to also
+      // exercise the true branch here. That branch is a straight boolean
+      // pass-through to hono/secure-headers' own strictTransportSecurity
+      // option, which isn't this app's code to re-test; the live check
+      // against dev.rwnd.tv (COOKIE_SECURE=true there) is what actually
+      // proves it.
+      expect(res.headers.get('strict-transport-security')).toBeNull()
+    })
+
+    it('denies camera/microphone/geolocation/payment via Permissions-Policy', async () => {
+      const res = await app.request('/api/v1/health')
+      const policy = res.headers.get('permissions-policy')!
+      expect(policy).toContain('camera=()')
+      expect(policy).toContain('microphone=()')
+      expect(policy).toContain('geolocation=()')
+      expect(policy).toContain('payment=()')
     })
   })
 })

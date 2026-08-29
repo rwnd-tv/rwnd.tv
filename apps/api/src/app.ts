@@ -8,6 +8,7 @@ import { cors } from 'hono/cors'
 import { csrf } from 'hono/csrf'
 import { createMiddleware } from 'hono/factory'
 import { HTTPException } from 'hono/http-exception'
+import { secureHeaders } from 'hono/secure-headers'
 import { serveStatic } from '@hono/node-server/serve-static'
 import { createDatabase, type Database } from '@rwnd/db'
 import type { AppEnv } from './types.js'
@@ -59,6 +60,48 @@ export function createApp(services?: { db: Database; metadataProviders: Metadata
     console.error(err)
     return c.json({ error: 'Internal Server Error' }, 500)
   })
+
+  // Mounted outermost (on '*', before anything else) so it covers error
+  // responses and the static SPA too, not just /api/*. The build emits no
+  // inline scripts or styles (Vite + @tailwindcss/vite both produce
+  // external hashed bundles — verified against apps/web/dist/index.html),
+  // so script-src/style-src can be 'self' with no 'unsafe-inline'. React's
+  // `style={{...}}` prop writes through the CSSOM (element.style), which
+  // CSP's style-src doesn't govern, so that's unaffected. img-src needs
+  // the metadata providers' own image CDNs, since posters/stills are
+  // fetched directly by the browser rather than proxied through this API.
+  // HSTS is sent only once COOKIE_SECURE confirms this instance is
+  // actually on HTTPS — emitting it from a plain-HTTP LAN deployment can
+  // wedge a self-hoster's browser onto a scheme nothing is listening on.
+  app.use(
+    '*',
+    secureHeaders({
+      xFrameOptions: 'DENY',
+      referrerPolicy: 'strict-origin-when-cross-origin',
+      // Legacy header, superseded by CSP — can itself introduce an XSS
+      // vector in old IE versions when left on.
+      xXssProtection: false,
+      strictTransportSecurity: env.COOKIE_SECURE,
+      permissionsPolicy: {
+        camera: [],
+        microphone: [],
+        geolocation: [],
+        payment: [],
+      },
+      contentSecurityPolicy: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'"],
+        styleSrc: ["'self'"],
+        imgSrc: ["'self'", 'data:', 'https://image.tmdb.org', 'https://artworks.thetvdb.com'],
+        connectSrc: ["'self'"],
+        fontSrc: ["'self'"],
+        objectSrc: ["'none'"],
+        baseUri: ["'none'"],
+        frameAncestors: ["'none'"],
+        formAction: ["'self'"],
+      },
+    }),
+  )
 
   if (env.CORS_ORIGINS.length > 0) {
     app.use('/api/*', cors({ origin: env.CORS_ORIGINS, credentials: true }))

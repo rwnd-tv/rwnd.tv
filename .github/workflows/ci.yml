@@ -122,6 +122,16 @@ jobs:
           severity: HIGH,CRITICAL
           exit-code: '1'
           ignore-unfixed: true
+          # trivy-action@v0.31.0's own default internal Trivy version
+          # (v0.63.0) is a yanked release with no download artifacts —
+          # confirmed via `gh api repos/aquasecurity/trivy/releases/tags/v0.63.0`
+          # (404) and aquasecurity/trivy-action#516, the same "found
+          # version, then a silent exit 1" failure this hit. Pinned to
+          # the actual latest release as of this fix; Dependabot won't
+          # bump this automatically (it's a `with:` value, not a `uses:`
+          # tag), so it may need manual bumping if a future Trivy release
+          # gets yanked the same way.
+          version: v0.74.0
 
   dependency-review:
     # Catches a vulnerable dependency a PR *introduces* — pnpm audit above

@@ -1,5 +1,9 @@
 import { defineConfig } from 'drizzle-kit'
-import { loadDbEnv } from './src/env.js'
+// drizzle-kit's own config loader (esbuild-based, not tsx/tsc's NodeNext
+// resolution) doesn't resolve a `.js`-suffixed import back to `.ts` — the
+// convention every other file in this package uses — so this one file
+// needs the extensionless form instead.
+import { loadDbEnv } from './src/env'
 
 const { databaseUrl, ssl } = loadDbEnv()
 

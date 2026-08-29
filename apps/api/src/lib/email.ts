@@ -95,3 +95,37 @@ export async function sendEmailChangeVerification(to: string, token: string): Pr
       `<p>If this wasn't you, you can ignore this email — your address won't be used.</p>`,
   )
 }
+
+/** Sent to the account's own address once a password change actually
+ * completes (POST /auth/me/password) — ASVS V2.5.5, the same
+ * "someone changed your password" pattern GitHub/Google use. Best-effort,
+ * same as every other send in this file: the password was already
+ * changed by the time this is called, so a delivery failure here shouldn't
+ * (and structurally can't, given how the caller awaits it) undo that. */
+export async function sendPasswordChangedNotice(to: string): Promise<void> {
+  await sendMail(
+    to,
+    'Your rwnd.tv password was changed',
+    `Your rwnd.tv account's password was just changed.\n\nIf this was you, no action is needed. If it wasn't, someone else may have access to your account — reset your password immediately using "Forgot password?" on the login page, which signs out every other active session too.`,
+    `<p>Your rwnd.tv account's password was just changed.</p>` +
+      `<p>If this was you, no action is needed. If it wasn't, someone else may have access to your account — reset your password immediately using "Forgot password?" on the login page, which signs out every other active session too.</p>`,
+  )
+}
+
+/** Sent to the *old* address once an email change is confirmed
+ * (POST /auth/confirm-email-change) — the new address already went
+ * through sendEmailChangeVerification above to prove ownership before the
+ * change happened at all; this is the compensating notice for whoever
+ * held the *old* address, the one who'd actually want to know if this
+ * wasn't them (ASVS V2.5.5). `newEmail` is shown so the old address's
+ * owner has something concrete to report if this wasn't them, without
+ * this email itself being a link anyone could act on. */
+export async function sendEmailChangedNotice(oldEmail: string, newEmail: string): Promise<void> {
+  await sendMail(
+    oldEmail,
+    'Your rwnd.tv email address was changed',
+    `Your rwnd.tv account's email address was just changed to ${newEmail}.\n\nIf this was you, no action is needed — you'll need to use the new address to log in from now on. If it wasn't you, someone else may have access to your account; contact this instance's admin.`,
+    `<p>Your rwnd.tv account's email address was just changed to <strong>${newEmail}</strong>.</p>` +
+      `<p>If this was you, no action is needed — you'll need to use the new address to log in from now on. If it wasn't you, someone else may have access to your account; contact this instance's admin.</p>`,
+  )
+}

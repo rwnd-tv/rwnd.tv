@@ -46,23 +46,23 @@ project, rather than scattering that reasoning across this table.
 
 ## V2 — Authentication
 
-| Req                | Status                    | Evidence / rationale                                                                                                                                                                                                             |
-| ------------------ | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| V2.1.1             | Pass                      | `passwordSchema = z.string().min(12).max(256)` — `packages/shared/src/schemas/auth.ts:8`                                                                                                                                         |
-| V2.1.2             | Pass                      | Long passwords aren't truncated (Argon2id hashes the full input); the 256-char cap satisfies the requirement's intent (permit 64+, deny unbounded) without the specific 128 threshold being load-bearing                         |
-| V2.1.3             | Pass                      | Argon2id via `@node-rs/argon2` never truncates input                                                                                                                                                                             |
-| V2.1.7             | Deferred → `docs/TODO.md` | No breached-password check (HIBP k-anonymity) — a network dependency + design decision, not a quick fix                                                                                                                          |
-| V2.1.9–11          | Pass                      | No composition rules, no rotation requirement, no paste-blocking anywhere in `apps/web`                                                                                                                                          |
-| V2.2.1             | Fail → fixed Stage E      | No rate limiting/lockout anywhere — confirmed by repo-wide grep                                                                                                                                                                  |
-| V2.4.1             | Pass                      | Argon2id, `apps/api/src/lib/password.ts` — `memoryCost: 19456, timeCost: 2, parallelism: 1`                                                                                                                                      |
-| V2.4.2             | Pass                      | `@node-rs/argon2` generates a unique random salt per hash internally                                                                                                                                                             |
-| V2.5.3             | Pass                      | Reset flow never reveals the current password; generic responses throughout                                                                                                                                                      |
-| V2.5.4             | Pass                      | No shared/default accounts; first admin created via one-time `POST /setup`                                                                                                                                                       |
-| V2.5.5             | Deferred → `docs/TODO.md` | No email notification is sent when a password or email address changes — a real feature addition, not a targeted fix; see `docs/adr/0007-security-posture.md`                                                                    |
-| V2.5.6             | Pass                      | Token-based reset via `apps/api/src/lib/account-tokens.ts`, 1h TTL, single-use                                                                                                                                                   |
-| V2.6.1–3           | Pass                      | Account-recovery tokens are 256-bit CSPRNG (`generateSecret(32)`), single-use, hashed at rest                                                                                                                                    |
-| V2.7.2             | Pass (reassessed)         | Password-reset/email-change tokens keep their 1h TTL — ASVS's 10-minute guidance targets a true out-of-band channel (SMS, push), not an emailed link the user may not open immediately; see `apps/api/src/lib/account-tokens.ts` |
-| V4.3.1 (admin MFA) | Deferred → `docs/TODO.md` | No MFA exists anywhere in the app; `requireAdmin` is password-only. Real feature gap, not a quick fix — log as a follow-up                                                                                                       |
+| Req                | Status                    | Evidence / rationale                                                                                                                                                                                                                                   |
+| ------------------ | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| V2.1.1             | Pass                      | `passwordSchema = z.string().min(12).max(256)` — `packages/shared/src/schemas/auth.ts:8`                                                                                                                                                               |
+| V2.1.2             | Pass                      | Long passwords aren't truncated (Argon2id hashes the full input); the 256-char cap satisfies the requirement's intent (permit 64+, deny unbounded) without the specific 128 threshold being load-bearing                                               |
+| V2.1.3             | Pass                      | Argon2id via `@node-rs/argon2` never truncates input                                                                                                                                                                                                   |
+| V2.1.7             | Deferred → `docs/TODO.md` | No breached-password check (HIBP k-anonymity) — a network dependency + design decision, not a quick fix                                                                                                                                                |
+| V2.1.9–11          | Pass                      | No composition rules, no rotation requirement, no paste-blocking anywhere in `apps/web`                                                                                                                                                                |
+| V2.2.1             | Fail → fixed Stage E      | No rate limiting/lockout anywhere — confirmed by repo-wide grep                                                                                                                                                                                        |
+| V2.4.1             | Pass                      | Argon2id, `apps/api/src/lib/password.ts` — `memoryCost: 19456, timeCost: 2, parallelism: 1`                                                                                                                                                            |
+| V2.4.2             | Pass                      | `@node-rs/argon2` generates a unique random salt per hash internally                                                                                                                                                                                   |
+| V2.5.3             | Pass                      | Reset flow never reveals the current password; generic responses throughout                                                                                                                                                                            |
+| V2.5.4             | Pass                      | No shared/default accounts; first admin created via one-time `POST /setup`                                                                                                                                                                             |
+| V2.5.5             | Fail → fixed              | `sendPasswordChangedNotice`/`sendEmailChangedNotice` (`apps/api/src/lib/email.ts`), sent from `POST /auth/me/password` and `POST /auth/confirm-email-change` — the email-changed notice goes to the _old_ address, the one that actually needs to know |
+| V2.5.6             | Pass                      | Token-based reset via `apps/api/src/lib/account-tokens.ts`, 1h TTL, single-use                                                                                                                                                                         |
+| V2.6.1–3           | Pass                      | Account-recovery tokens are 256-bit CSPRNG (`generateSecret(32)`), single-use, hashed at rest                                                                                                                                                          |
+| V2.7.2             | Pass (reassessed)         | Password-reset/email-change tokens keep their 1h TTL — ASVS's 10-minute guidance targets a true out-of-band channel (SMS, push), not an emailed link the user may not open immediately; see `apps/api/src/lib/account-tokens.ts`                       |
+| V4.3.1 (admin MFA) | Deferred → `docs/TODO.md` | No MFA exists anywhere in the app; `requireAdmin` is password-only. Real feature gap, not a quick fix — log as a follow-up                                                                                                                             |
 
 ## V3 — Session Management
 
@@ -179,7 +179,6 @@ logged to `docs/TODO.md`:
 
 - F-27 / V2.1.7 — breached-password check (HIBP k-anonymity)
 - V4.3.1 — admin MFA (no MFA exists anywhere in the app)
-- V2.5.5 — email notification when a password or email address changes
 - Full structured request logging remains out of scope — this review (and
   the 2026-08-29 follow-up pass closing the rest of this list) only ever
   added minimal `[security]`-prefixed event logging, not a general
@@ -192,9 +191,11 @@ an explicit `DATABASE_SSL` option), V8.2.1 (blanket `Cache-Control: no-store`
 on `/api/*`), V2.7.2 (1h token TTL reassessed and kept, see the V2.7.2 row
 above), V3.4.4 (`__Host-` cookie prefix, conditional on `COOKIE_SECURE` —
 see the V3.4.4 row above), F-24 / V3.3.2 (sliding session expiry plus a
-session list/revoke UI — see the V3.3.2 row above), and F-22 (`POST`/`GET`/
+session list/revoke UI — see the V3.3.2 row above), F-22 (`POST`/`GET`/
 `DELETE /invites`, `apps/api/src/routes/invites.ts` — `registration_mode:
-'invite'` is finally reachable). Image signing (cosign/OIDC keyless) and
+'invite'` is finally reachable), and V2.5.5 (password/email-change
+notification emails — see the V2.5.5 row above). Image signing (cosign/
+OIDC keyless) and
 `read_only: true` on the `app` container were also closed,
 in an earlier same-day pass — see `docs/TODO_ARCHIVE.md`'s "Further
 container hardening"

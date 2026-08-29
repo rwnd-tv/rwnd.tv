@@ -2756,3 +2756,26 @@ Transport-Security` header) and confirmed the app stays healthy and
       deleted afterward) — no admin credentials for dev.rwnd.tv to also
       click through the panel itself live, so that half relies on the test
       suite and code review rather than a live UI walkthrough.
+- [x] **Notify on password/email change** (2026-08-29 added, done 2026-08-30)\
+      ASVS V2.5.5. `sendPasswordChangedNotice`/`sendEmailChangedNotice`
+      added to `lib/email.ts`, sent (best-effort, same pattern as every
+      other send in that file) from `POST /auth/me/password` and
+      `POST /auth/confirm-email-change`. The email-changed notice
+      deliberately goes to the _old_ address — fetched from the `users`
+      row before the update overwrites it — not the new one, which already
+      proved ownership via the confirmation link itself. Both guarded on
+      `isEmailConfigured()` explicitly, since (unlike registration) neither
+      route otherwise requires email to be configured at all.\
+      **Verified** with real delivery, not just a passing test: two
+      throwaway `@mailinator.com` addresses on dev.rwnd.tv (which has real
+      SMTP configured) — registered account A, changed its password,
+      confirmed "Your rwnd.tv password was changed" actually arrived in
+      A's inbox; requested a change to address B, confirmed via the token
+      in B's actual received email (not a DB-inspected token), then
+      confirmed "Your rwnd.tv email address was changed" arrived in A's
+      (the _old_ address's) inbox naming B by name. Also the existing
+      `account-tokens.test.ts`/`session.test.ts` suites (unchanged, still
+      passing — both routes still succeed even when the notice send itself
+      fails, e.g. no SMTP listening in the test env) against a migrated
+      local Postgres; lint/typecheck/format/knip clean. Both throwaway
+      accounts deleted after.

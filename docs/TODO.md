@@ -116,10 +116,6 @@ Format:
       dependency and a design decision (should a self-hosted instance
       call out to a third party on every password change?) bigger than a
       review-scope fix. ASVS V2.1.7.
-- [ ] **Notify on password/email change** (2026-08-29 added)\
-      No email is sent when a user's password or email address changes —
-      unlike the equivalent GitHub/Google-style "someone changed your
-      password" pattern. ASVS V2.5.5, surfaced by the security review.
 
 ## Roadmap
 

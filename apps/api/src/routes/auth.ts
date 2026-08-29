@@ -51,6 +51,8 @@ import {
   sendPasswordResetEmail,
   sendEmailChangeVerification,
   sendAccountAlreadyExistsNotice,
+  sendPasswordChangedNotice,
+  sendEmailChangedNotice,
 } from '../lib/email.js'
 
 export const authRoutes = new OpenAPIHono<AppEnv>()
@@ -385,6 +387,20 @@ authRoutes.openapi(
     const currentToken = getSessionToken(c, env)
     if (currentToken) await revokeOtherSessions(db, user.id, currentToken)
 
+    // Best-effort, same reasoning as every other send in this file — a
+    // delivery failure shouldn't undo (and structurally can't undo) a
+    // password change that already happened. Unlike registration, this
+    // route works whether or not email is configured at all, so this is
+    // an explicit `isEmailConfigured()` check rather than something
+    // already guaranteed by a route-level gate (ASVS V2.5.5).
+    if (isEmailConfigured()) {
+      try {
+        await sendPasswordChangedNotice(user.email)
+      } catch (err) {
+        console.error(`Failed to send password-changed notice to user ${user.id}:`, err)
+      }
+    }
+
     return c.body(null, 204)
   },
 )
@@ -554,6 +570,15 @@ authRoutes.openapi(
       return c.json({ error: 'Email already in use' }, 409)
     }
 
+    // Read before overwriting — this is the only place the *old* address
+    // is available, and the notice below (ASVS V2.5.5) has to go to it,
+    // not the new one (which already proved ownership via this very link).
+    const [before] = await db
+      .select({ email: users.email })
+      .from(users)
+      .where(eq(users.id, redeemed.userId))
+      .limit(1)
+
     // The confirmation click itself is what proves ownership of the new
     // address — already verified the moment it's set, same as a
     // freshly-redeemed registration link.
@@ -561,6 +586,19 @@ authRoutes.openapi(
       .update(users)
       .set({ email: redeemed.newEmail, emailVerifiedAt: new Date() })
       .where(eq(users.id, redeemed.userId))
+
+    // Best-effort, same reasoning as every other send in this file — the
+    // address change already happened by the time this runs. Guarded on
+    // isEmailConfigured() defensively, even though initiating the change
+    // (POST /auth/me/email) already required it — a self-hoster could in
+    // principle unset SMTP_HOST between the two steps.
+    if (before && isEmailConfigured()) {
+      try {
+        await sendEmailChangedNotice(before.email, redeemed.newEmail)
+      } catch (err) {
+        console.error(`Failed to send email-changed notice for user ${redeemed.userId}:`, err)
+      }
+    }
 
     return c.body(null, 204)
   },

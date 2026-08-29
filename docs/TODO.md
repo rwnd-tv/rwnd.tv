@@ -89,17 +89,6 @@ Format:
       [pkgs/container/rwnd.tv/versions](https://github.com/rwnd-tv/rwnd.tv/pkgs/container/rwnd.tv/versions)
       page has been accumulating unbounded with no retention policy in
       place.
-- [ ] **Further container hardening: image signing + read-only root filesystem** (2026-08-29 added)\
-      Two items deferred from the 2026-08-29 security review rather than
-      done inline: cosign/OIDC keyless signing of published container
-      images (a bigger call than fit mid-review — pairs naturally with
-      "Cut the first tagged release" above); and `read_only: true` on the
-      `app` service in `docker-compose.yml`, which needs a full audit of
-      every path the container writes to first (right now: nothing
-      beyond stdout/stderr and the optional `BACKUP_DIR` mount, as far as
-      the review established, but that wants confirming properly before
-      flipping it).
-
 ## Security
 
 - [ ] **Force HTTPS + HSTS on the rwnd.tv reverse proxy** (2026-08-29 added)\

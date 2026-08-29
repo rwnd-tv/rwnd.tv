@@ -79,6 +79,18 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    # M3 security review follow-up (docs/TODO.md): audited every write the
+    # app makes (2026-08-29) — the only filesystem writes anywhere in
+    # apps/api are backups.ts's mkdir/writeFile under BACKUP_DIR (optional,
+    # already a bind mount below, unaffected by read_only) and the
+    # migrate.ts/seed.ts entrypoint steps, which only talk to Postgres.
+    # Avatars and imported ZIPs go straight to the database, never to disk.
+    # tmpfs covers /tmp as cheap insurance for anything in the Node/Postgres
+    # client stack that assumes it's writable, without giving it anywhere
+    # persistent to write.
+    read_only: true
+    tmpfs:
+      - /tmp
     mem_limit: 1g
     pids_limit: 256
 

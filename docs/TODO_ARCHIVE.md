@@ -2361,6 +2361,23 @@ DATABASE` ×2) — zero residue.\
       same `${VAR:-}` pattern already used for the other optional vars.
       Validated with `docker compose config` against a dummy `.env` —
       all three now resolve correctly in the rendered config.
+- [x] **Further container hardening: image signing + read-only root filesystem** (2026-08-29 added, done 2026-08-29)\
+      Both pieces deferred from the same day's security review. Signing:
+      `release.yml` now installs cosign and signs the published image by
+      digest with GitHub OIDC keyless signing (Fulcio cert + Rekor
+      transparency log, no key to manage) right after the push step, so
+      every tag pointing at that digest — `edge`, a semver tag, `latest`
+      — is covered by one signature; verification command left in a
+      comment on the step. Read-only root: audited every filesystem write
+      `apps/api` makes before flipping it — only `backups.ts`'s
+      `mkdir`/`writeFile` under the optional `BACKUP_DIR` bind mount (a
+      volume, unaffected by `read_only`) and the `migrate.ts`/`seed.ts`
+      entrypoint steps, which only talk to Postgres; avatars and imported
+      ZIPs go straight to the database, never to disk. Added
+      `read_only: true` plus a `tmpfs: [/tmp]` mount (cheap insurance, no
+      known writer needs it) to the `app` service in `docker-compose.yml`.
+      Verified on a real dev.rwnd.tv deploy — migrations, seed, and the
+      API all started cleanly and `/api/v1/health` returned `ok`.
 
 ## History page
 

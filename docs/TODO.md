@@ -125,14 +125,6 @@ Format:
       No email is sent when a user's password or email address changes —
       unlike the equivalent GitHub/Google-style "someone changed your
       password" pattern. ASVS V2.5.5, surfaced by the security review.
-- [ ] **Adopt the `__Host-` cookie prefix** (2026-08-29 added)\
-      Session/CSRF cookies don't use the `__Host-` prefix today. It
-      mandates `Secure`, which would break a plain-HTTP LAN-only
-      deployment (a legitimate, documented configuration —
-      `docs/self-hosting.md`) if applied unconditionally, so the security
-      review left it out of Stage D rather than gate every self-hoster on
-      it. Worth adopting conditionally, once `COOKIE_SECURE` confirms
-      HTTPS is actually in use. ASVS V3.4.4, `docs/security/asvs-l1.md`.
 - [ ] **Invite-creation route** (2026-08-29 added)\
       `registration_mode: 'invite'` is functionally unreachable — the
       `invites` table and redemption path both exist and are tested (the

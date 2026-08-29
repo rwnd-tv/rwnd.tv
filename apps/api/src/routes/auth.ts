@@ -29,7 +29,7 @@ import {
   revokeAllSessions,
   revokeOtherSessions,
 } from '../lib/session.js'
-import { setSessionCookie, clearSessionCookie } from '../lib/cookies.js'
+import { setSessionCookie, clearSessionCookie, getSessionToken } from '../lib/cookies.js'
 import { serializeUser } from '../lib/serialize.js'
 import { hashSecret } from '../lib/tokens.js'
 import { ensureDefaultWatchlist } from '../lib/watchlists.js'
@@ -48,7 +48,6 @@ import {
   sendEmailChangeVerification,
   sendAccountAlreadyExistsNotice,
 } from '../lib/email.js'
-import { getCookie } from 'hono/cookie'
 
 export const authRoutes = new OpenAPIHono<AppEnv>()
 
@@ -288,7 +287,7 @@ authRoutes.openapi(
   }),
   async (c) => {
     const env = loadEnv()
-    const token = getCookie(c, env.SESSION_COOKIE_NAME)
+    const token = getSessionToken(c, env)
     if (token) await revokeSession(c.get('db'), token)
     clearSessionCookie(c, env)
     return c.body(null, 204)
@@ -379,7 +378,7 @@ authRoutes.openapi(
     // revokeOtherSessions's doc comment in session.ts for why that's
     // different from the forgot-password reset's revokeAllSessions.
     const env = loadEnv()
-    const currentToken = getCookie(c, env.SESSION_COOKIE_NAME)
+    const currentToken = getSessionToken(c, env)
     if (currentToken) await revokeOtherSessions(db, user.id, currentToken)
 
     return c.body(null, 204)

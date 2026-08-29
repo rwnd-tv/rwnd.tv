@@ -1,8 +1,8 @@
 import { createMiddleware } from 'hono/factory'
-import { getCookie } from 'hono/cookie'
 import { resolveSession } from '../lib/session.js'
 import type { AppEnv } from '../types.js'
 import { loadEnv } from '../env.js'
+import { getSessionToken } from '../lib/cookies.js'
 
 /**
  * Every `/api/v1/*` route not listed here requires a valid session — see
@@ -56,7 +56,7 @@ export const requireSession = createMiddleware<AppEnv>(async (c, next) => {
   }
 
   const env = loadEnv()
-  const token = getCookie(c, env.SESSION_COOKIE_NAME)
+  const token = getSessionToken(c, env)
   const user = token ? await resolveSession(c.get('db'), token) : null
   if (!user) {
     return c.json({ error: 'unauthenticated' }, 401)

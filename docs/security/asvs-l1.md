@@ -46,40 +46,40 @@ project, rather than scattering that reasoning across this table.
 
 ## V2 — Authentication
 
-| Req                | Status                    | Evidence / rationale                                                                                                                                                                                     |
-| ------------------ | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| V2.1.1             | Pass                      | `passwordSchema = z.string().min(12).max(256)` — `packages/shared/src/schemas/auth.ts:8`                                                                                                                 |
-| V2.1.2             | Pass                      | Long passwords aren't truncated (Argon2id hashes the full input); the 256-char cap satisfies the requirement's intent (permit 64+, deny unbounded) without the specific 128 threshold being load-bearing |
-| V2.1.3             | Pass                      | Argon2id via `@node-rs/argon2` never truncates input                                                                                                                                                     |
-| V2.1.7             | Deferred → `docs/TODO.md` | No breached-password check (HIBP k-anonymity) — a network dependency + design decision, not a quick fix                                                                                                  |
-| V2.1.9–11          | Pass                      | No composition rules, no rotation requirement, no paste-blocking anywhere in `apps/web`                                                                                                                  |
-| V2.2.1             | Fail → fixed Stage E      | No rate limiting/lockout anywhere — confirmed by repo-wide grep                                                                                                                                          |
-| V2.4.1             | Pass                      | Argon2id, `apps/api/src/lib/password.ts` — `memoryCost: 19456, timeCost: 2, parallelism: 1`                                                                                                              |
-| V2.4.2             | Pass                      | `@node-rs/argon2` generates a unique random salt per hash internally                                                                                                                                     |
-| V2.5.3             | Pass                      | Reset flow never reveals the current password; generic responses throughout                                                                                                                              |
-| V2.5.4             | Pass                      | No shared/default accounts; first admin created via one-time `POST /setup`                                                                                                                               |
-| V2.5.5             | Deferred → `docs/TODO.md` | No email notification is sent when a password or email address changes — a real feature addition, not a targeted fix; see `docs/adr/0007-security-posture.md`                                            |
-| V2.5.6             | Pass                      | Token-based reset via `apps/api/src/lib/account-tokens.ts`, 1h TTL, single-use                                                                                                                           |
-| V2.6.1–3           | Pass                      | Account-recovery tokens are 256-bit CSPRNG (`generateSecret(32)`), single-use, hashed at rest                                                                                                            |
+| Req                | Status                    | Evidence / rationale                                                                                                                                                                                                             |
+| ------------------ | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| V2.1.1             | Pass                      | `passwordSchema = z.string().min(12).max(256)` — `packages/shared/src/schemas/auth.ts:8`                                                                                                                                         |
+| V2.1.2             | Pass                      | Long passwords aren't truncated (Argon2id hashes the full input); the 256-char cap satisfies the requirement's intent (permit 64+, deny unbounded) without the specific 128 threshold being load-bearing                         |
+| V2.1.3             | Pass                      | Argon2id via `@node-rs/argon2` never truncates input                                                                                                                                                                             |
+| V2.1.7             | Deferred → `docs/TODO.md` | No breached-password check (HIBP k-anonymity) — a network dependency + design decision, not a quick fix                                                                                                                          |
+| V2.1.9–11          | Pass                      | No composition rules, no rotation requirement, no paste-blocking anywhere in `apps/web`                                                                                                                                          |
+| V2.2.1             | Fail → fixed Stage E      | No rate limiting/lockout anywhere — confirmed by repo-wide grep                                                                                                                                                                  |
+| V2.4.1             | Pass                      | Argon2id, `apps/api/src/lib/password.ts` — `memoryCost: 19456, timeCost: 2, parallelism: 1`                                                                                                                                      |
+| V2.4.2             | Pass                      | `@node-rs/argon2` generates a unique random salt per hash internally                                                                                                                                                             |
+| V2.5.3             | Pass                      | Reset flow never reveals the current password; generic responses throughout                                                                                                                                                      |
+| V2.5.4             | Pass                      | No shared/default accounts; first admin created via one-time `POST /setup`                                                                                                                                                       |
+| V2.5.5             | Deferred → `docs/TODO.md` | No email notification is sent when a password or email address changes — a real feature addition, not a targeted fix; see `docs/adr/0007-security-posture.md`                                                                    |
+| V2.5.6             | Pass                      | Token-based reset via `apps/api/src/lib/account-tokens.ts`, 1h TTL, single-use                                                                                                                                                   |
+| V2.6.1–3           | Pass                      | Account-recovery tokens are 256-bit CSPRNG (`generateSecret(32)`), single-use, hashed at rest                                                                                                                                    |
 | V2.7.2             | Pass (reassessed)         | Password-reset/email-change tokens keep their 1h TTL — ASVS's 10-minute guidance targets a true out-of-band channel (SMS, push), not an emailed link the user may not open immediately; see `apps/api/src/lib/account-tokens.ts` |
-| V4.3.1 (admin MFA) | Deferred → `docs/TODO.md` | No MFA exists anywhere in the app; `requireAdmin` is password-only. Real feature gap, not a quick fix — log as a follow-up                                                                               |
+| V4.3.1 (admin MFA) | Deferred → `docs/TODO.md` | No MFA exists anywhere in the app; `requireAdmin` is password-only. Real feature gap, not a quick fix — log as a follow-up                                                                                                       |
 
 ## V3 — Session Management
 
-| Req    | Status                           | Evidence / rationale                                                                                                                                                      |
-| ------ | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| V3.1.1 | Pass                             | Session token only ever in the cookie, never a URL                                                                                                                        |
-| V3.2.1 | Pass                             | `createSession` mints a fresh token on every login — `apps/api/src/lib/session.ts:8`                                                                                      |
-| V3.2.2 | Pass                             | 256-bit CSPRNG token (`generateSecret(32)`), far above the 64-bit minimum                                                                                                 |
-| V3.2.3 | Pass                             | httpOnly cookie; `apps/api/src/lib/cookies.ts`                                                                                                                            |
-| V3.3.1 | Pass                             | Logout deletes the session row; password reset/change revoke sessions — `session.test.ts`                                                                                 |
-| V3.3.2 | Deferred → `docs/TODO.md`        | No re-authentication on idle/periodic basis (30-day fixed TTL, no sliding expiry) — F-24, a UI feature (session list/revoke), not a targeted fix                          |
-| V3.4.1 | **Fail → fixed Stage I**         | `docker-compose.yml`'s `${COOKIE_SECURE:-false}` overrides `env.ts`'s production default — session cookie ships without `Secure` on the documented deployment path (F-01) |
-| V3.4.2 | Pass                             | `httpOnly: true` — `apps/api/src/lib/cookies.ts:7`                                                                                                                        |
-| V3.4.3 | Pass                             | `sameSite: 'Lax'` — `apps/api/src/lib/cookies.ts:9`                                                                                                                       |
-| V3.4.4 | Fail → fixed-with-caveat Stage D | No `__Host-` prefix; adopt conditionally on `COOKIE_SECURE`, after F-01 (`__Host-` mandates `Secure`, which would break plain-HTTP LAN self-hosters)                      |
-| V3.4.5 | Accepted risk                    | `path: '/'` rather than a narrower path — the SPA and API share one origin, so a narrower path isn't meaningful here                                                      |
-| V3.7.1 | Pass                             | Password/email change and account deletion all re-verify `currentPassword` — `apps/api/src/routes/auth.ts:302,357,472`                                                    |
+| Req    | Status                    | Evidence / rationale                                                                                                                                                                                                                                                    |
+| ------ | ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| V3.1.1 | Pass                      | Session token only ever in the cookie, never a URL                                                                                                                                                                                                                      |
+| V3.2.1 | Pass                      | `createSession` mints a fresh token on every login — `apps/api/src/lib/session.ts:8`                                                                                                                                                                                    |
+| V3.2.2 | Pass                      | 256-bit CSPRNG token (`generateSecret(32)`), far above the 64-bit minimum                                                                                                                                                                                               |
+| V3.2.3 | Pass                      | httpOnly cookie; `apps/api/src/lib/cookies.ts`                                                                                                                                                                                                                          |
+| V3.3.1 | Pass                      | Logout deletes the session row; password reset/change revoke sessions — `session.test.ts`                                                                                                                                                                               |
+| V3.3.2 | Deferred → `docs/TODO.md` | No re-authentication on idle/periodic basis (30-day fixed TTL, no sliding expiry) — F-24, a UI feature (session list/revoke), not a targeted fix                                                                                                                        |
+| V3.4.1 | **Fail → fixed Stage I**  | `docker-compose.yml`'s `${COOKIE_SECURE:-false}` overrides `env.ts`'s production default — session cookie ships without `Secure` on the documented deployment path (F-01)                                                                                               |
+| V3.4.2 | Pass                      | `httpOnly: true` — `apps/api/src/lib/cookies.ts:7`                                                                                                                                                                                                                      |
+| V3.4.3 | Pass                      | `sameSite: 'Lax'` — `apps/api/src/lib/cookies.ts:9`                                                                                                                                                                                                                     |
+| V3.4.4 | Fail → fixed              | `__Host-` prefix applied whenever `COOKIE_SECURE` is true — `apps/api/src/lib/cookies.ts`'s `sessionCookieName()`. Left plain on a self-hoster's LAN-only, plain-HTTP deployment, where the prefix's mandatory `Secure` would make the browser drop the cookie entirely |
+| V3.4.5 | Accepted risk             | `path: '/'` rather than a narrower path — the SPA and API share one origin, so a narrower path isn't meaningful here                                                                                                                                                    |
+| V3.7.1 | Pass                      | Password/email change and account deletion all re-verify `currentPassword` — `apps/api/src/routes/auth.ts:302,357,472`                                                                                                                                                  |
 
 ## V4 — Access Control
 
@@ -115,13 +115,13 @@ project, rather than scattering that reasoning across this table.
 
 ## V8 — Data Protection
 
-| Req    | Status                                               | Evidence / rationale                                                                                                                                                                                                                                      |
-| ------ | ---------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| V8.2.1 | Fail → fixed                                         | `Cache-Control: no-store` on every `/api/*` response by default (`apps/api/src/app.ts`), set before route handlers run so the avatar route's own long-lived, private value still overrides it                                                             |
-| V8.2.2 | Pass                                                 | Zero real `localStorage`/`sessionStorage` use in `apps/web` (confirmed by grep); auth state lives only in the httpOnly cookie + in-memory React Query cache                                                                                               |
-| V8.2.3 | Pass                                                 | React Query cache is reset on logout — `apps/web/src/lib/reset-auth-cache.ts`                                                                                                                                                                             |
-| V8.3.1 | Accepted risk (webhook), Fail → fixed Stage G (TMDB) | Plex webhook token is a URL path segment by necessity (Plex allows no custom headers) — documented rationale in `apps/api/src/routes/webhooks.ts:12-22`; `TMDB_API_KEY` in the outbound query string is unrelated and gets fixed (F-09)                   |
-| V8.3.2 | Pass                                                 | Full CSV export (`GET /account/export`) and account deletion both exist                                                                                                                                                                                   |
+| Req    | Status                                               | Evidence / rationale                                                                                                                                                                                                                    |
+| ------ | ---------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| V8.2.1 | Fail → fixed                                         | `Cache-Control: no-store` on every `/api/*` response by default (`apps/api/src/app.ts`), set before route handlers run so the avatar route's own long-lived, private value still overrides it                                           |
+| V8.2.2 | Pass                                                 | Zero real `localStorage`/`sessionStorage` use in `apps/web` (confirmed by grep); auth state lives only in the httpOnly cookie + in-memory React Query cache                                                                             |
+| V8.2.3 | Pass                                                 | React Query cache is reset on logout — `apps/web/src/lib/reset-auth-cache.ts`                                                                                                                                                           |
+| V8.3.1 | Accepted risk (webhook), Fail → fixed Stage G (TMDB) | Plex webhook token is a URL path segment by necessity (Plex allows no custom headers) — documented rationale in `apps/api/src/routes/webhooks.ts:12-22`; `TMDB_API_KEY` in the outbound query string is unrelated and gets fixed (F-09) |
+| V8.3.2 | Pass                                                 | Full CSV export (`GET /account/export`) and account deletion both exist                                                                                                                                                                 |
 
 ## V9 — Communication
 
@@ -180,8 +180,6 @@ logged to `docs/TODO.md`:
 - F-22 — invite mode is unreachable (no route creates an invite code)
 - F-24 / V3.3.2 — session list/revoke-my-sessions UI, sliding expiry
 - F-27 / V2.1.7 — breached-password check (HIBP k-anonymity)
-- V3.4.4 — adopt the `__Host-` cookie prefix conditionally on
-  `COOKIE_SECURE` being true
 - V4.3.1 — admin MFA (no MFA exists anywhere in the app)
 - V2.5.5 — email notification when a password or email address changes
 - Full structured request logging remains out of scope — this review (and
@@ -193,8 +191,9 @@ logged to `docs/TODO.md`:
 Closed in the 2026-08-29 follow-up pass (see `docs/TODO_ARCHIVE.md`):
 F-25 (`packages/db`'s scripts now share one validated `env.ts` loader, plus
 an explicit `DATABASE_SSL` option), V8.2.1 (blanket `Cache-Control: no-store`
-on `/api/*`), and V2.7.2 (1h token TTL reassessed and kept, see the V2.7.2
-row above). Image signing (cosign/OIDC keyless) and `read_only: true` on the
-`app` container were also closed, in an earlier same-day pass — see
-`docs/TODO_ARCHIVE.md`'s "Further container hardening" entry — this list
-had gone stale rather than being updated at the time.
+on `/api/*`), V2.7.2 (1h token TTL reassessed and kept, see the V2.7.2 row
+above), and V3.4.4 (`__Host-` cookie prefix, conditional on `COOKIE_SECURE`
+— see the V3.4.4 row above). Image signing (cosign/OIDC keyless) and
+`read_only: true` on the `app` container were also closed, in an earlier
+same-day pass — see `docs/TODO_ARCHIVE.md`'s "Further container hardening"
+entry — this list had gone stale rather than being updated at the time.

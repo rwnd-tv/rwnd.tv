@@ -2675,3 +2675,30 @@ immutable` still overrides it (V8.2.1); (2) `packages/db`'s
       migrated local Postgres; lint/typecheck/format clean; deployed to
       dev.rwnd.tv and confirmed a live response carries `no-store` while
       the avatar image doesn't.
+- [x] **Adopt the `__Host-` cookie prefix** (2026-08-29 added, done 2026-08-29)\
+      ASVS V3.4.4. `apps/api/src/lib/cookies.ts` gained a `sessionCookieName()`
+      that applies the `__Host-` prefix whenever `env.COOKIE_SECURE` is true,
+      and leaves the cookie name as-is otherwise — the prefix mandates
+      `Secure`, which a browser enforces by dropping the cookie outright on
+      a plain-HTTP LAN-only deployment (a legitimate, documented
+      configuration — `docs/self-hosting.md`), so it can't be applied
+      unconditionally. Every read and write site now goes through this one
+      function rather than `env.SESSION_COOKIE_NAME` directly — the two
+      direct `getCookie(c, env.SESSION_COOKIE_NAME)` call sites in
+      `routes/auth.ts` (logout, and reading the current session's token
+      during a password change) and `middleware/auth.ts`'s own read, all
+      replaced with a shared `getSessionToken()` — so the read and write
+      sides can't drift onto different names. Documented in
+      `docs/self-hosting.md`'s "Securing your instance" section: flipping
+      `COOKIE_SECURE` on renames the cookie, so everyone (including the
+      admin) gets logged out once as part of that change — expected, not a
+      regression.\
+      **Verified**: a new `apps/api/src/lib/cookies.test.ts` unit-tests
+      `sessionCookieName()` directly against both branches (env.ts's
+      `loadEnv()` caches per-process, so a real request can't flip
+      `COOKIE_SECURE` mid-suite to exercise both); the full `session.test.ts`
+      and `auth.test.ts` suites still pass unchanged against a migrated
+      local Postgres; lint/typecheck/format clean; deployed to dev.rwnd.tv
+      (which runs with `COOKIE_SECURE=true`, confirmed via its `Strict-
+Transport-Security` header) and confirmed the app stays healthy and
+      an unauthenticated request to a protected route still 401s.

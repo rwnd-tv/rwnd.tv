@@ -48,6 +48,38 @@ describe('TmdbProvider 429 handling', () => {
   })
 })
 
+describe('TmdbProvider — API key never reaches a thrown error message (M3 security review, F-09)', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('redacts api_key from a non-2xx error message', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 404 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(provider().getMovie('603', 'en-GB')).rejects.toThrow(/404/)
+    await provider()
+      .getMovie('603', 'en-GB')
+      .catch((err: Error) => {
+        expect(err.message).not.toContain('test-key')
+        // URL-encoded by URL#toString() — '[' and ']' aren't valid
+        // unescaped query-string characters.
+        expect(err.message).toContain('api_key=%5Bredacted%5D')
+      })
+  })
+
+  it('redacts api_key from a network-level failure (DNS, connection refused, ...)', async () => {
+    const fetchMock = vi.fn().mockRejectedValue(new TypeError('fetch failed'))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await provider()
+      .getMovie('603', 'en-GB')
+      .catch((err: Error) => {
+        expect(err.message).not.toContain('test-key')
+        expect(err.message).toContain('network error')
+      })
+    expect.assertions(2)
+  })
+})
+
 describe('TmdbProvider.findByExternalId', () => {
   afterEach(() => vi.unstubAllGlobals())
 

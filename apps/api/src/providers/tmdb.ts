@@ -7,6 +7,7 @@ import type {
   ProviderSeasonSummary,
   ProviderShow,
 } from './types.js'
+import { redactUrl } from '../lib/redact-url.js'
 
 const POSTER_SIZE = 'w342'
 // Episode stills are much smaller/wider than posters — TMDB's own web
@@ -157,7 +158,20 @@ export class TmdbProvider implements MetadataProvider {
     url.searchParams.set('language', locale)
     for (const [key, value] of Object.entries(params)) url.searchParams.set(key, value)
 
-    const res = await fetch(url)
+    let res: Response
+    try {
+      res = await fetch(url)
+    } catch {
+      // A network-level failure (DNS, connection refused, ...) throws
+      // whatever message/cause the underlying HTTP client attaches — not
+      // this codebase's to fully control, and not guaranteed to never
+      // mention the request URL. Deliberately discarded rather than
+      // chained as `cause`, rethrown with a redacted URL instead, so
+      // nothing from the original reaches a caller's log line (M3
+      // security review, F-09) — TMDB's v3 API takes its key as a query
+      // parameter (`api_key` above), unlike TVDB's Bearer header.
+      throw new TmdbHttpError(0, `TMDB request failed: network error for ${redactUrl(url)}`)
+    }
 
     if (res.status === 429 && !isRetry) {
       // TMDB doesn't document a fixed rate limit today (the old 40-per-10s
@@ -175,7 +189,7 @@ export class TmdbProvider implements MetadataProvider {
     if (!res.ok) {
       throw new TmdbHttpError(
         res.status,
-        `TMDB request failed: ${res.status} ${res.statusText} (${path})`,
+        `TMDB request failed: ${res.status} ${res.statusText} (${redactUrl(url)})`,
       )
     }
     return (await res.json()) as T

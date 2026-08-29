@@ -12,6 +12,7 @@ import { requireAdmin } from '../middleware/auth.js'
 import { loadEnv } from '../env.js'
 import { availableProviderSources } from '../providers/index.js'
 import { isProviderSource } from '../lib/provider-source.js'
+import { logSecurityEvent } from '../lib/security-log.js'
 
 export const settingsRoutes = new OpenAPIHono<AppEnv>()
 
@@ -134,6 +135,7 @@ settingsRoutes.openapi(
       .onConflictDoUpdate({ target: instanceSettings.id, set: { ...body, updatedAt: new Date() } })
       .returning()
     if (!updated) throw new Error('Failed to update instance settings')
+    logSecurityEvent('admin_settings_changed', { userId: c.get('user')!.id })
     return c.json(serializeSettings(updated))
   },
 )

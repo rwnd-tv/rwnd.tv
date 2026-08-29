@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { inArray } from 'drizzle-orm'
 import { instanceSettings, invites, users } from '@rwnd/db'
 import type { User } from '@rwnd/shared'
@@ -37,6 +37,38 @@ describe('auth', () => {
     })
     expect(right.status).toBe(200)
     expect(right.headers.get('set-cookie')).toMatch(/rwnd_session=/)
+  })
+
+  describe('security-event logging (M3 security review)', () => {
+    afterEach(() => vi.restoreAllMocks())
+
+    it('logs login_failure without ever including the attempted email, and login_success with the user id', async () => {
+      await createUser('user@example.com', 'correct-horse-battery-staple')
+      const spy = vi.spyOn(console, 'log').mockImplementation(() => {})
+
+      await app.request('/api/v1/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: 'user@example.com', password: 'wrong-password' }),
+      })
+      const failureCall = spy.mock.calls.find(([prefix]) => prefix === '[security] login_failure')
+      expect(failureCall).toBeTruthy()
+      expect(String(failureCall![1])).not.toContain('user@example.com')
+
+      const loginRes = await app.request('/api/v1/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: 'user@example.com',
+          password: 'correct-horse-battery-staple',
+        }),
+      })
+      const { id: userId } = await json<User>(loginRes)
+      const successCall = spy.mock.calls.find(([prefix]) => prefix === '[security] login_success')
+      expect(successCall).toBeTruthy()
+      const payload = JSON.parse(String(successCall![1])) as { userId: string }
+      expect(payload.userId).toBe(userId)
+    })
   })
 
   it('returns the same error for unknown email and wrong password', async () => {

@@ -22,6 +22,7 @@ import { rateLimit, tryConsume } from '../middleware/rate-limit.js'
 import { isLoginLocked, recordFailedLogin, clearLoginAttempts } from '../lib/login-lockout.js'
 import { hashPassword, verifyPassword, verifyDummyPassword } from '../lib/password.js'
 import { sniffImageType, extensionFor } from '../lib/image-sniff.js'
+import { logSecurityEvent } from '../lib/security-log.js'
 import {
   createSession,
   revokeSession,
@@ -93,6 +94,7 @@ authRoutes.openapi(
     // here would turn the lockout itself into a new account-enumeration
     // oracle ("keep guessing until it locks" reveals the email exists).
     if (await isLoginLocked(db, email)) {
+      logSecurityEvent('login_locked_out')
       return c.json({ error: 'Invalid email or password' }, 401)
     }
 
@@ -116,14 +118,17 @@ authRoutes.openapi(
     if (!row || !row.credential.passwordHash) {
       await verifyDummyPassword(password)
       await recordFailedLogin(db, email)
+      logSecurityEvent('login_failure', { reason: 'unknown_email' })
       return c.json({ error: 'Invalid email or password' }, 401)
     }
     const valid = await verifyPassword(row.credential.passwordHash, password)
     if (!valid) {
       await recordFailedLogin(db, email)
+      logSecurityEvent('login_failure', { reason: 'wrong_password', userId: row.user.id })
       return c.json({ error: 'Invalid email or password' }, 401)
     }
     await clearLoginAttempts(db, email)
+    logSecurityEvent('login_success', { userId: row.user.id })
 
     const env = loadEnv()
     const { token, expiresAt } = await createSession(db, row.user.id, {
@@ -260,7 +265,7 @@ authRoutes.openapi(
       const verificationToken = await createEmailVerificationToken(db, user.id)
       await sendVerificationEmail(user.email, verificationToken)
     } catch (err) {
-      console.error(`Failed to send verification email to ${user.email}:`, err)
+      console.error(`Failed to send verification email to user ${user.id}:`, err)
     }
 
     const env = loadEnv()
@@ -690,7 +695,7 @@ authRoutes.openapi(
         const token = await createPasswordResetToken(db, row.user.id)
         await sendPasswordResetEmail(row.user.email, token)
       } catch (err) {
-        console.error(`Failed to send password reset email to ${row.user.email}:`, err)
+        console.error(`Failed to send password reset email to user ${row.user.id}:`, err)
       }
     }
 

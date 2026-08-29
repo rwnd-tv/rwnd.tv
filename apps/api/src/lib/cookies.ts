@@ -43,5 +43,14 @@ export function setSessionCookie(c: Context, env: Env, token: string, expiresAt:
 }
 
 export function clearSessionCookie(c: Context, env: Env): void {
-  deleteCookie(c, sessionCookieName(env), { path: '/' })
+  // `secure` here isn't optional once the name carries the __Host- prefix
+  // (sessionCookieName() above) — hono's own serializer throws "__Host-
+  // Cookie must have Secure attributes" if it's left out, which surfaced as
+  // a real 500 on every route that clears the cookie (logout, account
+  // deletion) the moment COOKIE_SECURE went true on a live deploy. Caught
+  // live on dev.rwnd.tv, not by the test suite — resolveSession()'s own
+  // unit tests only ever run with COOKIE_SECURE false (see cookies.test.ts's
+  // comment on why), so this branch had no test coverage until now; see the
+  // new coverage below.
+  deleteCookie(c, sessionCookieName(env), { path: '/', secure: env.COOKIE_SECURE })
 }

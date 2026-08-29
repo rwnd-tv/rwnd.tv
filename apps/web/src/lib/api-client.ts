@@ -13,6 +13,7 @@ import {
   type CreateBackupRequest,
   type CreateImportJobRequest,
   type CreatePlayRequest,
+  type CreateInviteResponse,
   type CreateWatchlistRequest,
   type DeleteAccountRequest,
   type DiffBackupResponse,
@@ -25,6 +26,7 @@ import {
   type ListImportJobsResponse,
   type ListLibraryMoviesResponse,
   type ListLibraryShowsResponse,
+  type ListInvitesResponse,
   type ListPlaysResponse,
   type ListSessionsResponse,
   type ListWatchlistsResponse,
@@ -138,6 +140,11 @@ export const api = {
   setup: {
     status: () => get<{ required: boolean }>('/setup'),
     create: (body: SetupRequest) => post<User>('/setup', body),
+  },
+  invites: {
+    list: () => get<ListInvitesResponse>('/invites'),
+    create: () => post<CreateInviteResponse>('/invites'),
+    delete: (id: string) => del<void>(`/invites/${encodeURIComponent(id)}`),
   },
   auth: {
     login: (body: LoginRequest) => post<User>('/auth/login', body),

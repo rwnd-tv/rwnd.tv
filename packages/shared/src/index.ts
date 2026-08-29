@@ -12,6 +12,7 @@ export * from './schemas/watchlists.js'
 export * from './schemas/account.js'
 export * from './schemas/backups.js'
 export * from './schemas/sessions.js'
+export * from './schemas/invites.js'
 // Only the top-level file schema/type of each frozen format is a real public
 // export — every sub-schema (backupShowSchemaV1, backupWatchlistItemSchemaV2,
 // etc.) exists solely to compose these and has no consumer outside its own

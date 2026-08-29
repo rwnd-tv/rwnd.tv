@@ -177,7 +177,6 @@ posture.md`, not tracked as open TODO work — see that ADR for why each
 one is a deliberate decision, not an oversight. Genuine follow-up work,
 logged to `docs/TODO.md`:
 
-- F-22 — invite mode is unreachable (no route creates an invite code)
 - F-27 / V2.1.7 — breached-password check (HIBP k-anonymity)
 - V4.3.1 — admin MFA (no MFA exists anywhere in the app)
 - V2.5.5 — email notification when a password or email address changes
@@ -192,9 +191,11 @@ F-25 (`packages/db`'s scripts now share one validated `env.ts` loader, plus
 an explicit `DATABASE_SSL` option), V8.2.1 (blanket `Cache-Control: no-store`
 on `/api/*`), V2.7.2 (1h token TTL reassessed and kept, see the V2.7.2 row
 above), V3.4.4 (`__Host-` cookie prefix, conditional on `COOKIE_SECURE` —
-see the V3.4.4 row above), and F-24 / V3.3.2 (sliding session expiry plus a
-session list/revoke UI — see the V3.3.2 row above). Image signing (cosign/
-OIDC keyless) and `read_only: true` on the `app` container were also closed,
+see the V3.4.4 row above), F-24 / V3.3.2 (sliding session expiry plus a
+session list/revoke UI — see the V3.3.2 row above), and F-22 (`POST`/`GET`/
+`DELETE /invites`, `apps/api/src/routes/invites.ts` — `registration_mode:
+'invite'` is finally reachable). Image signing (cosign/OIDC keyless) and
+`read_only: true` on the `app` container were also closed,
 in an earlier same-day pass — see `docs/TODO_ARCHIVE.md`'s "Further
 container hardening"
 entry — this list had gone stale rather than being updated at the time.

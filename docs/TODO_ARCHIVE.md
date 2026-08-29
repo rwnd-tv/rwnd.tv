@@ -2733,3 +2733,26 @@ Transport-Security` header) and confirmed the app stays healthy and
       real bug in the _previous_ commit — see "Fix a 500 on every
       cookie-clearing route once COOKIE_SECURE is true" — which a UI-only
       review would have missed entirely.
+- [x] **Invite-creation route** (2026-08-29 added, done 2026-08-29)\
+      F-22. New `POST`/`GET`/`DELETE /invites` (admin-only,
+      `apps/api/src/routes/invites.ts`) — a plaintext code shown exactly
+      once on creation (only `codeHash` is ever stored, same shape as a
+      session/API token), 7-day expiry, `status` (`pending`/`used`/
+      `expired`) computed from `usedBy`/`expiresAt` rather than a separate
+      column. Instance-wide rather than scoped to the creating admin, so a
+      multi-admin instance doesn't risk two admins handing out duplicate
+      invites. New `InvitesPanel.tsx` in the web Settings page, self-gated
+      on `registrationMode === 'invite'` (hides the whole card otherwise,
+      unlike DatabasePanel's partial self-gating on `backupsConfigured`)
+      — reuses `TokensPanel.tsx`'s "show once, copy to clipboard" pattern
+      for the freshly-created code.\
+      **Verified**: a new `invites.test.ts` (10 tests — admin/non-admin/
+      unauthenticated for all three routes, status computation, and an
+      end-to-end check that a created code actually redeems at
+      `POST /auth/register`) plus `route-coverage.test.ts`, against a
+      migrated local Postgres; lint/typecheck/format/knip clean. Live on
+      dev.rwnd.tv: confirmed both routes 401 unauthenticated and 403 for
+      an authenticated non-admin (registered a throwaway account for this,
+      deleted afterward) — no admin credentials for dev.rwnd.tv to also
+      click through the panel itself live, so that half relies on the test
+      suite and code review rather than a live UI walkthrough.

@@ -120,12 +120,6 @@ Format:
       No email is sent when a user's password or email address changes —
       unlike the equivalent GitHub/Google-style "someone changed your
       password" pattern. ASVS V2.5.5, surfaced by the security review.
-- [ ] **Invite-creation route** (2026-08-29 added)\
-      `registration_mode: 'invite'` is functionally unreachable — the
-      `invites` table and redemption path both exist and are tested (the
-      2026-08-29 security review's invite-redemption race fix included),
-      but no route anywhere actually creates an invite code for an admin
-      to hand out.
 
 ## Roadmap
 

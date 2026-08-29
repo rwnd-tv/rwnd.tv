@@ -3,6 +3,7 @@ import { useAuth } from '../lib/use-auth.js'
 import { TokensPanel } from '../components/settings/TokensPanel.js'
 import { DatabasePanel } from '../components/settings/DatabasePanel.js'
 import { InstanceSettingsPanel } from '../components/settings/InstanceSettingsPanel.js'
+import { InvitesPanel } from '../components/settings/InvitesPanel.js'
 
 export function SettingsPage() {
   const { t } = useTranslation()
@@ -14,6 +15,7 @@ export function SettingsPage() {
       <TokensPanel />
       <DatabasePanel />
       {user?.role === 'admin' && <InstanceSettingsPanel />}
+      {user?.role === 'admin' && <InvitesPanel />}
     </div>
   )
 }

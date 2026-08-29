@@ -756,6 +756,21 @@
       "metadataProvidersSingle": "Only one provider is configured on this instance.",
       "metadataProviderMoveUp": "Move {{provider}} up",
       "metadataProviderMoveDown": "Move {{provider}} down"
+    },
+    "invites": {
+      "title": "Invites",
+      "description": "Registration is invite-only — create a code to hand out. Each one works once and expires after 7 days.",
+      "create": "Create invite",
+      "createdOnce": "Copy this code now — it won't be shown again.",
+      "copy": "Copy",
+      "copied": "Copied",
+      "statusPending": "Pending",
+      "statusUsed": "Used",
+      "statusExpired": "Expired",
+      "created": "Created {{date}}",
+      "expires": "Expires {{date}}",
+      "revoke": "Revoke",
+      "empty": "No invites yet."
     }
   },
   "account": {

@@ -24,6 +24,13 @@ RUN pnpm --filter @rwnd/db deploy --prod --legacy /out/db
 
 # --- runtime: just the two deployable subsets, the built SPA, and Node ---
 FROM node:26-alpine AS runtime
+# apk upgrade: picks up patched OS packages (e.g. libcrypto3/libssl3) ahead of
+# the next node:26-alpine release — this is what the CI/release Trivy scans
+# check for (M3 security review, F-19). Also drop the base image's bundled
+# npm/npx: the entrypoint only ever runs tsx/node (see docker-entrypoint.sh),
+# so npm is unused dead weight here that otherwise carries its own CVEs.
+RUN apk upgrade --no-cache && \
+    rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
 RUN addgroup -S rwnd && adduser -S rwnd -G rwnd
 WORKDIR /app
 

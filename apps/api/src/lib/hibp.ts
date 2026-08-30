@@ -19,6 +19,12 @@ const REQUEST_TIMEOUT_MS = 3000
  * a self-hoster can notice a persistent problem, but never surfaced to the
  * end user as an error — a slow/unreachable third party shouldn't degrade
  * this instance's own core functionality.
+ *
+ * CodeQL's `js/insufficient-password-hash` (alerts #2-#7) flags the SHA-1
+ * below as a weak password hash — a false positive dismissed for the same
+ * reason as `hashSecret()` (`lib/tokens.ts`): it can't see that this hash
+ * feeds a k-anonymity lookup, not password storage/verification. See
+ * `docs/adr/0007-security-posture.md`'s accepted-risks table.
  */
 export async function isPasswordPwned(password: string): Promise<boolean> {
   const sha1 = createHash('sha1').update(password).digest('hex').toUpperCase()

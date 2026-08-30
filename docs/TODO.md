@@ -21,6 +21,30 @@ Format:
       group. Added a `typescript` major-version `ignore` rule to
       `.github/dependabot.yml` so Dependabot stops proposing it — remove
       that ignore once `typescript-eslint` supports TS 7.
+- [ ] **`release.yml`'s `cleanup` job can delete another concurrent run's not-yet-merged digests** (2026-08-30 added)\
+      Found cutting v1.0.1: pushing a commit to `main` and then immediately
+      tagging `v1.0.1` against it triggers two `Release` runs at once (one
+      per trigger — `push: branches` and `push: tags`). Both build their
+      own per-platform images and push them by digest, untagged, until
+      their own `merge` job ties them into a manifest list. `cleanup`
+      (`needs: merge`) deletes _every_ untagged package version
+      unconditionally — so if run A's `merge`+`cleanup` finish while run
+      B's images are still untagged (B's own `merge` hasn't run yet), A's
+      cleanup deletes B's images out from under it. Confirmed live:
+      `v1.0.1`'s tag-triggered run failed 3 times in a row on
+      `docker buildx imagetools create` with `... not found` (a different
+      digest each time), while the concurrent `main`-push run for the same
+      commit succeeded end to end including cleanup. Re-running just the
+      failed jobs can never work once this happens (the digests are
+      permanently gone) — only a full rebuild (fresh digests, run in
+      isolation) recovers. Fix needs `cleanup` to not run (or not delete)
+      while another `Release` run for the same workflow is still
+      in-flight — a concurrency group keyed on the workflow rather than
+      the ref, or gating `cleanup` on no other active run, would both
+      work; hasn't been designed yet. Workaround for now: don't push a
+      version-bump commit and its tag as two separate `git push`
+      invocations back to back — or if it happens, just fully re-run the
+      workflow (not `--failed`) once nothing else is running.
 
 ## TV Shows / Movies gallery follow-ups
 

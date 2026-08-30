@@ -89,7 +89,7 @@ Both exist because Trakt's 2026 "Community App" policy caps a free Trakt account
 
 ## Verifying the image
 
-Every image published to `ghcr.io/rwnd-tv/rwnd.tv` is signed with [cosign](https://docs.sigstore.dev/cosign/overview/) (keyless, via GitHub Actions' OIDC identity) and carries an SBOM and build provenance attestation. To verify the image you're about to run actually came from this repo's release workflow:
+Every image published to `ghcr.io/rwnd-tv/rwnd.tv` is signed with [cosign](https://docs.sigstore.dev/cosign/overview/) (keyless, via GitHub Actions' OIDC identity) and carries an SBOM and build provenance attestation. To verify the image you're about to run actually came from this repo's release workflow, you'll need **cosign v3 or newer** — v2 reports a false "no signatures found" against these images, since it doesn't recognize the format v3 signs in:
 
 ```sh
 cosign verify ghcr.io/rwnd-tv/rwnd.tv:latest \

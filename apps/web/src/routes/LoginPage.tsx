@@ -23,19 +23,41 @@ export function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string>()
+  // Set once POST /auth/login reports mfaRequired — switches the form to
+  // the second step (a code, not email/password again) rather than
+  // routing to a separate page, since the two steps share this same
+  // "logging in" moment.
+  const [challengeToken, setChallengeToken] = useState<string>()
+  const [code, setCode] = useState('')
+
+  async function onLoggedIn() {
+    // See LogoutButton.tsx's handleLogout for why this is removeQueries on
+    // everything else + a plain invalidate on auth/me, not clear().
+    // Covers reaching /login without going through the logout button
+    // too (e.g. a session that expired server-side).
+    await resetAuthCache(queryClient)
+    void navigate('/dashboard')
+  }
 
   const login = useMutation({
     mutationFn: () => api.auth.login({ email, password }),
-    onSuccess: async () => {
-      // See LogoutButton.tsx's handleLogout for why this is removeQueries on
-      // everything else + a plain invalidate on auth/me, not clear().
-      // Covers reaching /login without going through the logout button
-      // too (e.g. a session that expired server-side).
-      await resetAuthCache(queryClient)
-      void navigate('/dashboard')
+    onSuccess: async (result) => {
+      if ('mfaRequired' in result) {
+        setChallengeToken(result.challengeToken)
+        setError(undefined)
+        return
+      }
+      await onLoggedIn()
     },
     onError: (err) =>
       setError(err instanceof ApiError ? err.message : t('common.somethingWentWrong')),
+  })
+
+  const loginMfa = useMutation({
+    mutationFn: () => api.auth.loginMfa({ challengeToken: challengeToken!, code }),
+    onSuccess: onLoggedIn,
+    onError: (err) =>
+      setError(err instanceof ApiError ? t('login.mfaError') : t('common.somethingWentWrong')),
   })
 
   if (setupLoading || authLoading) {
@@ -52,6 +74,47 @@ export function LoginPage() {
     e.preventDefault()
     setError(undefined)
     login.mutate()
+  }
+
+  function handleMfaSubmit(e: FormEvent) {
+    e.preventDefault()
+    setError(undefined)
+    loginMfa.mutate()
+  }
+
+  if (challengeToken) {
+    return (
+      <div className="flex min-h-screen items-center justify-center px-4">
+        <Card className="w-full max-w-sm">
+          <h1 className="mb-2 text-xl font-semibold">{t('login.mfaTitle')}</h1>
+          <p className="mb-6 text-sm text-[var(--color-fg-muted)]">{t('login.mfaDescription')}</p>
+          <form onSubmit={handleMfaSubmit} className="flex flex-col gap-4">
+            <Field
+              label={t('login.mfaCode')}
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              required
+              autoFocus
+              error={error}
+            />
+            <Button type="submit" isLoading={loginMfa.isPending}>
+              {t('login.mfaSubmit')}
+            </Button>
+            <button
+              type="button"
+              className="self-start text-sm text-[var(--color-primary)] underline"
+              onClick={() => {
+                setChallengeToken(undefined)
+                setCode('')
+                setError(undefined)
+              }}
+            >
+              {t('login.mfaBack')}
+            </button>
+          </form>
+        </Card>
+      </div>
+    )
   }
 
   return (

@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next'
 import { EmailCard } from '../components/account/EmailCard.js'
 import { ChangePasswordCard } from '../components/account/ChangePasswordCard.js'
 import { SessionsCard } from '../components/account/SessionsCard.js'
+import { MfaCard } from '../components/account/MfaCard.js'
 import { ProfileCard } from '../components/account/ProfileCard.js'
 import { PreferencesCard } from '../components/account/PreferencesCard.js'
 import { AdvancedPreferencesCard } from '../components/account/AdvancedPreferencesCard.js'
@@ -15,10 +16,10 @@ import { LogoutButton } from '../components/account/LogoutButton.js'
  * leads the page — James, same day, moved it above Email/Change Password
  * after first seeing it lower down. Email and Change Password have no
  * section heading of their own — "Account" already says what they are;
- * Profile, Sessions, Preferences, and Advanced Preferences are the actual
- * named sections. Sessions sits right after Change Password (both
- * account-security actions, added together in the 2026-08-29 security
- * review's session-management follow-up) rather than lower down with
+ * Profile, Sessions, Two-factor authentication, Preferences, and Advanced
+ * Preferences are the actual named sections. Sessions and MFA sit right
+ * after Change Password — all three are account-security actions from the
+ * same 2026-08-29 security review — rather than lower down with
  * Preferences. See ProfileCard.tsx's doc comment for why Profile/
  * Preferences/Advanced Preferences each save independently rather than
  * sharing one cross-card form. Log out started as its own section at the
@@ -41,6 +42,7 @@ export function AccountPage() {
       <EmailCard />
       <ChangePasswordCard />
       <SessionsCard />
+      <MfaCard />
       <PreferencesCard />
       <AdvancedPreferencesCard />
       <DeleteAccountCard />

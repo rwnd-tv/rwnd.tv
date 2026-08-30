@@ -183,6 +183,20 @@
       "when": 1788031829602,
       "tag": "0025_add_sessions_last_used_at",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1788047135886,
+      "tag": "0026_add_totp_mfa",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1788047551121,
+      "tag": "0027_add_mfa_challenges",
+      "breakpoints": true
     }
   ]
 }

@@ -37,7 +37,7 @@ All configuration is environment variables, set in `.env` (see `.env.example` fo
 | `SESSION_COOKIE_NAME` | No                               | Defaults to `rwnd_session`                                                                                                                           |
 | `TRAKT_CLIENT_ID`     | No                               | Enables Trakt import (Settings > Import) — free app at trakt.tv/oauth/applications                                                                   |
 | `TRAKT_CLIENT_SECRET` | Only if `TRAKT_CLIENT_ID` is set | Paired with the client id above                                                                                                                      |
-| `ENCRYPTION_KEY`      | Only if `TRAKT_CLIENT_ID` is set | 32 bytes, base64 (`openssl rand -base64 32`) — encrypts stored Trakt tokens                                                                          |
+| `ENCRYPTION_KEY`      | Only if `TRAKT_CLIENT_ID` is set | 32 bytes, base64 (`openssl rand -base64 32`) — encrypts stored Trakt tokens, and is also required for anyone to enable two-factor authentication     |
 | `BACKUP_DIR`          | No                               | Enables per-user backup/restore (Settings > Database) — see Backups below                                                                            |
 | `SMTP_HOST`           | No                               | Enables account verification and "Forgot password?" emails — see Email below                                                                         |
 | `SMTP_PORT`           | Only if `SMTP_HOST` is set       | Defaults to `587`                                                                                                                                    |
@@ -60,6 +60,7 @@ rwnd.tv holds personal data (your watch history, email address, and — if you c
 - **Don't expose port 3000 directly** if a reverse proxy is meant to be the only way in — set `BIND_ADDRESS=127.0.0.1` so the container only accepts connections from the host itself, and let the proxy be the sole path from outside. Leave it unset (the default, all interfaces) for a pure-LAN deployment with no proxy in front.
 - **Registration defaults to closed.** The first person to load the app becomes the admin (see Quick start above); after that, nobody else can create an account until you open it from Settings → Instance or switch to invite-only.
 - **Passwords are checked against [Have I Been Pwned](https://haveibeenpwned.com/)'s breach database** whenever one is set (first-admin setup, registration, password change, password reset) — only the first 5 characters of the password's SHA-1 hash are ever sent (the [k-anonymity range API](https://haveibeenpwned.com/API/v3#PwnedPasswords)), never the password itself. If this instance has no outbound internet access, the check simply fails open and allows the password — it's an enhancement, not a requirement, so an air-gapped or LAN-only deployment isn't blocked from setting passwords at all.
+- **Two-factor authentication (TOTP) is available to any user**, opt-in, from Account → Two-factor authentication — requires `ENCRYPTION_KEY` to be set (see the table above), and hides itself in the UI otherwise. Worth turning on for admin accounts especially.
 
 ## Upgrading
 

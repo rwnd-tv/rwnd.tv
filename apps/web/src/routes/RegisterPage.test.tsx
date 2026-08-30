@@ -30,6 +30,7 @@ const baseSettings: InstanceSettings = {
   traktConfigured: false,
   backupsConfigured: false,
   emailConfigured: true,
+  mfaAvailable: false,
 }
 
 function renderRegisterPage(settingsOverrides: Partial<InstanceSettings> = {}) {

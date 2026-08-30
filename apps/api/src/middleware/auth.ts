@@ -23,6 +23,7 @@ export const PUBLIC_ROUTES: ReadonlyArray<{ method: string; path: string }> = [
   { method: 'GET', path: '/setup' }, // "is setup required" — needed before any account exists
   { method: 'POST', path: '/setup' }, // creates the first admin; self-gates on adminExists()
   { method: 'POST', path: '/auth/login' },
+  { method: 'POST', path: '/auth/login/mfa' }, // bearer-by-challenge-token in the request body
   { method: 'POST', path: '/auth/register' }, // self-gates on the instance's registration policy
   { method: 'POST', path: '/auth/logout' }, // reads its own cookie directly; a no-op without one
   { method: 'POST', path: '/auth/forgot-password' },

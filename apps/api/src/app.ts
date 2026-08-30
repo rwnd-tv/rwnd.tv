@@ -32,6 +32,7 @@ import { accountRoutes } from './routes/account.js'
 import { backupRoutes } from './routes/backups.js'
 import { webhookRoutes } from './routes/webhooks.js'
 import { inviteRoutes } from './routes/invites.js'
+import { mfaRoutes } from './routes/mfa.js'
 
 /**
  * `services` lets index.ts share the same db connection pool and provider
@@ -194,6 +195,7 @@ export function createApp(services?: { db: Database; metadataProviders: Metadata
   v1.route('/', backupRoutes)
   v1.route('/', webhookRoutes)
   v1.route('/', inviteRoutes)
+  v1.route('/', mfaRoutes)
 
   v1.doc('/openapi.json', {
     openapi: '3.1.0',

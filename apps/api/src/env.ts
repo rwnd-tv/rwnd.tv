@@ -166,6 +166,13 @@ export function parseEnv(source: NodeJS.ProcessEnv): Env {
     if (!parsed.data.ENCRYPTION_KEY) {
       throw new Error('ENCRYPTION_KEY is required when TRAKT_CLIENT_ID is set')
     }
+  }
+  // Shape-checked whenever it's present, not just when TRAKT_CLIENT_ID makes
+  // it required — MFA enrollment (lib/crypto.ts's encryptSecret, same as
+  // Trakt tokens) also needs it, and a self-hoster might set it solely for
+  // that without ever configuring Trakt. Better to fail loudly at startup
+  // than with a confusing error the first time someone tries to enable MFA.
+  if (parsed.data.ENCRYPTION_KEY) {
     let keyBytes: Buffer
     try {
       keyBytes = Buffer.from(parsed.data.ENCRYPTION_KEY, 'base64')

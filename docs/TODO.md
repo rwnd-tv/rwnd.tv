@@ -101,14 +101,6 @@ Format:
       over SSH. The application's own half (sending HSTS once
       `COOKIE_SECURE` confirms HTTPS) already shipped. See
       `docs/security/asvs-l1.md`'s V9.1.1 row.
-- [ ] **Admin MFA** (2026-08-29 added)\
-      No multi-factor authentication exists anywhere in the app —
-      `requireAdmin` is password-only. Surfaced by the security review's
-      ASVS pass (V4.3.1, `docs/security/asvs-l1.md`) rather than
-      previously planned work; a real feature addition (a TOTP adapter,
-      most likely, alongside `user_credentials`'
-      `local`/`oidc`-adapter design — see [ADR 0003](adr/0003-auth-model.md)),
-      not a quick fix.
 
 ## Roadmap
 

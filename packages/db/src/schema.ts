@@ -143,6 +143,70 @@ export const userCredentials = pgTable(
   ],
 )
 
+/**
+ * TOTP MFA (M3 security review follow-up, V4.3.1, docs/TODO.md) — a
+ * separate table rather than a third `user_credentials` type: TOTP is a
+ * *second factor on top of* a local credential, not an alternative primary
+ * one, so folding it into that table would muddy the adapter semantics ADR
+ * 0003 established there (see that ADR's update). One row per user
+ * (enforced by `userId`'s `.unique()`), created at enrollment with
+ * `confirmedAt` null — login only checks TOTP for a user once `confirmedAt`
+ * is set, so a mis-scanned QR code during enrollment can't lock anyone out
+ * of an account that was never actually protected. `secretEncrypted` uses
+ * the same AES-256-GCM `encryptSecret`/`decryptSecret` (`lib/crypto.ts`) as
+ * Trakt OAuth tokens — unlike a password or session token, the server has
+ * to recompute codes from this, so it must be recoverable, not just
+ * hashed.
+ */
+export const userTotp = pgTable('user_totp', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id')
+    .notNull()
+    .unique()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  secretEncrypted: text('secret_encrypted').notNull(),
+  confirmedAt: timestamp('confirmed_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+})
+
+/** Single-use recovery codes for the TOTP MFA above — generated once at
+ * enrollment confirmation, shown to the user exactly once. `usedAt` rather
+ * than deleting on use (unlike a password-reset token) so a user can see
+ * how many they've already burned through, same reasoning as `invites`'
+ * `usedBy` over an outright delete. */
+export const userRecoveryCodes = pgTable(
+  'user_recovery_codes',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    codeHash: text('code_hash').notNull(),
+    usedAt: timestamp('used_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index('user_recovery_codes_user_idx').on(table.userId)],
+)
+
+/** The short-lived second step of a login for an account with TOTP MFA
+ * confirmed — `POST /auth/login` no longer creates a session directly for
+ * such an account; it creates one of these instead and the client
+ * exchanges it (plus a TOTP or recovery code) at `POST /auth/login/mfa`
+ * for the real session. Same "hash at rest, single-use, delete on
+ * redemption" shape as `password_reset_tokens` below. 5-minute TTL — long
+ * enough to type a code, short enough to bound how long a stolen challenge
+ * token (e.g. from a compromised client before the second factor was
+ * entered) stays useful. */
+export const mfaChallenges = pgTable('mfa_challenges', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id')
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  tokenHash: text('token_hash').notNull().unique(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+})
+
 /** Browser sessions. The cookie holds the raw token; only its hash is stored. */
 export const sessions = pgTable(
   'sessions',
@@ -902,6 +966,18 @@ export const droppedShowsRelations = relations(droppedShows, ({ one }) => ({
 
 export const userCredentialsRelations = relations(userCredentials, ({ one }) => ({
   user: one(users, { fields: [userCredentials.userId], references: [users.id] }),
+}))
+
+export const userTotpRelations = relations(userTotp, ({ one }) => ({
+  user: one(users, { fields: [userTotp.userId], references: [users.id] }),
+}))
+
+export const userRecoveryCodesRelations = relations(userRecoveryCodes, ({ one }) => ({
+  user: one(users, { fields: [userRecoveryCodes.userId], references: [users.id] }),
+}))
+
+export const mfaChallengesRelations = relations(mfaChallenges, ({ one }) => ({
+  user: one(users, { fields: [mfaChallenges.userId], references: [users.id] }),
 }))
 
 export const sessionsRelations = relations(sessions, ({ one }) => ({

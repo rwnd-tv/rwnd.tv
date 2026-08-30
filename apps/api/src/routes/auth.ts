@@ -14,6 +14,8 @@ import {
   deleteAccountRequestSchema,
   userSchema,
   listSessionsResponseSchema,
+  loginMfaRequestSchema,
+  type MfaRequiredResponse,
 } from '@rwnd/shared'
 import { users, userCredentials, instanceSettings, invites } from '@rwnd/db'
 import type { AppEnv } from '../types.js'
@@ -23,6 +25,14 @@ import { rateLimit, tryConsume } from '../middleware/rate-limit.js'
 import { isLoginLocked, recordFailedLogin, clearLoginAttempts } from '../lib/login-lockout.js'
 import { hashPassword, verifyPassword, verifyDummyPassword } from '../lib/password.js'
 import { isPasswordPwned } from '../lib/hibp.js'
+import { decryptSecret } from '../lib/crypto.js'
+import { verifyTotp } from '../lib/totp.js'
+import { getUserTotp, consumeRecoveryCode } from '../lib/mfa.js'
+import {
+  createMfaChallenge,
+  deleteMfaChallenge,
+  getMfaChallengeUserId,
+} from '../lib/mfa-challenge.js'
 import { sniffImageType, extensionFor } from '../lib/image-sniff.js'
 import { logSecurityEvent } from '../lib/security-log.js'
 import {
@@ -136,8 +146,83 @@ authRoutes.openapi(
     await clearLoginAttempts(db, email)
     logSecurityEvent('login_success', { userId: row.user.id })
 
+    // A confirmed TOTP enrollment means the password alone isn't a
+    // complete login — no session is created yet. See POST /auth/login/mfa
+    // below for the second step.
+    const totp = await getUserTotp(db, row.user.id)
+    if (totp?.confirmedAt) {
+      const { token: challengeToken } = await createMfaChallenge(db, row.user.id)
+      return c.json({ mfaRequired: true, challengeToken } satisfies MfaRequiredResponse, 200)
+    }
+
     const env = loadEnv()
     const { token, expiresAt } = await createSession(db, row.user.id, {
+      userAgent: c.req.header('user-agent'),
+      ipAddress: c.req.header('x-forwarded-for') ?? undefined,
+    })
+    setSessionCookie(c, env, token, expiresAt)
+
+    return c.json(serializeUser(row.user), 200)
+  },
+)
+
+authRoutes.openapi(
+  createRoute({
+    method: 'post',
+    path: '/auth/login/mfa',
+    summary: 'Complete a login for an account with TOTP MFA, using a code from POST /auth/login',
+    // A wrong code doesn't burn the challenge (see getMfaChallengeUserId's
+    // doc comment) — this rate limit, plus the challenge's own 5-minute
+    // expiry, is what actually bounds how many guesses are possible.
+    middleware: [
+      rateLimit({ name: 'auth:login-mfa', limit: 10, windowMs: 15 * 60 * 1000 }),
+    ] as const,
+    request: { body: { content: { 'application/json': { schema: loginMfaRequestSchema } } } },
+    responses: {
+      200: { description: 'Logged in', content: { 'application/json': { schema: userSchema } } },
+      401: { description: 'Invalid or expired challenge, or the code is incorrect' },
+    },
+  }),
+  async (c) => {
+    const db = c.get('db')
+    const { challengeToken, code } = c.req.valid('json')
+
+    const userId = await getMfaChallengeUserId(db, challengeToken)
+    if (!userId) {
+      return c.json({ error: 'This login attempt has expired — please log in again' }, 401)
+    }
+
+    const [row] = await db.select({ user: users }).from(users).where(eq(users.id, userId)).limit(1)
+    const totp = await getUserTotp(db, userId)
+    // Shouldn't happen (the challenge was only ever created for a
+    // confirmed-TOTP account), but MFA having been disabled in the few
+    // minutes between the challenge being issued and redeemed is at least
+    // conceivable — fail closed rather than assume.
+    if (!row || !totp?.confirmedAt) {
+      return c.json({ error: 'This login attempt has expired — please log in again' }, 401)
+    }
+
+    const env = loadEnv()
+    let usedVia: 'totp' | 'recovery' | null = null
+    if (
+      /^\d{6}$/.test(code) &&
+      verifyTotp(decryptSecret(totp.secretEncrypted, env.ENCRYPTION_KEY!), code)
+    ) {
+      usedVia = 'totp'
+    } else if (await consumeRecoveryCode(db, userId, code)) {
+      usedVia = 'recovery'
+    }
+    if (!usedVia) {
+      logSecurityEvent('mfa_challenge_failed', { userId })
+      return c.json({ error: 'Incorrect code' }, 401)
+    }
+    await deleteMfaChallenge(db, challengeToken)
+    if (usedVia === 'recovery') {
+      logSecurityEvent('recovery_code_used', { userId })
+    }
+
+    logSecurityEvent('mfa_login_success', { userId })
+    const { token, expiresAt } = await createSession(db, userId, {
       userAgent: c.req.header('user-agent'),
       ipAddress: c.req.header('x-forwarded-for') ?? undefined,
     })

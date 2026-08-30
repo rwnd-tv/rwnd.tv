@@ -2810,3 +2810,68 @@ Transport-Security` header) and confirmed the app stays healthy and
       (`password123456`) was rejected with the same 400, then a strong
       random password succeeded normally — throwaway account deleted
       after.
+- [x] **Admin MFA** (2026-08-29 added, done 2026-08-30)\
+      ASVS V4.3.1. Opt-in for any user, not admin-only — the finding was
+      about admin accounts specifically, but there's no reason to gate the
+      option itself by role when the same code path benefits anyone on a
+      shared instance. TOTP hand-rolled on `node:crypto`
+      (`apps/api/src/lib/totp.ts` — HMAC-SHA1, base32, dynamic truncation,
+      a ±1-step window) rather than a library, verified against RFC 6238
+      Appendix B's own published test vectors, including reject cases
+      (wrong code, a step outside the window) so a too-permissive bug
+      couldn't pass silently. Two new tables: `user_totp` (one row per
+      user, `confirmedAt` gating whether it actually applies to login yet
+      — a mis-scanned QR code during enrollment can't lock anyone out of
+      an account that was never really protected) and
+      `user_recovery_codes` (10 single-use codes, generated once at
+      confirmation) — deliberately _not_ a third `user_credentials` type,
+      since TOTP is a second factor on top of a local credential rather
+      than an alternative primary one; see the ADR 0003 update. Secrets
+      encrypted at rest with the same AES-256-GCM path as Trakt tokens
+      (`lib/crypto.ts`), which makes `ENCRYPTION_KEY` load-bearing for
+      MFA too — `env.ts`'s shape validation now runs whenever it's set,
+      not just when `TRAKT_CLIENT_ID` requires it, and a new
+      `mfaAvailable` field in `GET /settings` lets the web app hide the
+      whole feature when it's unset rather than let someone enroll into
+      something that'll fail on confirmation.\
+      Login flow: a confirmed-TOTP account's `POST /auth/login` no longer
+      creates a session — it creates a short-lived (5 min) single-use
+      `mfa_challenges` row instead, exchanged at a new
+      `POST /auth/login/mfa` for the real session. A wrong code
+      deliberately does _not_ consume the challenge (a typo is the
+      overwhelmingly common case) — only the route's own rate limit and
+      the challenge's own expiry bound how many guesses are possible; only
+      a _correct_ code consumes it. Recovery codes work at every "prove
+      it's still you" point (disabling MFA, regenerating codes, the login
+      challenge itself) as a TOTP-code alternative, for someone who's lost
+      their authenticator app.\
+      New `apps/api/src/routes/mfa.ts` (enroll/confirm/disable/
+      regenerate-recovery-codes) and a `MfaCard.tsx` in the web Account
+      page — QR code via `react-qr-code` (picked over `qrcode`, which
+      bundles a CLI and `yargs` neither this app nor the browser needs;
+      `react-qr-code`'s only two dependencies are `qrcode-generator` and
+      `prop-types`) plus the base32 secret shown as a fallback for manual
+      entry. `LoginPage.tsx` gained a second step for the code/recovery-
+      code exchange rather than a separate route, since both steps are one
+      continuous "logging in" moment for the person doing it.\
+      **Verified**: RFC 6238 vector tests (`totp.test.ts`, all 6 of the
+      RFC's own published SHA1 vectors) plus `recovery-codes.test.ts` and
+      23 route-level tests (`mfa.test.ts` — enrollment, both disable
+      paths, regeneration, cross-user isolation, and the full login-
+      challenge flow including that a wrong code doesn't burn the
+      challenge and a recovery code is genuinely single-use) against a
+      migrated local Postgres; full existing suite (518 tests) unchanged
+      and passing; lint/typecheck/format/knip clean. Live on dev.rwnd.tv:
+      confirmed `mfaAvailable: true` is correctly computed, then a full
+      register → enroll → confirm → login-challenge → TOTP-code login →
+      recovery-code login → disable → delete-account round trip against
+      the real API for a throwaway account, computing each TOTP code
+      independently in a plain Node script using the same RFC 6238
+      arithmetic as the production code (not read out of a debugger) —
+      deliberately API-only rather than through the browser, since the
+      browser available for this session was already logged into James's
+      real dev.rwnd.tv account and switching it to a throwaway session
+      risked disturbing that; the QR code's actual on-screen rendering
+      wasn't visually confirmed as a result, though the `otpauthUri` string
+      it's built from was confirmed correctly formed via the live API
+      response.

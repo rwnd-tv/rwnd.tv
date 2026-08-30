@@ -29,3 +29,16 @@ Registration is admin-configurable (`instance_settings.registration_mode`: `open
 - Adding OIDC later means writing a new adapter and inserting `user_credentials` rows, not migrating the `users` table or any query that joins against it.
 - Proxy-header auth (Authelia in front of nginx-pm, for example) is not implemented in M1. If added, it must be opt-in and paired with a trusted-proxy allowlist — trusting a `Remote-User`-style header unconditionally is unsafe the moment the app is reachable by any other path.
 - Every login failure returns the same generic "Invalid email or password" (see `apps/api/src/routes/auth.ts`) regardless of whether the email exists, so the endpoint can't be used to enumerate accounts.
+
+## Update: TOTP MFA is not a `user_credentials` adapter (2026-08-30)
+
+M3's security review follow-up (ASVS V4.3.1, docs/TODO.md) added optional
+TOTP-based MFA. It deliberately does **not** slot in as a third
+`user_credentials.type` alongside `local`/`oidc`: every existing type there
+is a _primary_ way to authenticate — present exactly one way to complete a
+login on its own. TOTP is a _second factor on top of_ a local credential,
+required only after a password already succeeded, so treating it as a peer
+row in the same table would muddy that adapter semantics for no benefit.
+It lives in its own `user_totp` (one row per user, `confirmedAt` gating
+whether it actually applies to login yet) and `user_recovery_codes` tables
+instead — see `packages/db/src/schema.ts`'s doc comments on both.

@@ -42,6 +42,13 @@ export const instanceSettingsSchema = z.object({
   // POST /auth/verify-email) isn't gated by this — that only needs the
   // token to still be valid, not SMTP to be configured right now.
   emailConfigured: z.boolean(),
+  // True when this instance has ENCRYPTION_KEY configured — same reasoning
+  // as traktConfigured/backupsConfigured above. TOTP secrets are encrypted
+  // at rest the same way Trakt tokens are (apps/api/src/lib/crypto.ts), so
+  // the web app hides the Account page's "Enable MFA" option when false
+  // rather than letting someone start enrolling into a feature that'll
+  // 503 on confirmation.
+  mfaAvailable: z.boolean(),
 })
 export type InstanceSettings = z.infer<typeof instanceSettingsSchema>
 
@@ -52,6 +59,7 @@ export const updateInstanceSettingsRequestSchema = instanceSettingsSchema
     traktConfigured: true,
     backupsConfigured: true,
     emailConfigured: true,
+    mfaAvailable: true,
   })
   .partial()
 export type UpdateInstanceSettingsRequest = z.infer<typeof updateInstanceSettingsRequestSchema>

@@ -176,3 +176,25 @@ describe('Trakt import config', () => {
     ).not.toThrow()
   })
 })
+
+describe('ENCRYPTION_KEY shape validation (standalone, no Trakt config)', () => {
+  // MFA enrollment (lib/crypto.ts's encryptSecret, same as Trakt tokens)
+  // also needs a valid key — a self-hoster might set this solely for that,
+  // never touching Trakt at all, so this has to be checked independent of
+  // TRAKT_CLIENT_ID.
+  it('is fine with no ENCRYPTION_KEY at all', () => {
+    expect(() => parseEnv(base)).not.toThrow()
+  })
+
+  it('rejects an ENCRYPTION_KEY that is not 32 bytes, with no Trakt config set', () => {
+    expect(() =>
+      parseEnv({ ...base, ENCRYPTION_KEY: Buffer.alloc(16).toString('base64') }),
+    ).toThrow(/32 bytes/)
+  })
+
+  it('accepts a valid 32-byte ENCRYPTION_KEY with no Trakt config set', () => {
+    expect(() =>
+      parseEnv({ ...base, ENCRYPTION_KEY: Buffer.alloc(32, 7).toString('base64') }),
+    ).not.toThrow()
+  })
+})

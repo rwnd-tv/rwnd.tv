@@ -67,6 +67,7 @@ function serializeSettings(row?: {
     traktConfigured: Boolean(loadEnv().TRAKT_CLIENT_ID && loadEnv().TRAKT_CLIENT_SECRET),
     backupsConfigured: Boolean(loadEnv().BACKUP_DIR),
     emailConfigured: Boolean(loadEnv().SMTP_HOST),
+    mfaAvailable: Boolean(loadEnv().ENCRYPTION_KEY),
   }
 }
 

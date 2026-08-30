@@ -1,11 +1,23 @@
-# Documentation screenshot tool
+# Screenshot tool
 
-Captures screenshots of a running rwnd.tv instance for use in `README.md` and
-`docs/`. Deliberately **outside** the pnpm workspace
-(`pnpm-workspace.yaml` only globs `apps/*`/`packages/*`) — it has its own
-`package.json` and lockfile, so it never adds Playwright's Chromium download
-to a CI run that never uses it, and the root `lint`/`format:check`/`typecheck`
-gates never see it either.
+Captures screenshots of a running rwnd.tv instance for two different
+destinations, selected with `TARGET`:
+
+- `TARGET=docs` (the default) — `README.md`'s screenshots, written to
+  `../../docs/screenshots/`.
+- `TARGET=landing` — the public landing page's screenshots
+  (`apps/web/src/routes/LandingPage.tsx`'s `<Shot>` component), written to
+  `../../apps/web/public/landing/`. Each shot is captured at the exact
+  aspect ratio its CSS container uses (`object-cover` + a fixed
+  `aspectRatio` style in `LandingPage.tsx`), so nothing gets cropped
+  unexpectedly — see the `LANDING_*_VIEWPORT` constants in `capture.ts` if a
+  container's `aspectRatio` ever changes; the capture viewport needs to
+  match it.
+
+Deliberately **outside** the pnpm workspace (`pnpm-workspace.yaml` only globs
+`apps/*`/`packages/*`) — it has its own `package.json` and lockfile, so it
+never adds Playwright's Chromium download to a CI run that never uses it,
+and the root `lint`/`format:check`/`typecheck` gates never see it either.
 
 ## Setup
 
@@ -19,15 +31,18 @@ pnpm install-browser   # downloads Chromium once
 
 ```sh
 BASE_URL=https://dev.rwnd.tv EMAIL=you@example.com PASSWORD=... pnpm start
+TARGET=landing BASE_URL=https://dev.rwnd.tv EMAIL=you@example.com PASSWORD=... pnpm start
 ```
 
-`BASE_URL` defaults to `http://localhost:3000`. Output lands in
-`../../docs/screenshots/{name}-{locale}-{theme}.webp`.
+`BASE_URL` defaults to `http://localhost:3000`.
 
 **Use a dedicated account with a small, curated watch history — not a
 personal one.** These screenshots go into a public repo forever. The account
-needs at least one logged watch for the show-detail shot; without one, that
-shot is skipped with a warning rather than failing the run.
+needs at least one logged watch for the show-detail shot (both targets) and
+the season shot (`landing` only) — without one, those shots are skipped with
+a warning rather than failing the run. A handful of shows/movies logged
+looks far better than just one: a gallery or grid with a single poster in
+an otherwise-empty row looks like a bug, not a feature.
 
 The script switches the account's locale and theme mid-run (locale is a
 server-side preference — see `capture.ts`'s top comment for why) and restores

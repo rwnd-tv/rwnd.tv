@@ -42,14 +42,6 @@ Format:
 
 ## Documentation
 
-- [ ] **Regenerate the landing page screenshots with `tools/screenshots`** (2026-08-30 added)\
-      The 24 `apps/web/public/landing/*.webp` shots were captured by hand
-      before `tools/screenshots/` existed (see the M3 landing-page entry
-      in this archive). Not urgent — they're current — but next time
-      they need refreshing, extend that tool's shot list to cover the
-      landing page's set (dashboard/shows/movies/show-detail/season/
-      import, all four locale/theme combinations) instead of doing it
-      by hand again.
 - [ ] **Drop the vestigial Playwright entries in `eslint.config.js`/`.gitignore`** (2026-08-30 added)\
       `eslint.config.js`'s ignores and `.gitignore` both carry
       `playwright-report/`/`test-results/` patterns left over from a

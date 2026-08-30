@@ -1,14 +1,22 @@
 /**
- * Captures documentation screenshots against a running rwnd.tv instance.
+ * Captures screenshots against a running rwnd.tv instance — either the
+ * documentation screenshots README.md embeds, or the marketing screenshots
+ * apps/web/src/routes/LandingPage.tsx embeds. Select with TARGET.
  *
  * Usage:
  *   BASE_URL=https://dev.rwnd.tv EMAIL=you@example.com PASSWORD=... pnpm start
+ *   TARGET=landing BASE_URL=... EMAIL=... PASSWORD=... pnpm start
+ *
+ * TARGET defaults to "docs" (writes docs/screenshots/, embedded in
+ * README.md). "landing" writes apps/web/public/landing/ instead, matching
+ * the `{name}-{locale}-{theme}.webp` pattern LandingPage.tsx's `<Shot>`
+ * component reads, and captures each shot at the exact aspect ratio its CSS
+ * container uses (`object-cover` + a fixed `aspectRatio` style) so nothing
+ * gets unexpectedly cropped.
  *
  * BASE_URL defaults to http://localhost:3000. Use a dedicated account with a
  * small, curated watch history you're comfortable putting in a public repo
  * forever — not a personal account. See README.md.
- *
- * Output: ../../docs/screenshots/{name}-{locale}-{theme}.webp, 1600px wide.
  *
  * Logs in once and reuses that session (via storageState) across every
  * locale/theme context instead of logging in per-context — the login route
@@ -40,17 +48,12 @@ const BASE_URL = process.env.BASE_URL ?? 'http://localhost:3000'
 const EMAIL = requireEnv('EMAIL')
 const PASSWORD = requireEnv('PASSWORD')
 
-const OUT_DIR = path.resolve(fileURLToPath(import.meta.url), '../../../docs/screenshots')
-// Deliberately narrower than a typical desktop viewport: the sidebar is a
-// fixed width, so a wide capture leaves a lot of empty gutter on
-// lightly-populated pages, and a screenshot this size gets squeezed into a
-// README table column a fraction of its width anyway — capturing narrower
-// means less downscaling there, so text ends up more legible, not less.
-// Comfortably above the app's sm: (640px) breakpoint where the sidebar
-// switches to its mobile overlay behavior.
-const VIEWPORT = { width: 1120, height: 760 }
-// Captured at 2x and downsampled back to VIEWPORT.width below — supersampled
-// antialiasing, not a size change (that's VIEWPORT's job).
+const TARGETS = ['docs', 'landing'] as const
+type Target = (typeof TARGETS)[number]
+const TARGET = parseTarget(process.env.TARGET)
+
+// Captured at 2x and downsampled back to each shot's own width below —
+// supersampled antialiasing, not a size change.
 const CAPTURE_SCALE = 2
 
 const LOCALES = ['en-GB', 'en-US'] as const
@@ -58,9 +61,15 @@ type Locale = (typeof LOCALES)[number]
 const THEMES = ['light', 'dark'] as const
 type Theme = (typeof THEMES)[number]
 
+interface Viewport {
+  width: number
+  height: number
+}
+
 interface Shot {
   name: string
   path: string
+  viewport: Viewport
   /** Extra settle time beyond `networkidle`, for a query that resolves
    * and re-renders just after the last request finishes. */
   settleMs?: number
@@ -71,10 +80,20 @@ interface Preferences {
   theme: string
 }
 
+interface ShotContext {
+  showSlug: string | undefined
+}
+
 function requireEnv(name: string): string {
   const value = process.env[name]
   if (!value) throw new Error(`Missing required env var ${name} — see this file's usage comment.`)
   return value
+}
+
+function parseTarget(value: string | undefined): Target {
+  if (value === undefined) return 'docs'
+  if ((TARGETS as readonly string[]).includes(value)) return value as Target
+  throw new Error(`Unknown TARGET "${value}" — expected one of: ${TARGETS.join(', ')}`)
 }
 
 async function login(context: BrowserContext): Promise<void> {
@@ -103,8 +122,8 @@ async function setPreferences(context: BrowserContext, prefs: Preferences): Prom
 /**
  * Finds a real show slug from the account's own watch history, rather than
  * hardcoding a title that might not exist on whichever instance this runs
- * against. Returns undefined (and the show-detail shot is skipped) if the
- * account hasn't logged any watches yet.
+ * against. Returns undefined (and show-detail/season shots are skipped) if
+ * the account hasn't logged any watches yet.
  */
 async function findShowSlug(context: BrowserContext): Promise<string | undefined> {
   const res = await context.request.get('/api/v1/library/shows')
@@ -113,31 +132,107 @@ async function findShowSlug(context: BrowserContext): Promise<string | undefined
   return body.shows[0]?.slug
 }
 
-function buildShotList(showSlug: string | undefined): Shot[] {
+// ---- docs/screenshots (README.md) ----
+
+// Deliberately narrower than a typical desktop viewport: the sidebar is a
+// fixed width, so a wide capture leaves a lot of empty gutter on
+// lightly-populated pages, and a screenshot this size gets squeezed into a
+// README table column a fraction of its width anyway — capturing narrower
+// means less downscaling there, so text ends up more legible, not less.
+// Comfortably above the app's sm: (640px) breakpoint where the sidebar
+// switches to its mobile overlay behavior.
+const DOCS_VIEWPORT: Viewport = { width: 1120, height: 760 }
+
+function buildDocsShots({ showSlug }: ShotContext): Shot[] {
   const shots: Shot[] = [
-    { name: 'dashboard', path: '/dashboard', settleMs: 500 },
-    { name: 'shows', path: '/shows', settleMs: 500 },
-    { name: 'movies', path: '/movies', settleMs: 500 },
-    { name: 'history', path: '/history', settleMs: 500 },
-    { name: 'import', path: '/import', settleMs: 300 },
+    { name: 'dashboard', path: '/dashboard', viewport: DOCS_VIEWPORT, settleMs: 500 },
+    { name: 'shows', path: '/shows', viewport: DOCS_VIEWPORT, settleMs: 500 },
+    { name: 'movies', path: '/movies', viewport: DOCS_VIEWPORT, settleMs: 500 },
+    { name: 'history', path: '/history', viewport: DOCS_VIEWPORT, settleMs: 500 },
+    { name: 'import', path: '/import', viewport: DOCS_VIEWPORT, settleMs: 300 },
     // Whole /settings page — includes the Tokens panel the "Connecting
     // Plex" doc section needs. Deliberately never creates a token here: a
     // freshly created one shows its full secret on screen, which is not
     // something that belongs in a screenshot committed to a public repo.
     // With no token just-created, the panel only ever shows names/dates.
-    { name: 'settings-tokens', path: '/settings', settleMs: 300 },
+    { name: 'settings-tokens', path: '/settings', viewport: DOCS_VIEWPORT, settleMs: 300 },
   ]
   if (showSlug) {
-    shots.push({ name: 'show-detail', path: `/shows/${showSlug}`, settleMs: 500 })
+    shots.push({
+      name: 'show-detail',
+      path: `/shows/${showSlug}`,
+      viewport: DOCS_VIEWPORT,
+      settleMs: 500,
+    })
   } else {
     console.warn('No watched show on this account — skipping the show-detail shot.')
   }
   return shots
 }
 
-async function saveWebp(png: Buffer, filename: string): Promise<void> {
-  const webp = await sharp(png).resize({ width: VIEWPORT.width }).webp({ quality: 82 }).toBuffer()
-  await writeFile(path.join(OUT_DIR, filename), webp)
+// ---- apps/web/public/landing (LandingPage.tsx) ----
+
+// Each viewport's aspect ratio matches the CSS `aspectRatio` its <Shot>
+// container uses (see the `style={{ aspectRatio: ... }}` wrappers in
+// LandingPage.tsx) exactly, so `object-cover` never has anything to crop —
+// the whole captured frame fits the container precisely.
+const LANDING_HERO_VIEWPORT: Viewport = { width: 1600, height: 800 } // 16 / 8
+const LANDING_GALLERY_VIEWPORT: Viewport = { width: 1600, height: 1000 } // 16 / 10
+const LANDING_IMPORT_VIEWPORT: Viewport = { width: 1600, height: 1067 } // 3 / 2
+
+function buildLandingShots({ showSlug }: ShotContext): Shot[] {
+  const shots: Shot[] = [
+    { name: 'dashboard', path: '/dashboard', viewport: LANDING_HERO_VIEWPORT, settleMs: 500 },
+    { name: 'tv-shows', path: '/shows', viewport: LANDING_GALLERY_VIEWPORT, settleMs: 500 },
+    { name: 'films', path: '/movies', viewport: LANDING_GALLERY_VIEWPORT, settleMs: 500 },
+    { name: 'import', path: '/import', viewport: LANDING_IMPORT_VIEWPORT, settleMs: 300 },
+  ]
+  if (showSlug) {
+    shots.push(
+      {
+        name: 'show-detail',
+        path: `/shows/${showSlug}`,
+        viewport: LANDING_GALLERY_VIEWPORT,
+        settleMs: 500,
+      },
+      // Season 1 specifically, matching the landing page's own convention —
+      // every show a capture account logs starts there, so it's always
+      // real content rather than an empty/unwatched season.
+      {
+        name: 'season',
+        path: `/shows/${showSlug}/season/1`,
+        viewport: LANDING_GALLERY_VIEWPORT,
+        settleMs: 500,
+      },
+    )
+  } else {
+    console.warn('No watched show on this account — skipping the show-detail/season shots.')
+  }
+  return shots
+}
+
+const TARGET_CONFIG: Record<
+  Target,
+  { outDir: string; buildShots: (ctx: ShotContext) => Shot[] }
+> = {
+  docs: {
+    outDir: path.resolve(fileURLToPath(import.meta.url), '../../../docs/screenshots'),
+    buildShots: buildDocsShots,
+  },
+  landing: {
+    outDir: path.resolve(fileURLToPath(import.meta.url), '../../../apps/web/public/landing'),
+    buildShots: buildLandingShots,
+  },
+}
+
+async function saveWebp(
+  png: Buffer,
+  filename: string,
+  width: number,
+  outDir: string,
+): Promise<void> {
+  const webp = await sharp(png).resize({ width }).webp({ quality: 82 }).toBuffer()
+  await writeFile(path.join(outDir, filename), webp)
 }
 
 type StorageState = Awaited<ReturnType<BrowserContext['storageState']>>
@@ -148,10 +243,10 @@ async function captureLocaleTheme(
   locale: Locale,
   theme: Theme,
   shots: Shot[],
+  outDir: string,
 ): Promise<void> {
   const context = await browser.newContext({
     baseURL: BASE_URL,
-    viewport: VIEWPORT,
     deviceScaleFactor: CAPTURE_SCALE,
     colorScheme: theme,
     storageState,
@@ -161,12 +256,13 @@ async function captureLocaleTheme(
 
     const page = await context.newPage()
     for (const shot of shots) {
+      await page.setViewportSize(shot.viewport)
       await page.goto(shot.path)
       await page.waitForLoadState('networkidle')
       if (shot.settleMs) await page.waitForTimeout(shot.settleMs)
       const png = await page.screenshot()
       const filename = `${shot.name}-${locale}-${theme}.webp`
-      await saveWebp(png, filename)
+      await saveWebp(png, filename, shot.viewport.width, outDir)
       console.log(`Captured ${filename}`)
     }
   } finally {
@@ -175,7 +271,8 @@ async function captureLocaleTheme(
 }
 
 async function main(): Promise<void> {
-  await mkdir(OUT_DIR, { recursive: true })
+  const { outDir, buildShots } = TARGET_CONFIG[TARGET]
+  await mkdir(outDir, { recursive: true })
 
   const browser = await chromium.launch()
   const setupContext = await browser.newContext({ baseURL: BASE_URL })
@@ -189,12 +286,12 @@ async function main(): Promise<void> {
   const storageState = await setupContext.storageState()
   await setupContext.close()
 
-  const shots = buildShotList(showSlug)
+  const shots = buildShots({ showSlug })
 
   try {
     for (const locale of LOCALES) {
       for (const theme of THEMES) {
-        await captureLocaleTheme(browser, storageState, locale, theme, shots)
+        await captureLocaleTheme(browser, storageState, locale, theme, shots, outDir)
       }
     }
   } finally {

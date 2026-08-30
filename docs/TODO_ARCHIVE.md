@@ -2975,3 +2975,23 @@ up -d` pull-based quick start test (no local Docker CLI reachable
       confirmed instead via the dev.rwnd.tv build (same
       Dockerfile/entrypoint, current source, healthy) and a direct
       GHCR manifest check that `:latest` resolves.
+- [x] **Regenerate the landing page screenshots with `tools/screenshots`** (2026-08-30 added, done 2026-08-30)\
+      Generalized `tools/screenshots/capture.ts` with a `TARGET` env var
+      (`docs`, the default, or `landing`) rather than writing a second
+      script — same login/locale/theme/restore machinery, different
+      shot list, output directory, and per-shot viewport. The landing
+      page's `<Shot>` containers use `object-cover` with a fixed CSS
+      `aspectRatio` per section (hero `16/8`, gallery shots `16/10`,
+      import `3/2`), so each landing shot is now captured at a viewport
+      matching that ratio exactly — no cropping surprises, unlike the
+      docs shots which all share one viewport. Added a `season` shot
+      (season 1 of whatever show the capture account's history turns
+      up) alongside the existing dashboard/tv-shows/films/show-detail/
+      import ones, matching `GALLERY_SHOTS` in `LandingPage.tsx`.\
+      Ran it against dev.rwnd.tv with the same disposable
+      mailinator.com account from the README pass, now with 5 shows and
+      5 movies logged instead of 1 each (a single-poster gallery reads
+      as broken, not authentic) — all 24 files landed at the exact
+      paths/names `LandingPage.tsx` already expects, reviewed for
+      redaction, `lint`/`knip`/`format:check`/`typecheck`/`build` all
+      clean.

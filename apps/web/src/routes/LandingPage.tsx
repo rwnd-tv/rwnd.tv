@@ -161,7 +161,7 @@ export function LandingPage() {
         <div className="mx-auto flex max-w-6xl flex-col items-center gap-6 px-5 pt-20">
           <span className="inline-flex items-center gap-2 rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-1 text-[13px] font-medium text-[var(--color-fg-muted)]">
             <span className="h-[7px] w-[7px] rounded-full bg-[var(--color-success)]" />
-            {t('landing.hero.status')}
+            {t('landing.hero.status', { version: settings?.appVersion ?? '' })}
           </span>
           <h1 className="max-w-[20ch] text-center text-4xl leading-[1.06] font-semibold tracking-tight text-balance sm:text-5xl md:text-6xl">
             {t('landing.hero.title')}
@@ -365,7 +365,7 @@ export function LandingPage() {
               {t('landing.status.title')}
             </h2>
             <p className="max-w-[68ch] text-base leading-7 text-[var(--color-fg-muted)]">
-              {t('landing.status.body')}
+              {t('landing.status.body', { version: settings?.appVersion ?? '' })}
             </p>
           </div>
           <div className="grid gap-5 lg:grid-cols-3">

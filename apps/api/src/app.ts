@@ -14,6 +14,7 @@ import { createDatabase, type Database } from '@rwnd/db'
 import type { AppEnv } from './types.js'
 import type { MetadataProvider } from './providers/types.js'
 import { loadEnv } from './env.js'
+import { APP_VERSION } from './version.js'
 import { requireSession } from './middleware/auth.js'
 import { jsonBodyLimit } from './lib/body-limit.js'
 import { createMetadataProviders } from './providers/index.js'
@@ -201,7 +202,7 @@ export function createApp(services?: { db: Database; metadataProviders: Metadata
     openapi: '3.1.0',
     info: {
       title: 'rwnd.tv API',
-      version: '1.0.0',
+      version: APP_VERSION,
       description: 'Self-hosted tracking for what you watch.',
     },
   })

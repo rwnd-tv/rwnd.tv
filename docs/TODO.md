@@ -34,6 +34,11 @@ Format:
       string compare — "The Wire" sorts under T, not W. Real per-language
       leading-article rules are a bigger job than this feature needed; left
       as a known simplification.
+- [ ] **Poster thumbnail briefly resizes on "Refresh metadata"** (2026-08-30 13:55 added)\
+      On a TV Show page, clicking the manual refresh-metadata button
+      momentarily changes the poster thumbnail's size before it settles
+      back — a layout-shift bug, not yet root-caused. James's repro:
+      https://dev.rwnd.tv/shows/the-ghost-in-the-shell-2026.
 
 ## Documentation
 

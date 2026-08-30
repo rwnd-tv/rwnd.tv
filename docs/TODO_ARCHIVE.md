@@ -2378,6 +2378,19 @@ DATABASE` ×2) — zero residue.\
       known writer needs it) to the `app` service in `docker-compose.yml`.
       Verified on a real dev.rwnd.tv deploy — migrations, seed, and the
       API all started cleanly and `/api/v1/health` returned `ok`.
+- [x] **Cut the first tagged release** (2026-08-26 added, GHCR cleanup folded in 2026-08-29, done 2026-08-29/30) — M3\
+      `v1.0.0` tagged (`package.json` bumped across all four workspaces),
+      triggering `release.yml`'s existing tag-push behavior — multi-arch
+      build, `latest`/`1.0`/`1.0.0` tags alongside `edge`, cosign signing,
+      and (added as part of this) an auto-created GitHub Release built
+      from `git log <prev-tag>..<tag>`. GHCR cleanup added ahead of the
+      tag (`dataaxiom/ghcr-cleanup-action`, dry-run verified first, then
+      flipped live) so the untagged per-platform images every push had
+      been leaving behind stop accumulating unbounded.\
+      One piece missed at the time and caught by the M3 documentation
+      pass right after: `docker-compose.yml` still pulled `:edge` even
+      after `:latest` started pointing at the real release — fixed
+      alongside that pass, see this file's Documentation section.
 
 ## History page
 
@@ -2900,3 +2913,65 @@ includeSubDomains; preload`) now that its HSTS setting is on too.
       Redundant but harmless — both agree on "always HTTPS," and this is
       the last item from the 2026-08-29 security review's Security
       section, which is now fully closed.
+
+## Documentation
+
+- [x] **Refresh the GitHub-facing docs, and a self-hosting readiness pass** (2026-08-23 14:40 added, self-hosting pass folded in 2026-08-28, done 2026-08-30) — M3\
+      Rewrote `README.md` (Status/Features reflect v1.0.0 and all of M1–M3,
+      a screenshots section, fixed the `Foo` badge placeholder, corrected
+      the `/api/docs`/OpenAPI and TMDB-only claims), `docs/vision.md`
+      (split delivered vs. still-aspirational aims, updated the Metadata
+      section for TheTVDB), `docs/ROADMAP.md` (ticked both open M3 items,
+      fixed a stale "one finding left open" claim and the sort-order
+      count), `CONTRIBUTING.md` and the PR template (added the missing
+      `knip`/`audit` CI gates and the nine env vars the test suite needs,
+      neither previously documented), and `docs/self-hosting.md` (added
+      Connecting Plex / Importing from Trakt / Verifying the image
+      sections, a restore procedure, and the config-table gaps found
+      auditing it against `.env.example`). Added light `## Update` notes
+      to ADRs 0001/0002/0005/0006/0007 where a decision's surrounding
+      facts had drifted (a split `library.ts`, a second metadata
+      provider, three accepted-risk rows in 0007 that were actually
+      closed the next day), and fixed `docs/security/asvs-l1.md`'s
+      drifted `file:line` citations by re-citing to symbols instead —
+      the file already concedes its pinned commit isn't kept current, so
+      a line number just guarantees the same drift again. Corrected the
+      landing page's `en-GB`/`en-US` copy (still said "no tagged release
+      yet, and the security review is still open," both false) and its
+      `MILESTONES` array, which still marked M3 `inProgress`.\
+      Built a small Playwright capture tool (`tools/screenshots/`,
+      deliberately outside the pnpm workspace via its own
+      `pnpm-workspace.yaml` — otherwise `pnpm install` there just
+      reinstalls the whole monorepo) to generate the README's
+      screenshots reproducibly: theme is a `colorScheme` context option
+      (the account's theme is forced to `system` for the run), locale is
+      a server-side account preference with no browser equivalent
+      (`PATCH /auth/me`, restored in `finally` even on failure). Ran it
+      against dev.rwnd.tv with a disposable mailinator.com account and a
+      couple of logged watches; all 28 shots reviewed for redaction
+      before committing.\
+      Also fixed the real bug the docs-staleness surfaced:
+      `docker-compose.yml` still pulled `:edge` after `v1.0.0` was
+      tagged and `:latest` started pointing at the release — switched
+      to `:latest`, and confirmed via the GHCR registry API that the tag
+      actually resolves. Also fixed `SESSION_COOKIE_NAME` being
+      documented but never passed through `docker-compose.yml`'s
+      `environment:` list — set it and nothing happened. Rewrote
+      `SECURITY.md`'s Supported Versions section, stale since before the
+      release.\
+      Verified: deployed to dev.rwnd.tv and confirmed the corrected
+      landing copy live in both locales/themes; `pnpm lint`/`knip`/
+      `format:check`/`typecheck`/`build` all clean. `pnpm test` ran 195
+      non-DB tests clean, but the 20 API integration test files that
+      need a live Postgres couldn't run in this session — the local
+      WSL2 Postgres (`rwnd-tv-postgres-dev`) was up but not reachable
+      from Windows (`network_mode: host`, mirrored networking not
+      currently bridging the port; a pre-existing environment quirk,
+      not something this pass touched). CI will run the full suite on
+      push. Also could not do a literal from-scratch `docker compose
+up -d` pull-based quick start test (no local Docker CLI reachable
+      from this machine's shell, and an SSH-to-home-server attempt
+      stalled on what looked like an interactive agent prompt) —
+      confirmed instead via the dev.rwnd.tv build (same
+      Dockerfile/entrypoint, current source, healthy) and a direct
+      GHCR manifest check that `:latest` resolves.

@@ -51,3 +51,23 @@ These are GitHub repository settings, not files this review can commit — namin
 - Future findings against the accepted-risk items above should check this ADR before being re-raised as new — the reasoning here is the answer, not a placeholder for a future fix.
 - The webhook multi-user trust model means an instance should not be shared across mutually-distrusting users. This was already implicitly true (any authenticated user can see every other user's display name via `assignableUsers`, and instance settings are instance-wide, not per-tenant); this ADR makes it explicit.
 - `docs/security/asvs-l1.md` is now the durable audit record — it should be updated (not superseded by a new document) as further ASVS items are addressed, so a future reviewer can diff against a known baseline rather than starting over.
+
+## Update (2026-08-30)
+
+Three rows in the Accepted risks table above were closed the day after this
+ADR was written, in the 2026-08-29 follow-up pass — see
+`docs/security/asvs-l1.md` for the current status of each:
+
+- **No `__Host-` cookie prefix** — now applied whenever `COOKIE_SECURE` is
+  true (V3.4.4), left plain otherwise so a LAN-only plain-HTTP deployment
+  isn't broken.
+- **Invite mode unreachable** — `POST`/`GET`/`DELETE /invites`
+  (`apps/api/src/routes/invites.ts`, F-22) now exist, so
+  `registration_mode: 'invite'` is a real path, not just a schema value.
+- **No session list/revoke UI, no sliding expiry** — both shipped (V3.3.2,
+  F-24): `GET`/`DELETE /auth/me/sessions` and
+  `apps/web/src/components/account/SessionsCard.tsx`.
+
+Left as a historical record above rather than rewritten in place — the
+table reflects what was actually decided on 2026-08-26, and `asvs-l1.md`
+is the file to trust for current status.

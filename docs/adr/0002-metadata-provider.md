@@ -27,3 +27,10 @@ Two TMDB compliance requirements are enforced structurally rather than by conven
 - Every self-hosted instance needs its own free TMDB API key (documented in `.env.example` and the self-hosting guide). rwnd.tv ships no bundled or shared key.
 - `external_ids` (`packages/db/src/schema.ts`) stores `(entity_type, source, external_id)` rather than a single `tmdb_id` column on each table, so a second provider's IDs can coexist with TMDB's on the same local record instead of requiring a migration.
 - Superseded in part by `[ADR 0006](0006-multi-provider-metadata.md)`: `METADATA_PROVIDER` (the "selected via" mechanism above) is gone — which providers exist is now derived from which credentials are configured, not a separate explicit choice.
+
+## Update (2026-08-30)
+
+"Ship one implementation — `TmdbProvider` — for M1" above describes M1 only.
+TheTVDB shipped as a second real `MetadataProvider` implementation in M2
+(`apps/api/src/providers/tvdb.ts`) — the interface this ADR defined was
+exercised by a genuine second provider, not just designed to allow one.

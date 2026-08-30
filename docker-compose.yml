@@ -1,8 +1,8 @@
 services:
   app:
-    # `edge` tracks main until the first tagged release exists, after which
-    # `latest` will track the newest release instead — see release.yml.
-    image: ghcr.io/rwnd-tv/rwnd.tv:edge
+    # `latest` tracks the newest tagged release (see release.yml). `edge`
+    # tracks main between releases if you want unreleased changes.
+    image: ghcr.io/rwnd-tv/rwnd.tv:latest
     # Uncomment to build from source instead of pulling the published image:
     # build: .
     container_name: rwnd-tv
@@ -39,6 +39,7 @@ services:
       # header unconditionally would let any client spoof its own
       # rate-limit bucket.
       - TRUST_PROXY
+      - SESSION_COOKIE_NAME
       - TRAKT_CLIENT_ID
       - TRAKT_CLIENT_SECRET
       - ENCRYPTION_KEY

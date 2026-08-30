@@ -36,7 +36,7 @@ const FAQ_KEYS = ['selfHost', 'dropIn', 'metadata', 'requirements', 'players'] a
 const MILESTONES = [
   { key: 'm1', status: 'done' },
   { key: 'm2', status: 'done' },
-  { key: 'm3', status: 'inProgress' },
+  { key: 'm3', status: 'done' },
 ] as const
 
 const QUICK_START = `curl -O https://raw.githubusercontent.com/rwnd-tv/rwnd.tv/main/docker-compose.yml

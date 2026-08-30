@@ -2,3 +2,8 @@ pnpm-lock.yaml
 dist
 node_modules
 packages/db/drizzle
+docs/screenshots
+
+# Has its own lockfile/tooling, deliberately outside the pnpm workspace —
+# see tools/screenshots/README.md.
+tools

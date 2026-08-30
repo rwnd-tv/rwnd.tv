@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/rwnd-tv/rwnd.tv/actions/workflows/ci.yml/badge.svg)](https://github.com/rwnd-tv/rwnd.tv/actions/workflows/ci.yml)
 [![CodeQL](https://github.com/rwnd-tv/rwnd.tv/actions/workflows/codeql.yml/badge.svg)](https://github.com/rwnd-tv/rwnd.tv/actions/workflows/codeql.yml)
-[![Foo](https://github.com/rwnd-tv/rwnd.tv/actions/workflows/dependabot/dependabot-updates/badge.svg)](https://github.com/rwnd-tv/rwnd.tv/actions/workflows/dependabot/dependabot-updates)
+[![Dependabot Updates](https://github.com/rwnd-tv/rwnd.tv/actions/workflows/dependabot/dependabot-updates/badge.svg)](https://github.com/rwnd-tv/rwnd.tv/actions/workflows/dependabot/dependabot-updates)
 [![Release](https://github.com/rwnd-tv/rwnd.tv/actions/workflows/release.yml/badge.svg)](https://github.com/rwnd-tv/rwnd.tv/actions/workflows/release.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
@@ -12,15 +12,24 @@ rwnd.tv (rewind dot tv) is an open source, self-hosted app for tracking the TV s
 
 ## Status
 
-Early days — milestone 1 (a working vertical slice: sign in, search for something, log that you watched it, see your history) is done and running live at [rwnd.tv](https://rwnd.tv). Trakt import and Plex/Tautulli webhook ingestion are next. See [docs/ROADMAP.md](docs/ROADMAP.md) for the full roadmap.
+**v1.0.0 — ready for real use.** Milestones 1–3 are done: local accounts, search and manual logging, Trakt/CSV import, Plex webhook ingestion, watchlists and ratings, and a full OWASP ASVS 4.0.3 Level 1 security review. See [docs/ROADMAP.md](docs/ROADMAP.md) for the full history and what's next (M4: broader webhook ingestion, an upcoming-episodes calendar).
 
-## Features (this milestone)
+## Screenshots
 
-- Local accounts, admin-configurable registration (open / invite / closed)
-- Search movies and TV episodes via [TMDB](https://www.themoviedb.org/)
-- Log watches manually and browse your history
-- Per-user API tokens (for the webhook ingestion landing in the next milestone)
-- Light/dark/system theming
+|                                                                                                                                                                                                                                            |                                                                                                                                                                                                                                                   |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/dashboard-en-US-dark.webp"><img src="docs/screenshots/dashboard-en-US-light.webp" alt="Dashboard: search, Continue Watching, and recent History"></picture> | <picture><source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/shows-en-US-dark.webp"><img src="docs/screenshots/shows-en-US-light.webp" alt="TV Shows gallery, poster wall with watch progress"></picture>                       |
+| Dashboard                                                                                                                                                                                                                                  | TV Shows gallery                                                                                                                                                                                                                                  |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/show-detail-en-US-dark.webp"><img src="docs/screenshots/show-detail-en-US-light.webp" alt="A show page with seasons, progress, and rating"></picture>       | <picture><source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/import-en-US-dark.webp"><img src="docs/screenshots/import-en-US-light.webp" alt="Import page: Trakt account, Trakt export file, or rwnd.tv export file"></picture> |
+| Show page                                                                                                                                                                                                                                  | Import                                                                                                                                                                                                                                            |
+
+## Features
+
+- **Accounts**: local accounts (Argon2id), admin-configurable registration (open / invite / closed), session list & revoke, optional TOTP two-factor authentication, "forgot password" and email verification (self-hosters bring their own SMTP relay)
+- **Library**: search movies and TV episodes via TMDB and/or TheTVDB, log watches manually, poster-wall galleries for shows and movies with filters (genre, release year, rating, dropped) and twelve sort orders, per-episode progress, 5-star ratings, any number of named watchlists, and a unified Activity feed of every watch/rating/watchlist change
+- **Getting your data in and out**: Trakt import (OAuth device flow or a ZIP export upload — either works with no callback URL or reachable server), CSV import/export round-tripping the same open format, and per-user backup/restore independent of a full database dump
+- **Automation**: Plex webhook ingestion that logs watches as they happen, with first-class multi-user Plex server support (each Plex account claimed to its own rwnd.tv user); per-user API tokens back it
+- **Instance**: light/dark/system theming, en-GB/en-US locales, and a documented HTTP API (OpenAPI 3.1, session-gated Swagger UI at `/api/docs`)
 
 ## Quick start
 
@@ -40,27 +49,40 @@ Requirements: Node.js ≥ 22, pnpm (`corepack enable`), and a PostgreSQL databas
 
 ```sh
 pnpm install
-cp .env.example apps/api/.env   # fill in DATABASE_URL and TMDB_API_KEY
+cp .env.example apps/api/.env   # fill in DATABASE_URL, TMDB_API_KEY and/or TVDB_API_KEY
+# .env.example is written for docker-compose (DATABASE_URL's host is `db`,
+# only resolvable inside that network) — point DATABASE_URL at your own
+# Postgres instead, and add CORS_ORIGINS=http://localhost:5173 so the Vite
+# dev server (5173) can talk to the API (3000) across origins.
 pnpm db:migrate
 pnpm dev:api    # http://localhost:3000
 pnpm dev:web    # http://localhost:5173, proxies /api to the API above
 ```
 
-Other useful scripts: `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`.
+Other useful scripts: `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`. See [CONTRIBUTING.md](CONTRIBUTING.md) for the full list, including what CI additionally checks.
 
 The project is a pnpm workspace:
 
-| Path              | What                                                                   |
-| ----------------- | ---------------------------------------------------------------------- |
-| `apps/api`        | Hono JSON API — auth, search, plays, OpenAPI spec at `/api/docs`       |
-| `apps/web`        | React (Vite) single-page app                                           |
-| `packages/db`     | Drizzle schema and migrations                                          |
-| `packages/shared` | Zod schemas and types shared by the API and web app                    |
-| `docs/`           | Vision doc, roadmap, architecture decision records, self-hosting guide |
+| Path                | What                                                                                                                                      |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `apps/api`          | Hono JSON API — auth, search, plays, OpenAPI spec at `/api/v1/openapi.json`, Swagger UI at `/api/docs` (both require a signed-in session) |
+| `apps/web`          | React (Vite) single-page app                                                                                                              |
+| `packages/db`       | Drizzle schema and migrations                                                                                                             |
+| `packages/shared`   | Zod schemas and types shared by the API and web app                                                                                       |
+| `tools/screenshots` | Playwright tool that captures the screenshots above — its own package, outside the pnpm workspace                                         |
+| `docs/`             | Vision doc, roadmap, architecture decision records, self-hosting guide, security review record, and a running TODO log                    |
 
 ## Architecture decisions
 
-Significant design choices and their reasoning are recorded in [docs/adr/](docs/adr/) — start with [0001](docs/adr/0001-stack.md) (stack), [0002](docs/adr/0002-metadata-provider.md) (metadata), [0003](docs/adr/0003-auth-model.md) (auth).
+Significant design choices and their reasoning are recorded in [docs/adr/](docs/adr/):
+
+- [0001](docs/adr/0001-stack.md) — TypeScript end-to-end, Hono API + React SPA, Postgres
+- [0002](docs/adr/0002-metadata-provider.md) — pluggable metadata provider, TMDB first
+- [0003](docs/adr/0003-auth-model.md) — local accounts with an OIDC-ready credentials table
+- [0004](docs/adr/0004-trakt-import.md) — Trakt import via OAuth device flow
+- [0005](docs/adr/0005-metadata-refresh.md) — cached season metadata, with a scheduled refresher
+- [0006](docs/adr/0006-multi-provider-metadata.md) — multi-provider metadata plumbing
+- [0007](docs/adr/0007-security-posture.md) — security posture and trust model (M3 review)
 
 ## Contributing
 

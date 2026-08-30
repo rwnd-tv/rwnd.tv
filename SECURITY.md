@@ -2,8 +2,11 @@
 
 ## Supported Versions
 
-rwnd.tv is pre-1.0 and moving quickly. Until the first stable release, only
-the `main` branch / `edge` image receives fixes.
+rwnd.tv is at v1.0.0, a small, part-time-maintained project moving quickly.
+Only the latest tagged release (`:latest` image) and `main` (`:edge` image)
+receive fixes — there's no support for older tagged versions once a new one
+ships. Self-hosters should upgrade promptly; see
+[docs/self-hosting.md](docs/self-hosting.md#upgrading).
 
 ## Reporting a Vulnerability
 
@@ -31,6 +34,12 @@ Areas of particular interest given how rwnd.tv is used:
   incoming webhook request)
 - Multi-user data isolation (every query that touches `plays`, `api_tokens`,
   etc. should be scoped to the authenticated user)
+- Two-factor authentication (`apps/api/src/lib/totp.ts`,
+  `apps/api/src/routes/mfa.ts`)
+- Invite-only registration (`apps/api/src/routes/invites.ts`)
+- CSRF protection on the hand-written multipart routes (avatar upload,
+  imports) — see the comment in `apps/api/src/app.ts` for why
+- Avatar upload and per-user backup/restore (`apps/api/src/routes/backups.ts`)
 
 A structured security review (OWASP ASVS 4.0.3 Level 1) was completed for
 M3 — see `docs/security/asvs-l1.md` for the requirement-by-requirement

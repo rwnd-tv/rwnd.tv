@@ -4,10 +4,10 @@
 
 ## How was this tested?
 
-<!-- pnpm lint / typecheck / test / build, manual testing steps, etc. -->
+<!-- pnpm lint / knip / format:check / typecheck / test / build, manual testing steps, etc. -->
 
 ## Checklist
 
-- [ ] `pnpm lint && pnpm typecheck && pnpm test && pnpm build` pass locally
+- [ ] `pnpm lint && pnpm knip && pnpm format:check && pnpm typecheck && pnpm test && pnpm build` pass locally
 - [ ] I added/updated tests if this changes behaviour
-- [ ] I updated relevant docs (README, docs/self-hosting.md, ADRs) if needed
+- [ ] I updated relevant docs if needed (README, docs/self-hosting.md, ADRs, docs/TODO.md/ROADMAP.md)

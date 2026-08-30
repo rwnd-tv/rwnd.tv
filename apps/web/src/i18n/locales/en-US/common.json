@@ -4,7 +4,7 @@
     "tagline": "Track what you watch."
   },
   "landing": {
-    "badge": "early days",
+    "badge": "v1.0.0",
     "signIn": "Sign in",
     "createAccount": "Create an account",
     "createAccountShort": "Create account",
@@ -16,10 +16,10 @@
       "github": "GitHub"
     },
     "hero": {
-      "status": "Early days — milestone 3 in progress",
+      "status": "v1.0.0 — ready for real use",
       "title": "Track what you watch, on your own server.",
       "body": "rwnd.tv is an open source, self-hosted app for tracking the TV shows and movies you watch — a replacement for trakt.tv that you run yourself. Log by hand, import your Trakt history, or let Plex log it for you.",
-      "meta": "MIT licensed · Docker image on GHCR · Node 22 + PostgreSQL · Light, dark and system themes"
+      "meta": "MIT licensed · Docker image on GHCR · Node 26 + PostgreSQL · Light, dark and system themes"
     },
     "strip": {
       "m1": {
@@ -31,12 +31,12 @@
         "body": "Trakt import, galleries, Plex webhooks, export"
       },
       "m3": {
-        "label": "M3 · in progress",
-        "body": "Ratings and watchlists shipped; first tagged release next"
+        "label": "M3 · done",
+        "body": "Ratings, watchlists, and a full security review — all shipped"
       },
       "honest": {
         "label": "Honestly:",
-        "body": "no tagged release yet, and the security review is still open.",
+        "body": "this is a young, single-maintainer project — expect the occasional rough edge, and please file an issue when you hit one.",
         "link": "See where things stand"
       }
     },
@@ -107,7 +107,7 @@
     },
     "status": {
       "title": "Where the project actually is",
-      "body": "Two milestones are done and the third is under way. The roadmap in the repo is a living document and this page follows it rather than getting ahead of it.",
+      "body": "All three milestones are done and v1.0.0 is out. The roadmap in the repo is a living document and this page follows it rather than getting ahead of it.",
       "done": "done",
       "inProgress": "in progress",
       "m1": {
@@ -133,8 +133,8 @@
         "items": [
           "Watchlists, custom lists and ratings — shipped",
           "History as a full-width poster grid — shipped",
-          "Metadata accuracy fixes, self-hosting readiness pass",
-          "Security review, then the first tagged release"
+          "Metadata accuracy fixes, self-hosting readiness pass — shipped",
+          "Full ASVS L1 security review, then v1.0.0 — both shipped"
         ]
       },
       "builtTitle": "Built with Claude Code, in the open.",
@@ -153,7 +153,7 @@
       },
       "dropIn": {
         "q": "Is it a drop-in Trakt replacement yet?",
-        "a": "Not entirely. Import, logging, galleries, watchlists, ratings and Plex scrobbling all work. Stats and insights, an upcoming-episodes calendar, and shareable profiles aren't scheduled yet."
+        "a": "Not entirely. Import, logging, galleries, watchlists, ratings and Plex scrobbling all work. A calendar of upcoming episodes is planned for the next milestone; stats and insights and shareable profiles aren't scheduled yet."
       },
       "metadata": {
         "q": "Where does the metadata come from?",

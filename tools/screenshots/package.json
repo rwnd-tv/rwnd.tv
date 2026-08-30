@@ -1,0 +1,19 @@
+{
+  "name": "rwnd-tv-screenshot-tool",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Captures documentation screenshots against a running rwnd.tv instance. Deliberately outside the pnpm workspace (see README.md) so root lint/format/CI never touch it.",
+  "scripts": {
+    "install-browser": "playwright install --with-deps chromium",
+    "start": "tsx capture.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "playwright": "^1.49.1",
+    "sharp": "^0.33.5",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3"
+  }
+}

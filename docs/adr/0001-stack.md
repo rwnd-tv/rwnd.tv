@@ -24,3 +24,10 @@ rwnd.tv needs a stack that is maintainable by a non-web-developer working with C
 - Self-hosting requires two containers (app + Postgres) rather than one, reflected in the repo's `docker-compose.yml`.
 - `packages/db` and `packages/shared` ship TypeScript source directly (no build step) — Vite and `tsx` transpile it on the fly during dev. The production Docker image bundles both into the API via `tsup` (see `apps/api/tsup.config.ts`) so the runtime container never needs a TypeScript toolchain.
 - A future SQLite adapter (for the lowest-possible-barrier self-hosting case) is possible but not designed for yet; it would need a second Drizzle dialect and portable-SQL discipline across every query.
+
+## Update (2026-08-30)
+
+The generated OpenAPI spec (`GET /api/v1/openapi.json`) and its Swagger UI
+(`GET /api/docs`) sit behind `requireSession` as of the M3 security review
+(route-surface disclosure, ASVS V14.3.3) — a signed-in session is needed to
+read either, not just to call the routes they document.

@@ -42,19 +42,24 @@ Format:
 
 ## Documentation
 
-- [ ] **Refresh the GitHub-facing docs, and a self-hosting readiness pass** (2026-08-23 14:40 added, self-hosting pass folded in 2026-08-28) — M3\
-      `README.md`'s "Status" section still says M1 is the only thing
-      shipped and Trakt import is "next" — both M1 and M2 are done now
-      (see `docs/TODO_ARCHIVE.md` for the real history). Update
-      `README.md`/`docs/vision.md`/`docs/ROADMAP.md` to reflect where the
-      project actually is, give the roadmap more visibility (right now
-      it's just a linked doc, easy to miss from the README), and
-      generally make the repo read as more current and inviting to
-      someone landing on it cold. Last of the M3 content items — run
-      after the code review and security review so it describes the
-      actual end state instead of needing a second pass. Also confirm
-      `docker-compose.yml`/`.env.example`/`docs/self-hosting.md` actually
-      work end to end for a real self-hoster.
+- [ ] **Regenerate the landing page screenshots with `tools/screenshots`** (2026-08-30 added)\
+      The 24 `apps/web/public/landing/*.webp` shots were captured by hand
+      before `tools/screenshots/` existed (see the M3 landing-page entry
+      in this archive). Not urgent — they're current — but next time
+      they need refreshing, extend that tool's shot list to cover the
+      landing page's set (dashboard/shows/movies/show-detail/season/
+      import, all four locale/theme combinations) instead of doing it
+      by hand again.
+- [ ] **Drop the vestigial Playwright entries in `eslint.config.js`/`.gitignore`** (2026-08-30 added)\
+      `eslint.config.js`'s ignores and `.gitignore` both carry
+      `playwright-report/`/`test-results/` patterns left over from a
+      Playwright setup that was never actually added — there's no `e2e/`
+      directory anywhere. `tools/screenshots/` now uses Playwright for
+      real, but as a screenshot tool, not a test runner, so it doesn't
+      produce either of those directories. Low priority: harmless as
+      long as they stay accurate to _something_ Playwright-shaped in the
+      repo, but worth removing or reworking now that the "planned but
+      never added" reading no longer applies cleanly.
 
 ## Auth & accounts
 
@@ -78,26 +83,25 @@ Format:
       theirs, so the page should make clear what's being authorized
       rather than a bare yes/no.
 
-## Self-hosting & deployment
+## Internationalization
 
-- [ ] **Cut the first tagged release** (2026-08-26 added, GHCR cleanup folded in 2026-08-29) — M3\
-      `SECURITY.md` says rwnd.tv is "pre-1.0... until the first stable
-      release," and `docker-compose.yml`'s own comment already
-      anticipates this: "`edge` tracks main until the first tagged
-      release exists, after which `latest` will track the newest release
-      instead — see release.yml." M3 — ready for real use — is the
-      natural point to actually do this. Needs deciding: version number
-      (v1.0.0?), what "stable" means for a pre-1.0 project moving this
-      fast (semver commitment level), and whether `release.yml` needs
-      changes beyond what the existing comment already implies. Also add
-      a GHCR cleanup step (e.g. `actions/delete-package-versions` or
-      `dataaxiom/ghcr-cleanup-action`) — every push to `main` leaves the
-      previous `edge` digest behind as an untagged version, and the
-      multi-arch build (`linux/amd64`+`linux/arm64`) fans each push into
-      several untagged per-platform images on top of that, so the
-      [pkgs/container/rwnd.tv/versions](https://github.com/rwnd-tv/rwnd.tv/pkgs/container/rwnd.tv/versions)
-      page has been accumulating unbounded with no retention policy in
-      place.
+- [ ] **Landing page locale gets stuck on first-detected language** (2026-08-30 14:28 added)\
+      `i18next-browser-languagedetector` (`apps/web/src/i18n/index.ts`) uses
+      its default detection order (`localStorage` before `navigator`) and
+      caches whatever it first detects into `localStorage['i18nextLng']`.
+      Once a browser has been detected as `en-GB` (or `en-US`), it stays
+      pinned there on every later visit and never re-checks
+      `navigator.language` again — so changing the browser/OS language
+      afterward has no effect on the landing page (or anywhere else in the
+      app) until that localStorage key is cleared manually. Confirmed live
+      on dev.rwnd.tv: cleared the key, reloaded, it re-detected from
+      `navigator.language` as expected; setting it explicitly to `en-US`
+      then correctly switched both the landing page copy and its embedded
+      per-locale screenshots. Fix: probably drop the `localStorage` cache
+      (or the whole custom `caches`/`order` config) so it always re-derives
+      from the browser's current language on each load — there's no
+      in-app language switcher yet, so nothing actually depends on the
+      cached value today.
 
 ## Roadmap
 

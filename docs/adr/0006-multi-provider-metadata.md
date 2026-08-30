@@ -31,3 +31,12 @@ The concrete motivation was a live Trakt import failure: a title (Formula 1) had
 - **The priority-order UI is read-only until there's a second entry to order.** Tracked above as a deliberate scope cut, not forgotten.
 - **`METADATA_PROVIDER` disappearing is a config-surface change**, not just an internal refactor — existing deployments carrying it in their env file are unaffected (an unrecognised env var is silently ignored), but it's no longer read for anything.
 - Supersedes part of `[ADR 0002](0002-metadata-provider.md)`'s "selected via `METADATA_PROVIDER=tmdb`" framing (selection is now credential-driven) and partially closes the gap `[ADR 0005](0005-metadata-refresh.md)` flagged in its own Consequences — the refresher no longer hardcodes `source = 'tmdb'`, though its season/status caching itself is still TMDB-shaped, per the `AIRING_STATUSES` point above.
+
+## Update (2026-08-30)
+
+The "priority-order UI ships read-only" decision above no longer holds:
+`InstanceSettingsPanel.tsx` now has real reorder controls (up/down buttons,
+as anticipated) now that TheTVDB is a second configured provider on real
+instances and there's an actual order worth changing. The backend needed no
+changes — this was always additive UI work on top of the existing
+patch-a-full-ordered-list API, exactly as predicted.

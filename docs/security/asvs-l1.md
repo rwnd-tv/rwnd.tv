@@ -125,10 +125,10 @@ project, rather than scattering that reasoning across this table.
 
 ## V9 — Communication
 
-| Req      | Status                               | Evidence / rationale                                                                                                                                                                                                                                                                                                                                                               |
-| -------- | ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| V9.1.1   | **Fail — live instance, still open** | `http://rwnd.tv/` still serves the full app with no HTTPS redirect (re-confirmed at review close-out, 2026-08-29). This is a home-server reverse-proxy config change, not something in this repository — needs James's hands on the proxy, or explicit go-ahead to do it over SSH. The application's own half (HSTS, sent once `COOKIE_SECURE` confirms HTTPS) shipped in Stage D. |
-| V9.1.2–3 | Pass                                 | Observed live via `openssl s_client -connect rwnd.tv:443`: negotiates TLS 1.3 (TLS_AES_256_GCM_SHA384) by default; TLS 1.2 also available with a strong cipher (ECDHE-ECDSA-AES256-GCM-SHA384); Let's Encrypt certificate, correct CN                                                                                                                                              |
+| Req      | Status       | Evidence / rationale                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| -------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| V9.1.1   | Fail → fixed | `http://rwnd.tv/` and `http://dev.rwnd.tv/` now 301-redirect to HTTPS — James enabled Force SSL/HTTP2/HSTS on both proxy hosts in Nginx Proxy Manager (2026-08-30), the last piece this repository itself couldn't fix. Confirmed live: both domains redirect, and both send `Strict-Transport-Security` (now doubled up — the app's own header from Stage D, `max-age=15552000`, plus NPM's own `max-age=63072000; includeSubDomains; preload` now that its HSTS setting is on too; redundant but harmless, both agree on "always HTTPS") |
+| V9.1.2–3 | Pass         | Observed live via `openssl s_client -connect rwnd.tv:443`: negotiates TLS 1.3 (TLS_AES_256_GCM_SHA384) by default; TLS 1.2 also available with a strong cipher (ECDHE-ECDSA-AES256-GCM-SHA384); Let's Encrypt certificate, correct CN                                                                                                                                                                                                                                                                                                      |
 
 ## V12 — Files and Resources
 
@@ -149,26 +149,19 @@ project, rather than scattering that reasoning across this table.
 
 ## V14 — Configuration
 
-| Req     | Status                              | Evidence / rationale                                                                                                                                                                                                                                             |
-| ------- | ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| V14.2.1 | Fail → fixed Stage H                | Dependabot exists but no CodeQL, `pnpm audit`, or image scan in CI (F-19)                                                                                                                                                                                        |
-| V14.3.2 | Pass                                | `NODE_ENV=production` set in `Dockerfile:38`; no debug endpoints found                                                                                                                                                                                           |
-| V14.3.3 | Pass                                | Swagger UI's `info.version: '1.0.0'` is static metadata, not a real version leak — and `/api/docs`/`/openapi.json` are gated behind a session now (Stage B, F-10), so this is unauthenticated-unreachable regardless; no other version/build info exposure found |
-| V14.4.1 | Pass                                | Hono sets `Content-Type` on every response                                                                                                                                                                                                                       |
-| V14.4.2 | Fail → fixed Stage D/F              | No `Content-Disposition` on the avatar response (F-06)                                                                                                                                                                                                           |
-| V14.4.3 | Fail → fixed Stage D                | No CSP anywhere (F-04)                                                                                                                                                                                                                                           |
-| V14.4.4 | Fail → fixed Stage D                | No `X-Content-Type-Options: nosniff` anywhere (F-04)                                                                                                                                                                                                             |
-| V14.4.5 | App fixed Stage D; proxy still open | HSTS now sent by the app once `COOKIE_SECURE` confirms HTTPS (F-04); the reverse proxy itself still needs the HTTP→HTTPS redirect — see V9.1.1 above (F-00)                                                                                                      |
-| V14.4.6 | Fail → fixed Stage D                | No `Referrer-Policy` (F-04)                                                                                                                                                                                                                                      |
-| V14.4.7 | Fail → fixed Stage D                | No `X-Frame-Options`/`frame-ancestors` (F-04)                                                                                                                                                                                                                    |
-| V14.5.2 | Pass                                | Auth decisions are session-cookie-based, never derived from the `Origin` header                                                                                                                                                                                  |
-
-## Still open at review close-out
-
-**V9.1.1 — plain HTTP still served on the live instance.** The one finding
-this review could not close: it's a home-server reverse-proxy
-configuration change, not something in this repository. Needs either
-James directly, or explicit go-ahead to make the change over SSH.
+| Req     | Status                 | Evidence / rationale                                                                                                                                                                                                                                             |
+| ------- | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| V14.2.1 | Fail → fixed Stage H   | Dependabot exists but no CodeQL, `pnpm audit`, or image scan in CI (F-19)                                                                                                                                                                                        |
+| V14.3.2 | Pass                   | `NODE_ENV=production` set in `Dockerfile:38`; no debug endpoints found                                                                                                                                                                                           |
+| V14.3.3 | Pass                   | Swagger UI's `info.version: '1.0.0'` is static metadata, not a real version leak — and `/api/docs`/`/openapi.json` are gated behind a session now (Stage B, F-10), so this is unauthenticated-unreachable regardless; no other version/build info exposure found |
+| V14.4.1 | Pass                   | Hono sets `Content-Type` on every response                                                                                                                                                                                                                       |
+| V14.4.2 | Fail → fixed Stage D/F | No `Content-Disposition` on the avatar response (F-06)                                                                                                                                                                                                           |
+| V14.4.3 | Fail → fixed Stage D   | No CSP anywhere (F-04)                                                                                                                                                                                                                                           |
+| V14.4.4 | Fail → fixed Stage D   | No `X-Content-Type-Options: nosniff` anywhere (F-04)                                                                                                                                                                                                             |
+| V14.4.5 | Fail → fixed           | HSTS sent by the app once `COOKIE_SECURE` confirms HTTPS (F-04, Stage D), and the reverse proxy now also redirects HTTP→HTTPS and sends its own HSTS — see V9.1.1 above (F-00)                                                                                   |
+| V14.4.6 | Fail → fixed Stage D   | No `Referrer-Policy` (F-04)                                                                                                                                                                                                                                      |
+| V14.4.7 | Fail → fixed Stage D   | No `X-Frame-Options`/`frame-ancestors` (F-04)                                                                                                                                                                                                                    |
+| V14.5.2 | Pass                   | Auth decisions are session-cookie-based, never derived from the `Origin` header                                                                                                                                                                                  |
 
 ## Deferred items (tracked in `docs/TODO.md`'s Security section)
 
@@ -200,3 +193,9 @@ OIDC keyless) and
 in an earlier same-day pass — see `docs/TODO_ARCHIVE.md`'s "Further
 container hardening"
 entry — this list had gone stale rather than being updated at the time.
+
+V9.1.1 (F-00) — the one finding this review itself couldn't close, since
+it's a home-server reverse-proxy config change rather than anything in
+this repository — was closed the next day (2026-08-30) once James enabled
+Force SSL/HSTS on the `rwnd.tv`/`dev.rwnd.tv` proxy hosts; see the V9.1.1
+row above.

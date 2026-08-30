@@ -90,18 +90,6 @@ Format:
       page has been accumulating unbounded with no retention policy in
       place.
 
-## Security
-
-- [ ] **Force HTTPS + HSTS on the rwnd.tv reverse proxy** (2026-08-29 added)\
-      The one finding the 2026-08-29 security review (see
-      `docs/TODO_ARCHIVE.md`) couldn't close: `http://rwnd.tv/` still
-      serves the full app with no redirect to HTTPS. This is a
-      home-server nginx-pm config change, not something in this
-      repository — needs James directly, or explicit go-ahead to do it
-      over SSH. The application's own half (sending HSTS once
-      `COOKIE_SECURE` confirms HTTPS) already shipped. See
-      `docs/security/asvs-l1.md`'s V9.1.1 row.
-
 ## Roadmap
 
 Every open item from [ROADMAP.md](ROADMAP.md) that doesn't already have a

@@ -2875,3 +2875,28 @@ Transport-Security` header) and confirmed the app stays healthy and
       wasn't visually confirmed as a result, though the `otpauthUri` string
       it's built from was confirmed correctly formed via the live API
       response.
+- [x] **Force HTTPS + HSTS on the rwnd.tv reverse proxy** (2026-08-29 added, done 2026-08-30)\
+      ASVS V9.1.1/V14.4.5 — the one finding the 2026-08-29 security review
+      itself couldn't close, since it's a home-server reverse-proxy config
+      change rather than anything in this repository. Investigated first
+      rather than hand-editing anything: Nginx Proxy Manager stores its
+      config in a SQLite database and regenerates nginx's actual config
+      through its own app logic (API/web UI actions), so a direct database
+      edit wouldn't reliably take effect and risks corrupting a file its
+      own running process has open. A read-only query of that database
+      (`SELECT ... FROM proxy_host`) pinned the finding down precisely:
+      every other domain on the server (`bulman.io`, `plex.bulman.io`, 25+
+      others) already had `ssl_forced`/`http2_support`/`hsts_enabled`/
+      `hsts_subdomains` all set — `rwnd.tv` and `dev.rwnd.tv` were the only
+      two at all-zero, and both already had a certificate provisioned
+      (no new cert needed, just the toggles). James enabled Force SSL,
+      HTTP/2 Support, HSTS Enabled, and HSTS Sub-domains on both proxy
+      hosts in the NPM web UI.\
+      **Verified**: `http://rwnd.tv/` and `http://dev.rwnd.tv/` now both
+      301-redirect to HTTPS; both now send `Strict-Transport-Security`
+      twice in the same response — the app's own header from Stage D
+      (`max-age=15552000`) plus NPM's own (`max-age=63072000;
+includeSubDomains; preload`) now that its HSTS setting is on too.
+      Redundant but harmless — both agree on "always HTTPS," and this is
+      the last item from the 2026-08-29 security review's Security
+      section, which is now fully closed.

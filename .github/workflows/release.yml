@@ -219,10 +219,16 @@ jobs:
   # https://github.com/orgs/rwnd-tv/packages/container/package/rwnd.tv
   # with no retention policy (docs/TODO.md). Runs after every successful
   # release, tagged or not, rather than on a schedule — ties the cleanup
-  # to the exact event that creates the mess. `dry-run: true` for now
-  # (2026-08-30): flip once a real run's log confirms it only ever
-  # touches genuinely untagged images, never edge/latest/a semver tag —
-  # deletion here is irreversible.
+  # to the exact event that creates the mess. Ran once with `dry-run: true`
+  # first (2026-08-30) and confirmed via its log: only genuinely untagged,
+  # unreferenced digests were marked for deletion — every tagged image
+  # (edge/latest/every semver tag) correctly skipped as "in use by
+  # another image". That run also caught a real issue before going
+  # live — prod's docker-compose.yaml was pinned directly to an
+  # edge-derived digest this job would have deleted out from under it;
+  # repinned to the permanent v1.0.0 tag first. Deletion here is
+  # irreversible, so don't add a new keep/delete rule without
+  # dry-running it again first.
   #
   # Deliberately not actions/delete-package-versions: it deletes package
   # versions individually, with no concept of a multi-arch manifest list
@@ -245,5 +251,45 @@ jobs:
       # else" falls out of the default behavior rather than needing its
       # own rule.
       - uses: dataaxiom/ghcr-cleanup-action@d52806a0dc70b430571a37da1fde39733ffd640f # v1.2.2
+
+  # A tag push alone doesn't create a GitHub Release — they're separate
+  # features (found 2026-08-30 comparing this repo's page against
+  # another self-hosted project's: rwnd.tv had a Package tab from
+  # publishing to GHCR, no Releases tab, since a git tag on its own
+  # never produces one). Only runs for a version tag, not a plain push
+  # to main (those just move `edge`, nothing to announce).
+  #
+  # Deliberately not `gh release create --generate-notes`: that's
+  # PR-based, and every PR this repo has ever had is a Dependabot bump
+  # (direct-push workflow, no feature work ever goes through a PR) —
+  # tried it against this exact tag and it produced a changelog that
+  # was 100% dependency bumps, nothing about any real feature. Built
+  # from the commit log between tags instead, which actually captures
+  # what shipped.
+  github-release:
+    needs: merge
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          dry-run: true
+          # Full history, not the default single-commit shallow clone —
+          # need every tag to find the previous one to diff against.
+          # fetch-tags explicit, not just implied by fetch-depth: 0 —
+          # actions/checkout's own default for it is false.
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          previous_tag=$(git describe --tags --abbrev=0 "$GITHUB_REF_NAME^" 2>/dev/null || true)
+          if [ -n "$previous_tag" ]; then
+            notes=$(git log "$previous_tag..$GITHUB_REF_NAME" --pretty=format:'- %s')
+          else
+            notes='First tagged release.'
+          fi
+          gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes "$notes"

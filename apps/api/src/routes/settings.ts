@@ -13,6 +13,7 @@ import { loadEnv } from '../env.js'
 import { availableProviderSources } from '../providers/index.js'
 import { isProviderSource } from '../lib/provider-source.js'
 import { logSecurityEvent } from '../lib/security-log.js'
+import { APP_VERSION } from '../version.js'
 
 export const settingsRoutes = new OpenAPIHono<AppEnv>()
 
@@ -68,6 +69,7 @@ function serializeSettings(row?: {
     backupsConfigured: Boolean(loadEnv().BACKUP_DIR),
     emailConfigured: Boolean(loadEnv().SMTP_HOST),
     mfaAvailable: Boolean(loadEnv().ENCRYPTION_KEY),
+    appVersion: APP_VERSION,
   }
 }
 

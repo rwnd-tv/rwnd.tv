@@ -749,6 +749,10 @@
         "importLink": "To bring this into another rwnd.tv instance, use Import."
       }
     },
+    "about": {
+      "title": "About",
+      "version": "Version {{version}}"
+    },
     "instance": {
       "title": "Instance settings",
       "instanceName": "Instance name",

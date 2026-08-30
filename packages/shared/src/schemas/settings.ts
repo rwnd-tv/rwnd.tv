@@ -49,6 +49,9 @@ export const instanceSettingsSchema = z.object({
   // rather than letting someone start enrolling into a feature that'll
   // 503 on confirmation.
   mfaAvailable: z.boolean(),
+  // This package's own package.json `version` — see apps/api/src/version.ts.
+  // Derived, not admin-editable, same convention as environmentLabel above.
+  appVersion: z.string(),
 })
 export type InstanceSettings = z.infer<typeof instanceSettingsSchema>
 
@@ -60,6 +63,7 @@ export const updateInstanceSettingsRequestSchema = instanceSettingsSchema
     backupsConfigured: true,
     emailConfigured: true,
     mfaAvailable: true,
+    appVersion: true,
   })
   .partial()
 export type UpdateInstanceSettingsRequest = z.infer<typeof updateInstanceSettingsRequestSchema>

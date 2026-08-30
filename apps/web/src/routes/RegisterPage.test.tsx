@@ -31,6 +31,7 @@ const baseSettings: InstanceSettings = {
   backupsConfigured: false,
   emailConfigured: true,
   mfaAvailable: false,
+  appVersion: '0.1.0',
 }
 
 function renderRegisterPage(settingsOverrides: Partial<InstanceSettings> = {}) {

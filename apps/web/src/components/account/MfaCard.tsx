@@ -100,7 +100,7 @@ export function MfaCard() {
     return (
       <Card>
         <h2 className="text-lg font-semibold">{t('account.mfaTitle')}</h2>
-        <div className="mb-4 mt-1 border-t border-[var(--color-border)]" />
+        <div className="mt-1 mb-4 border-t border-[var(--color-border)]" />
         <p className="text-sm text-[var(--color-fg-muted)]">{t('account.mfaUnavailable')}</p>
       </Card>
     )
@@ -127,7 +127,7 @@ export function MfaCard() {
   return (
     <Card>
       <h2 className="text-lg font-semibold">{t('account.mfaTitle')}</h2>
-      <div className="mb-4 mt-1 border-t border-[var(--color-border)]" />
+      <div className="mt-1 mb-4 border-t border-[var(--color-border)]" />
 
       {isLoading ? (
         <Spinner label={t('common.loading')} />

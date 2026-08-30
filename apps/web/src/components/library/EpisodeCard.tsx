@@ -161,7 +161,7 @@ export function EpisodeCard({
           className="absolute inset-0"
           aria-label={displayTitle}
         >
-          <div className={stillHidden ? 'h-full w-full select-none blur-md' : 'h-full w-full'}>
+          <div className={stillHidden ? 'h-full w-full blur-md select-none' : 'h-full w-full'}>
             {episode.stillPath ? (
               <img
                 src={episode.stillPath}
@@ -192,7 +192,7 @@ export function EpisodeCard({
               e.stopPropagation()
               setStillRevealed(true)
             }}
-            className="absolute left-2 top-2 flex h-7 w-7 items-center justify-center rounded-full border border-white/70 bg-black/40 text-white/90 opacity-0 transition-opacity hover:bg-black/60 focus-visible:opacity-100 group-hover:opacity-100"
+            className="absolute top-2 left-2 flex h-7 w-7 items-center justify-center rounded-full border border-white/70 bg-black/40 text-white/90 opacity-0 transition-opacity group-hover:opacity-100 hover:bg-black/60 focus-visible:opacity-100"
           >
             <EyeIcon />
           </button>
@@ -204,7 +204,7 @@ export function EpisodeCard({
             title={t('showDetail.addWatchTooltip.episode')}
             aria-label={t('showDetail.addWatchTooltip.episode')}
             onClick={() => setLogAdditionalWatchOpen(true)}
-            className="absolute right-11 top-2 flex h-7 w-7 items-center justify-center rounded-full border border-white/70 bg-black/40 text-white/90 opacity-0 transition-opacity hover:bg-black/60 focus-visible:opacity-100 disabled:cursor-not-allowed disabled:opacity-60 group-hover:opacity-100"
+            className="absolute top-2 right-11 flex h-7 w-7 items-center justify-center rounded-full border border-white/70 bg-black/40 text-white/90 opacity-0 transition-opacity group-hover:opacity-100 hover:bg-black/60 focus-visible:opacity-100 disabled:cursor-not-allowed disabled:opacity-60"
           >
             <PlusIcon />
           </button>
@@ -216,7 +216,7 @@ export function EpisodeCard({
           title={toggleTitle}
           disabled={toggleDisabled}
           onClick={() => (episode.watched ? setUnwatchConfirmOpen(true) : setDialogOpen(true))}
-          className={`absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full border transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
+          className={`absolute top-2 right-2 flex h-7 w-7 items-center justify-center rounded-full border transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
             episode.watched
               ? 'border-[var(--color-primary)] bg-[var(--color-primary)] text-[var(--color-primary-fg)]'
               : 'border-white/70 bg-black/40 text-white/90 hover:bg-black/60'
@@ -238,7 +238,7 @@ export function EpisodeCard({
           disabled={ratingDisabled}
           filledClassName="text-white"
           mutedClassName="text-white/70 hover:text-white"
-          className={`absolute bottom-2 left-2 rounded-full border border-white/70 bg-black/40 px-1.5 py-1 transition-opacity focus-within:opacity-100 hover:bg-black/60 group-hover:opacity-100 ${
+          className={`absolute bottom-2 left-2 rounded-full border border-white/70 bg-black/40 px-1.5 py-1 transition-opacity group-hover:opacity-100 focus-within:opacity-100 hover:bg-black/60 ${
             // Same "always shown once it has something to show" treatment
             // as the watched checkmark button above — only an *unrated*
             // episode stays hover-only, the same way the "log an additional

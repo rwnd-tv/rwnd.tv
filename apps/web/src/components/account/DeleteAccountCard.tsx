@@ -83,7 +83,7 @@ export function DeleteAccountCard() {
       <h2 className="text-lg font-semibold text-[var(--color-danger)]">
         {t('account.deleteTitle')}
       </h2>
-      <div className="mb-4 mt-1 border-t border-[var(--color-border)]" />
+      <div className="mt-1 mb-4 border-t border-[var(--color-border)]" />
       <p className="mb-4 text-sm text-[var(--color-fg-muted)]">{t('account.deleteWarning')}</p>
       <Button
         type="button"

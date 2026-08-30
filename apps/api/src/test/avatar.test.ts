@@ -17,7 +17,10 @@ async function createUserAndLogin(): Promise<string> {
   return extractCookie(res)!
 }
 
-function jpegBytes(): Uint8Array {
+// Explicit `ArrayBuffer` generic (not bare `Uint8Array`) — @types/node's
+// ambient global redeclares `Uint8Array` as `Uint8Array<ArrayBufferLike>`,
+// which `new File([...])`/`BlobPart` (lib.dom) no longer accept.
+function jpegBytes(): Uint8Array<ArrayBuffer> {
   const buf = new Uint8Array(64)
   buf[0] = 0xff
   buf[1] = 0xd8
@@ -25,7 +28,7 @@ function jpegBytes(): Uint8Array {
   return buf
 }
 
-function pngBytes(): Uint8Array {
+function pngBytes(): Uint8Array<ArrayBuffer> {
   const buf = new Uint8Array(64)
   buf.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a], 0)
   return buf

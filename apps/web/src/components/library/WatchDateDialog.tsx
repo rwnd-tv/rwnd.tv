@@ -102,6 +102,11 @@ export function WatchDateDialog({
   useEffect(() => {
     if (!open) return
     if (initialWatchedAt) {
+      // The reset itself can't move to render-time derivation: it depends
+      // on the real wall clock ("now", in the else branch below), which
+      // isn't a pure function of props/state — see the `maxDate` comment
+      // further down for the same reasoning.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setMode('other')
       const initial = new Date(initialWatchedAt)
       setPreviewDate(initial)
@@ -132,6 +137,10 @@ export function WatchDateDialog({
       next = new Date(episode.firstAired)
     }
     if (next) {
+      // Same as the reset effect above: depends on the real wall clock via
+      // `new Date()`/`Date.now()`, so it can't be derived purely at render
+      // time.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setPreviewDate(next)
       setPreviewText(formatDateTimeInput(next, locale))
     }
@@ -145,6 +154,11 @@ export function WatchDateDialog({
   // needs to reflect the actual current time regardless of how long the
   // dialog has been open.
   const minDate = episode.firstAired ? new Date(episode.firstAired) : null
+  // Reads the real wall clock deliberately (see comment above) rather than
+  // storing it in state — this project has no React Compiler/SSR, so
+  // there's no memoization or hydration mismatch at stake, just a bound
+  // that needs to reflect the actual current time.
+  // eslint-disable-next-line react-hooks/purity
   const maxDate = new Date(Date.now() + (episode.runtimeMinutes ?? 0) * 60_000)
 
   function updatePreviewDate(next: Date) {

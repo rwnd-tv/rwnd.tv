@@ -29,7 +29,7 @@ export function PreferencesCard() {
   return (
     <Card>
       <h2 className="text-lg font-semibold">{t('account.preferencesTitle')}</h2>
-      <div className="mb-4 mt-1 border-t border-[var(--color-border)]" />
+      <div className="mt-1 mb-4 border-t border-[var(--color-border)]" />
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <div className="flex flex-col gap-1">
           <label htmlFor="locale-select" className="text-sm font-medium">

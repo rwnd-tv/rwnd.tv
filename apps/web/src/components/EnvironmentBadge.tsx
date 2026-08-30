@@ -8,7 +8,7 @@ export function EnvironmentBadge({ label }: { label: string | null | undefined }
   if (!label) return null
 
   return (
-    <span className="rounded-full border border-amber-500/40 bg-amber-500/15 px-2 py-0.5 text-xs font-semibold uppercase tracking-wide text-amber-500">
+    <span className="rounded-full border border-amber-500/40 bg-amber-500/15 px-2 py-0.5 text-xs font-semibold tracking-wide text-amber-500 uppercase">
       {label}
     </span>
   )

@@ -71,7 +71,7 @@ export function ProfileCard() {
   return (
     <Card>
       <h2 className="text-lg font-semibold">{t('account.profileTitle')}</h2>
-      <div className="mb-4 mt-1 border-t border-[var(--color-border)]" />
+      <div className="mt-1 mb-4 border-t border-[var(--color-border)]" />
       <div className="flex flex-col gap-2">
         <span className="text-sm font-medium">{t('account.avatar')}</span>
         <div className="flex items-center gap-4">
@@ -110,7 +110,7 @@ export function ProfileCard() {
           </p>
         )}
       </div>
-      <div className="mb-4 mt-4 border-t border-[var(--color-border)]" />
+      <div className="mt-4 mb-4 border-t border-[var(--color-border)]" />
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <Field
           label={t('account.displayName')}

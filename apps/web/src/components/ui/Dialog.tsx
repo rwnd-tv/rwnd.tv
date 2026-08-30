@@ -47,7 +47,7 @@ export function Dialog({
       // a fixed-position box, but Tailwind's preflight resets margin to 0
       // on every element first — positioned explicitly here instead of
       // relying on that.
-      className="fixed left-1/2 top-1/2 max-h-[85vh] w-[min(90vw,28rem)] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-6 text-[var(--color-fg)] backdrop:bg-black/60"
+      className="fixed top-1/2 left-1/2 max-h-[85vh] w-[min(90vw,28rem)] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-6 text-[var(--color-fg)] backdrop:bg-black/60"
     >
       <h2 id={titleId} className="mb-4 text-lg font-semibold">
         {title}

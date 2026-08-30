@@ -140,14 +140,14 @@ export function LandingPage() {
           </a>
           <Link
             to="/login"
-            className="ml-2 inline-flex shrink-0 items-center justify-center whitespace-nowrap rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-2 text-sm font-medium hover:bg-[var(--color-border)]"
+            className="ml-2 inline-flex shrink-0 items-center justify-center rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-2 text-sm font-medium whitespace-nowrap hover:bg-[var(--color-border)]"
           >
             {t('landing.signIn')}
           </Link>
           {canRegister && (
             <Link
               to="/register"
-              className="inline-flex shrink-0 items-center justify-center whitespace-nowrap rounded-md bg-[var(--color-primary)] px-4 py-2 text-sm font-medium text-[var(--color-primary-fg)] hover:opacity-90"
+              className="inline-flex shrink-0 items-center justify-center rounded-md bg-[var(--color-primary)] px-4 py-2 text-sm font-medium whitespace-nowrap text-[var(--color-primary-fg)] hover:opacity-90"
             >
               {t('landing.createAccountShort')}
             </Link>
@@ -161,10 +161,10 @@ export function LandingPage() {
             <span className="h-[7px] w-[7px] rounded-full bg-[var(--color-success)]" />
             {t('landing.hero.status')}
           </span>
-          <h1 className="max-w-[20ch] text-balance text-center text-4xl font-semibold leading-[1.06] tracking-tight sm:text-5xl md:text-6xl">
+          <h1 className="max-w-[20ch] text-center text-4xl leading-[1.06] font-semibold tracking-tight text-balance sm:text-5xl md:text-6xl">
             {t('landing.hero.title')}
           </h1>
-          <p className="max-w-[60ch] text-pretty text-center text-lg leading-8 text-[var(--color-fg-muted)]">
+          <p className="max-w-[60ch] text-center text-lg leading-8 text-pretty text-[var(--color-fg-muted)]">
             {t('landing.hero.body')}
           </p>
           <div className="flex flex-wrap justify-center gap-3 pt-1">
@@ -235,7 +235,7 @@ export function LandingPage() {
       </section>
 
       <section id="features">
-        <div className="py-18 mx-auto flex max-w-6xl flex-col gap-8 px-5">
+        <div className="mx-auto flex max-w-6xl flex-col gap-8 px-5 py-18">
           <div className="flex flex-col gap-2">
             <h2 className="text-2xl font-semibold tracking-tight sm:text-[28px]">
               {t('landing.features.title')}
@@ -261,7 +261,7 @@ export function LandingPage() {
         id="self-host"
         className="border-t border-[var(--color-border)] bg-[var(--color-surface)]"
       >
-        <div className="py-18 mx-auto grid max-w-6xl gap-14 px-5 lg:grid-cols-2">
+        <div className="mx-auto grid max-w-6xl gap-14 px-5 py-18 lg:grid-cols-2">
           <div className="flex flex-col gap-7">
             <div className="flex flex-col gap-2">
               <h2 className="text-2xl font-semibold tracking-tight sm:text-[28px]">
@@ -291,7 +291,7 @@ export function LandingPage() {
           </div>
           <div className="flex flex-col gap-4">
             <div className="flex flex-col gap-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] p-5">
-              <span className="text-xs font-semibold uppercase tracking-wider text-[var(--color-fg-muted)]">
+              <span className="text-xs font-semibold tracking-wider text-[var(--color-fg-muted)] uppercase">
                 {t('landing.selfHost.quickStart')}
               </span>
               <pre className="overflow-x-auto font-mono text-[13px] leading-6">{QUICK_START}</pre>
@@ -311,7 +311,7 @@ export function LandingPage() {
       </section>
 
       <section className="border-t border-[var(--color-border)]">
-        <div className="py-18 mx-auto flex max-w-6xl flex-col gap-7 px-5">
+        <div className="mx-auto flex max-w-6xl flex-col gap-7 px-5 py-18">
           <div className="flex flex-col gap-2">
             <h2 className="text-2xl font-semibold tracking-tight sm:text-[28px]">
               {t('landing.gallery.title')}
@@ -357,7 +357,7 @@ export function LandingPage() {
         id="status"
         className="border-t border-[var(--color-border)] bg-[var(--color-surface)]"
       >
-        <div className="py-18 mx-auto flex max-w-6xl flex-col gap-8 px-5">
+        <div className="mx-auto flex max-w-6xl flex-col gap-8 px-5 py-18">
           <div className="flex flex-col gap-2">
             <h2 className="text-2xl font-semibold tracking-tight sm:text-[28px]">
               {t('landing.status.title')}
@@ -422,7 +422,7 @@ export function LandingPage() {
       </section>
 
       <section className="border-t border-[var(--color-border)]">
-        <div className="py-18 mx-auto grid max-w-6xl gap-14 px-5 lg:grid-cols-[320px_1fr]">
+        <div className="mx-auto grid max-w-6xl gap-14 px-5 py-18 lg:grid-cols-[320px_1fr]">
           <div className="flex flex-col gap-2">
             <h2 className="text-2xl font-semibold tracking-tight sm:text-[28px]">
               {t('landing.faq.title')}
@@ -459,8 +459,8 @@ export function LandingPage() {
       </section>
 
       <section className="border-t border-[var(--color-border)] bg-[var(--color-surface)]">
-        <div className="py-18 mx-auto flex max-w-6xl flex-col items-center gap-5 px-5 text-center">
-          <h2 className="max-w-[26ch] text-balance text-2xl font-semibold tracking-tight sm:text-3xl">
+        <div className="mx-auto flex max-w-6xl flex-col items-center gap-5 px-5 py-18 text-center">
+          <h2 className="max-w-[26ch] text-2xl font-semibold tracking-tight text-balance sm:text-3xl">
             {t('landing.cta.title')}
           </h2>
           <p className="max-w-[56ch] text-base leading-7 text-[var(--color-fg-muted)]">
@@ -497,7 +497,7 @@ export function LandingPage() {
       </section>
 
       <footer className="border-t border-[var(--color-border)]">
-        <div className="mx-auto flex max-w-6xl flex-col gap-7 px-5 pb-12 pt-10">
+        <div className="mx-auto flex max-w-6xl flex-col gap-7 px-5 pt-10 pb-12">
           <div className="flex flex-wrap items-start justify-between gap-8">
             <div className="flex flex-col gap-2.5">
               <div className="flex items-center gap-3">

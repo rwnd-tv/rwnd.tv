@@ -114,7 +114,7 @@ function PhaseChip({ phase }: { phase: string }) {
   return (
     <span
       title={t(`import.progress.phaseLabel.${phase}`, phase)}
-      className={`mr-1.5 inline-block rounded-full border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${classes}`}
+      className={`mr-1.5 inline-block rounded-full border px-1.5 py-0.5 text-[10px] font-semibold tracking-wide uppercase ${classes}`}
     >
       {t(`import.progress.phase.${phase}`, phase)}
     </span>
@@ -172,6 +172,10 @@ export function ImportProgress() {
   // projection: whatever rate got us to itemsProcessed so far is assumed
   // to hold for the rest.
   const startedAtMs = latest.startedAt ? new Date(latest.startedAt).getTime() : null
+  // Reads the real wall clock deliberately — this project has no React
+  // Compiler/SSR, so there's no memoization or hydration mismatch at
+  // stake, just an estimate that needs to reflect the actual current time.
+  // eslint-disable-next-line react-hooks/purity
   const endedAtMs = latest.finishedAt ? new Date(latest.finishedAt).getTime() : Date.now()
   const elapsedSeconds = startedAtMs != null ? (endedAtMs - startedAtMs) / 1000 : null
   const remainingSeconds =

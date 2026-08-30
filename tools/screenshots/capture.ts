@@ -10,6 +10,11 @@
  *
  * Output: ../../docs/screenshots/{name}-{locale}-{theme}.webp, 1600px wide.
  *
+ * Logs in once and reuses that session (via storageState) across every
+ * locale/theme context instead of logging in per-context — the login route
+ * is rate-limited (10/15min), and one login per run instead of six keeps a
+ * rerun from eating into that limit.
+ *
  * Locale is a server-side account preference
  * (`PATCH /api/v1/auth/me`, apps/api/src/routes/auth.ts), not a browser
  * setting — apps/web/src/components/PreferencesEffect.tsx applies it via
@@ -36,7 +41,17 @@ const EMAIL = requireEnv('EMAIL')
 const PASSWORD = requireEnv('PASSWORD')
 
 const OUT_DIR = path.resolve(fileURLToPath(import.meta.url), '../../../docs/screenshots')
-const VIEWPORT = { width: 1600, height: 1000 }
+// Deliberately narrower than a typical desktop viewport: the sidebar is a
+// fixed width, so a wide capture leaves a lot of empty gutter on
+// lightly-populated pages, and a screenshot this size gets squeezed into a
+// README table column a fraction of its width anyway — capturing narrower
+// means less downscaling there, so text ends up more legible, not less.
+// Comfortably above the app's sm: (640px) breakpoint where the sidebar
+// switches to its mobile overlay behavior.
+const VIEWPORT = { width: 1120, height: 760 }
+// Captured at 2x and downsampled back to VIEWPORT.width below — supersampled
+// antialiasing, not a size change (that's VIEWPORT's job).
+const CAPTURE_SCALE = 2
 
 const LOCALES = ['en-GB', 'en-US'] as const
 type Locale = (typeof LOCALES)[number]
@@ -125,8 +140,11 @@ async function saveWebp(png: Buffer, filename: string): Promise<void> {
   await writeFile(path.join(OUT_DIR, filename), webp)
 }
 
+type StorageState = Awaited<ReturnType<BrowserContext['storageState']>>
+
 async function captureLocaleTheme(
   browser: Browser,
+  storageState: StorageState,
   locale: Locale,
   theme: Theme,
   shots: Shot[],
@@ -134,11 +152,11 @@ async function captureLocaleTheme(
   const context = await browser.newContext({
     baseURL: BASE_URL,
     viewport: VIEWPORT,
-    deviceScaleFactor: 1,
+    deviceScaleFactor: CAPTURE_SCALE,
     colorScheme: theme,
+    storageState,
   })
   try {
-    await login(context)
     await setPreferences(context, { locale, theme: 'system' })
 
     const page = await context.newPage()
@@ -164,6 +182,11 @@ async function main(): Promise<void> {
   await login(setupContext)
   const original = await getPreferences(setupContext)
   const showSlug = await findShowSlug(setupContext)
+  // Authenticate once and reuse the session cookie for every context below —
+  // one login instead of one per locale/theme combination (+ restore), so a
+  // run doesn't eat into the login rate limit (10/15min, ASVS V2.2.1) on its
+  // own and can be rerun back-to-back without waiting one out.
+  const storageState = await setupContext.storageState()
   await setupContext.close()
 
   const shots = buildShotList(showSlug)
@@ -171,13 +194,12 @@ async function main(): Promise<void> {
   try {
     for (const locale of LOCALES) {
       for (const theme of THEMES) {
-        await captureLocaleTheme(browser, locale, theme, shots)
+        await captureLocaleTheme(browser, storageState, locale, theme, shots)
       }
     }
   } finally {
     try {
-      const restoreContext = await browser.newContext({ baseURL: BASE_URL })
-      await login(restoreContext)
+      const restoreContext = await browser.newContext({ baseURL: BASE_URL, storageState })
       await setPreferences(restoreContext, original)
       await restoreContext.close()
       console.log(`Restored account preferences: locale=${original.locale} theme=${original.theme}`)

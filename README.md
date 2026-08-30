@@ -16,12 +16,28 @@ rwnd.tv (rewind dot tv) is an open source, self-hosted app for tracking the TV s
 
 ## Screenshots
 
-|                                                                                                                                                                                                                                            |                                                                                                                                                                                                                                                   |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| <picture><source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/dashboard-en-US-dark.webp"><img src="docs/screenshots/dashboard-en-US-light.webp" alt="Dashboard: search, Continue Watching, and recent History"></picture> | <picture><source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/shows-en-US-dark.webp"><img src="docs/screenshots/shows-en-US-light.webp" alt="TV Shows gallery, poster wall with watch progress"></picture>                       |
-| Dashboard                                                                                                                                                                                                                                  | TV Shows gallery                                                                                                                                                                                                                                  |
-| <picture><source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/show-detail-en-US-dark.webp"><img src="docs/screenshots/show-detail-en-US-light.webp" alt="A show page with seasons, progress, and rating"></picture>       | <picture><source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/import-en-US-dark.webp"><img src="docs/screenshots/import-en-US-light.webp" alt="Import page: Trakt account, Trakt export file, or rwnd.tv export file"></picture> |
-| Show page                                                                                                                                                                                                                                  | Import                                                                                                                                                                                                                                            |
+<table>
+<tr>
+<td align="center">
+<picture><source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/dashboard-en-US-dark.webp"><img src="docs/screenshots/dashboard-en-US-light.webp" alt="Dashboard: search, Continue Watching, and recent History"></picture>
+<br><sub>Dashboard — full size: <a href="docs/screenshots/dashboard-en-US-light.webp">light</a> · <a href="docs/screenshots/dashboard-en-US-dark.webp">dark</a></sub>
+</td>
+<td align="center">
+<picture><source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/shows-en-US-dark.webp"><img src="docs/screenshots/shows-en-US-light.webp" alt="TV Shows gallery, poster wall with watch progress"></picture>
+<br><sub>TV Shows gallery — full size: <a href="docs/screenshots/shows-en-US-light.webp">light</a> · <a href="docs/screenshots/shows-en-US-dark.webp">dark</a></sub>
+</td>
+</tr>
+<tr>
+<td align="center">
+<picture><source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/show-detail-en-US-dark.webp"><img src="docs/screenshots/show-detail-en-US-light.webp" alt="A show page with seasons, progress, and rating"></picture>
+<br><sub>Show page — full size: <a href="docs/screenshots/show-detail-en-US-light.webp">light</a> · <a href="docs/screenshots/show-detail-en-US-dark.webp">dark</a></sub>
+</td>
+<td align="center">
+<picture><source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/import-en-US-dark.webp"><img src="docs/screenshots/import-en-US-light.webp" alt="Import page: Trakt account, Trakt export file, or rwnd.tv export file"></picture>
+<br><sub>Import — full size: <a href="docs/screenshots/import-en-US-light.webp">light</a> · <a href="docs/screenshots/import-en-US-dark.webp">dark</a></sub>
+</td>
+</tr>
+</table>
 
 ## Features
 

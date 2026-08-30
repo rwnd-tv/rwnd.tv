@@ -1,6 +1,8 @@
 # rwnd.tv
 
 [![CI](https://github.com/rwnd-tv/rwnd.tv/actions/workflows/ci.yml/badge.svg)](https://github.com/rwnd-tv/rwnd.tv/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/rwnd-tv/rwnd.tv/actions/workflows/codeql.yml/badge.svg)](https://github.com/rwnd-tv/rwnd.tv/actions/workflows/codeql.yml)
+[![Foo](https://github.com/rwnd-tv/rwnd.tv/actions/workflows/dependabot/dependabot-updates/badge.svg)](https://github.com/rwnd-tv/rwnd.tv/actions/workflows/dependabot/dependabot-updates)
 [![Release](https://github.com/rwnd-tv/rwnd.tv/actions/workflows/release.yml/badge.svg)](https://github.com/rwnd-tv/rwnd.tv/actions/workflows/release.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 

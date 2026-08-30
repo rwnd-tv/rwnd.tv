@@ -42,7 +42,7 @@ export function AdvancedPreferencesCard() {
           {t('account.advancedPreferencesTitle')}
           <ChevronDownIcon className="h-5 w-5 flex-shrink-0 transition-transform group-open:rotate-180" />
         </summary>
-        <div className="mb-4 mt-4 border-t border-[var(--color-border)]" />
+        <div className="mt-4 mb-4 border-t border-[var(--color-border)]" />
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <div className="flex flex-col gap-1">
             <label className="flex items-center gap-2 text-sm font-medium">

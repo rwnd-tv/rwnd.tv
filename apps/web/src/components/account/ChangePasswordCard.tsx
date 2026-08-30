@@ -41,7 +41,7 @@ export function ChangePasswordCard() {
   return (
     <Card>
       <h2 className="text-lg font-semibold">{t('account.changePasswordTitle')}</h2>
-      <div className="mb-4 mt-1 border-t border-[var(--color-border)]" />
+      <div className="mt-1 mb-4 border-t border-[var(--color-border)]" />
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <Field
           label={t('account.changePasswordCurrent')}

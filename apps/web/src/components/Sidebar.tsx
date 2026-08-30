@@ -92,7 +92,7 @@ export function Sidebar({ collapsed, onNavigate }: { collapsed: boolean; onNavig
       className={
         collapsed
           ? 'hidden h-[calc(100dvh-4rem)] w-16 flex-shrink-0 flex-col border-r border-[var(--color-border)] transition-[width] duration-200 sm:sticky sm:top-16 sm:flex'
-          : 'fixed left-0 top-16 z-30 flex h-[calc(100dvh-4rem)] w-56 flex-shrink-0 flex-col border-r border-[var(--color-border)] bg-[var(--color-bg)] transition-[width] duration-200 sm:sticky sm:z-auto'
+          : 'fixed top-16 left-0 z-30 flex h-[calc(100dvh-4rem)] w-56 flex-shrink-0 flex-col border-r border-[var(--color-border)] bg-[var(--color-bg)] transition-[width] duration-200 sm:sticky sm:z-auto'
       }
     >
       <ul className="flex flex-1 flex-col gap-1 overflow-y-auto px-2 py-2">

@@ -67,7 +67,7 @@ export function EmailCard() {
   return (
     <Card>
       <h2 className="text-lg font-semibold">{t('account.email')}</h2>
-      <div className="mb-4 mt-1 border-t border-[var(--color-border)]" />
+      <div className="mt-1 mb-4 border-t border-[var(--color-border)]" />
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-sm">{user?.email}</span>
         {user?.emailVerifiedAt ? (

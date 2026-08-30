@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import type { MetadataProviderSource, RegistrationMode } from '@rwnd/shared'
@@ -57,13 +57,17 @@ export function InstanceSettingsPanel() {
   const [registrationMode, setRegistrationMode] = useState<RegistrationMode>('closed')
   const [priorityOrder, setPriorityOrder] = useState<MetadataProviderSource[]>([])
 
-  useEffect(() => {
-    if (data) {
-      setInstanceName(data.instanceName)
-      setRegistrationMode(data.registrationMode)
-      setPriorityOrder(data.metadataProviderPriority)
-    }
-  }, [data])
+  // Seeds the editable local state from the query once it loads (and again
+  // if it changes identity, e.g. after a refetch) — computed during render
+  // rather than in an effect, per
+  // https://react.dev/learn/you-might-not-need-an-effect#adjusting-some-state-when-a-prop-changes.
+  const [loadedSettings, setLoadedSettings] = useState(data)
+  if (data && data !== loadedSettings) {
+    setLoadedSettings(data)
+    setInstanceName(data.instanceName)
+    setRegistrationMode(data.registrationMode)
+    setPriorityOrder(data.metadataProviderPriority)
+  }
 
   const updateSettings = useMutation({
     mutationFn: () => api.settings.update({ instanceName, registrationMode }),
@@ -99,7 +103,7 @@ export function InstanceSettingsPanel() {
   return (
     <Card>
       <h2 className="text-lg font-semibold">{t('settings.instance.title')}</h2>
-      <div className="mb-4 mt-1 border-t border-[var(--color-border)]" />
+      <div className="mt-1 mb-4 border-t border-[var(--color-border)]" />
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <Field
           label={t('settings.instance.instanceName')}

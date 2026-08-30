@@ -14,9 +14,13 @@ Format:
 
 ## Repo hygiene
 
-- [ ] **Hold TS 7 bump** (2026-08-09 20:40)\
-      `typescript-eslint` doesn't support TS 7 yet; leave any TS 7.0
-      Dependabot bump open until it does.
+- [ ] **Hold TS 7 bump** (2026-08-09 20:40 added, ignore rule added 2026-08-30)\
+      `typescript-eslint` doesn't support TS 7 yet. A Dependabot PR
+      (`dev-dependencies` group) bundled a `typescript` 5.9.3→7.0.2 bump in
+      with 13 unrelated safe updates, failing CI (lint) for the whole
+      group. Added a `typescript` major-version `ignore` rule to
+      `.github/dependabot.yml` so Dependabot stops proposing it — remove
+      that ignore once `typescript-eslint` supports TS 7.
 
 ## TV Shows / Movies gallery follow-ups
 

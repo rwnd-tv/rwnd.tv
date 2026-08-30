@@ -7,6 +7,14 @@ updates:
     groups:
       dev-dependencies:
         dependency-type: development
+    ignore:
+      # typescript-eslint doesn't support TS 7 yet — see docs/TODO.md's
+      # "Hold TS 7 bump" item. Without this, Dependabot's dev-dependencies
+      # group bundles the TS 7 bump in with unrelated safe updates, so the
+      # whole group fails CI (typescript-eslint refuses to run under TS 7)
+      # until this ignore is removed.
+      - dependency-name: 'typescript'
+        update-types: ['version-update:semver-major']
   - package-ecosystem: 'github-actions'
     directory: '/'
     schedule:

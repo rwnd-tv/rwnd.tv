@@ -17,8 +17,27 @@ permissions:
   contents: read
 
 jobs:
-  ci:
-    runs-on: ubuntu-latest
+  # Both architectures run the full job identically — lint through the
+  # Docker build/scan — rather than assuming which steps are actually
+  # arch-sensitive (native deps like @node-rs/argon2/esbuild/tailwindcss-
+  # oxide resolve different per-platform binaries, and this is the only
+  # place arm64 gets tested before an actual release build; release.yml
+  # itself (2026-08-30) builds arm64 on this same native runner type, not
+  # QEMU, after a QEMU-emulation crash there twice in a row). Named `test`,
+  # not `ci` — a matrix job's status check posts as "test (amd64,
+  # ubuntu-latest)"/"test (arm64, ubuntu-24.04-arm)", not a stable "test",
+  # so branch protection's required "ci" check (see the `ci` gate job
+  # below) couldn't target it directly.
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
     services:
       postgres:
         image: postgres:16-alpine
@@ -109,8 +128,12 @@ jobs:
         # Tagged (not pushed — that's release.yml) so the Trivy step below
         # can scan it. Also still catches a broken Dockerfile (e.g. a base
         # image bump that drops something the build relies on) before it
-        # reaches the release workflow, same as before this review.
-        run: docker build -t rwnd-tv:ci .
+        # reaches the release workflow, same as before this review. Each
+        # matrix leg builds for its own runner's native architecture —
+        # docker build with no --platform flag always targets the host,
+        # so this genuinely produces (and then scans) an arm64 image on
+        # the arm64 runner, not a cross-built one.
+        run: docker build -t rwnd-tv:ci-${{ matrix.arch }} .
 
       # M3 security review (F-19): the image build already happens above,
       # so scanning it here is nearly free — catches a vulnerable OS/base
@@ -118,7 +141,7 @@ jobs:
       - name: Scan Docker image for vulnerabilities
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
-          image-ref: rwnd-tv:ci
+          image-ref: rwnd-tv:ci-${{ matrix.arch }}
           severity: HIGH,CRITICAL
           exit-code: '1'
           ignore-unfixed: true
@@ -132,6 +155,23 @@ jobs:
           # tag), so it may need manual bumping if a future Trivy release
           # gets yanked the same way.
           version: v0.74.0
+
+  # A fixed-name gate `main`'s branch protection rule can require, since
+  # `test`'s own check name varies per matrix leg (see the comment on
+  # `test` above). Always runs (even if a `test` leg failed or was
+  # skipped) so it can fail deliberately instead of silently not posting.
+  ci:
+    needs: test
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check test matrix result
+        run: |
+          result='${{ needs.test.result }}'
+          if [ "$result" != "success" ]; then
+            echo "test matrix result: $result"
+            exit 1
+          fi
 
   dependency-review:
     # Catches a vulnerable dependency a PR *introduces* — pnpm audit above

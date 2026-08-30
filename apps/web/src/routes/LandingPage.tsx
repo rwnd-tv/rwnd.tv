@@ -121,9 +121,11 @@ export function LandingPage() {
           <img src="/favicon.svg" alt="" className="h-6 w-6 shrink-0" />
           <span className="text-lg font-semibold">{t('app.name')}</span>
         </a>
-        <span className="inline-flex items-center rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-0.5 text-xs font-medium text-[var(--color-fg-muted)]">
-          {t('landing.badge')}
-        </span>
+        {settings && (
+          <span className="inline-flex items-center rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-0.5 text-xs font-medium text-[var(--color-fg-muted)]">
+            v{settings.appVersion}
+          </span>
+        )}
         <div className="flex-1" />
         <nav className="flex min-w-0 items-center gap-1">
           <a href="#features" className={`hidden whitespace-nowrap md:block ${sectionLink}`}>

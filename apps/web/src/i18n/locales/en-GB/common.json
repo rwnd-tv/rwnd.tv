@@ -4,7 +4,6 @@
     "tagline": "Track what you watch."
   },
   "landing": {
-    "badge": "v1.0.0",
     "signIn": "Sign in",
     "createAccount": "Create an account",
     "createAccountShort": "Create account",

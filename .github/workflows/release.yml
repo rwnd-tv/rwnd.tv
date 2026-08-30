@@ -210,3 +210,40 @@ jobs:
       #     --certificate-oidc-issuer https://token.actions.githubusercontent.com
       - name: Sign published image
         run: cosign sign --yes ghcr.io/rwnd-tv/rwnd.tv@${{ steps.merged.outputs.digest }}
+
+  # Every push to main moves the `edge` tag onto a new digest, leaving the
+  # previous one behind as an untagged image version — same for a semver
+  # tag push, once `edge` next moves past it — and the multi-arch matrix
+  # above (2026-08-30) fans that into several untagged per-platform/
+  # attestation images on top, all accumulating on
+  # https://github.com/orgs/rwnd-tv/packages/container/package/rwnd.tv
+  # with no retention policy (docs/TODO.md). Runs after every successful
+  # release, tagged or not, rather than on a schedule — ties the cleanup
+  # to the exact event that creates the mess. `dry-run: true` for now
+  # (2026-08-30): flip once a real run's log confirms it only ever
+  # touches genuinely untagged images, never edge/latest/a semver tag —
+  # deletion here is irreversible.
+  #
+  # Deliberately not actions/delete-package-versions: it deletes package
+  # versions individually, with no concept of a multi-arch manifest list
+  # still referencing a platform-specific digest as a child — exactly the
+  # shape `build`/`merge` above now produce. ghcr-cleanup-action is built
+  # for this (its whole premise is "safely handles multi-architecture
+  # images"): deleting a manifest list also deletes its now-unreferenced
+  # platform children, and a still-referenced child is left alone even
+  # though it has no tag of its own.
+  cleanup:
+    needs: merge
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    steps:
+      # No package/owner/keep/exclude options needed: this only ever
+      # deletes *untagged* images (the tool's own default with no other
+      # rules set) — edge, every semver tag, and latest are never
+      # untagged, so "keep every tagged image forever, prune everything
+      # else" falls out of the default behavior rather than needing its
+      # own rule.
+      - uses: dataaxiom/ghcr-cleanup-action@d52806a0dc70b430571a37da1fde39733ffd640f # v1.2.2
+        with:
+          dry-run: true

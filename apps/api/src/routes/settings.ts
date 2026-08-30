@@ -1,7 +1,9 @@
 import { OpenAPIHono, createRoute } from '@hono/zod-openapi'
+import { sql } from 'drizzle-orm'
 import {
   SUPPORTED_LOCALES,
   instanceSettingsSchema,
+  instanceAboutSchema,
   updateInstanceSettingsRequestSchema,
   type InstanceSettings,
   type MetadataProviderSource,
@@ -93,6 +95,41 @@ settingsRoutes.openapi(
   async (c) => {
     const [row] = await c.get('db').select().from(instanceSettings).limit(1)
     return c.json(serializeSettings(row))
+  },
+)
+
+// Authenticated only (no PUBLIC_ROUTES entry — see middleware/auth.ts and
+// instanceAboutSchema's own doc comment for why this is split from the
+// public GET /settings above) — any logged-in user, not admin-only, same
+// as the app-version display it extends.
+settingsRoutes.openapi(
+  createRoute({
+    method: 'get',
+    path: '/settings/about',
+    summary: 'Instance runtime diagnostics (About panel)',
+    responses: {
+      200: {
+        description: 'Runtime diagnostics',
+        content: { 'application/json': { schema: instanceAboutSchema } },
+      },
+    },
+  }),
+  async (c) => {
+    const db = c.get('db')
+    const [pgRow] = (await db.execute(
+      sql`select current_setting('server_version') as version`,
+    )) as { version: string }[]
+    const [migrationRow] = (await db.execute(
+      sql`select count(*)::int as count from drizzle.__drizzle_migrations`,
+    )) as { count: number }[]
+
+    return c.json({
+      nodeVersion: process.version,
+      postgresVersion: pgRow!.version,
+      migrationCount: migrationRow!.count,
+      uptimeSeconds: Math.floor(process.uptime()),
+      environmentLabel: loadEnv().ENVIRONMENT_LABEL ?? null,
+    })
   },
 )
 

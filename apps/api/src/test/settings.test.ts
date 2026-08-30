@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { instanceSettings } from '@rwnd/db'
-import type { InstanceSettings } from '@rwnd/shared'
+import type { InstanceAbout, InstanceSettings } from '@rwnd/shared'
 import { createLocalUser, extractCookie, json, resetDb, testApp, testDb } from './helpers.js'
 
 const db = testDb()
@@ -103,5 +103,41 @@ describe('/api/v1/settings — metadata provider priority', () => {
     expect(res.status).toBe(200)
     const body = await json<InstanceSettings>(res)
     expect(body.metadataProviderPriority).toEqual(['tmdb'])
+  })
+})
+
+describe('/api/v1/settings/about', () => {
+  beforeEach(() => resetDb(db))
+
+  it('rejects an unauthenticated request', async () => {
+    const res = await app.request('/api/v1/settings/about')
+    expect(res.status).toBe(401)
+  })
+
+  it('reports real runtime diagnostics for any logged-in user, not just an admin', async () => {
+    await createLocalUser(db, 'regular@example.com', 'correct-horse-battery-staple')
+    const login = await app.request('/api/v1/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: 'regular@example.com',
+        password: 'correct-horse-battery-staple',
+      }),
+    })
+    const cookie = extractCookie(login)!
+
+    const res = await app.request('/api/v1/settings/about', { headers: { cookie } })
+    expect(res.status).toBe(200)
+    const body = await json<InstanceAbout>(res)
+    expect(body.nodeVersion).toBe(process.version)
+    expect(body.postgresVersion).toMatch(/^\d+/)
+    // The real migrations table, run for real against this test's own
+    // Postgres before the suite starts (see apps/api/.env / CI's
+    // `pnpm db:migrate` step) — not a mock, so this just needs to be a
+    // real, growing count rather than any specific number.
+    expect(body.migrationCount).toBeGreaterThan(0)
+    expect(body.uptimeSeconds).toBeGreaterThanOrEqual(0)
+    // Test env doesn't set ENVIRONMENT_LABEL (see apps/api/.env / ci.yml).
+    expect(body.environmentLabel).toBeNull()
   })
 })

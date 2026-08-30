@@ -23,6 +23,7 @@ import {
   type EnrollTotpResponse,
   type ForgotPasswordRequest,
   type ImportJob,
+  type InstanceAbout,
   type InstanceSettings,
   type ListBackupsResponse,
   type ListActivityResponse,
@@ -355,6 +356,7 @@ export const api = {
   settings: {
     get: () => get<InstanceSettings>('/settings'),
     update: (body: UpdateInstanceSettingsRequest) => patch<InstanceSettings>('/settings', body),
+    getAbout: () => get<InstanceAbout>('/settings/about'),
   },
   imports: {
     connection: () => get<TraktConnectionStatus>('/import/trakt/connection'),

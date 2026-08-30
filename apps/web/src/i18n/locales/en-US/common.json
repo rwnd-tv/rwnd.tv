@@ -751,7 +751,12 @@
     },
     "about": {
       "title": "About",
-      "version": "Version {{version}}"
+      "version": "Version",
+      "nodeVersion": "Node.js",
+      "postgresVersion": "PostgreSQL",
+      "migrationCount": "Migrations applied",
+      "uptime": "Uptime",
+      "environment": "Environment"
     },
     "instance": {
       "title": "Instance settings",

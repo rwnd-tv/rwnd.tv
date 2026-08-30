@@ -67,3 +67,26 @@ export const updateInstanceSettingsRequestSchema = instanceSettingsSchema
   })
   .partial()
 export type UpdateInstanceSettingsRequest = z.infer<typeof updateInstanceSettingsRequestSchema>
+
+// Richer runtime diagnostics for the Settings > About panel — deliberately
+// on its own authenticated-only route (GET /settings/about), not folded
+// into instanceSettingsSchema above: that one is intentionally readable
+// pre-login (the login/setup screens need instanceName/registrationMode
+// before anyone's authenticated), and letting an anonymous internet
+// visitor fingerprint the exact Node/Postgres versions this instance runs
+// is a materially different exposure than a bare app version number.
+export const instanceAboutSchema = z.object({
+  nodeVersion: z.string(),
+  postgresVersion: z.string(),
+  // Count of applied drizzle migrations (drizzle.__drizzle_migrations),
+  // not a migration name/tag — apps/api has no access to
+  // packages/db/drizzle/meta/_journal.json's tag names at runtime (a
+  // separate deployed package, see docker-entrypoint.sh), and the DB
+  // itself is the only thing that can say what's actually applied here
+  // anyway, same reasoning as reading everything else in this schema live
+  // rather than from a build-time constant.
+  migrationCount: z.number(),
+  uptimeSeconds: z.number(),
+  environmentLabel: z.string().nullable(),
+})
+export type InstanceAbout = z.infer<typeof instanceAboutSchema>

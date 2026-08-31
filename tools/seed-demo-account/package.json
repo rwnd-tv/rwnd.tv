@@ -1,0 +1,16 @@
+{
+  "name": "rwnd-tv-seed-demo-account",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Populates a throwaway demo account with curated watch history, ratings and watchlists via the running instance's own API, for the screenshot tool to capture. Deliberately outside the pnpm workspace (see README.md) so root lint/format/CI never touch it.",
+  "scripts": {
+    "start": "tsx seed.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3"
+  }
+}

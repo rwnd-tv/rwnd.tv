@@ -29,20 +29,34 @@ pnpm install-browser   # downloads Chromium once
 
 ## Running
 
+Seed the account's watch history first. `../seed-demo-account` populates
+it automatically and reproducibly, rather than relying on someone having
+hand-curated it:
+
 ```sh
-BASE_URL=https://dev.rwnd.tv EMAIL=you@example.com PASSWORD=... pnpm start
-TARGET=landing BASE_URL=https://dev.rwnd.tv EMAIL=you@example.com PASSWORD=... pnpm start
+cd ../seed-demo-account
+BASE_URL=https://dev.rwnd.tv EMAIL=demo@example.com PASSWORD=... pnpm start
+cd ../screenshots
+```
+
+Then capture:
+
+```sh
+BASE_URL=https://dev.rwnd.tv EMAIL=demo@example.com PASSWORD=... pnpm start
+TARGET=landing BASE_URL=https://dev.rwnd.tv EMAIL=demo@example.com PASSWORD=... pnpm start
 ```
 
 `BASE_URL` defaults to `http://localhost:3000`.
 
 **Use a dedicated account with a small, curated watch history — not a
-personal one.** These screenshots go into a public repo forever. The account
-needs at least one logged watch for the show-detail shot (both targets) and
-the season shot (`landing` only) — without one, those shots are skipped with
-a warning rather than failing the run. A handful of shows/movies logged
-looks far better than just one: a gallery or grid with a single poster in
-an otherwise-empty row looks like a bug, not a feature.
+personal one.** These screenshots go into a public repo forever. The
+account needs at least one logged watch for the show-detail shot (both
+targets) and the season shot (`landing` only) — without one, those shots
+are skipped with a warning rather than failing the run. `../seed-demo-account`
+already guarantees this. If seeding it manually instead, a handful of
+shows/movies logged looks far better than just one: a gallery or grid
+with a single poster in an otherwise-empty row looks like a bug, not a
+feature.
 
 The script switches the account's locale and theme mid-run (locale is a
 server-side preference — see `capture.ts`'s top comment for why) and restores

@@ -1,0 +1,9 @@
+# Presence of this file is what makes tools/seed-demo-account its own pnpm
+# workspace root: pnpm otherwise walks up to the repo's own
+# pnpm-workspace.yaml and installs the whole monorepo instead of this
+# package. No `packages:` list, so it's a workspace of exactly one.
+
+allowBuilds:
+  esbuild: true
+onlyBuiltDependencies:
+  - esbuild

@@ -125,11 +125,30 @@ async function setPreferences(context: BrowserContext, prefs: Preferences): Prom
  * against. Returns undefined (and show-detail/season shots are skipped) if
  * the account hasn't logged any watches yet.
  */
+/** Prefers a show with more than one season: a single-season show's
+ * season page looks the same as its show page, and the show-detail shot
+ * itself is more representative of the app with a season selector that
+ * actually has something to select. Checks each show's own detail (the
+ * list response doesn't carry a season count) in list order, capped so a
+ * large library doesn't turn this into one request per show; falls back to
+ * the first show outright if none of those qualify or nothing has more than
+ * one season yet. */
 async function findShowSlug(context: BrowserContext): Promise<string | undefined> {
   const res = await context.request.get('/api/v1/library/shows')
   if (!res.ok()) return undefined
   const body = (await res.json()) as { shows: { slug: string }[] }
-  return body.shows[0]?.slug
+  const first = body.shows[0]?.slug
+  if (!first) return undefined
+
+  const CANDIDATE_LIMIT = 20
+  for (const { slug } of body.shows.slice(0, CANDIDATE_LIMIT)) {
+    const detailRes = await context.request.get(`/api/v1/library/shows/${slug}`)
+    if (!detailRes.ok()) continue
+    const detail = (await detailRes.json()) as { seasons: unknown[] }
+    if (detail.seasons.length > 1) return slug
+  }
+  console.warn('No show with more than one season found; using the first show instead.')
+  return first
 }
 
 // ---- docs/screenshots (README.md) ----
@@ -176,16 +195,17 @@ function buildDocsShots({ showSlug }: ShotContext): Shot[] {
 // container uses (see the `style={{ aspectRatio: ... }}` wrappers in
 // LandingPage.tsx) exactly, so `object-cover` never has anything to crop —
 // the whole captured frame fits the container precisely.
-const LANDING_HERO_VIEWPORT: Viewport = { width: 1600, height: 800 } // 16 / 8
 const LANDING_GALLERY_VIEWPORT: Viewport = { width: 1600, height: 1000 } // 16 / 10
-const LANDING_IMPORT_VIEWPORT: Viewport = { width: 1600, height: 1067 } // 3 / 2
 
 function buildLandingShots({ showSlug }: ShotContext): Shot[] {
   const shots: Shot[] = [
-    { name: 'dashboard', path: '/dashboard', viewport: LANDING_HERO_VIEWPORT, settleMs: 500 },
+    // Every landing shot shares this one aspect ratio (16 / 10) now. The
+    // hero used to be 16 / 8 and the import shot 3 / 2, both leftovers from
+    // the previous design with no content reason behind them.
+    { name: 'dashboard', path: '/dashboard', viewport: LANDING_GALLERY_VIEWPORT, settleMs: 500 },
     { name: 'tv-shows', path: '/shows', viewport: LANDING_GALLERY_VIEWPORT, settleMs: 500 },
-    { name: 'films', path: '/movies', viewport: LANDING_GALLERY_VIEWPORT, settleMs: 500 },
-    { name: 'import', path: '/import', viewport: LANDING_IMPORT_VIEWPORT, settleMs: 300 },
+    { name: 'movies', path: '/movies', viewport: LANDING_GALLERY_VIEWPORT, settleMs: 500 },
+    { name: 'import', path: '/import', viewport: LANDING_GALLERY_VIEWPORT, settleMs: 300 },
   ]
   if (showSlug) {
     shots.push(

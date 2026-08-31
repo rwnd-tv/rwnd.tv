@@ -33,3 +33,24 @@ Notes:
 - Committing/pushing is a separate, later decision — batch to end of
   session, always with its own explicit go-ahead. Deploying to dev is not
   that decision; do it freely to verify a change actually works.
+
+## Public-facing design surfaces
+
+An earlier version of the landing page converged too closely, in
+structure and visual treatment, on another project's marketing site —
+unintentional, no copied text or code, but close enough to be worth
+avoiding going forward.
+
+Before a new marketing/landing surface — or a substantial redesign of an
+existing one — is hand-off-integrated from Claude Design (or any other
+AI-generated draft) into the app, check it against comparable existing
+projects: structure and section order, not just copy. Change anything
+that reads as a close match before it ships, not after. Do this as a
+fresh check each time rather than by keeping a standing list anywhere,
+public or private — the check is a one-off step in the process, not an
+artifact to maintain.
+
+The landing page is the obvious case, but the same risk applies to any
+other public-facing surface built the same way with little existing
+precedent in this app to anchor it — the README's structure, an
+onboarding flow, and so on.

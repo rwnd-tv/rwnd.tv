@@ -9,8 +9,18 @@ on:
   # a run needs retrying for reasons unrelated to the code.
   workflow_dispatch:
 
+# Global (not per-ref): a `main` push and a version-tag push are separate
+# triggers with different `github.ref` values, so a per-ref group let them
+# run fully concurrently. Both legs build/push their own untagged digests
+# until their own `merge` job tags them, and `cleanup` below deletes every
+# untagged digest unconditionally — so one run's cleanup could delete the
+# other's not-yet-tagged images out from under it (see docs/TODO_ARCHIVE.md
+# for the incident this caused cutting v1.0.1). A single global group with
+# `cancel-in-progress: false` serializes the two runs end to end instead:
+# a tag pushed right after its own bump commit just queues behind that
+# commit's own `main`-triggered run rather than racing it.
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-${{ github.workflow }}
   cancel-in-progress: false
 
 permissions:

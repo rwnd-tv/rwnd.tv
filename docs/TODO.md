@@ -21,7 +21,7 @@ Format:
       group. Added a `typescript` major-version `ignore` rule to
       `.github/dependabot.yml` so Dependabot stops proposing it; remove
       that ignore once `typescript-eslint` supports TS 7.
-- [ ] **`release.yml`'s `cleanup` job can delete another concurrent run's not-yet-merged digests** (2026-08-30 added)\
+- [ ] **`release.yml`'s `cleanup` job can delete another concurrent run's not-yet-merged digests** (2026-08-30 added, fix shipped 2026-08-31, pending real-world verification)\
       Found cutting v1.0.1: pushing a commit to `main` and then immediately
       tagging `v1.0.1` against it triggers two `Release` runs at once (one
       per trigger: `push: branches` and `push: tags`). Both build their
@@ -44,7 +44,20 @@ Format:
       work; hasn't been designed yet. Workaround for now: don't push a
       version-bump commit and its tag as two separate `git push`
       invocations back to back; or if it happens, just fully re-run the
-      workflow (not `--failed`) once nothing else is running.
+      workflow (not `--failed`) once nothing else is running.\
+      **Fix shipped 2026-08-31**: `concurrency.group` changed from
+      `release-${{ github.ref }}` to `release-${{ github.workflow }}`
+      (global rather than per-ref), so a `main` push and a version-tag
+      push now fully serialize instead of running concurrently. A tag
+      pushed right after its own bump commit queues behind that commit's
+      own `main`-triggered run and waits for it to finish end to end
+      (including `cleanup`) before starting. Not yet exercised against a
+      real double-trigger though: the workaround above was always
+      available to sidestep it manually, so the actual race hasn't
+      recurred since it was first found, and this fix's correctness rests
+      on GitHub's documented concurrency-group semantics rather than a
+      live reproduction. Leaving this open until the next real version
+      cut confirms it, rather than archiving on code review alone.
 
 ## TV Shows / Movies gallery follow-ups
 

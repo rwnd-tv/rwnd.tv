@@ -277,7 +277,15 @@ export function ShowDetailPage() {
 
   return (
     <div className="flex flex-col gap-8">
-      <div className="flex flex-col gap-6 sm:flex-row">
+      {/* sm:items-start is load-bearing, not decorative — see
+          EpisodeDetailPage.tsx's own still-image container for the full
+          explanation: flex's default align-items:stretch would otherwise
+          force this aspect-[2/3] poster box to match the text column's
+          height once they sit side by side, distorting the poster's real
+          crop (surfaced 2026-08-31: the box visibly grew whenever the
+          "Refreshed." success line added an extra line of height to the
+          text column). */}
+      <div className="flex flex-col gap-6 sm:flex-row sm:items-start">
         <div className="aspect-[2/3] w-48 flex-shrink-0 overflow-hidden rounded-lg bg-[var(--color-surface)]">
           {show.posterPath ? (
             <img

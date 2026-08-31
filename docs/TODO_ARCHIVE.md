@@ -951,6 +951,36 @@ currently-dropped shows, since a row can have both
       shows). Verified live: full-width layout renders correctly,
       clicking through updates the page, and both chevrons disable
       correctly at the season's first/last episode.
+- [x] **Poster thumbnail briefly resizes on "Refresh metadata"**
+      (2026-08-30 13:55 added, done 2026-08-31)\
+      Root-caused live via `getBoundingClientRect` measurement on
+      dev.rwnd.tv rather than eyeballing screenshots (same method as the
+      2026-08-26 layout-bug hunt): the poster container's flex row had no
+      `items-start`, so flexbox's default `align-items: stretch` forced
+      the `aspect-[2/3]` poster box to match the (often taller) text
+      column's height instead of its own aspect ratio — measured at
+      317.33px tall against an expected 288px even before touching
+      anything. Clicking "Refresh metadata" adds a "Refreshed." success
+      line to the text column, growing it by one line (28px), which grew
+      the stretched poster box in lockstep (317.33px → 345.33px,
+      confirmed) — the "resize" James saw. This is the exact same
+      latent bug found and fixed on `MovieDetailPage.tsx`/
+      `EpisodeDetailPage.tsx` back on 2026-08-26 (see "TV Show pages"
+      above), deliberately left unfixed on Show/Season pages at the time
+      since it hadn't been asked for — now fixed there too with the
+      identical one-line `sm:items-start` addition (kept the existing
+      `sm` breakpoint rather than the `lg` MovieDetailPage/
+      EpisodeDetailPage also switched to, since that breakpoint change
+      was a separate cosmetic choice, not part of the actual fix).
+      `SeasonDetailPage.tsx` had the identical unfixed pattern (no
+      trigger there yet, but the same defect) — fixed in the same
+      pass after checking scope with James first. Verified live on
+      dev.rwnd.tv both before and after rebuilding the container: poster
+      height measured exactly 288px on both the Show and Season pages,
+      unchanged after triggering "Refresh metadata" (Show page) and after
+      a fresh reload (Season page, which has no equivalent trigger of its
+      own to test against). `pnpm lint`/`typecheck`/`format:check` all
+      clean.
 
 ## Season pages
 

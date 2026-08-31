@@ -25,7 +25,7 @@ Prove every layer works end to end, running as a real self-hosted deployment.
 - [x] **Multi-provider metadata matching**: `MetadataProviderSource` widened off the old TMDB-only literal, a real reverse-lookup fallback (Trakt's `imdb`/`tvdb` ids via TMDB's `/find`) for the common case a `tmdb` id is missing or stale, `METADATA_PROVIDER` env var replaced by credential-derived + admin-configurable priority, and a "Metadata: TMDB" provenance indicator on show/movie pages — see [ADR 0006](adr/0006-multi-provider-metadata.md)
 - [x] **TheTVDB as a real second metadata provider**: a full `TvdbProvider` against TheTVDB v4 API, cross-provider fallback for Trakt import matching (so a title TMDB has no entry for under any id, like Formula 1, can still resolve), and TVDB deep links/attribution logos on show/movie/season/episode pages
 
-## M3 — Ready for real use
+## M3 — Ready for real use ✅ done
 
 Core watch-logging is already solid (M1/M2 shipped local accounts, search,
 manual logging, Trakt/CSV import, and Plex webhooks). M3 isn't about adding

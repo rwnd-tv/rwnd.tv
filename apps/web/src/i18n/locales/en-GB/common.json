@@ -12,12 +12,13 @@
       "features": "Features",
       "selfHost": "Self-host",
       "status": "Status",
+      "faq": "FAQ",
       "github": "GitHub"
     },
     "hero": {
-      "status": "v{{version}} — ready for real use",
+      "status": "v{{version}}, ready for real use",
       "title": "Track what you watch, on your own server.",
-      "body": "rwnd.tv is an open source, self-hosted app for tracking the TV shows and films you watch — a replacement for trakt.tv that you run yourself. Log by hand, import your Trakt history, or let Plex log it for you.",
+      "body": "rwnd.tv is an open source, self-hosted app for tracking the TV shows and films you watch: a replacement for trakt.tv that you run yourself. Log by hand, import your Trakt history, or let Plex log it for you.",
       "meta": "MIT licensed · Docker image on GHCR · Node 26 + PostgreSQL · Light, dark and system themes"
     },
     "strip": {
@@ -31,11 +32,11 @@
       },
       "m3": {
         "label": "M3 · done",
-        "body": "Ratings, watchlists, and a full security review — all shipped"
+        "body": "Ratings, watchlists, and a full security review, all shipped"
       },
       "honest": {
         "label": "Honestly:",
-        "body": "this is a young, single-maintainer project — expect the occasional rough edge, and please file an issue when you hit one.",
+        "body": "this is a young, single-maintainer project, so expect the occasional rough edge, and please file an issue when you hit one.",
         "link": "See where things stand"
       }
     },
@@ -44,7 +45,7 @@
       "body": "Everything listed here is shipped and running on the live instance. Nothing below is a plan.",
       "log": {
         "title": "Search and log",
-        "body": "Find a film or a specific episode, log that you watched it, and browse your History — every watch, rating, watchlist add and drop in one place."
+        "body": "Find a film or a specific episode, log that you watched it, and browse your History: every watch, rating, watchlist add and drop in one place."
       },
       "plex": {
         "title": "Plex logs it for you",
@@ -52,7 +53,7 @@
       },
       "trakt": {
         "title": "Bring your Trakt data",
-        "body": "Import history, ratings and watchlist — either over OAuth or from the ZIP that Trakt's own \"Export now\" gives you, so the one-connected-app cap isn't in your way."
+        "body": "Import history, ratings and watchlist, either over OAuth or from the ZIP that Trakt's own \"Export now\" gives you, so the one-connected-app cap isn't in your way."
       },
       "galleries": {
         "title": "Poster galleries",
@@ -60,11 +61,11 @@
       },
       "lists": {
         "title": "Watchlists and ratings",
-        "body": "Any number of named lists plus a one-click default, and a 5-star rating for shows, films and individual episodes — independent of whether you've watched them."
+        "body": "Any number of named lists plus a one-click default, and a 5-star rating for shows, films and individual episodes, independent of whether you've watched them."
       },
       "export": {
         "title": "Your data stays yours",
-        "body": "A CSV per category — history, ratings, watchlist, dropped shows — zipped and downloadable from Settings. Open formats, no lock-in, by design."
+        "body": "Export a CSV file per category (history, ratings, watchlist, dropped shows), zipped and downloadable from Settings. Open formats, no lock-in, by design."
       }
     },
     "selfHost": {
@@ -94,7 +95,7 @@
       "films": "Films: the same wall, with repeat watches counted.",
       "show": "A show page: seasons, progress, ratings, watchlist and spoiler-safe synopsis.",
       "season": "A season page: tick off episodes, rate them, count rewatches.",
-      "import": "Import: connect Trakt or upload its ZIP export, pick what to bring in, and watch it run — re-running an import never creates duplicates."
+      "import": "Import: connect Trakt or upload its ZIP export, pick what to bring in, and watch it run. Re-running an import never creates duplicates."
     },
     "shots": {
       "dashboard": "The rwnd.tv dashboard: search, Continue Watching, Upcoming and History poster rows",
@@ -110,7 +111,7 @@
       "done": "done",
       "inProgress": "in progress",
       "m1": {
-        "title": "M1 — Foundation",
+        "title": "M1: Foundation",
         "items": [
           "Local accounts, sessions, per-user API tokens",
           "TMDB search, manual watch logging, history",
@@ -119,7 +120,7 @@
         ]
       },
       "m2": {
-        "title": "M2 — Get your data in",
+        "title": "M2: Get your data in",
         "items": [
           "Trakt import, over OAuth and from the ZIP export",
           "TV Shows and Films poster galleries",
@@ -128,27 +129,27 @@
         ]
       },
       "m3": {
-        "title": "M3 — Ready for real use",
+        "title": "M3: Ready for real use",
         "items": [
-          "Watchlists, custom lists and ratings — shipped",
-          "History as a full-width poster grid — shipped",
-          "Metadata accuracy fixes, self-hosting readiness pass — shipped",
-          "Full ASVS L1 security review, then v1.0.0 — both shipped"
+          "Watchlists, custom lists and ratings, shipped",
+          "History as a full-width poster grid, shipped",
+          "Metadata accuracy fixes, self-hosting readiness pass, shipped",
+          "Full ASVS L1 security review, then v1.0.0, both shipped"
         ]
       },
       "builtTitle": "Built with Claude Code, in the open.",
-      "builtBody": "The author isn't a web developer, and has said so from day one — the vision doc, the ADRs and the roadmap are all in the repo, and so is the reasoning behind every significant choice.",
+      "builtBody": "The author isn't a web developer, and has said so from day one: the vision doc, the ADRs and the roadmap are all in the repo, and so is the reasoning behind every significant choice.",
       "visionLink": "Read the vision doc",
       "repoLink": "Browse the repo"
     },
     "faq": {
       "title": "Questions",
-      "body": "Anything missing? Open an issue —",
+      "body": "Anything missing? Open an issue:",
       "contributeLink": "contributions are welcome",
       "selfHost": {
         "q": "Do I have to self-host it?",
         "aOpen": "No. rwnd.tv runs a public instance you can sign up for, and the same Docker image serves it. Every instance decides its own registration policy: open, invite-only or closed.",
-        "aClosed": "No. rwnd.tv runs a public instance, though it isn't taking new sign-ups right now — the same Docker image serves it, so self-hosting is the way in for now. Every instance decides its own registration policy: open, invite-only or closed."
+        "aClosed": "No. rwnd.tv runs a public instance, though it isn't taking new sign-ups right now; the same Docker image serves it, so self-hosting is the way in for now. Every instance decides its own registration policy: open, invite-only or closed."
       },
       "dropIn": {
         "q": "Is it a drop-in Trakt replacement yet?",
@@ -156,7 +157,7 @@
       },
       "metadata": {
         "q": "Where does the metadata come from?",
-        "a": "TMDB and TheTVDB, both behind a provider interface rather than called directly — so a more open source can join or replace them later without a rewrite."
+        "a": "TMDB and TheTVDB, both behind a provider interface rather than called directly, so a more open source can join or replace them later without a rewrite."
       },
       "requirements": {
         "q": "What do I need to run it?",
@@ -164,13 +165,13 @@
       },
       "players": {
         "q": "Jellyfin, Emby or Kodi?",
-        "a": "Not yet. Plex shipped first, but the ingestion core is source-agnostic on purpose — each additional player is one payload parser and one route, not a rework."
+        "a": "Not yet. Plex shipped first, but the ingestion core is source-agnostic on purpose: each additional player is one payload parser and one route, not a rework."
       }
     },
     "cta": {
       "title": "Start logging what you watch",
       "bodyOpen": "Sign up on this instance, or run your own copy in a container. MIT licensed, either way.",
-      "bodyClosed": "Registration is closed on this instance — run your own copy in a container instead. MIT licensed, either way."
+      "bodyClosed": "Registration is closed on this instance; run your own copy in a container instead. MIT licensed, either way."
     },
     "footer": {
       "blurb": "Open source watch tracking you host yourself.",
@@ -180,7 +181,7 @@
       "selfHostingGuide": "Self-hosting guide",
       "adrs": "Architecture decisions",
       "contributing": "Contributing",
-      "attribution": "This product uses the TMDB API but is not endorsed or certified by TMDB. Metadata provided by TheTVDB — please consider adding missing information or subscribing."
+      "attribution": "This product uses the TMDB API but is not endorsed or certified by TMDB. Metadata provided by TheTVDB. Please consider adding missing information or subscribing."
     }
   },
   "nav": {

@@ -4,7 +4,7 @@
 
 rwnd.tv is at v1.0.0, a small, part-time-maintained project moving quickly.
 Only the latest tagged release (`:latest` image) and `main` (`:edge` image)
-receive fixes — there's no support for older tagged versions once a new one
+receive fixes; there's no support for older tagged versions once a new one
 ships. Self-hosters should upgrade promptly; see
 [docs/self-hosting.md](docs/self-hosting.md#upgrading).
 
@@ -20,7 +20,7 @@ for this repository, or email james.bulman@rwnd.tv with details. Please include:
 - Any relevant logs or proof-of-concept code
 
 You should get an acknowledgement within a few days. This is a small,
-part-time-maintained project, so please be patient — but reports are taken
+part-time-maintained project, so please be patient, but reports are taken
 seriously and fixes are prioritised over new features.
 
 ## Scope
@@ -38,10 +38,10 @@ Areas of particular interest given how rwnd.tv is used:
   `apps/api/src/routes/mfa.ts`)
 - Invite-only registration (`apps/api/src/routes/invites.ts`)
 - CSRF protection on the hand-written multipart routes (avatar upload,
-  imports) — see the comment in `apps/api/src/app.ts` for why
+  imports); see the comment in `apps/api/src/app.ts` for why
 - Avatar upload and per-user backup/restore (`apps/api/src/routes/backups.ts`)
 
 A structured security review (OWASP ASVS 4.0.3 Level 1) was completed for
-M3 — see `docs/security/asvs-l1.md` for the requirement-by-requirement
+M3; see `docs/security/asvs-l1.md` for the requirement-by-requirement
 record and `docs/adr/0007-security-posture.md` for the trust model and
 which findings were fixed vs. deliberately accepted.

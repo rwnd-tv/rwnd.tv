@@ -77,6 +77,20 @@ ghcr.io/rwnd-tv/rwnd.tv:X.Y.Z`, replace the old digest in that one
 Deploy to dev the same way afterward (see above) so both instances track
 the same released version, not just prod.
 
+## Prose style in docs
+
+Don't use em-dashes (—) in `docs/`, root-level markdown (README.md,
+CONTRIBUTING.md, SECURITY.md, CODE_OF_CONDUCT.md), or this file. Use a
+colon, semicolon, comma, parentheses, or a separate sentence instead,
+whichever reads best for the specific sentence. Source code comments are
+exempt; this is about reader-facing documentation, not internal notes.
+
+`docs/TODO_ARCHIVE.md` is a working history log rather than polished
+documentation and is exempt. `docs/TODO.md` is not exempt: it's actively
+read, so it follows the same rule as everything else above, including
+its milestone-tag convention (see that file's "Format" section), which
+already avoids em-dashes.
+
 ## Public-facing design surfaces
 
 An earlier version of the landing page converged too closely, in

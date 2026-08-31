@@ -2995,3 +2995,26 @@ up -d` pull-based quick start test (no local Docker CLI reachable
       paths/names `LandingPage.tsx` already expects, reviewed for
       redaction, `lint`/`knip`/`format:check`/`typecheck`/`build` all
       clean.
+- [x] **Tidy up em-dash usage in the docs** (2026-08-31 18:40 added, done
+      2026-08-31)\
+      Reworded every em-dash into a colon, semicolon, comma, parentheses,
+      or a separate sentence, matching the style already used for
+      `CLAUDE.md` (`f968f3d`). No content changes. Scope: root markdown
+      (README, CONTRIBUTING, SECURITY), `docs/vision.md`,
+      `docs/ROADMAP.md`, `docs/self-hosting.md`, `docs/adr/*.md`,
+      `docs/security/asvs-l1.md`, and `docs/TODO.md` itself (whose
+      milestone-tag suffix convention got folded into the trailing date
+      parenthetical instead, e.g. `(2026-08-24 added; M4)`).
+      `docs/TODO_ARCHIVE.md` was deliberately left as-is: a working
+      history log rather than polished documentation, and rewording 437
+      occurrences of already-shipped history carried real risk of
+      introducing subtle content drift for no reader benefit. Done via
+      four parallel forks (root docs, vision/ROADMAP/self-hosting, the
+      seven ADRs, and the 57-occurrence ASVS security doc), reviewed
+      centrally before committing: confirmed zero em-dashes remained
+      outside three deliberately untouched shell-comment exceptions in
+      `README.md`/`CONTRIBUTING.md`, `pnpm lint`/`typecheck` both clean,
+      and `prettier --check .` passing across the whole repo. Also added
+      a new "Prose style in docs" convention to `CLAUDE.md` so this
+      doesn't drift back in, with `docs/TODO_ARCHIVE.md` as the one
+      standing exemption.

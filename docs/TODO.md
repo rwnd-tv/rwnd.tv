@@ -76,6 +76,10 @@ Format:
       long as they stay accurate to _something_ Playwright-shaped in the
       repo, but worth removing or reworking now that the "planned but
       never added" reading no longer applies cleanly.
+- [ ] **Tidy up em-dash usage in the docs** (2026-08-31 18:40 added)\
+      Scoped to `docs/` (README, ADRs, self-hosting/contributing guides,
+      etc.) — source code comments are out of scope, not fussed about
+      those.
 
 ## Auth & accounts
 

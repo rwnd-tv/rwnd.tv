@@ -46,12 +46,12 @@ a floating tag) only updates on a version tag push:
    new version, commit as "Bump version to X.Y.Z", tag that commit
    `vX.Y.Z`, push both the commit and the tag.
 2. Wait for the tag-triggered Release workflow to finish (`gh run watch
-   <run-id> --exit-status`, or `gh run list` to find it): it builds,
+<run-id> --exit-status`, or `gh run list` to find it): it builds,
    scans, signs, and publishes the new image, and moves `latest`.
 3. Verify the published image is actually signed by this repo's own
    release workflow before touching prod. See
    `docs/self-hosting.md#verifying-the-image` for the exact `cosign
-   verify` command. cosign isn't installed everywhere; if missing on the
+verify` command. cosign isn't installed everywhere; if missing on the
    home-server, install to `~/bin/cosign` (a user-writable path, since
    `sudo` isn't available non-interactively over SSH) rather than skip
    the check.
@@ -67,7 +67,7 @@ a floating tag) only updates on a version tag push:
    `cleanup` job's comment in `.github/workflows/release.yml`). Get the
    new digest from either the
    `cosign verify` output or `docker buildx imagetools inspect
-   ghcr.io/rwnd-tv/rwnd.tv:X.Y.Z`, replace the old digest in that one
+ghcr.io/rwnd-tv/rwnd.tv:X.Y.Z`, replace the old digest in that one
    `image:` line, then:
 
    ```

@@ -1,7 +1,7 @@
 {
   "name": "rwnd.tv",
   "private": true,
-  "version": "1.0.3",
+  "version": "1.0.4",
   "type": "module",
   "description": "rwnd.tv (rewind dot tv) — self-hosted tracking for what you watch.",
   "license": "MIT",

@@ -3018,3 +3018,17 @@ up -d` pull-based quick start test (no local Docker CLI reachable
       a new "Prose style in docs" convention to `CLAUDE.md` so this
       doesn't drift back in, with `docs/TODO_ARCHIVE.md` as the one
       standing exemption.
+- [x] **Drop the vestigial Playwright entries in `eslint.config.js`/`.gitignore`**
+      (2026-08-30 added, done 2026-08-31)\
+      Both files carried `playwright-report/`/`test-results/` ignore
+      patterns left over from a Playwright test suite that was planned but
+      never actually added (no `e2e/` directory anywhere in the repo).
+      `tools/screenshots/` does use Playwright for real, but only as a
+      one-off screenshot-capture script, not a test runner, so it never
+      produces either folder. Confirmed via a repo-wide grep that nothing
+      else references either name and `tools/screenshots/` writes to
+      neither, so this was a straightforward removal rather than a
+      rework: dropped both entries from `eslint.config.js`'s `ignores`
+      array and `.gitignore`'s "Test / coverage" section (leaving
+      `coverage/`, which is real). `pnpm lint`/`prettier --check` both
+      clean afterward.

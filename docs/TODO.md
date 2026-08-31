@@ -77,19 +77,6 @@ Format:
       back: a layout-shift bug, not yet root-caused. James's repro:
       https://dev.rwnd.tv/shows/the-ghost-in-the-shell-2026.
 
-## Documentation
-
-- [ ] **Drop the vestigial Playwright entries in `eslint.config.js`/`.gitignore`** (2026-08-30 added)\
-      `eslint.config.js`'s ignores and `.gitignore` both carry
-      `playwright-report/`/`test-results/` patterns left over from a
-      Playwright setup that was never actually added; there's no `e2e/`
-      directory anywhere. `tools/screenshots/` now uses Playwright for
-      real, but as a screenshot tool, not a test runner, so it doesn't
-      produce either of those directories. Low priority: harmless as
-      long as they stay accurate to _something_ Playwright-shaped in the
-      repo, but worth removing or reworking now that the "planned but
-      never added" reading no longer applies cleanly.
-
 ## Auth & accounts
 
 - [ ] **Passkey (WebAuthn) support** (2026-08-23 15:45 added)\

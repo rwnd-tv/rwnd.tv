@@ -13,8 +13,6 @@ export default tseslint.config(
       '**/coverage/**',
       '**/node_modules/**',
       '**/drizzle/**',
-      '**/playwright-report/**',
-      '**/test-results/**',
       // Has its own lockfile/tooling, deliberately outside the pnpm
       // workspace — see tools/screenshots/README.md.
       'tools/**',

@@ -19,6 +19,15 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
+// Guarded, not just truthiness-checked: this value is interpolated straight
+// into a user-visible outbound URL (apps/web/src/lib/imdb.ts), and TMDB
+// returns "" rather than null/absent for a title it has no IMDb id for.
+// Every real IMDb title id is `tt` followed by digits; anything else isn't
+// something we should be building a link out of.
+function imdbIdOf(raw: string | null | undefined): string | null {
+  return raw && /^tt\d+$/.test(raw) ? raw : null
+}
+
 interface TmdbOptions {
   apiKey: string
   apiBaseUrl: string
@@ -49,6 +58,9 @@ interface TmdbMovie {
   genres?: TmdbGenre[]
   vote_average?: number | null
   vote_count?: number
+  // Movies expose this at the top level even without append_to_response —
+  // unlike shows/episodes, which only get it via TmdbExternalIds below.
+  imdb_id?: string | null
 }
 interface TmdbShow {
   id: number
@@ -61,6 +73,14 @@ interface TmdbShow {
   seasons?: TmdbSeasonSummary[]
   vote_average?: number | null
   vote_count?: number
+  // Only present when requested via append_to_response=external_ids — see
+  // getShow() below.
+  external_ids?: TmdbExternalIds
+}
+// TMDB returns "" (not null, not absent) for a title it has no IMDb id
+// for — see imdbIdOf() below, which normalizes that.
+interface TmdbExternalIds {
+  imdb_id?: string | null
 }
 interface TmdbGenre {
   id: number
@@ -84,6 +104,11 @@ interface TmdbEpisode {
   // Same "0 means unrated" quirk as the season/show-level fields — see
   // TmdbSeason's vote_average comment below.
   vote_average?: number | null
+  // Only present when requested via append_to_response=external_ids — see
+  // getEpisode() below. Never present on an episode object nested inside a
+  // /season response (getSeason() below never requests it, and TMDB
+  // doesn't return per-episode external ids there regardless).
+  external_ids?: TmdbExternalIds
 }
 interface TmdbSeason {
   overview?: string | null
@@ -213,6 +238,10 @@ export class TmdbProvider implements MetadataProvider {
   }
 
   async getMovie(externalId: string, locale: string): Promise<ProviderMovie> {
+    // No append_to_response here, deliberately unlike getShow() below:
+    // movies already carry imdb_id at the top level (verified live), so
+    // appending external_ids would only grow the payload of the
+    // highest-traffic provider call for a field it already has.
     const m = await this.request<TmdbMovie>(`/movie/${externalId}`, locale)
     return {
       externalId: String(m.id),
@@ -226,11 +255,16 @@ export class TmdbProvider implements MetadataProvider {
       // treated as "no rating" here rather than a real 0/10, same as
       // getShow() does for the same quirk.
       voteAverage: m.vote_count ? (m.vote_average ?? null) : null,
+      imdbId: imdbIdOf(m.imdb_id),
     }
   }
 
   async getShow(externalId: string, locale: string): Promise<ProviderShow> {
-    const s = await this.request<TmdbShow>(`/tv/${externalId}`, locale)
+    // Unlike getMovie() above, the /tv endpoint has no top-level imdb_id —
+    // append_to_response is the only way to get one (verified live).
+    const s = await this.request<TmdbShow>(`/tv/${externalId}`, locale, {
+      append_to_response: 'external_ids',
+    })
     return {
       externalId: String(s.id),
       title: s.name,
@@ -250,6 +284,7 @@ export class TmdbProvider implements MetadataProvider {
         airDate: season.air_date ?? null,
         posterPath: this.posterUrl(season.poster_path),
       })),
+      imdbId: imdbIdOf(s.external_ids?.imdb_id),
     }
   }
 
@@ -262,6 +297,7 @@ export class TmdbProvider implements MetadataProvider {
     const e = await this.request<TmdbEpisode>(
       `/tv/${showExternalId}/season/${seasonNumber}/episode/${episodeNumber}`,
       locale,
+      { append_to_response: 'external_ids' },
     )
     return {
       title: e.name ?? null,
@@ -275,6 +311,7 @@ export class TmdbProvider implements MetadataProvider {
       // TMDB's episode pages are addressed by number, not id — see
       // ProviderEpisode.externalId's doc comment.
       externalId: null,
+      imdbId: imdbIdOf(e.external_ids?.imdb_id),
     }
   }
 
@@ -300,6 +337,14 @@ export class TmdbProvider implements MetadataProvider {
         stillPath: this.stillUrl(e.still_path),
         voteAverage: e.vote_average ? e.vote_average : null,
         externalId: null,
+        // Always null here, unlike getEpisode() above: TMDB's /season
+        // endpoint returns no external ids on its per-episode objects, and
+        // append_to_response=external_ids on this path returns the
+        // *season's* ids, not each episode's (verified live). A per-episode
+        // IMDb id costs one /episode/{n} call each — which is why one is
+        // fetched by its own route (routes/library/seasons.ts's
+        // .../episodes/{n}/imdb) rather than folded into this bulk payload.
+        imdbId: null,
       })),
     }
   }

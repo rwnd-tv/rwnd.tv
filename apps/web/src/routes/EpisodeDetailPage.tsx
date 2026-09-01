@@ -7,6 +7,7 @@ import { useAuth } from '../lib/use-auth.js'
 import { useEpisodeRatingActions } from '../lib/use-episode-rating-actions.js'
 import { useEpisodeWatchActions } from '../lib/use-episode-watch-actions.js'
 import { TVDB_LOGO_DARK_BG_URL, TVDB_LOGO_LIGHT_BG_URL, tvdbEpisodeUrl } from '../lib/tvdb.js'
+import { imdbTitleUrl } from '../lib/imdb.js'
 import { MetadataAttribution } from '../components/library/MetadataAttribution.js'
 import { RatingPicker } from '../components/library/RatingPicker.js'
 import { SpoilerGuard } from '../components/library/SpoilerGuard.js'
@@ -101,7 +102,9 @@ const TMDB_LOGO_URL = '/attribution/tmdb-logo.svg'
  * season grid (SeasonDetailPage.tsx's EpisodeCard). Sources its data from
  * the same season query that grid already uses — every field this page
  * needs (overview, still image, runtime, watched state, TMDB rating) is
- * already on SeasonEpisode — rather than a dedicated endpoint.
+ * already on SeasonEpisode — rather than a dedicated endpoint. The one
+ * exception is the IMDb id (the `imdb` query below), which does hit its
+ * own endpoint — see that query's own doc comment for why.
  */
 export function EpisodeDetailPage() {
   const { t } = useTranslation()
@@ -156,6 +159,22 @@ export function EpisodeDetailPage() {
     queryKey: ['show', slug, 'season', seasonNumber, 'episode', episode?.episodeNumber, 'watches'],
     queryFn: () => api.library.episodeWatches(slug!, seasonNumber, episode!.episodeNumber),
     enabled: Boolean(slug) && paramsValid && Boolean(episode) && episode!.watchedCount > 0,
+  })
+
+  // Its own, independent query rather than part of the season fetch above:
+  // an episode's IMDb id costs one dedicated provider call (TMDB's season
+  // endpoint carries no per-episode external ids), so fetching it for
+  // every episode of a season would mean ~25 provider calls per season
+  // page view. Non-blocking by design — the page renders fully without
+  // it, and the "View on IMDb" link appears once this lands.
+  // `staleTime: Infinity` since an episode's IMDb id never changes within
+  // a session, and `enabled` waits on `episode` resolving first so this
+  // doesn't fire for an episode number that doesn't exist.
+  const { data: imdb } = useQuery({
+    queryKey: ['show', slug, 'season', seasonNumber, 'episode', episode?.episodeNumber, 'imdb'],
+    queryFn: () => api.library.episodeImdb(slug!, seasonNumber, episode!.episodeNumber),
+    enabled: Boolean(slug) && paramsValid && Boolean(episode),
+    staleTime: Infinity,
   })
 
   if (isLoading) return <Spinner label={t('common.loading')} />
@@ -349,6 +368,20 @@ export function EpisodeDetailPage() {
                       alt={t('showDetail.viewOnTvdb.episode')}
                       className="tvdb-logo-dark h-[0.9rem]"
                     />
+                  </a>
+                ) : null,
+                // A plain text link, not a logo — see MovieDetailPage.tsx's
+                // identical fact for why. Backed by its own, non-blocking
+                // query (imdb, above) rather than a season-payload field —
+                // see that query's doc comment.
+                imdb?.imdbId ? (
+                  <a
+                    href={imdbTitleUrl(imdb.imdbId)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title={t('showDetail.viewOnImdb.episode')}
+                  >
+                    IMDb
                   </a>
                 ) : null,
               ] satisfies (ReactNode | null)[]

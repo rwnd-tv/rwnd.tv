@@ -191,3 +191,125 @@ describe('TmdbProvider.findByExternalId', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2)
   })
 })
+
+describe('TmdbProvider imdbId', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('getMovie reads imdb_id from the top level, without append_to_response', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          id: 603,
+          title: 'The Matrix',
+          release_date: '1999-03-30',
+          imdb_id: 'tt0133093',
+        }),
+        { status: 200 },
+      ),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const movie = await provider().getMovie('603', 'en-GB')
+    expect(movie.imdbId).toBe('tt0133093')
+    const [url] = fetchMock.mock.calls[0] as [URL]
+    expect(url.searchParams.has('append_to_response')).toBe(false)
+  })
+
+  it('getMovie normalizes an empty imdb_id to null', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValueOnce(
+        new Response(JSON.stringify({ id: 603, title: 'The Matrix', imdb_id: '' }), {
+          status: 200,
+        }),
+      ),
+    )
+    const movie = await provider().getMovie('603', 'en-GB')
+    expect(movie.imdbId).toBeNull()
+  })
+
+  it('getShow requests append_to_response=external_ids and reads imdb_id from it', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          id: 1396,
+          name: 'Breaking Bad',
+          external_ids: { imdb_id: 'tt0903747' },
+        }),
+        { status: 200 },
+      ),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const show = await provider().getShow('1396', 'en-GB')
+    expect(show.imdbId).toBe('tt0903747')
+    const [url] = fetchMock.mock.calls[0] as [URL]
+    expect(url.searchParams.get('append_to_response')).toBe('external_ids')
+  })
+
+  it('getShow normalizes a missing external_ids block to null', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify({ id: 1396, name: 'Breaking Bad' }), { status: 200 }),
+        ),
+    )
+    const show = await provider().getShow('1396', 'en-GB')
+    expect(show.imdbId).toBeNull()
+  })
+
+  it('getEpisode requests append_to_response=external_ids and reads imdb_id from it', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          name: 'Pilot',
+          season_number: 1,
+          episode_number: 1,
+          external_ids: { imdb_id: 'tt0959621' },
+        }),
+        { status: 200 },
+      ),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const episode = await provider().getEpisode('1396', 1, 1, 'en-GB')
+    expect(episode.imdbId).toBe('tt0959621')
+    const [url] = fetchMock.mock.calls[0] as [URL]
+    expect(url.searchParams.get('append_to_response')).toBe('external_ids')
+  })
+
+  it('getSeason never populates imdbId on its episodes — TMDB has no per-episode ids there', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            overview: null,
+            episodes: [
+              { name: 'Pilot', season_number: 1, episode_number: 1 },
+              { name: 'Cat’s in the Bag...', season_number: 1, episode_number: 2 },
+            ],
+          }),
+          { status: 200 },
+        ),
+      ),
+    )
+    const season = await provider().getSeason('1396', 1, 'en-GB')
+    expect(season.episodes.every((e) => e.imdbId === null)).toBe(true)
+  })
+
+  it('rejects a malformed imdb_id rather than building a link out of it', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValueOnce(
+        new Response(JSON.stringify({ id: 603, title: 'The Matrix', imdb_id: 'nm0000206' }), {
+          status: 200,
+        }),
+      ),
+    )
+    const movie = await provider().getMovie('603', 'en-GB')
+    expect(movie.imdbId).toBeNull()
+  })
+})

@@ -111,36 +111,21 @@ Format:
 
 ## Metadata & matching
 
-- [ ] **IMDb deep link on show/movie pages** (2026-09-01 13:35 added; M4)\
-      `external_ids` already has an `imdb` source
-      (`packages/db/src/schema.ts`) and the movie/show detail routes
-      already expose `tmdbId`/`tvdbId` as plain deep-link fields
-      (`apps/api/src/routes/library/movies.ts`,
-      `apps/api/src/routes/library/shows.ts`); add `imdbId` the same way
-      and render it on `MovieDetailPage.tsx`/`ShowDetailPage.tsx` with the
-      same plain logo+link treatment `tvdbId` already gets (no rating
-      badge, see the ratings item below). Gap: an `imdb` row is only ever
-      written today for Trakt-imported titles; anything resolved directly
-      via TMDB/TVDB search needs one backfilled, cheapest via TMDB's
-      `append_to_response=external_ids` on the existing
-      `getMovie`/`getShow` calls (`apps/api/src/providers/tmdb.ts`, free
-      in the same request) and TVDB v4's equivalent (`remoteIds`, needs
-      checking). Existing titles without a row pick one up naturally via
-      the metadata-refresh sweep or the manual "refresh metadata" button;
-      no forced backfill needed. Needs an IMDb logo asset and a check of
-      their brand/attribution terms, same as TMDB's did.
 - [ ] **IMDb ratings on Movies (and maybe TV Shows)** (2026-09-01 13:35 added)\
-      Depends on the link item above (needs the imdb id first). IMDb has
-      no public ratings API, so this means adding OMDb (omdbapi.com) as a
-      genuinely new external integration: an optional `OMDB_API_KEY` env
-      var (same "unset -> feature hides itself" pattern as
+      The link groundwork now exists (`imdbId` on show/movie/episode
+      detail responses, and an `imdb` `external_ids` row for the large
+      majority of movies/shows already, see TODO_ARCHIVE.md), so this no
+      longer needs its own id-fetching work, just the rating itself. IMDb
+      has no public ratings API, so this means adding OMDb (omdbapi.com)
+      as a genuinely new external integration: an optional `OMDB_API_KEY`
+      env var (same "unset -> feature hides itself" pattern as
       `TMDB_API_KEY`/`TVDB_API_KEY`, `apps/api/src/env.ts`), a new cached
       `imdbRating` column on `movies` (and `shows` if TV is included, kept
       separate from `voteAverage` since that's TMDB's own rating on a
       different scale), and a second rating badge next to the TMDB one on
-      the detail pages, linking to the same imdb.com URL as the link item.
-      OMDb's free tier is 1,000 requests/day, much tighter than TMDB's
-      effectively uncapped one, so this likely can't fold into the
+      the detail pages, linking to the same imdb.com URL as the existing
+      link. OMDb's free tier is 1,000 requests/day, much tighter than
+      TMDB's effectively uncapped one, so this likely can't fold into the
       existing 6-month compliance refresh sweep
       (`apps/api/src/metadata/refresh.ts`) the way TMDB/TVDB fields do;
       more realistic is fetch-once-and-cache plus the existing manual
@@ -148,6 +133,20 @@ Format:
       this scale before committing to it. Movies-only vs. Movies+TV Shows
       is a small code delta either way (OMDb's `i=` lookup works
       identically for both); the real constraint is the daily quota.
+- [ ] **TVDB `remoteIds` → `imdb` id mapping** (2026-09-01 added)\
+      `TvdbProvider` (`apps/api/src/providers/tvdb.ts`) never populates
+      `imdbId`: every `getMovie`/`getShow`/`getEpisode` call returns
+      `imdbId: null`, deliberately left out of scope when the IMDb deep
+      link shipped (see TODO_ARCHIVE.md) since TMDB alone already covers
+      ~99% of the reference library. TVDB v4's extended movie/series
+      records do carry a `remoteIds` array (imdb entries have
+      `sourceName: "IMDB"`); whether `short: 'true'` (used on every
+      `/extended` call today) strips it needs checking live before
+      mapping it in. When this lands, episodes already marked
+      `imdb_checked_at` under a TVDB-primary show need a targeted reset
+      (`UPDATE episodes SET imdb_checked_at = NULL ...` scoped to those
+      shows) or they'll never get re-checked against the newly-available
+      source.
 
 ## Roadmap
 

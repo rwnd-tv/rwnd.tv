@@ -160,36 +160,44 @@ movieRoutes.openapi(
     // Every query below depends only on `movie.id`/`userId`, not on each
     // other — run them concurrently rather than as 6 sequential round
     // trips on what's one of the app's highest-traffic pages.
-    const [tmdbExternalId, tvdbExternalId, watchedRange, ratingRow, myWatchlistIds] =
-      await Promise.all([
-        // Backs the TMDB rating badge's link to the movie's TMDB page —
-        // same convention as the show route's tmdbExternalId lookup above.
-        getExternalId(db, 'movie', movie.id, 'tmdb'),
-        // Backs the TVDB link — same convention as the show route's own
-        // tvdbExternalId query.
-        getExternalId(db, 'movie', movie.id, 'tvdb'),
-        // Same 1900-01-01 Trakt-sentinel exclusion as the show route's
-        // watchedRange query above — see that query's doc comment.
-        db
-          .select({ watchedCount: sql<number>`count(*)`.mapWith(Number), ...watchedRangeFragments })
-          .from(plays)
-          .where(and(eq(plays.userId, userId), eq(plays.movieId, movie.id)))
-          .then((rows) => rows[0]),
-        // See the show detail route's identical lookup above.
-        db
-          .select({ rating: ratings.rating })
-          .from(ratings)
-          .where(
-            and(
-              eq(ratings.userId, userId),
-              eq(ratings.entityType, 'movie'),
-              eq(ratings.entityId, movie.id),
-            ),
-          )
-          .limit(1)
-          .then((rows) => rows[0]),
-        getMyWatchlistIds(db, userId, 'movie', movie.id),
-      ])
+    const [
+      tmdbExternalId,
+      tvdbExternalId,
+      imdbExternalId,
+      watchedRange,
+      ratingRow,
+      myWatchlistIds,
+    ] = await Promise.all([
+      // Backs the TMDB rating badge's link to the movie's TMDB page —
+      // same convention as the show route's tmdbExternalId lookup above.
+      getExternalId(db, 'movie', movie.id, 'tmdb'),
+      // Backs the TVDB link — same convention as the show route's own
+      // tvdbExternalId query.
+      getExternalId(db, 'movie', movie.id, 'tvdb'),
+      // Backs the IMDb link — same convention as the two above.
+      getExternalId(db, 'movie', movie.id, 'imdb'),
+      // Same 1900-01-01 Trakt-sentinel exclusion as the show route's
+      // watchedRange query above — see that query's doc comment.
+      db
+        .select({ watchedCount: sql<number>`count(*)`.mapWith(Number), ...watchedRangeFragments })
+        .from(plays)
+        .where(and(eq(plays.userId, userId), eq(plays.movieId, movie.id)))
+        .then((rows) => rows[0]),
+      // See the show detail route's identical lookup above.
+      db
+        .select({ rating: ratings.rating })
+        .from(ratings)
+        .where(
+          and(
+            eq(ratings.userId, userId),
+            eq(ratings.entityType, 'movie'),
+            eq(ratings.entityId, movie.id),
+          ),
+        )
+        .limit(1)
+        .then((rows) => rows[0]),
+      getMyWatchlistIds(db, userId, 'movie', movie.id),
+    ])
 
     return c.json({
       id: movie.id,
@@ -203,6 +211,7 @@ movieRoutes.openapi(
       voteAverage: movie.voteAverage,
       tmdbId: tmdbExternalId ?? null,
       tvdbId: tvdbExternalId ?? null,
+      imdbId: imdbExternalId ?? null,
       metadataSource:
         movie.metadataSource && isProviderSource(movie.metadataSource)
           ? movie.metadataSource

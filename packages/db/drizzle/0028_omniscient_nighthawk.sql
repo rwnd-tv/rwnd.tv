@@ -1,0 +1,1 @@
+ALTER TABLE "episodes" ADD COLUMN "imdb_checked_at" timestamp with time zone;

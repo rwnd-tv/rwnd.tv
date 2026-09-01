@@ -40,3 +40,37 @@ as anticipated) now that TheTVDB is a second configured provider on real
 instances and there's an actual order worth changing. The backend needed no
 changes; this was always additive UI work on top of the existing
 patch-a-full-ordered-list API, exactly as predicted.
+
+## Update (2026-09-01)
+
+Two things shift for the `imdb` id namespace with the "View on IMDb" deep
+link (`docs/TODO_ARCHIVE.md`), though the core invariant from this ADR's
+Decision above holds unchanged: `imdb` is still not a
+`MetadataProviderSource`, and still never a system metadata is fetched
+_from_.
+
+- **`imdb` ids are now fetched, not just received.** Previously an `imdb`
+  `external_ids` row only ever arrived via Trakt import
+  (`apps/api/src/import/match.ts`'s `backfillExternalIds`) or a webhook/CSV
+  match (`apps/api/src/lib/external-match.ts`'s `backfillExternalIdBundle`).
+  `TmdbProvider`'s
+  `getMovie`/`getShow`/`getEpisode` (`apps/api/src/providers/tmdb.ts`) now
+  also read an `imdb_id` straight out of the same TMDB response
+  `resolveMovie`/`resolveShow`/`resolveEpisode` already fetch (free for
+  movies, one extra `append_to_response=external_ids` for shows/episodes)
+  and write it as a second `external_ids` row (`apps/api/src/lib/media.ts`'s
+  `upsertExternalId`). Still not a reverse-lookup _source_ the way
+  `findByExternalId` treats `imdb`/`tvdb`: this is TMDB handing over a
+  value it already holds, not TMDB being asked to resolve an `imdb` id into
+  anything.
+- **The namespace now has an outbound use, not just inbound matching.**
+  Until now every `imdb` id existed purely to help _find_ a local row
+  (`findByExternalId`, `findViaAlternateIds`). The new `imdbId` field
+  (`showDetailSchema`/`movieDetailSchema`/`episodeImdbSchema` in
+  `packages/shared/src/schemas`) is the first read of it for something a
+  user actually sees: a plain text "IMDb" link on the show/movie/episode
+  detail pages (`apps/web/src/lib/imdb.ts`). Deliberately a plain text
+  link, not a logo, the inverse of TMDB's/TVDB's own terms, which
+  _require_ their logos: IMDb's conditions of use forbid using their
+  trademark as a link's clickable
+  element without written permission.

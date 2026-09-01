@@ -186,6 +186,15 @@ export const showDetailSchema = z.object({
    * regardless of which provider is currently `metadataSource`, so the
    * link doesn't disappear just because TMDB happens to be primary. */
   tvdbId: z.string().nullable(),
+  /** This show's IMDb id (`tt…`), for linking to its IMDb page
+   * (imdb.com/title/{id}/ — see apps/web/src/lib/imdb.ts). Same "deep
+   * link, not a provenance indicator" convention as `tmdbId`/`tvdbId`
+   * above. Rendered as a plain text link reading "IMDb", never a logo or
+   * wordmark, unlike its TMDB/TVDB neighbours: IMDb's conditions of use
+   * forbid using their trademark as a link's clickable element without
+   * written permission, the opposite of TMDB's/TVDB's terms, which
+   * require their logos. */
+  imdbId: z.string().nullable(),
   /** Which provider the cached metadata on this page (title/overview/
    * genres/etc., not `tmdbId`/`tvdbId` above) was last fetched from —
    * shown as a provenance label next to the rating badge (docs/adr/0006).
@@ -310,6 +319,23 @@ export const seasonDetailSchema = z.object({
   tvdbSeasonId: z.string().nullable(),
 })
 export type SeasonDetail = z.infer<typeof seasonDetailSchema>
+
+/**
+ * Response shape for GET .../episodes/{episodeNumber}/imdb
+ * (apps/api/src/routes/library/seasons.ts). Deliberately its own route and
+ * schema rather than a field on seasonEpisodeSchema above: an episode's
+ * IMDb id costs one dedicated provider call (TMDB's season endpoint
+ * carries no per-episode external ids), so folding it into the season
+ * list would mean up to ~25 provider calls on one season page view.
+ * EpisodeDetailPage.tsx fetches this as its own, non-blocking query
+ * instead. `imdbId` is null both while unknown and when the provider
+ * genuinely has none — the caller can't and shouldn't tell those apart,
+ * same convention as MetadataProvider.findByExternalId.
+ */
+export const episodeImdbSchema = z.object({
+  imdbId: z.string().nullable(),
+})
+export type EpisodeImdb = z.infer<typeof episodeImdbSchema>
 
 /**
  * Response shape for the per-episode/per-movie watched toggle (POST /plays
@@ -560,6 +586,9 @@ export const movieDetailSchema = z.object({
   /** TVDB's own numeric id for this movie — see showDetailSchema's
    * `tvdbId` for the same convention (thetvdb.com/dereferrer/movie/{id}). */
   tvdbId: z.string().nullable(),
+  /** This movie's IMDb id — see showDetailSchema's `imdbId` for the same
+   * convention (imdb.com/title/{id}/) and why it's a plain text link. */
+  imdbId: z.string().nullable(),
   /** See showDetailSchema's field of the same name. */
   metadataSource: metadataProviderSourceSchema.nullable(),
   /** See showDetailSchema's field of the same name. */

@@ -1,4 +1,4 @@
-import { and, eq, gt, gte, inArray } from 'drizzle-orm'
+import { and, eq, gt, gte, inArray, sql } from 'drizzle-orm'
 import type { Database } from '@rwnd/db'
 import { episodes, externalIds, movies, plays, seasons, shows } from '@rwnd/db'
 import type { MetadataProvider } from '../providers/types.js'
@@ -11,6 +11,53 @@ export function episodeDisplayTitle(
   episodeNumber: number | undefined,
 ): string {
   return title ?? `S${seasonNumber} E${episodeNumber}`
+}
+
+/**
+ * Shared `external_ids` upsert for a secondary id discovered alongside an
+ * entity's primary provider id — today, always an `imdb` id found via
+ * TMDB. `correct: false` (create paths below) bare no-ops on conflict:
+ * there's nothing to correct on a row being created for the first time,
+ * and it sidesteps a cross-entity unique violation entirely (see the
+ * `correct: true` branch's comment). `correct: true` (refresh paths in
+ * apps/api/src/metadata/refresh.ts) actively overwrites a stale id — worth
+ * it because every *existing* imdb row today came from Trakt/Plex, a
+ * lower-quality source than TMDB, and a silent no-op here would make the
+ * manual "refresh metadata" button unable to ever fix a wrong one.
+ */
+export async function upsertExternalId(
+  db: Database,
+  entityType: 'movie' | 'show' | 'episode',
+  entityId: string,
+  source: 'tmdb' | 'tvdb' | 'imdb',
+  externalId: string,
+  { correct }: { correct: boolean },
+): Promise<void> {
+  if (!correct) {
+    await db
+      .insert(externalIds)
+      .values({ entityType, entityId, source, externalId })
+      .onConflictDoNothing()
+    return
+  }
+  try {
+    // external_ids carries a SECOND unique index besides the one this
+    // targets — (entity_type, source, external_id) — which
+    // onConflictDoUpdate can't also target. If this source's id already
+    // points at a *different* entity, the insert throws a raw Postgres
+    // unique violation instead of updating. Logged, not rethrown: we can't
+    // tell which entity is actually right, and one bad id must not abort
+    // an entire refresh pass.
+    await db
+      .insert(externalIds)
+      .values({ entityType, entityId, source, externalId })
+      .onConflictDoUpdate({
+        target: [externalIds.entityType, externalIds.entityId, externalIds.source],
+        set: { externalId: sql`excluded.external_id` },
+      })
+  } catch (err) {
+    console.error(`upsertExternalId: ${entityType} ${entityId} ${source} conflict:`, err)
+  }
 }
 
 /**
@@ -71,6 +118,12 @@ export async function resolveMovie(
       externalId,
     })
     .onConflictDoNothing()
+
+  // Free IMDb id for the "View on IMDb" deep link — TMDB returns this in
+  // the same request getMovie() already made above.
+  if (fetched.imdbId) {
+    await upsertExternalId(db, 'movie', movie.id, 'imdb', fetched.imdbId, { correct: false })
+  }
 
   return { id: movie.id, slug: movie.slug, title: movie.title, posterPath: movie.posterPath }
 }
@@ -168,6 +221,14 @@ export async function resolveShow(
     })
     .onConflictDoNothing()
 
+  // Free IMDb id for the "View on IMDb" deep link — see resolveMovie's own
+  // comment above. resolveSeason below never gets one: getSeason() can't
+  // supply per-episode ids, and there's no show-level id to piggyback on
+  // for episodes.
+  if (fetched.imdbId) {
+    await upsertExternalId(db, 'show', show.id, 'imdb', fetched.imdbId, { correct: false })
+  }
+
   // Store season/episode-count data the provider already returned for free —
   // saves the metadata refresher (apps/api/src/metadata/refresh.ts) an
   // otherwise-immediate re-fetch for every newly-resolved show.
@@ -215,6 +276,11 @@ export async function resolveSeason(
   seasonNumber: number,
   locale: string,
 ): Promise<ResolvedEpisode[]> {
+  // Writes no `imdb` external_ids rows, unlike resolveMovie/resolveShow/
+  // resolveEpisode above — provider.getSeason() never populates an
+  // episode's imdbId (see TmdbProvider.getSeason's own comment), so
+  // there's nothing here to write. Per-episode IMDb ids are filled lazily
+  // by apps/api/src/lib/episode-imdb.ts instead.
   const { episodes: seasonEpisodes } = await provider.getSeason(
     showExternalId,
     seasonNumber,
@@ -518,6 +584,18 @@ export async function resolveEpisode(
       externalId: `${show.externalId}:${seasonNumber}:${episodeNumber}`,
     })
     .onConflictDoNothing()
+
+  // Free IMDb id for the "View on IMDb" deep link, when this episode was
+  // resolved via a real getEpisode() call (the branch above, not the
+  // early-return for an already-known episode) — see resolveMovie's own
+  // comment. This is a bonus write, not the episode-imdb route's only
+  // source: routes/library/seasons.ts's dedicated .../imdb route (backed
+  // by apps/api/src/lib/episode-imdb.ts) is what actually serves pages for
+  // the far more common case where an episode row already exists without
+  // ever having gone through this fetch path.
+  if (fetched.imdbId) {
+    await upsertExternalId(db, 'episode', episode.id, 'imdb', fetched.imdbId, { correct: false })
+  }
 
   const [showRow] = await db.select().from(shows).where(eq(shows.id, show.id)).limit(1)
 

@@ -12,6 +12,7 @@ import {
   users,
 } from '@rwnd/db'
 import type {
+  EpisodeImdb,
   ListLibraryMoviesResponse,
   ListLibraryShowsResponse,
   ListWatchlistsResponse,
@@ -333,6 +334,7 @@ describe('library', () => {
       await db.insert(externalIds).values([
         { entityType: 'show', entityId: show.id, source: 'tmdb', externalId: '111' },
         { entityType: 'show', entityId: show.id, source: 'tvdb', externalId: '222' },
+        { entityType: 'show', entityId: show.id, source: 'imdb', externalId: 'tt0111' },
       ])
 
       const res = await app.request(`/api/v1/library/shows/${show.slug}`, { headers: { cookie } })
@@ -343,6 +345,9 @@ describe('library', () => {
       // comment for why it isn't gated on metadataSource.
       expect(detail.tmdbId).toBe('111')
       expect(detail.tvdbId).toBe('222')
+      // Same independence as tvdbId above — see showDetailSchema's
+      // `imdbId` doc comment.
+      expect(detail.imdbId).toBe('tt0111')
     })
 
     it('reports real per-season watched counts, but excludes specials from the header total (regression)', async () => {
@@ -990,6 +995,7 @@ describe('library', () => {
             stillPath: null,
             voteAverage: null,
             externalId: externalId ? `${externalId}-ep` : null,
+            imdbId: null,
           },
         ],
       })
@@ -1107,6 +1113,161 @@ describe('library', () => {
       expect(body.overview).toBe('A season only TVDB knows about')
       expect(body.episodes).toHaveLength(1)
       expect(tmdbGetSeason).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('GET /library/shows/{slug}/seasons/{seasonNumber}/episodes/{episodeNumber}/imdb', () => {
+    async function insertShowWithSeason(episodeCount = 1) {
+      const [show] = await db
+        .insert(shows)
+        .values({ title: 'IMDb Episode Show', slug: 'imdb-episode-show' })
+        .returning()
+      if (!show) throw new Error('failed to insert show')
+      await db
+        .insert(externalIds)
+        .values({ entityType: 'show', entityId: show.id, source: 'tmdb', externalId: '70001' })
+      await db.insert(seasons).values({ showId: show.id, seasonNumber: 1, episodeCount })
+      return show
+    }
+
+    function fakeTmdbWithEpisode(imdbId: string | null) {
+      const getEpisode = vi.fn(async () => ({
+        title: 'Ep 1',
+        seasonNumber: 1,
+        episodeNumber: 1,
+        runtimeMinutes: null,
+        firstAired: null,
+        overview: null,
+        stillPath: null,
+        voteAverage: null,
+        externalId: null,
+        imdbId,
+      }))
+      const provider = { source: 'tmdb', getEpisode } as unknown as MetadataProvider
+      return { provider, getEpisode }
+    }
+
+    it('fetches and caches an episode IMDb id on first request', async () => {
+      const cookie = await createUserAndCookie()
+      const show = await insertShowWithSeason()
+      const [episode] = await db
+        .insert(episodes)
+        .values({ showId: show.id, seasonNumber: 1, episodeNumber: 1 })
+        .returning()
+      if (!episode) throw new Error('failed to insert episode')
+
+      const { provider, getEpisode } = fakeTmdbWithEpisode('tt0959621')
+      const customApp = createApp({ db, metadataProviders: [provider] })
+      const res = await customApp.request(
+        `/api/v1/library/shows/${show.slug}/seasons/1/episodes/1/imdb`,
+        { headers: { cookie } },
+      )
+      expect(res.status).toBe(200)
+      expect((await json<EpisodeImdb>(res)).imdbId).toBe('tt0959621')
+      expect(getEpisode).toHaveBeenCalledTimes(1)
+
+      const [row] = await db
+        .select()
+        .from(externalIds)
+        .where(and(eq(externalIds.entityType, 'episode'), eq(externalIds.entityId, episode.id)))
+      expect(row?.source).toBe('imdb')
+      expect(row?.externalId).toBe('tt0959621')
+
+      const [updated] = await db.select().from(episodes).where(eq(episodes.id, episode.id))
+      expect(updated?.imdbCheckedAt).not.toBeNull()
+    })
+
+    it('returns a cached id without calling the provider again', async () => {
+      const cookie = await createUserAndCookie()
+      const show = await insertShowWithSeason()
+      const [episode] = await db
+        .insert(episodes)
+        .values({ showId: show.id, seasonNumber: 1, episodeNumber: 1, imdbCheckedAt: new Date() })
+        .returning()
+      if (!episode) throw new Error('failed to insert episode')
+      await db.insert(externalIds).values({
+        entityType: 'episode',
+        entityId: episode.id,
+        source: 'imdb',
+        externalId: 'tt0959621',
+      })
+
+      const { provider, getEpisode } = fakeTmdbWithEpisode('tt0000000')
+      const customApp = createApp({ db, metadataProviders: [provider] })
+      const res = await customApp.request(
+        `/api/v1/library/shows/${show.slug}/seasons/1/episodes/1/imdb`,
+        { headers: { cookie } },
+      )
+      expect((await json<EpisodeImdb>(res)).imdbId).toBe('tt0959621')
+      expect(getEpisode).not.toHaveBeenCalled()
+    })
+
+    it('skips the provider call when recently checked and still empty (negative cache)', async () => {
+      const cookie = await createUserAndCookie()
+      const show = await insertShowWithSeason()
+      await db
+        .insert(episodes)
+        .values({ showId: show.id, seasonNumber: 1, episodeNumber: 1, imdbCheckedAt: new Date() })
+
+      const { provider, getEpisode } = fakeTmdbWithEpisode('tt9999999')
+      const customApp = createApp({ db, metadataProviders: [provider] })
+      const res = await customApp.request(
+        `/api/v1/library/shows/${show.slug}/seasons/1/episodes/1/imdb`,
+        { headers: { cookie } },
+      )
+      expect((await json<EpisodeImdb>(res)).imdbId).toBeNull()
+      expect(getEpisode).not.toHaveBeenCalled()
+    })
+
+    it('returns { imdbId: null } rather than a 5xx when the provider call fails', async () => {
+      const cookie = await createUserAndCookie()
+      const show = await insertShowWithSeason()
+      await db.insert(episodes).values({ showId: show.id, seasonNumber: 1, episodeNumber: 1 })
+
+      const provider = {
+        source: 'tmdb',
+        getEpisode: async () => {
+          throw new Error('network blip')
+        },
+      } as unknown as MetadataProvider
+      const customApp = createApp({ db, metadataProviders: [provider] })
+      const res = await customApp.request(
+        `/api/v1/library/shows/${show.slug}/seasons/1/episodes/1/imdb`,
+        { headers: { cookie } },
+      )
+      expect(res.status).toBe(200)
+      expect((await json<EpisodeImdb>(res)).imdbId).toBeNull()
+    })
+
+    it('works for an episode with no local row yet, without creating one', async () => {
+      const cookie = await createUserAndCookie()
+      const show = await insertShowWithSeason()
+
+      const { provider, getEpisode } = fakeTmdbWithEpisode('tt0959621')
+      const customApp = createApp({ db, metadataProviders: [provider] })
+      const res = await customApp.request(
+        `/api/v1/library/shows/${show.slug}/seasons/1/episodes/1/imdb`,
+        { headers: { cookie } },
+      )
+      expect((await json<EpisodeImdb>(res)).imdbId).toBe('tt0959621')
+      expect(getEpisode).toHaveBeenCalledTimes(1)
+
+      const localRows = await db.select().from(episodes).where(eq(episodes.showId, show.id))
+      expect(localRows).toHaveLength(0)
+    })
+
+    it('404s an out-of-range episode number without calling the provider', async () => {
+      const cookie = await createUserAndCookie()
+      const show = await insertShowWithSeason(1)
+
+      const { provider, getEpisode } = fakeTmdbWithEpisode('tt0959621')
+      const customApp = createApp({ db, metadataProviders: [provider] })
+      const res = await customApp.request(
+        `/api/v1/library/shows/${show.slug}/seasons/1/episodes/99/imdb`,
+        { headers: { cookie } },
+      )
+      expect(res.status).toBe(404)
+      expect(getEpisode).not.toHaveBeenCalled()
     })
   })
 
@@ -2954,6 +3115,7 @@ describe('library', () => {
       await db.insert(externalIds).values([
         { entityType: 'movie', entityId: movie.id, source: 'tmdb', externalId: '111' },
         { entityType: 'movie', entityId: movie.id, source: 'tvdb', externalId: '222' },
+        { entityType: 'movie', entityId: movie.id, source: 'imdb', externalId: 'tt0111' },
       ])
 
       const res = await app.request(`/api/v1/library/movies/${movie.slug}`, { headers: { cookie } })
@@ -2961,6 +3123,7 @@ describe('library', () => {
       const detail = await json<MovieDetail>(res)
       expect(detail.tmdbId).toBe('111')
       expect(detail.tvdbId).toBe('222')
+      expect(detail.imdbId).toBe('tt0111')
     })
 
     it("returns metadata and the current user's watch status", async () => {

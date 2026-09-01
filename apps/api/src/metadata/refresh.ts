@@ -1,9 +1,10 @@
 import { and, eq, exists, gt, inArray, isNull, lt, notExists, or, sql } from 'drizzle-orm'
 import type { Database } from '@rwnd/db'
-import { externalIds, instanceSettings, movies, seasons, shows } from '@rwnd/db'
+import { episodes, externalIds, instanceSettings, movies, seasons, shows } from '@rwnd/db'
 import type { MetadataProvider } from '../providers/types.js'
 import { orderedProviders } from '../providers/priority.js'
-import { resolveSeason } from '../lib/media.js'
+import { resolveSeason, upsertExternalId } from '../lib/media.js'
+import { resolveEpisodeImdbId } from '../lib/episode-imdb.js'
 
 /**
  * Keeps cached show/movie metadata (apps/api/src/lib/media.ts's
@@ -48,6 +49,16 @@ const AIRING_STATUSES = ['Returning Series', 'In Production', 'Planned', 'Pilot'
 // so this is deliberately conservative for a job nobody is watching rather
 // than an attempt to run at the limit.
 const REQUEST_STAGGER_MS = 150
+
+// One-off drain of episodes that predate IMDb ids being fetched at all
+// (~4,700 on the reference instance at time of writing). Capped per pass
+// and self-terminating: every episode touched gets `imdbCheckedAt` set
+// regardless of outcome (apps/api/src/lib/episode-imdb.ts), so the
+// candidate set strictly shrinks pass over pass. Deliberately NOT a
+// findStale*-style recurring clause — see those functions' own comments.
+// At 250/pass and the existing REQUEST_STAGGER_MS, ~4,700 episodes drains
+// in about 19 daily passes (~3 weeks).
+const EPISODE_IMDB_BACKFILL_PER_PASS = 250
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
@@ -201,6 +212,18 @@ async function findStaleShows(db: Database): Promise<RefreshCandidate[]> {
   return rows
 }
 
+// Deliberately NO "never populated imdb id" clause here, despite the
+// genres/voteAverage clauses above suggesting every future cached field
+// needs one. At the time this was added, 483/494 shows on the reference
+// instance already had one (from past Trakt imports) — unlike genres,
+// where the set genuinely shrank to zero after one sweep, the ~2%
+// residual here mostly lacks an id because TMDB has none, or the show
+// resolved via TVDB only. A clause would match that same handful of rows
+// forever, not just once. They self-heal within the existing compliance
+// window (~5 months) or immediately via the manual "refresh metadata"
+// button — acceptable for a supplementary deep link on a small fraction
+// of the library. See docs/adr/0005-metadata-refresh.md's update.
+
 async function findStaleMovies(db: Database): Promise<RefreshCandidate[]> {
   const complianceCutoff = new Date(Date.now() - COMPLIANCE_MAX_AGE_MS)
   const rows = await db
@@ -230,6 +253,10 @@ async function findStaleMovies(db: Database): Promise<RefreshCandidate[]> {
     )
   return rows
 }
+
+// Same deliberate omission as findStaleShows' own comment above: no
+// "never populated imdb id" clause, for the same reasoning (563/580
+// movies already covered at the time this was added).
 
 /**
  * Exported for the manual "refresh metadata" button
@@ -262,6 +289,14 @@ export async function refreshOneShow(
       metadataRefreshedAt: new Date(),
     })
     .where(eq(shows.id, candidate.id))
+
+  // Correcting, not just filling: existing imdb rows mostly came from
+  // Trakt/Plex, a lower-quality source than TMDB — see upsertExternalId's
+  // own doc comment for why refresh paths use `correct: true` and create
+  // paths (apps/api/src/lib/media.ts) don't.
+  if (fetched.imdbId) {
+    await upsertExternalId(db, 'show', candidate.id, 'imdb', fetched.imdbId, { correct: true })
+  }
 
   if (fetched.seasons.length > 0) {
     const regularSeasons = fetched.seasons.filter((s) => s.seasonNumber > 0)
@@ -369,6 +404,100 @@ export async function refreshOneMovie(
       metadataRefreshedAt: new Date(),
     })
     .where(eq(movies.id, candidate.id))
+
+  // See refreshOneShow's identical comment above.
+  if (fetched.imdbId) {
+    await upsertExternalId(db, 'movie', candidate.id, 'imdb', fetched.imdbId, { correct: true })
+  }
+}
+
+/** Up to EPISODE_IMDB_BACKFILL_PER_PASS episodes never checked for an IMDb
+ * id, oldest first for stable, resumable paging across passes. The
+ * notExists clause is belt-and-suspenders with imdbCheckedAt IS NULL —
+ * resolveEpisodeImdbId always sets imdbCheckedAt when it writes a hit, but
+ * this guards against ever re-selecting a row that somehow has an imdb
+ * external_ids row without the checked flag set. */
+async function findEpisodesNeedingImdbCheck(
+  db: Database,
+): Promise<{ id: string; showId: string; seasonNumber: number; episodeNumber: number }[]> {
+  return db
+    .select({
+      id: episodes.id,
+      showId: episodes.showId,
+      seasonNumber: episodes.seasonNumber,
+      episodeNumber: episodes.episodeNumber,
+    })
+    .from(episodes)
+    .where(
+      and(
+        isNull(episodes.imdbCheckedAt),
+        notExists(
+          db
+            .select()
+            .from(externalIds)
+            .where(
+              and(
+                eq(externalIds.entityType, 'episode'),
+                eq(externalIds.entityId, episodes.id),
+                eq(externalIds.source, 'imdb'),
+              ),
+            ),
+        ),
+      ),
+    )
+    .orderBy(episodes.createdAt)
+    .limit(EPISODE_IMDB_BACKFILL_PER_PASS)
+}
+
+/**
+ * One-off drain of episodes that predate IMDb ids being fetched at all —
+ * see EPISODE_IMDB_BACKFILL_PER_PASS's own comment. Self-terminating:
+ * resolveEpisodeImdbId sets imdbCheckedAt on every episode it actually
+ * asks a provider about, regardless of outcome, so the candidate set
+ * strictly shrinks pass over pass. A show with no configured provider at
+ * all is skipped without being marked checked — the same "nothing an
+ * admin could act on, try again next pass" tradeoff
+ * findStaleShows/runMetadataRefresh already make for the identical case.
+ */
+async function backfillEpisodeImdbIds(
+  db: Database,
+  ordered: MetadataProvider[],
+  locale: string,
+): Promise<number> {
+  const candidates = await findEpisodesNeedingImdbCheck(db)
+  if (candidates.length === 0) return 0
+
+  const targets = await pickRefreshTargets(
+    db,
+    'show',
+    [...new Set(candidates.map((c) => c.showId))],
+    ordered,
+  )
+
+  let filled = 0
+  for (const candidate of candidates) {
+    const target = targets.get(candidate.showId)
+    if (!target) continue
+    try {
+      const imdbId = await resolveEpisodeImdbId(
+        db,
+        target.provider,
+        target.externalId,
+        {
+          id: candidate.id,
+          seasonNumber: candidate.seasonNumber,
+          episodeNumber: candidate.episodeNumber,
+          imdbCheckedAt: null,
+        },
+        locale,
+      )
+      if (imdbId) filled += 1
+    } catch (err) {
+      console.error(`Episode IMDb backfill failed for episode ${candidate.id}:`, err)
+    }
+    await sleep(REQUEST_STAGGER_MS)
+  }
+  return filled
 }
 
 /**
@@ -387,7 +516,7 @@ export async function refreshOneMovie(
 export async function runMetadataRefresh(
   db: Database,
   providers: MetadataProvider[],
-): Promise<{ showsRefreshed: number; moviesRefreshed: number }> {
+): Promise<{ showsRefreshed: number; moviesRefreshed: number; episodeImdbIdsFilled: number }> {
   const [locale, ordered, staleShows, staleMovies] = await Promise.all([
     currentLocale(db),
     orderedProviders(db, providers),
@@ -446,7 +575,9 @@ export async function runMetadataRefresh(
     await sleep(REQUEST_STAGGER_MS)
   }
 
-  return { showsRefreshed, moviesRefreshed }
+  const episodeImdbIdsFilled = await backfillEpisodeImdbIds(db, ordered, locale)
+
+  return { showsRefreshed, moviesRefreshed, episodeImdbIdsFilled }
 }
 
 /**
@@ -461,10 +592,11 @@ export function scheduleMetadataRefresh(db: Database, providers: MetadataProvide
   const DAY_MS = 24 * 60 * 60 * 1000
   const run = () =>
     runMetadataRefresh(db, providers)
-      .then(({ showsRefreshed, moviesRefreshed }) => {
-        if (showsRefreshed || moviesRefreshed) {
+      .then(({ showsRefreshed, moviesRefreshed, episodeImdbIdsFilled }) => {
+        if (showsRefreshed || moviesRefreshed || episodeImdbIdsFilled) {
           console.log(
-            `Metadata refresh: ${showsRefreshed} show(s), ${moviesRefreshed} movie(s) updated.`,
+            `Metadata refresh: ${showsRefreshed} show(s), ${moviesRefreshed} movie(s) updated, ` +
+              `${episodeImdbIdsFilled} episode IMDb id(s) filled.`,
           )
         }
       })

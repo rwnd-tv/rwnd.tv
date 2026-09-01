@@ -252,6 +252,7 @@ showRoutes.openapi(
     const [
       tmdbExternalId,
       tvdbExternalId,
+      imdbExternalId,
       droppedRow,
       ratingRow,
       myWatchlistIds,
@@ -269,6 +270,9 @@ showRoutes.openapi(
       // `tmdbExternalId`: a show can have either id, both, or neither on
       // record.
       getExternalId(db, 'show', show.id, 'tvdb'),
+      // Backs the IMDb link on the same page — same independent-of-the-
+      // others convention as tvdbExternalId above.
+      getExternalId(db, 'show', show.id, 'imdb'),
       db
         .select({
           traktDropped: droppedShows.traktDropped,
@@ -380,6 +384,7 @@ showRoutes.openapi(
       voteAverage: show.voteAverage,
       tmdbId: tmdbExternalId ?? null,
       tvdbId: tvdbExternalId ?? null,
+      imdbId: imdbExternalId ?? null,
       metadataSource:
         show.metadataSource && isProviderSource(show.metadataSource) ? show.metadataSource : null,
       metadataRefreshedAt: show.metadataRefreshedAt.toISOString(),

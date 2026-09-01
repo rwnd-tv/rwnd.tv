@@ -1,6 +1,7 @@
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi'
 import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm'
 import {
+  episodeImdbSchema,
   markShowWatchedRequestSchema,
   markShowWatchedResponseSchema,
   removeShowWatchesResponseSchema,
@@ -13,6 +14,7 @@ import {
 import { episodes, plays, ratings, seasons } from '@rwnd/db'
 import type { AppEnv } from '../../types.js'
 import { resolveSeasonEpisodes } from '../../lib/media.js'
+import { resolveEpisodeImdbId } from '../../lib/episode-imdb.js'
 import { pickRefreshTarget } from '../../metadata/refresh.js'
 import { orderedProviders } from '../../providers/priority.js'
 import {
@@ -203,6 +205,93 @@ seasonRoutes.openapi(
         }),
       tvdbSeasonId,
     })
+  },
+)
+
+/**
+ * One episode's IMDb id, for the episode detail page's "View on IMDb"
+ * link — deliberately its own route rather than a field on the season
+ * detail route above. TMDB's season endpoint carries no per-episode
+ * external ids (see TmdbProvider.getSeason's own comment), so getting an
+ * episode's IMDb id costs one dedicated provider call; folding that into
+ * the season response would mean up to ~25 provider calls on a single
+ * season page view. Fetched by EpisodeDetailPage.tsx as its own,
+ * non-blocking query instead. Always 200 once the show/season/episode
+ * exist — a provider failure or missing id is `{ imdbId: null }`, not a
+ * 5xx, same "supplementary link, never break the page" convention as the
+ * season route's own TVDB lookup above.
+ */
+seasonRoutes.openapi(
+  createRoute({
+    method: 'get',
+    path: '/library/shows/{slug}/seasons/{seasonNumber}/episodes/{episodeNumber}/imdb',
+    summary: 'Get one episode’s IMDb id, fetching and caching it if not already known',
+    request: {
+      params: z.object({
+        slug: z.string(),
+        seasonNumber: z.coerce.number().int().min(0),
+        episodeNumber: z.coerce.number().int().min(1),
+      }),
+    },
+    responses: {
+      200: {
+        description: 'IMDb id, or null if none is known',
+        content: { 'application/json': { schema: episodeImdbSchema } },
+      },
+      404: { description: 'Show, season or episode not found' },
+    },
+  }),
+  async (c) => {
+    const { slug, seasonNumber, episodeNumber } = c.req.valid('param')
+    const user = c.get('user')!
+    const db = c.get('db')
+    const providers = await orderedProviders(db, c.get('metadataProviders'))
+
+    const show = await getShowBySlug(db, slug)
+    if (!show) return c.json({ error: 'Show not found' }, 404)
+
+    const [seasonRow] = await db
+      .select({ episodeCount: seasons.episodeCount })
+      .from(seasons)
+      .where(and(eq(seasons.showId, show.id), eq(seasons.seasonNumber, seasonNumber)))
+      .limit(1)
+    if (!seasonRow) return c.json({ error: 'Season not found' }, 404)
+
+    // Cheap, purely local guard against an out-of-range episode number —
+    // without it, every bogus number is a live provider 404 on every
+    // request, forever (no local row means no negative cache to stop it).
+    if (episodeNumber > seasonRow.episodeCount) {
+      return c.json({ error: 'Episode not found' }, 404)
+    }
+
+    const target = await pickRefreshTarget(db, 'show', show.id, providers)
+    if (!target) return c.json({ imdbId: null })
+
+    const [episodeRow] = await db
+      .select({ id: episodes.id, imdbCheckedAt: episodes.imdbCheckedAt })
+      .from(episodes)
+      .where(
+        and(
+          eq(episodes.showId, show.id),
+          eq(episodes.seasonNumber, seasonNumber),
+          eq(episodes.episodeNumber, episodeNumber),
+        ),
+      )
+      .limit(1)
+
+    const imdbId = await resolveEpisodeImdbId(
+      db,
+      target.provider,
+      target.externalId,
+      {
+        id: episodeRow?.id ?? null,
+        seasonNumber,
+        episodeNumber,
+        imdbCheckedAt: episodeRow?.imdbCheckedAt ?? null,
+      },
+      user.locale,
+    )
+    return c.json({ imdbId })
   },
 )
 

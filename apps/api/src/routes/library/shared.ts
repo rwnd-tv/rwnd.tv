@@ -45,14 +45,14 @@ export async function getEpisodeIdByNumbers(
   return episode?.id
 }
 
-/** Looks up one provider's external id for a show/movie — backs the TMDB/
- * TVDB deep links on the show/movie/season detail pages. A show or movie
- * can have either id, both, or neither on record. */
+/** Looks up one provider's external id for a show/movie/episode — backs
+ * the TMDB/TVDB/IMDb deep links on the show/movie/season/episode detail
+ * pages. An entity can have any subset of these ids on record, or none. */
 export async function getExternalId(
   db: Database,
-  entityType: 'show' | 'movie',
+  entityType: 'show' | 'movie' | 'episode',
   entityId: string,
-  source: 'tmdb' | 'tvdb',
+  source: 'tmdb' | 'tvdb' | 'imdb',
 ) {
   const [row] = await db
     .select({ externalId: externalIds.externalId })

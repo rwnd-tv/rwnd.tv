@@ -71,6 +71,7 @@ function fakeTvdbProvider(): MetadataProvider {
         posterPath: null,
         genres: [],
         voteAverage: null,
+        imdbId: null,
       }
     },
     async getShow(externalId) {
@@ -87,6 +88,7 @@ function fakeTvdbProvider(): MetadataProvider {
         genres: [],
         voteAverage: null,
         seasons: [],
+        imdbId: null,
       }
     },
     async getEpisode() {
@@ -111,6 +113,7 @@ function fakeTvdbProvider(): MetadataProvider {
             stillPath: null,
             voteAverage: null,
             externalId: 'fake-tvdb-episode-1',
+            imdbId: null,
           },
         ],
       }

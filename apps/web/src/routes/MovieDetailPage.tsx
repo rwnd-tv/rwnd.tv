@@ -9,6 +9,7 @@ import { invalidateWatchData } from '../lib/query-client.js'
 import { useMovieWatchActions } from '../lib/use-movie-watch-actions.js'
 import { TMDB_LOGO_URL } from '../lib/tmdb.js'
 import { TVDB_LOGO_DARK_BG_URL, TVDB_LOGO_LIGHT_BG_URL, tvdbMovieUrl } from '../lib/tvdb.js'
+import { imdbTitleUrl } from '../lib/imdb.js'
 import { MetadataAttribution } from '../components/library/MetadataAttribution.js'
 import { RatingPicker } from '../components/library/RatingPicker.js'
 import { UnwatchConfirmDialog } from '../components/library/UnwatchConfirmDialog.js'
@@ -264,6 +265,22 @@ export function MovieDetailPage() {
                       alt={t('movieDetail.viewOnTvdb')}
                       className="tvdb-logo-dark h-[0.9rem]"
                     />
+                  </a>
+                ) : null,
+                // A plain text link, not a logo, unlike the TMDB/TVDB facts
+                // above — IMDb's conditions of use forbid using their
+                // trademark as a link's clickable element without written
+                // permission, where TMDB's and TVDB's terms require their
+                // logos. See lib/imdb.ts. No rating number next to it
+                // either: this app holds no IMDb rating.
+                movie.imdbId ? (
+                  <a
+                    href={imdbTitleUrl(movie.imdbId)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title={t('movieDetail.viewOnImdb')}
+                  >
+                    IMDb
                   </a>
                 ) : null,
               ] satisfies (ReactNode | null)[]

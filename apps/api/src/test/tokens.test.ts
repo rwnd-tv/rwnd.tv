@@ -26,6 +26,7 @@ function fakeTmdb(): MetadataProvider {
         posterPath: null,
         genres: [],
         voteAverage: null,
+        imdbId: null,
       }
     },
     async getShow(externalId) {
@@ -40,6 +41,7 @@ function fakeTmdb(): MetadataProvider {
         genres: [],
         voteAverage: null,
         seasons: [],
+        imdbId: null,
       }
     },
     async getEpisode() {
@@ -64,6 +66,7 @@ function fakeTmdb(): MetadataProvider {
             stillPath: null,
             voteAverage: null,
             externalId: null,
+            imdbId: null,
           },
         ],
       }

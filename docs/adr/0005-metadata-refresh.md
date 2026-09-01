@@ -48,3 +48,41 @@ show/movie page), and `routes/library.ts` was split into
 `apps/api/src/routes/library/{index,movies,queue,ratings,seasons,shared,shows}.ts`
 during the M3 code-review pass; the gallery endpoint this ADR describes is
 now `shows.ts`/`movies.ts` in that directory, not a single file.
+
+## Update (2026-09-01)
+
+The refresh sweep gained a second, bounded job alongside the existing
+show/movie refresh: `backfillEpisodeImdbIds` (`apps/api/src/metadata/
+refresh.ts`), draining episodes that predate an IMDb id ever being fetched
+for them (see `docs/adr/0006-multi-provider-metadata.md`'s own update).
+Same "one job, run from the same scheduled entrypoint" precedent as the
+rest of this ADR, but deliberately shaped differently from the
+show/movie refresh it sits next to:
+
+- **Self-terminating by construction, not by a `findStale*` clause.**
+  Every episode a pass touches gets `episodes.imdb_checked_at` set
+  regardless of outcome (`apps/api/src/lib/episode-imdb.ts`), so the
+  candidate set (`imdb_checked_at IS NULL`) strictly shrinks pass over
+  pass, capped at `EPISODE_IMDB_BACKFILL_PER_PASS` per run. This is a
+  one-off historical drain, not an ongoing freshness check the way the
+  show/movie compliance sweep is: an episode's IMDb id, once known,
+  doesn't go stale the way cached title/overview fields do.
+- **Deliberately no "never populated" clause added to `findStaleShows`/
+  `findStaleMovies`** for a show/movie's own missing `imdb` id, unlike
+  every other cached field this ADR's `findStaleShows` comment says needs
+  one. At the time this was added, 483/494 shows and 563/580 movies on the
+  reference instance already had an `imdb` id (from past Trakt imports),
+  unlike `genres`, where the "never populated" set genuinely shrank to
+  zero after one sweep; the small residual here mostly lacks an id because
+  TMDB itself has none, or the show resolved via TVDB only. A recurring
+  clause would match that same handful of rows forever, not just once.
+  They self-heal within the existing ~5-month compliance window, or
+  immediately via the existing manual refresh button, accepted for a
+  supplementary deep link on a small fraction of the library. See
+  `findStaleShows`'/`findStaleMovies`' own comments in `refresh.ts`.
+- **`refreshOneShow`/`refreshOneMovie` now also correct a show/movie's own
+  `imdb` id** (`upsertExternalId(..., { correct: true })`,
+  `apps/api/src/lib/media.ts`), unlike the create paths in `resolveShow`/
+  `resolveMovie`, which only ever fill a missing id
+  (`{ correct: false }`), since most existing `imdb` rows came from
+  Trakt/Plex, a source TMDB can now actively correct.

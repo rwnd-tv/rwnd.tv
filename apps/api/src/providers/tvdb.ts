@@ -318,6 +318,10 @@ export class TvdbProvider implements MetadataProvider {
       posterPath: movie.image ?? null,
       genres: (movie.genres ?? []).map((g) => g.name),
       voteAverage: null,
+      // TVDB doesn't map remoteIds -> imdb id yet (docs/TODO.md); every
+      // ProviderMovie/ProviderShow/ProviderEpisode this provider returns
+      // has imdbId: null until that lands.
+      imdbId: null,
     }
   }
 
@@ -374,6 +378,8 @@ export class TvdbProvider implements MetadataProvider {
       status: show.status?.name ?? null,
       genres: (show.genres ?? []).map((g) => g.name),
       voteAverage: null,
+      // See getMovie()'s own imdbId comment.
+      imdbId: null,
       seasons: (show.seasons ?? [])
         .filter((s) => isDefaultSeasonType(s, show))
         .map((s): ProviderSeasonSummary => {
@@ -426,6 +432,8 @@ export class TvdbProvider implements MetadataProvider {
       stillPath: episode.image ?? null,
       voteAverage: null,
       externalId: String(episode.id),
+      // See getMovie()'s own imdbId comment.
+      imdbId: null,
     }
   }
 
@@ -460,6 +468,8 @@ export class TvdbProvider implements MetadataProvider {
         stillPath: e.image ?? null,
         voteAverage: null,
         externalId: String(e.id),
+        // See getMovie()'s own imdbId comment.
+        imdbId: null,
       })),
     }
   }

@@ -8,6 +8,7 @@ import { invalidateWatchData } from '../lib/query-client.js'
 import { markWatchedRequestBody } from '../lib/date.js'
 import { TMDB_LOGO_URL } from '../lib/tmdb.js'
 import { TVDB_LOGO_DARK_BG_URL, TVDB_LOGO_LIGHT_BG_URL, tvdbSeriesUrl } from '../lib/tvdb.js'
+import { imdbTitleUrl } from '../lib/imdb.js'
 import { useAuth } from '../lib/use-auth.js'
 import { EpisodeCard } from '../components/library/EpisodeCard.js'
 import { MetadataAttribution } from '../components/library/MetadataAttribution.js'
@@ -356,6 +357,20 @@ export function ShowDetailPage() {
                       alt={t('showDetail.viewOnTvdb.show')}
                       className="tvdb-logo-dark h-[0.9rem]"
                     />
+                  </a>
+                ) : null,
+                // A plain text link, not a logo — see MovieDetailPage.tsx's
+                // identical fact for why (IMDb's conditions of use forbid
+                // it without written permission). No rating number either:
+                // this app holds no IMDb rating.
+                show.imdbId ? (
+                  <a
+                    href={imdbTitleUrl(show.imdbId)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title={t('showDetail.viewOnImdb.show')}
+                  >
+                    IMDb
                   </a>
                 ) : null,
               ] satisfies (ReactNode | null)[]

@@ -150,6 +150,7 @@ describe('TvdbProvider.getMovie / getShow', () => {
       posterPath: 'https://example.com/p.jpg',
       genres: ['Action'],
       voteAverage: null,
+      imdbId: null,
     })
   })
 
@@ -308,6 +309,7 @@ describe('TvdbProvider.getEpisode', () => {
       stillPath: 'https://example.com/still.jpg',
       voteAverage: null,
       externalId: '1',
+      imdbId: null,
     })
     const [, secondCall] = fetchMock.mock.calls as [unknown, [URL]]
     const [url] = secondCall

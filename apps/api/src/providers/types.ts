@@ -88,6 +88,13 @@ export interface ProviderMovie {
    * or null if the provider doesn't expose one / has no votes yet. Same
    * convention as ProviderShow.voteAverage. */
   voteAverage: number | null
+  /** This entity's IMDb id (`tt…`), for the "View on IMDb" deep link — an
+   * id namespace, never a fetch source (docs/adr/0006), so this is the
+   * only IMDb-shaped field anywhere in this interface. Null if the
+   * provider has none on record. Required, not optional, same reasoning
+   * as ProviderSeason.externalId: a provider that can't supply one must
+   * say so explicitly rather than the field being silently absent. */
+  imdbId: string | null
 }
 
 export interface ProviderShow {
@@ -113,6 +120,9 @@ export interface ProviderShow {
    * packages/db/src/schema.ts's `seasons` table. Excludes nothing itself;
    * callers decide whether to include season 0 (specials). */
   seasons: ProviderSeasonSummary[]
+  /** See ProviderMovie.imdbId — same convention, same field, applies to a
+   * show as a whole rather than one episode. */
+  imdbId: string | null
 }
 
 export interface ProviderSeasonSummary {
@@ -145,4 +155,11 @@ export interface ProviderEpisode {
    * (thetvdb.com/dereferrer/episode/{id}). TmdbProvider always returns
    * null here. */
   externalId: string | null
+  /** See ProviderMovie.imdbId. Only ever populated when this episode was
+   * fetched via getEpisode — getSeason's episodes always return null here,
+   * since TMDB's season endpoint carries no per-episode external ids (see
+   * TmdbProvider.getSeason's own comment). That's the whole reason episode
+   * IMDb ids get their own lazily-fetched route rather than riding along
+   * with the season payload. */
+  imdbId: string | null
 }

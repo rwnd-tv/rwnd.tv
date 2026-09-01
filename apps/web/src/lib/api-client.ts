@@ -21,6 +21,7 @@ import {
   type DisableTotpRequest,
   type DroppedStatus,
   type EnrollTotpResponse,
+  type EpisodeImdb,
   type ForgotPasswordRequest,
   type ImportJob,
   type InstanceAbout,
@@ -299,6 +300,14 @@ export const api = {
     episodeWatches: (slug: string, seasonNumber: number, episodeNumber: number) =>
       get<Watches>(
         `/library/shows/${encodeURIComponent(slug)}/seasons/${seasonNumber}/episodes/${episodeNumber}/plays`,
+      ),
+    // Its own endpoint, not part of season(...) above — an episode's IMDb
+    // id costs one dedicated provider call, so folding it into the season
+    // fetch would mean ~25 provider calls per season page view. See
+    // apps/api/src/routes/library/seasons.ts's .../imdb route.
+    episodeImdb: (slug: string, seasonNumber: number, episodeNumber: number) =>
+      get<EpisodeImdb>(
+        `/library/shows/${encodeURIComponent(slug)}/seasons/${seasonNumber}/episodes/${episodeNumber}/imdb`,
       ),
     rateEpisode: (slug: string, seasonNumber: number, episodeNumber: number, rating: number) =>
       put<RatingStatus>(

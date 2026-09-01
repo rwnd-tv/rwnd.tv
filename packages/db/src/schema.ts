@@ -591,6 +591,18 @@ export const episodes = pgTable(
     runtimeMinutes: integer('runtime_minutes'),
     firstAired: date('first_aired'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    /**
+     * When this episode's IMDb id was last looked up — set on every check
+     * regardless of outcome (apps/api/src/lib/episode-imdb.ts), so it
+     * records "we asked", not "we found". Two jobs: a negative cache (skip
+     * re-asking TMDB for an episode it genuinely has no IMDb id for on
+     * every page view) and the episode-imdb backfill pass's termination
+     * condition (apps/api/src/metadata/refresh.ts) — every episode touched
+     * gets this set, so the "never checked" candidate set strictly shrinks
+     * pass over pass. Null forever for an episode nobody's viewed since
+     * this column was added; that's expected, not a bug.
+     */
+    imdbCheckedAt: timestamp('imdb_checked_at', { withTimezone: true }),
   },
   (table) => [
     uniqueIndex('episodes_show_season_episode_idx').on(

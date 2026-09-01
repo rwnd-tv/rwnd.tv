@@ -1669,6 +1669,80 @@ currently-dropped shows, since a row can have both
       existing tests once the aired-count computation started depending
       on episodes actually landing in the right season.
 
+- [x] **IMDb deep link on show/movie/episode pages** (2026-09-01 13:35
+      added, M4; done 2026-09-01)\
+      Scoped out in chat first: IMDb's own linking policy
+      (imdb.com/pressroom/brand-guidelines, help.imdb.com) forbids using
+      their logo/trademark as a link's clickable element without written
+      permission — the opposite of TMDB's/TVDB's terms, which _require_
+      their logos — so this renders as a plain text "IMDb" link, not a
+      logo, on `MovieDetailPage.tsx`/`ShowDetailPage.tsx`/
+      `EpisodeDetailPage.tsx` (no Season page equivalent — IMDb has no
+      season-level page). Extended to episodes during scoping, beyond the
+      original show/movie-only TODO text.\
+      Provider layer: `TmdbProvider.getMovie` reads the `imdb_id` field
+      TMDB's `/movie/{id}` already returns at the top level, no extra
+      request; `getShow`/`getEpisode` add
+      `append_to_response=external_ids` to get one (`/tv/{id}` has no
+      top-level `imdb_id`, verified live) — `getSeason` still never
+      populates a per-episode id, TMDB's season endpoint carries none at
+      all, confirmed live even with `append_to_response`.
+      `TvdbProvider` returns `imdbId: null` everywhere (mapping its
+      `remoteIds` field is a separate, deliberately out-of-scope TODO
+      item) — `ProviderMovie`/`ProviderShow`/`ProviderEpisode.imdbId` is
+      required, not optional, so every provider implementation (including
+      every hand-written test fake) had to say so explicitly.\
+      Writes: `resolveMovie`/`resolveShow`/`resolveEpisode`
+      (`apps/api/src/lib/media.ts`) write a second `external_ids` row via
+      a new shared `upsertExternalId` helper when a fetch turns up an
+      imdb id; `refreshOneShow`/`refreshOneMovie`
+      (`apps/api/src/metadata/refresh.ts`) _correct_ an existing one
+      (`onConflictDoUpdate`, not `onConflictDoNothing`) since most
+      pre-existing `imdb` rows came from Trakt/Plex, a lower-quality
+      source than TMDB. Deliberately no new "never populated" clause on
+      `findStaleShows`/`findStaleMovies` despite that file's own
+      convention — at 483/494 shows and 563/580 movies already covered on
+      the reference instance, a recurring clause would just re-match the
+      same handful of genuinely-id-less rows forever; they self-heal via
+      the existing ~5-month compliance sweep or the manual refresh
+      button instead. See `docs/adr/0006-multi-provider-metadata.md`'s
+      and `docs/adr/0005-metadata-refresh.md`'s own dated updates for the
+      full reasoning.\
+      Episodes were the hard part: TMDB has no bulk per-episode id
+      endpoint (confirmed live — a season's episode list carries no
+      external ids under any request shape), and 4,703 of 13,378 episodes
+      on the reference instance had no id at launch. Solved with a new
+      `episodes.imdb_checked_at` column (migration `0028`) plus
+      `apps/api/src/lib/episode-imdb.ts`'s `resolveEpisodeImdbId`: a
+      negative cache (skip re-asking for 30 days once checked and empty)
+      and the self-termination signal a new bounded backfill pass
+      (`backfillEpisodeImdbIds`, folded into the existing scheduled
+      metadata-refresh sweep, not a standalone script — the only
+      mechanism in this codebase that reaches every self-hosted instance,
+      not just this one) needs to know it's drained the backlog. A new
+      dedicated route,
+      `GET .../seasons/{n}/episodes/{n}/imdb`
+      (`apps/api/src/routes/library/seasons.ts`), serves
+      `EpisodeDetailPage.tsx`'s own independent, non-blocking query
+      rather than folding into the season payload — TMDB's season
+      endpoint has no per-episode ids, so that would mean up to ~25
+      provider calls per season page view. Works for an episode with no
+      local `episodes` row too (an unwatched show), just without
+      persisting the result — this deliberately doesn't start
+      materializing rows for shows nobody's watching.\
+      Verified: 21 new/updated unit tests across
+      `apps/api/src/providers/tmdb.test.ts` (append_to_response
+      assertions, `""`/malformed-id normalization),
+      `apps/api/src/providers/tvdb.test.ts` (updated exact-match
+      fixtures), `apps/api/src/test/library.test.ts` (tvdbId-independence
+      tests extended, 6 new episode-imdb-route tests covering the cache
+      hit/miss/negative-cache/failure/no-local-row/out-of-range cases),
+      and a new `apps/web/src/lib/imdb.test.ts` pinning the trailing
+      slash IMDb's own linking guidance asks for. Full repo
+      typecheck/lint/format:check clean; 287 pre-existing API tests still
+      passing alongside the new ones (local WSL Postgres, migration
+      `0028` applied first).
+
 ## Webhooks & scrobbling
 
 - [x] **Plex webhook ingestion** (2026-08-23 15:30 added, done 2026-08-24) — M2\

@@ -92,6 +92,37 @@ grouping, sorted oldest to newest.
       (corepack is no longer bundled with Node ≥25, install it
       explicitly) and merged 8 PRs; #7 stays open, blocked on TS 7.
 
+- [x] **`release.yml`'s `cleanup` job can delete another concurrent run's
+      not-yet-merged digests** (2026-08-30 added, fix shipped 2026-08-31,
+      confirmed 2026-09-01)\
+      Found cutting v1.0.1: pushing a commit to `main` and then
+      immediately tagging `v1.0.1` against it triggers two `Release` runs
+      at once (one per trigger: `push: branches` and `push: tags`). Both
+      build their own per-platform images and push them by digest,
+      untagged, until their own `merge` job ties them into a manifest
+      list. `cleanup` (`needs: merge`) deletes _every_ untagged package
+      version unconditionally, so if run A's `merge`+`cleanup` finish
+      while run B's images are still untagged (B's own `merge` hasn't run
+      yet), A's cleanup deletes B's images out from under it. Confirmed
+      live: `v1.0.1`'s tag-triggered run failed 3 times in a row on
+      `docker buildx imagetools create` with `... not found` (a different
+      digest each time), while the concurrent `main`-push run for the
+      same commit succeeded end to end including cleanup.\
+      **Fix shipped 2026-08-31**: `concurrency.group` changed from
+      `release-${{ github.ref }}` to `release-${{ github.workflow }}`
+      (global rather than per-ref), so a `main` push and a version-tag
+      push now fully serialize instead of running concurrently.\
+      **Confirmed 2026-09-01, cutting v1.0.5**: pushed the version-bump
+      commit and its tag together (`git push origin main v1.0.5`), the
+      exact double-trigger shape that broke v1.0.1. Both `Release` runs
+      appeared (`push: main`, `push: tags v1.0.5`); the tag-triggered one
+      ran first and completed end to end, and the `main`-push one sat
+      `pending` the whole time rather than racing it, only starting once
+      the first fully finished (including its own `cleanup`). Both
+      completed successfully with no digest-not-found failures. The fix
+      holds under a real double-trigger, not just the documented
+      concurrency-group semantics it was reasoned from.
+
 ## Open questions / not yet decided
 
 - [x] **Local dev-loop** (2026-08-09 20:40)\

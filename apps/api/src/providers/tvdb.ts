@@ -44,6 +44,13 @@ interface TvdbSearchResult {
 interface TvdbGenre {
   name: string
 }
+// Confirmed live 2026-09-01 against the real API that `short: 'true'`
+// (used on every /extended call in this file) does NOT strip remoteIds —
+// same field, same content, with or without it.
+interface TvdbRemoteId {
+  id?: string
+  sourceName?: string
+}
 interface TvdbStatus {
   name?: string | null
 }
@@ -65,6 +72,7 @@ interface TvdbMovie {
   runtime?: number | null
   image?: string | null
   genres?: TvdbGenre[]
+  remoteIds?: TvdbRemoteId[]
 }
 interface TvdbSeries {
   id: number
@@ -75,6 +83,7 @@ interface TvdbSeries {
   status?: TvdbStatus | null
   genres?: TvdbGenre[]
   seasons?: TvdbSeasonSummary[]
+  remoteIds?: TvdbRemoteId[]
   // Id of this show's own "aired order" season-type grouping (a show can
   // have several — DVD order, absolute order, etc. — alongside it). NOT
   // the same thing as the string "default" used as a path segment on the
@@ -95,6 +104,13 @@ interface TvdbEpisode {
 }
 interface TvdbEpisodesPage {
   episodes?: TvdbEpisode[]
+}
+// Only the field getEpisode()'s own extra imdbId lookup needs — the list
+// endpoint it fetches episodes from (`/series/{id}/episodes/default`)
+// carries no remoteIds itself; only the per-episode `/extended` record
+// does, confirmed live 2026-09-01.
+interface TvdbEpisodeExtended {
+  remoteIds?: TvdbRemoteId[]
 }
 // Only the one field getSeriesRecord's episode-fallback actually needs —
 // not merged into TvdbEpisode itself, which every other episode call site
@@ -134,6 +150,14 @@ const LANGUAGE_BY_LOCALE: Record<string, string> = {
 
 function tvdbLanguage(locale: string): string {
   return LANGUAGE_BY_LOCALE[locale] ?? 'eng'
+}
+
+/** Picks the IMDb id out of a TVDB `remoteIds` array (multiple unrelated
+ * external sites/ids share this same array — official site, social media
+ * handles, TheMovieDB.com, etc. — `sourceName: "IMDB"` is the one this app
+ * cares about), or null if TVDB has none on record for this entity. */
+function imdbIdFromRemoteIds(remoteIds: TvdbRemoteId[] | undefined): string | null {
+  return remoteIds?.find((r) => r.sourceName === 'IMDB')?.id ?? null
 }
 
 /** Whether a season belongs to the show's own "aired order" grouping.
@@ -318,10 +342,7 @@ export class TvdbProvider implements MetadataProvider {
       posterPath: movie.image ?? null,
       genres: (movie.genres ?? []).map((g) => g.name),
       voteAverage: null,
-      // TVDB doesn't map remoteIds -> imdb id yet (docs/TODO.md); every
-      // ProviderMovie/ProviderShow/ProviderEpisode this provider returns
-      // has imdbId: null until that lands.
-      imdbId: null,
+      imdbId: imdbIdFromRemoteIds(movie.remoteIds),
     }
   }
 
@@ -378,8 +399,7 @@ export class TvdbProvider implements MetadataProvider {
       status: show.status?.name ?? null,
       genres: (show.genres ?? []).map((g) => g.name),
       voteAverage: null,
-      // See getMovie()'s own imdbId comment.
-      imdbId: null,
+      imdbId: imdbIdFromRemoteIds(show.remoteIds),
       seasons: (show.seasons ?? [])
         .filter((s) => isDefaultSeasonType(s, show))
         .map((s): ProviderSeasonSummary => {
@@ -432,8 +452,27 @@ export class TvdbProvider implements MetadataProvider {
       stillPath: episode.image ?? null,
       voteAverage: null,
       externalId: String(episode.id),
-      // See getMovie()'s own imdbId comment.
-      imdbId: null,
+      imdbId: await this.episodeImdbId(String(episode.id)),
+    }
+  }
+
+  /** A second request beyond the one getEpisode() already makes above —
+   * unlike getMovie/getShow, the episode-list endpoint carries no
+   * remoteIds, only the per-episode `/extended` record does (see
+   * TvdbEpisodeExtended's own comment). Same "one extra provider call per
+   * episode" cost episode-imdb.ts already accepts for TMDB's own episode
+   * lookup, just paid inside this method instead. Best-effort: this is a
+   * supplementary deep link, not core episode data, so a failure here
+   * (network hiccup, or TVDB genuinely has no IMDb id for this episode)
+   * degrades to no link rather than failing episode resolution itself. */
+  private async episodeImdbId(episodeId: string): Promise<string | null> {
+    try {
+      const extended = await this.request<TvdbEpisodeExtended>(`/episodes/${episodeId}/extended`, {
+        short: 'true',
+      })
+      return imdbIdFromRemoteIds(extended.remoteIds)
+    } catch {
+      return null
     }
   }
 
@@ -468,7 +507,11 @@ export class TvdbProvider implements MetadataProvider {
         stillPath: e.image ?? null,
         voteAverage: null,
         externalId: String(e.id),
-        // See getMovie()'s own imdbId comment.
+        // Deliberately not fetched here — same reasoning as
+        // ProviderEpisode.imdbId's own doc comment (types.ts): fetching
+        // every episode's imdbId up front would mean one extra request per
+        // episode on a single season page view. Only getEpisode() (a
+        // single episode) pays that cost, via episodeImdbId() above.
         imdbId: null,
       })),
     }

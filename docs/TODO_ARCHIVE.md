@@ -1788,6 +1788,57 @@ currently-dropped shows, since a row can have both
       passing alongside the new ones (local WSL Postgres, migration
       `0028` applied first).
 
+- [x] **TVDB `remoteIds` → `imdb` id mapping** (2026-09-01 added, done 2026-09-01)\
+      Done: `TvdbProvider` (`apps/api/src/providers/tvdb.ts`) now parses
+      TVDB's `remoteIds` array (an entry with `sourceName: "IMDB"`) into
+      `imdbId` on `getMovie`/`getShow`, for free — both already fetch the
+      `/extended` record `remoteIds` lives on, no new request. Confirmed
+      live against the real API first (`short: 'true'`, used on every
+      `/extended` call in this file, does NOT strip `remoteIds` — same
+      field, same content, with or without it; checked movie, series, and
+      episode extended records). Episode-level lookup (`getEpisode`) needed
+      a genuinely new request, since the episode-list endpoint it already
+      calls (`/series/{id}/episodes/default`) carries no `remoteIds` at
+      all, only the per-episode `/episodes/{id}/extended` record does — a
+      second, best-effort call (`episodeImdbId()`, try/catch degrades to
+      `null` rather than failing episode resolution), the same "one extra
+      provider call per episode" cost `episode-imdb.ts` already accepts for
+      TMDB's own per-episode lookup. `getSeason`'s per-episode entries
+      deliberately still return `imdbId: null` — fetching it for every
+      episode of a season would mean one extra request per episode on a
+      single page view, the same cost TMDB's own season endpoint was
+      already avoiding (see `ProviderEpisode.imdbId`'s doc comment,
+      `types.ts`).\
+      Verified live on dev.rwnd.tv against real TVDB data before writing
+      any code (Breaking Bad's real IMDb id `tt0903747` correctly pulled
+      out of a real `/series/81189/extended?short=true` response,
+      alongside three unrelated remoteIds entries; same for a movie and an
+      episode). Then end-to-end through the real UI: temporarily cleared
+      Formula 1's existing `imdb` external_ids row (originally set by
+      Trakt import, not TVDB) on dev's database, clicked the show's
+      "refresh metadata" button, and confirmed the exact same id
+      (`tt6758316`) was correctly re-derived live from TVDB's own data.
+      Also confirmed the reverse (no false positives): NASA: 50 Years of
+      Space Exploration and a specific 1950 Formula 1 race episode both
+      show no IMDb link, and both were independently confirmed via the
+      live TVDB API to genuinely carry no IMDb remoteId — not a bug, TVDB
+      just has no cross-reference for either.\
+      `docs/TODO.md`'s own callout — episodes under a TVDB-primary show
+      that were already marked `imdb_checked_at` (from being viewed while
+      TVDB still always returned null) would otherwise sit on that stale
+      negative-cache result for up to 30 days before ever re-checking —
+      addressed with the targeted reset it called for:
+      `UPDATE episodes SET imdb_checked_at = NULL FROM shows WHERE
+episodes.show_id = shows.id AND shows.metadata_source = 'tvdb' AND
+episodes.imdb_checked_at IS NOT NULL`, run against dev (0 rows — nothing
+      had been checked there yet); same command to run against prod once
+      this promotes there, where it will actually matter.\
+      23 tvdb.test.ts unit tests updated/added (new IMDb-mapping cases for
+      movie/show/episode, a best-effort-failure case for the episode
+      lookup), all passing; every other test file touching `TvdbProvider`
+      uses a hand-built fake satisfying `MetadataProvider` rather than the
+      real class, so none needed updating. Full repo lint/typecheck clean.
+
 ## Webhooks & scrobbling
 
 - [x] **Plex webhook ingestion** (2026-08-23 15:30 added, done 2026-08-24) — M2\

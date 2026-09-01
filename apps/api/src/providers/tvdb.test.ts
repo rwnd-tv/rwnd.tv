@@ -154,6 +154,28 @@ describe('TvdbProvider.getMovie / getShow', () => {
     })
   })
 
+  it('getMovie picks the IMDb entry out of remoteIds, ignoring unrelated sources', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(loginOk())
+      .mockResolvedValueOnce(
+        apiResponse({
+          id: 603,
+          name: 'The Matrix',
+          genres: [],
+          remoteIds: [
+            { id: 'https://example.com', sourceName: 'Official Website' },
+            { id: 'tt0133093', sourceName: 'IMDB' },
+          ],
+        }),
+      )
+      .mockResolvedValueOnce(apiResponse({ name: 'The Matrix' }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const movie = await provider().getMovie('603', 'en-GB')
+    expect(movie.imdbId).toBe('tt0133093')
+  })
+
   it('getShow derives per-season episode counts and air dates from the full episode list, and drops non-default season types', async () => {
     const fetchMock = vi
       .fn()
@@ -197,6 +219,26 @@ describe('TvdbProvider.getMovie / getShow', () => {
         posterPath: null,
       },
     ])
+  })
+
+  it('getShow picks the IMDb entry out of remoteIds', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(loginOk())
+      .mockResolvedValueOnce(
+        apiResponse({
+          id: 1399,
+          name: 'Game of Thrones',
+          seasons: [],
+          remoteIds: [{ id: 'tt0944947', sourceName: 'IMDB' }],
+        }),
+      )
+      .mockResolvedValueOnce(apiResponse({ name: 'Game of Thrones' }))
+      .mockResolvedValueOnce(apiResponse({ episodes: [] }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const show = await provider().getShow('1399', 'en-GB')
+    expect(show.imdbId).toBe('tt0944947')
   })
 
   it('falls back to matching the "official" season type by name when defaultSeasonType is itself missing', async () => {
@@ -276,7 +318,7 @@ describe('TvdbProvider.getMovie / getShow', () => {
 describe('TvdbProvider.getEpisode', () => {
   afterEach(() => vi.unstubAllGlobals())
 
-  it('requests the exact season/episode and maps the result', async () => {
+  it('requests the exact season/episode, then a second call for its own imdbId, and maps the result', async () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(loginOk())
@@ -296,6 +338,7 @@ describe('TvdbProvider.getEpisode', () => {
           ],
         }),
       )
+      .mockResolvedValueOnce(apiResponse({ remoteIds: [{ id: 'tt1480055', sourceName: 'IMDB' }] }))
     vi.stubGlobal('fetch', fetchMock)
 
     const episode = await provider().getEpisode('1399', 1, 1, 'en-GB')
@@ -309,12 +352,15 @@ describe('TvdbProvider.getEpisode', () => {
       stillPath: 'https://example.com/still.jpg',
       voteAverage: null,
       externalId: '1',
-      imdbId: null,
+      imdbId: 'tt1480055',
     })
-    const [, secondCall] = fetchMock.mock.calls as [unknown, [URL]]
-    const [url] = secondCall
-    expect(url.searchParams.get('season')).toBe('1')
-    expect(url.searchParams.get('episodeNumber')).toBe('1')
+    const [, secondCall, thirdCall] = fetchMock.mock.calls as [unknown, [URL], [URL]]
+    const [listUrl] = secondCall
+    expect(listUrl.searchParams.get('season')).toBe('1')
+    expect(listUrl.searchParams.get('episodeNumber')).toBe('1')
+    const [extendedUrl] = thirdCall
+    expect(String(extendedUrl)).toContain('/episodes/1/extended')
+    expect(extendedUrl.searchParams.get('short')).toBe('true')
   })
 
   it('throws when no matching episode is returned', async () => {
@@ -325,6 +371,18 @@ describe('TvdbProvider.getEpisode', () => {
     vi.stubGlobal('fetch', fetchMock)
 
     await expect(provider().getEpisode('1399', 99, 99, 'en-GB')).rejects.toThrow(/not found/)
+  })
+
+  it('degrades to a null imdbId rather than failing episode resolution when the extended lookup errors', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(loginOk())
+      .mockResolvedValueOnce(apiResponse({ episodes: [{ id: 1, seasonNumber: 1, number: 1 }] }))
+      .mockResolvedValueOnce(new Response(null, { status: 500 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const episode = await provider().getEpisode('1399', 1, 1, 'en-GB')
+    expect(episode.imdbId).toBeNull()
   })
 })
 

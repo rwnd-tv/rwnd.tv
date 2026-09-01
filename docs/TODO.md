@@ -76,20 +76,6 @@ Format:
       this scale before committing to it. Movies-only vs. Movies+TV Shows
       is a small code delta either way (OMDb's `i=` lookup works
       identically for both); the real constraint is the daily quota.
-- [ ] **TVDB `remoteIds` → `imdb` id mapping** (2026-09-01 added)\
-      `TvdbProvider` (`apps/api/src/providers/tvdb.ts`) never populates
-      `imdbId`: every `getMovie`/`getShow`/`getEpisode` call returns
-      `imdbId: null`, deliberately left out of scope when the IMDb deep
-      link shipped (see TODO_ARCHIVE.md) since TMDB alone already covers
-      ~99% of the reference library. TVDB v4's extended movie/series
-      records do carry a `remoteIds` array (imdb entries have
-      `sourceName: "IMDB"`); whether `short: 'true'` (used on every
-      `/extended` call today) strips it needs checking live before
-      mapping it in. When this lands, episodes already marked
-      `imdb_checked_at` under a TVDB-primary show need a targeted reset
-      (`UPDATE episodes SET imdb_checked_at = NULL ...` scoped to those
-      shows) or they'll never get re-checked against the newly-available
-      source.
 
 ## Roadmap
 

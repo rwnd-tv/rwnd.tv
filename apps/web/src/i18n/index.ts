@@ -17,4 +17,11 @@ void i18n
     supportedLngs: SUPPORTED_LOCALES,
     defaultNS: 'common',
     interpolation: { escapeValue: false },
+    detection: {
+      // No in-app language switcher exists yet, so nothing depends on a
+      // cached choice; always re-derive from the browser's current
+      // language instead of pinning to whatever was first detected.
+      order: ['navigator', 'htmlTag'],
+      caches: [],
+    },
   })

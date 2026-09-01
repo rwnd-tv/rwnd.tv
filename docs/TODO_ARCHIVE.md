@@ -1556,6 +1556,20 @@ currently-dropped shows, since a row can have both
       Cleaned up afterward: deleted the throwaway account and restored
       registration to `Closed`.
 
+- [x] **Landing page locale gets stuck on first-detected language** (2026-08-30 14:28 added, done 2026-09-01)\
+      Done: added an explicit `detection` config to
+      `apps/web/src/i18n/index.ts` (`order: ['navigator', 'htmlTag']`,
+      `caches: []`) so `i18next-browser-languagedetector` always
+      re-derives from the browser's current language on each load
+      instead of pinning to whatever it first cached into
+      `localStorage['i18nextLng']`. No in-app language switcher exists
+      yet, so nothing depended on the cached value. Verified live on
+      dev.rwnd.tv: manually forced a stale `i18nextLng` value in
+      `localStorage` that disagreed with the live browser language
+      (`navigator.language`), reloaded, and confirmed the app resolved
+      to the browser's actual language rather than the stale cached one
+      (`document.documentElement.lang` matched `navigator.language`).
+
 ## Metadata & matching
 
 - [x] **Multi-provider metadata (tmdb/imdb/tvdb)** (2026-08-11 22:20 added, done 2026-08-24) — M2\

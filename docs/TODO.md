@@ -52,26 +52,6 @@ Format:
       theirs, so the page should make clear what's being authorized
       rather than a bare yes/no.
 
-## Internationalization
-
-- [ ] **Landing page locale gets stuck on first-detected language** (2026-08-30 14:28 added)\
-      `i18next-browser-languagedetector` (`apps/web/src/i18n/index.ts`) uses
-      its default detection order (`localStorage` before `navigator`) and
-      caches whatever it first detects into `localStorage['i18nextLng']`.
-      Once a browser has been detected as `en-GB` (or `en-US`), it stays
-      pinned there on every later visit and never re-checks
-      `navigator.language` again, so changing the browser/OS language
-      afterward has no effect on the landing page (or anywhere else in the
-      app) until that localStorage key is cleared manually. Confirmed live
-      on dev.rwnd.tv: cleared the key, reloaded, it re-detected from
-      `navigator.language` as expected; setting it explicitly to `en-US`
-      then correctly switched both the landing page copy and its embedded
-      per-locale screenshots. Fix: probably drop the `localStorage` cache
-      (or the whole custom `caches`/`order` config) so it always re-derives
-      from the browser's current language on each load; there's no
-      in-app language switcher yet, so nothing actually depends on the
-      cached value today.
-
 ## Metadata & matching
 
 - [ ] **IMDb ratings on Movies (and maybe TV Shows)** (2026-09-01 13:35 added)\

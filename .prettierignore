@@ -7,3 +7,13 @@ docs/screenshots
 # Has its own lockfile/tooling, deliberately outside the pnpm workspace —
 # see tools/screenshots/README.md.
 tools
+
+# Prettier's markdown formatter has a genuine bug reindenting a GFM
+# task-list (`- [ ]`) item's second-and-later paragraph 4 spaces deeper
+# than its first, and isn't even idempotent about it (drifts further on
+# each --write). Confirmed against a stock config and a fresh install, not
+# this repo's plugins. These two files use real blank lines to separate
+# paragraphs within an item (see TODO.md's own Format section), which
+# triggers it; excluded here rather than reverting that convention.
+docs/TODO.md
+docs/TODO_ARCHIVE.md

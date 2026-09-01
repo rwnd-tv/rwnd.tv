@@ -583,6 +583,21 @@ currently-dropped shows, since a row can have both
       returned 204, the confirmation appeared, and the page's cached data
       re-fetched without errors in the server log.
 
+- [x] **Title-sort article stripping** (2026-08-19 15:25, done 2026-09-01)\
+      The gallery's title sort ("Sort by: Title") was a plain locale-aware
+      string compare: "The Wire" sorted under T, not W. Considered a fully
+      language-agnostic fix first (no such thing exists: which words count
+      as articles is inherently per-language, and `Intl.Collator`/CLDR
+      don't expose an "ignore leading article" option), so kept it
+      English-only since en-GB/en-US are the only UI locales that ship
+      today. `titleComparatorAsc`/`titleComparatorDesc`
+      (`apps/web/src/lib/library-filter.ts`) now strip a leading
+      "the"/"a"/"an" (case-insensitively, word-boundary so "Antz" isn't
+      touched) before handing titles to the collator, gated on
+      `locale.startsWith('en')`. Covered by new unit tests in
+      `library-filter.test.ts`; extend with more per-language article
+      tables if/when non-English locales ship.
+
 ## Mobile / responsive
 
 - [x] **Sidebar bottom items hidden behind the mobile address bar** (2026-08-21)\

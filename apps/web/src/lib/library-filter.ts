@@ -27,25 +27,36 @@ export function filterByTitle<T extends { title: string }>(items: T[], query: st
   return items.filter((item) => matchesFilter(item.title, query))
 }
 
+/** Leading-article stripping is inherently per-language (which words count
+ * as articles varies, and plenty of languages have none), so there's no
+ * locale-agnostic algorithm for it. Only English ships as a UI locale
+ * today, so this only handles "the"/"a"/"an"; extend with more language
+ * tables if/when non-English locales ship. */
+const ENGLISH_LEADING_ARTICLE = /^(the|an?)\s+/i
+
+function sortKeyFor(locale: string, title: string): string {
+  return locale.startsWith('en') ? title.replace(ENGLISH_LEADING_ARTICLE, '') : title
+}
+
 /** Locale-aware title comparator — `numeric: true` so "Season 2" sorts
  * before "Season 10", `sensitivity: 'base'` so case/accents don't affect
- * order (only whether something matches search). Deliberately doesn't
- * strip leading articles ("The Wire" sorts under T, not W) — real per-
- * language rules for that are a bigger job than this feature needs.
- * `Desc` is a plain swap of the same collator, not a separate comparator —
- * there's no null/unknown case for a title to handle specially. */
+ * order (only whether something matches search). Strips a leading English
+ * article ("The Wire" sorts under W) for English locales; see
+ * `sortKeyFor`. `Desc` is a plain swap of the same collator, not a
+ * separate comparator — there's no null/unknown case for a title to
+ * handle specially. */
 export function titleComparatorAsc(
   locale: string,
 ): (a: { title: string }, b: { title: string }) => number {
   const collator = new Intl.Collator(locale, { sensitivity: 'base', numeric: true })
-  return (a, b) => collator.compare(a.title, b.title)
+  return (a, b) => collator.compare(sortKeyFor(locale, a.title), sortKeyFor(locale, b.title))
 }
 
 export function titleComparatorDesc(
   locale: string,
 ): (a: { title: string }, b: { title: string }) => number {
   const collator = new Intl.Collator(locale, { sensitivity: 'base', numeric: true })
-  return (a, b) => collator.compare(b.title, a.title)
+  return (a, b) => collator.compare(sortKeyFor(locale, b.title), sortKeyFor(locale, a.title))
 }
 
 /** Items with no year sort last in *both* directions — "unknown" isn't

@@ -66,11 +66,6 @@ Format:
       ~500 shows/movies, comfortably fine for the DOM. Revisit if a
       self-hoster's library gets meaningfully larger and scroll performance
       suffers.
-- [ ] **Title-sort article stripping** (2026-08-19 15:25)\
-      The gallery's title sort ("Sort by: Title") is a plain locale-aware
-      string compare: "The Wire" sorts under T, not W. Real per-language
-      leading-article rules are a bigger job than this feature needed; left
-      as a known simplification.
 
 ## Auth & accounts
 

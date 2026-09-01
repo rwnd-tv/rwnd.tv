@@ -4,6 +4,8 @@ import {
   myRatingComparatorAsc,
   myRatingComparatorDesc,
   myRatingRange,
+  titleComparatorAsc,
+  titleComparatorDesc,
 } from './library-filter.js'
 
 describe('myRatingRange', () => {
@@ -44,6 +46,50 @@ describe('filterByMyRating', () => {
 
   it('include shows only unrated items, ignoring the range entirely', () => {
     expect(filterByMyRating(items, 1, 2, 'include')).toEqual([{ myRating: null }])
+  })
+})
+
+describe('titleComparatorAsc / titleComparatorDesc', () => {
+  it('strips a leading English article so it sorts by the next word', () => {
+    const items = [{ title: 'The Wire' }, { title: 'Amelie' }, { title: 'Batman' }]
+    expect(items.toSorted(titleComparatorAsc('en-GB'))).toEqual([
+      { title: 'Amelie' },
+      { title: 'Batman' },
+      { title: 'The Wire' },
+    ])
+  })
+
+  it('strips "a"/"an" too, case-insensitively', () => {
+    const items = [{ title: "a Bug's Life" }, { title: 'AN American Tail' }]
+    expect(items.toSorted(titleComparatorAsc('en-US'))).toEqual([
+      { title: 'AN American Tail' },
+      { title: "a Bug's Life" },
+    ])
+  })
+
+  it('does not strip a word that only starts with an article, like "Antz"', () => {
+    const items = [{ title: 'Antz' }, { title: 'Aladdin' }]
+    expect(items.toSorted(titleComparatorAsc('en-GB'))).toEqual([
+      { title: 'Aladdin' },
+      { title: 'Antz' },
+    ])
+  })
+
+  it('leaves non-English locales untouched', () => {
+    const items = [{ title: 'The Wire' }, { title: 'Amelie' }]
+    expect(items.toSorted(titleComparatorAsc('fr-FR'))).toEqual([
+      { title: 'Amelie' },
+      { title: 'The Wire' },
+    ])
+  })
+
+  it('desc is the reverse of asc', () => {
+    const items = [{ title: 'The Wire' }, { title: 'Amelie' }, { title: 'Batman' }]
+    expect(items.toSorted(titleComparatorDesc('en-GB'))).toEqual([
+      { title: 'The Wire' },
+      { title: 'Batman' },
+      { title: 'Amelie' },
+    ])
   })
 })
 

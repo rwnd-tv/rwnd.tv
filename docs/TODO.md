@@ -156,3 +156,19 @@ source of truth for scope; this is just so a TODO listing is complete.
 - [ ] **Public/shareable profile pages** (2026-08-23 15:38 added; Not yet scheduled)
 
       A public view of a user's watch history/stats.
+
+- [ ] **Admin UI for managing user accounts** (2026-09-02 21:59 added, M4'd 2026-09-02; M4)
+
+      There's no admin-facing view of an instance's users at all today:
+      the `admin`/`user` split (`packages/db/src/schema.ts`'s
+      `userRoleEnum`) only ever gets set once, on the very first account
+      at setup (`routes/setup.ts`), with no route or page to list other
+      users, see their role or last login, promote/demote, revoke their
+      sessions, or delete an account other than your own
+      (`DeleteAccountCard.tsx` is self-service only). An admin on a
+      shared instance currently has no way to do any of this short of a
+      direct database query.
+
+      James, 2026-09-02: needed to actually operate an instance, not
+      just a nice-to-have; milestoned M4 straight away rather than left
+      unscheduled.

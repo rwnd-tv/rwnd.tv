@@ -52,6 +52,7 @@ genuinely production-ready.
 
 - [ ] **Tautulli/Jellyfin/Emby/Kodi webhook ingestion**: built on the same source-agnostic core (entity resolution, per-user API token auth) Plex's webhook (M2) already runs on, so each of these is "one payload parser + one route," not a rework. Tautulli's webhook body is fully user-templated (no fixed shape, needs its own JSON template + setup docs), unlike the others' fixed formats (see TODO.md).
 - [ ] **Calendar of upcoming episodes**: a view of what's airing next across the shows you're following (see TODO.md).
+- [ ] **Admin UI for managing user accounts**: no way today for an admin to list an instance's users, see their role or last login, promote/demote, revoke a session, or delete another account short of a direct database query (see TODO.md).
 - [x] **IMDb deep link on show/movie/episode pages**: a plain text "IMDb" link (not a logo, IMDb's terms forbid that without written permission, unlike TMDB/TVDB), no rating badge. Extended to episode pages during scoping, not just show/movie as originally scoped; see TODO_ARCHIVE.md.
 
 ## Not yet scheduled

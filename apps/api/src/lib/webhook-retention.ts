@@ -6,10 +6,10 @@ import { pendingWebhookEvents } from '@rwnd/db'
  * `pending_webhook_events` held no retention policy before this (M3
  * security review, F-08) — an account seen on a webhook but never linked
  * in Settings would accumulate events indefinitely. 90 days is generous
- * relative to how quickly a real self-hoster actually claims a new Plex
+ * relative to how quickly a real self-hoster actually links a new Plex
  * account (see docs/TODO_ARCHIVE.md's multi-user Plex attribution entry):
  * long enough that someone who's just slow to open Settings doesn't lose
- * anything, short enough that an account nobody ever intends to claim
+ * anything, short enough that an account nobody ever intends to link
  * doesn't grow this table forever.
  */
 const RETENTION_MS = 90 * 24 * 60 * 60 * 1000

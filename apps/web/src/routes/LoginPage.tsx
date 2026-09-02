@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Link, Navigate, useNavigate } from 'react-router'
+import { Link, Navigate, useNavigate, useSearchParams } from 'react-router'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { api, ApiError } from '../lib/api-client.js'
 import { useSetupStatus } from '../lib/use-setup-status.js'
@@ -12,9 +12,23 @@ import { Field } from '../components/ui/Field.js'
 import { Button } from '../components/ui/Button.js'
 import { Spinner } from '../components/ui/Spinner.js'
 
+/** `next` comes from `ProtectedRoute.tsx`'s redirect — only ever trusted
+ * when it's a plain in-app path. A `next` starting with `//` is
+ * protocol-relative (browsers treat it as `https://<that host>`, not a
+ * path on this origin), and anything not starting with `/` at all could
+ * be an absolute URL to somewhere else entirely — both rejected in favour
+ * of the same `/dashboard` fallback as no `next` at all, rather than ever
+ * navigating off whatever the login flow was actually asked to return to. */
+function safeNextPath(raw: string | null): string {
+  if (!raw || !raw.startsWith('/') || raw.startsWith('//')) return '/dashboard'
+  return raw
+}
+
 export function LoginPage() {
   const { t } = useTranslation()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const next = safeNextPath(searchParams.get('next'))
   const queryClient = useQueryClient()
   const { user, isLoading: authLoading } = useAuth()
   const { data: setupStatus, isLoading: setupLoading } = useSetupStatus()
@@ -36,7 +50,7 @@ export function LoginPage() {
     // Covers reaching /login without going through the logout button
     // too (e.g. a session that expired server-side).
     await resetAuthCache(queryClient)
-    void navigate('/dashboard')
+    void navigate(next)
   }
 
   const login = useMutation({
@@ -68,7 +82,7 @@ export function LoginPage() {
     )
   }
   if (setupStatus?.required) return <Navigate to="/setup" replace />
-  if (user) return <Navigate to="/dashboard" replace />
+  if (user) return <Navigate to={next} replace />
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault()

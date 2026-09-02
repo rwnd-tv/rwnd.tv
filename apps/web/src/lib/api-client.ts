@@ -13,8 +13,11 @@ import {
   type CreateBackupRequest,
   type CreateImportJobRequest,
   type CreatePlayRequest,
+  type CreateInviteRequest,
   type CreateInviteResponse,
   type CreateWatchlistRequest,
+  type CreateWebhookLinkCodeRequest,
+  type CreateWebhookLinkCodeResponse,
   type ConfirmTotpResponse,
   type DeleteAccountRequest,
   type DiffBackupResponse,
@@ -45,6 +48,7 @@ import {
   type OnDeckResponse,
   type Play,
   type RatingStatus,
+  type RedeemWebhookLinkRequest,
   type RegenerateRecoveryCodesRequest,
   type RegenerateRecoveryCodesResponse,
   type RegisterRequest,
@@ -69,7 +73,6 @@ import {
   type UpdatePlayRequest,
   type UpdateProfileRequest,
   type UpdateWatchlistRequest,
-  type UpdateWebhookLinkRequest,
   type UpNextResponse,
   type User,
   type VerifyEmailRequest,
@@ -78,6 +81,7 @@ import {
   type WatchlistDetail,
   type WatchlistMembershipStatus,
   type WatchlistSummary,
+  type WebhookAccountLink,
 } from '@rwnd/shared'
 
 export class ApiError extends Error {
@@ -153,7 +157,7 @@ export const api = {
   },
   invites: {
     list: () => get<ListInvitesResponse>('/invites'),
-    create: () => post<CreateInviteResponse>('/invites'),
+    create: (body: CreateInviteRequest) => post<CreateInviteResponse>('/invites', body),
     delete: (id: string) => del<void>(`/invites/${encodeURIComponent(id)}`),
   },
   auth: {
@@ -199,10 +203,20 @@ export const api = {
     create: (body: CreateApiTokenRequest) => post<CreateApiTokenResponse>('/tokens', body),
     delete: (id: string) => del<void>(`/tokens/${id}`),
     webhookLinks: (id: string) => get<ListWebhookLinksResponse>(`/tokens/${id}/webhook-links`),
-    updateWebhookLink: (id: string, linkId: string, body: UpdateWebhookLinkRequest) =>
-      patch<void>(`/tokens/${id}/webhook-links/${linkId}`, body),
+    linkWebhookLink: (id: string, linkId: string) =>
+      post<WebhookAccountLink>(`/tokens/${id}/webhook-links/${linkId}/link`),
+    unlinkWebhookLink: (id: string, linkId: string) =>
+      post<WebhookAccountLink>(`/tokens/${id}/webhook-links/${linkId}/unlink`),
+    createWebhookLinkCode: (id: string, linkId: string, body: CreateWebhookLinkCodeRequest) =>
+      post<CreateWebhookLinkCodeResponse>(`/tokens/${id}/webhook-links/${linkId}/link-code`, body),
     deleteWebhookLink: (id: string, linkId: string) =>
       del<void>(`/tokens/${id}/webhook-links/${linkId}`),
+  },
+  webhookLinks: {
+    redeem: (body: RedeemWebhookLinkRequest) =>
+      post<WebhookAccountLink>('/webhook-links/redeem', body),
+    mine: () => get<ListWebhookLinksResponse>('/webhook-links/mine'),
+    unlink: (linkId: string) => post<WebhookAccountLink>(`/webhook-links/mine/${linkId}/unlink`),
   },
   search: (q: string, type: 'movie' | 'show' | 'all' = 'all') =>
     get<SearchResponse>(`/search?q=${encodeURIComponent(q)}&type=${type}`),

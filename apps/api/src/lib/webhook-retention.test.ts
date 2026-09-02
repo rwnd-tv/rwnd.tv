@@ -33,7 +33,7 @@ async function insertPendingEvent(tokenId: string, createdAt: Date): Promise<str
 describe('pruneStalePendingWebhookEvents', () => {
   beforeEach(() => resetDb(db))
 
-  it('deletes an unclaimed event older than the 90-day retention window', async () => {
+  it('deletes an unlinked event older than the 90-day retention window', async () => {
     const tokenId = await createToken()
     const ninetyOneDaysAgo = new Date(Date.now() - 91 * 24 * 60 * 60 * 1000)
     const eventId = await insertPendingEvent(tokenId, ninetyOneDaysAgo)

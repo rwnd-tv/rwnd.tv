@@ -129,9 +129,12 @@ interface TmdbFindResponse {
   // Plex agent (nature-documentary content, at least) reports an
   // episode's own tmdb/imdb ids in the same place it would put a show's.
   // TMDB's /find still resolves these, just into this array instead of
-  // tv_results — falling back to the episode's own show_id recovers the
-  // show a naive tv_results-only read would miss entirely. Optional
-  // rather than trusting it's always present on every response.
+  // tv_results. Checked *before* tv_results in findByExternalId below,
+  // not just as a fallback when tv_results is empty — live-verified
+  // 2026-09-02 that TMDB's own cross-reference data can have a genuinely
+  // bad tv_results entry alongside a correct one here for the same
+  // external id (see findByExternalId's own comment). Optional rather
+  // than trusting it's always present on every response.
   tv_episode_results?: { show_id: number }[]
 }
 
@@ -372,8 +375,18 @@ export class TmdbProvider implements MetadataProvider {
     if (entityType === 'movie') {
       return data.movie_results[0] ? String(data.movie_results[0].id) : null
     }
-    if (data.tv_results[0]) return String(data.tv_results[0].id)
+    // Checked *before* tv_results, not after — live-verified 2026-09-02
+    // against a real Plex webhook: TMDB's own external-id cross-reference
+    // table can carry a genuinely bad entry that puts an unrelated show in
+    // tv_results for the same external id that tv_episode_results
+    // correctly identifies (TVDB id 411857 → tv_results: "Sisbro" (wrong),
+    // tv_episode_results: "1990" S1E1 "Creed of Slaves", show_id 13380
+    // (right) — confirmed directly against TMDB's live API). An episode
+    // hit carries season/episode numbers that corroborate it, which a bare
+    // tv_results id never does, so it's the more trustworthy signal
+    // whenever both are present, not just when tv_results is empty.
     const episodeHit = data.tv_episode_results?.[0]
-    return episodeHit ? String(episodeHit.show_id) : null
+    if (episodeHit) return String(episodeHit.show_id)
+    return data.tv_results[0] ? String(data.tv_results[0].id) : null
   }
 }

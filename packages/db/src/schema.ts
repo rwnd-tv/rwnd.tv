@@ -260,14 +260,14 @@ export const apiTokens = pgTable(
  * (and, in practice, stays — live-verified 2026-08-24: Plex's own docs'
  * claim that "the server owner is always account 1" does not hold for
  * real payloads, so there's no reliable auto-link) with `userId` null,
- * meaning "seen, not yet claimed" — created automatically the first
+ * meaning "seen, not yet linked" — created automatically the first
  * time an unrecognized account shows up in a webhook event
  * (`apps/api/src/lib/webhook-accounts.ts`), so a self-hoster never has
  * to somehow discover a Plex account's numeric id themselves before
- * they can link it (Settings > API tokens' per-token "Linked accounts"
- * list is where that claim actually happens — see
+ * they can link it (Settings > API tokens' per-token "Detected accounts"
+ * list is where that link actually happens — see
  * `apps/api/src/lib/webhook-plays.ts` for what happens to any watch
- * that arrived while still unclaimed). Deleting the parent token
+ * that arrived while still unlinked). Deleting the parent token
  * cascades — a revoked webhook's account mappings have nothing left to
  * attach to. */
 export const webhookAccountLinks = pgTable(
@@ -280,7 +280,7 @@ export const webhookAccountLinks = pgTable(
     source: webhookSourceEnum('source').notNull(),
     externalAccountId: text('external_account_id').notNull(),
     // Display-only (Plex's Account.title, i.e. username) — never the
-    // match key, just so the claim UI shows a human a name instead of a
+    // match key, just so the link UI shows a human a name instead of a
     // bare number. Refreshed on every sighting in case it changes.
     externalAccountName: text('external_account_name').notNull(),
     userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }),
@@ -296,10 +296,39 @@ export const webhookAccountLinks = pgTable(
   ],
 )
 
+/** A one-time code that lets someone link one specific unclaimed
+ * `webhookAccountLinks` row to *their own* account, without the token
+ * owner ever picking a target user directly (the consent rework this
+ * closes — see `docs/adr/0007-security-posture.md`'s addendum). Modelled
+ * closely on `invites` above: same `codeHash`/`createdBy`/`usedBy`/
+ * `expiresAt` shape, same one-week TTL, same "plaintext shown exactly
+ * once" contract. Unlike `invites`, scoped to one `linkId` rather than
+ * the whole instance — generating a new code for a link supersedes (and
+ * deletes) any prior unused one, so at most one is ever live per link.
+ * Deleting the parent link cascades, same as deleting a token cascades
+ * through to its links. Named `webhookLinkCodes` (not `...ClaimCodes`)
+ * as of 2026-09-02 — the whole feature was renamed from "claim" to
+ * "link" throughout (code, routes, UI copy) since James felt "link" is
+ * the term users would actually understand; renamed the table itself
+ * too rather than leaving an internal/user-facing naming mismatch. */
+export const webhookLinkCodes = pgTable('webhook_link_codes', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  linkId: uuid('link_id')
+    .notNull()
+    .references(() => webhookAccountLinks.id, { onDelete: 'cascade' }),
+  codeHash: text('code_hash').notNull().unique(),
+  createdBy: uuid('created_by')
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  usedBy: uuid('used_by').references(() => users.id, { onDelete: 'set null' }),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+})
+
 /** A webhook event that arrived for an account not yet linked to a
  * rwnd.tv user (see `webhookAccountLinks` above) — stored in full so it
  * can become a real `plays` row retroactively the moment that account
- * gets claimed, instead of being lost. `event` is the parsed,
+ * gets linked, instead of being lost. `event` is the parsed,
  * source-agnostic shape (`apps/api/src/webhooks/plex.ts`'s
  * `IncomingWatchEvent`, or any future source's own equivalent) —
  * defined structurally here rather than imported, since this package
@@ -307,8 +336,8 @@ export const webhookAccountLinks = pgTable(
  * actually happened, not when it's eventually replayed — see
  * `apps/api/src/lib/webhook-plays.ts`. Retention: a daily sweep
  * (apps/api/src/lib/webhook-retention.ts) deletes rows older than 90
- * days for a link that's never been claimed — see that file's doc
- * comment for why an account left permanently unclaimed shouldn't grow
+ * days for a link that's never been linked — see that file's doc
+ * comment for why an account left permanently unlinked shouldn't grow
  * this table forever (M3 security review). */
 export const pendingWebhookEvents = pgTable(
   'pending_webhook_events',
@@ -358,6 +387,15 @@ export const instanceSettings = pgTable(
       .array()
       .notNull()
       .default(['tmdb']),
+    // Optional, admin-set contact address — nullable, no default, so a
+    // fresh instance has none until an admin explicitly sets one.
+    // Publicly readable (apps/api/src/routes/settings.ts's GET /settings,
+    // the same public route instanceName/registrationMode are on) — an
+    // operator who doesn't want it exposed just never sets it. Woven into
+    // a couple of existing "contact this instance's admin"/"ask whoever
+    // runs it" email sentences (apps/api/src/lib/email.ts) that had no
+    // actual address to offer before this existed.
+    adminEmail: text('admin_email'),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [check('instance_settings_singleton', sql`${table.id} = 1`)],
@@ -1006,6 +1044,11 @@ export const webhookAccountLinksRelations = relations(webhookAccountLinks, ({ on
   token: one(apiTokens, { fields: [webhookAccountLinks.tokenId], references: [apiTokens.id] }),
   user: one(users, { fields: [webhookAccountLinks.userId], references: [users.id] }),
 }))
+
+// No relations block, matching `invites` above — same dual-FK-to-`users`
+// shape (createdBy/usedBy), and every route touching this table (see
+// apps/api/src/routes/tokens.ts, webhook-links.ts) uses plain
+// select/eq queries rather than the relational query API.
 
 export const pendingWebhookEventsRelations = relations(pendingWebhookEvents, ({ one }) => ({
   token: one(apiTokens, { fields: [pendingWebhookEvents.tokenId], references: [apiTokens.id] }),

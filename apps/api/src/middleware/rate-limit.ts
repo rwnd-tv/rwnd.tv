@@ -21,6 +21,9 @@ import { getClientIp } from '../lib/client-ip.js'
  *   (tryConsume, called directly from the route handler — see auth.ts)
  * - register / setup: 5/hour per IP
  * - Plex webhook: 120/min per token
+ * - webhook link redeem: 10/15min per IP (the code itself is a 9-byte
+ *   CSPRNG value, so this bounds automation rather than defending
+ *   meaningful entropy)
  */
 
 interface Bucket {

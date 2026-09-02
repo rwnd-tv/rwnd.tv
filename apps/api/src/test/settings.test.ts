@@ -106,6 +106,60 @@ describe('/api/v1/settings — metadata provider priority', () => {
   })
 })
 
+describe('/api/v1/settings — admin email', () => {
+  beforeEach(() => resetDb(db))
+
+  it('GET reports null by default, with no auth required', async () => {
+    const res = await app.request('/api/v1/settings')
+    expect(res.status).toBe(200)
+    const body = await json<InstanceSettings>(res)
+    expect(body.adminEmail).toBeNull()
+  })
+
+  it('PATCH sets it, and GET reflects the change publicly', async () => {
+    const cookie = await createAdminAndCookie()
+    const patchRes = await app.request('/api/v1/settings', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', cookie },
+      body: JSON.stringify({ adminEmail: 'admin@rwnd.tv' }),
+    })
+    expect(patchRes.status).toBe(200)
+    const patched = await json<InstanceSettings>(patchRes)
+    expect(patched.adminEmail).toBe('admin@rwnd.tv')
+
+    const getRes = await app.request('/api/v1/settings')
+    const body = await json<InstanceSettings>(getRes)
+    expect(body.adminEmail).toBe('admin@rwnd.tv')
+  })
+
+  it('PATCH rejects a malformed address', async () => {
+    const cookie = await createAdminAndCookie()
+    const res = await app.request('/api/v1/settings', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', cookie },
+      body: JSON.stringify({ adminEmail: 'not-an-email' }),
+    })
+    expect(res.status).toBe(400)
+  })
+
+  it('PATCH clears it back to null', async () => {
+    const cookie = await createAdminAndCookie()
+    await app.request('/api/v1/settings', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', cookie },
+      body: JSON.stringify({ adminEmail: 'admin@rwnd.tv' }),
+    })
+    const res = await app.request('/api/v1/settings', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', cookie },
+      body: JSON.stringify({ adminEmail: null }),
+    })
+    expect(res.status).toBe(200)
+    const body = await json<InstanceSettings>(res)
+    expect(body.adminEmail).toBeNull()
+  })
+})
+
 describe('/api/v1/settings/about', () => {
   beforeEach(() => resetDb(db))
 

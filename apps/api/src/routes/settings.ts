@@ -24,6 +24,7 @@ const DEFAULT_SETTINGS = {
   registrationMode: 'closed' as const,
   defaultLocale: 'en-US' as const,
   metadataProviderPriority: ['tmdb'] as MetadataProviderSource[],
+  adminEmail: null as string | null,
 }
 
 function isSupportedLocale(value: string): value is InstanceSettings['defaultLocale'] {
@@ -37,6 +38,7 @@ function serializeSettings(row?: {
   registrationMode: InstanceSettings['registrationMode']
   defaultLocale: string
   metadataProviderPriority: string[]
+  adminEmail: string | null
 }): InstanceSettings {
   const source = row ?? DEFAULT_SETTINGS
   const available = availableProviderSources(loadEnv())
@@ -72,14 +74,19 @@ function serializeSettings(row?: {
     emailConfigured: Boolean(loadEnv().SMTP_HOST),
     mfaAvailable: Boolean(loadEnv().ENCRYPTION_KEY),
     appVersion: APP_VERSION,
+    adminEmail: source.adminEmail,
   }
 }
 
 // Instance name / registration mode / default locale are not sensitive —
 // the login and setup screens need to read them before anyone is
-// authenticated (e.g. to decide whether to show a "Register" link). PATCH
-// below is gated on admin explicitly in its own handler chain, rather than
-// via app.use('/settings', ...), since that would match this GET too.
+// authenticated (e.g. to decide whether to show a "Register" link).
+// adminEmail is here too, deliberately: it's null unless an admin
+// explicitly sets one (its own doc comment on packages/db/src/schema.ts's
+// instanceSettings table), so an operator who doesn't want it public
+// simply doesn't set it. PATCH below is gated on admin explicitly in its
+// own handler chain, rather than via app.use('/settings', ...), since
+// that would match this GET too.
 settingsRoutes.openapi(
   createRoute({
     method: 'get',

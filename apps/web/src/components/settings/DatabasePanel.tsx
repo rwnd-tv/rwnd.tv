@@ -10,6 +10,8 @@ import { Button } from '../ui/Button.js'
 import { Dialog } from '../ui/Dialog.js'
 import { Field } from '../ui/Field.js'
 import { Spinner } from '../ui/Spinner.js'
+import { ChevronDownIcon } from '../icons.js'
+import { usePanelOpen } from '../../lib/use-panel-open.js'
 
 type Category = 'watchHistory' | 'ratings' | 'watchlist' | 'droppedShows'
 
@@ -25,11 +27,15 @@ const EMPTY_SELECTION: Record<Category, boolean> = {
  * to/from a file (apps/api/src/routes/backups.ts). Both scoped to the
  * signed-in user only — same tier as ProfileForm/TokensPanel in
  * SettingsPage.tsx, not gated behind `user?.role === 'admin'` the way
- * InstanceSettingsPanel is.
+ * InstanceSettingsPanel is. Collapsed by default like every other panel
+ * on this page except AboutPanel.tsx (2026-09-02) — see
+ * account/AdvancedPreferencesCard.tsx's doc comment for why `<details>`
+ * over a bespoke show/hide component.
  */
 export function DatabasePanel() {
   const { t, i18n } = useTranslation()
   const queryClient = useQueryClient()
+  const [open, setOpen] = usePanelOpen('panelSettingsDatabase')
   const [selected, setSelected] = useState(EMPTY_SELECTION)
   const [confirmOpen, setConfirmOpen] = useState(false)
 
@@ -131,291 +137,312 @@ export function DatabasePanel() {
 
   return (
     <Card>
-      <h2 className="text-lg font-semibold">{t('settings.database.title')}</h2>
-      <div className="mt-1 mb-4 border-t border-[var(--color-border)]" />
+      <details className="group" open={open} onToggle={(e) => setOpen(e.currentTarget.open)}>
+        <summary className="flex cursor-pointer list-none items-center justify-between text-lg font-semibold [&::-webkit-details-marker]:hidden">
+          {t('settings.database.title')}
+          <ChevronDownIcon className="h-5 w-5 flex-shrink-0 transition-transform group-open:rotate-180" />
+        </summary>
+        <div className="mt-4 mb-4 border-t border-[var(--color-border)]" />
 
-      {backupsConfigured && (
-        <div>
-          <h3 className="mb-1 text-base font-semibold">{t('settings.database.backup.title')}</h3>
-          <p className="mb-4 text-sm text-[var(--color-fg-muted)]">
-            {t('settings.database.backup.description')}
-          </p>
-
-          <div className="mb-4">
-            <Button type="button" onClick={() => setCreateBackupOpen(true)}>
-              {t('settings.database.backup.createButton')}
-            </Button>
-          </div>
-
-          {backupsLoading ? (
-            <Spinner label={t('common.loading')} />
-          ) : backupsError ? (
-            <p className="text-sm text-[var(--color-danger)]">{t('common.somethingWentWrong')}</p>
-          ) : backupsData && backupsData.backups.length === 0 ? (
-            <p className="text-sm text-[var(--color-fg-muted)]">
-              {t('settings.database.backup.empty')}
+        {backupsConfigured && (
+          <div>
+            <h3 className="mb-1 text-base font-semibold">{t('settings.database.backup.title')}</h3>
+            <p className="mb-4 text-sm text-[var(--color-fg-muted)]">
+              {t('settings.database.backup.description')}
             </p>
-          ) : (
-            <ul className="@container flex flex-col gap-2">
-              {backupsData?.backups.map((backup) => (
-                <li
-                  key={backup.id}
-                  className="flex flex-col gap-3 rounded-md border border-[var(--color-border)] p-3 @lg:flex-row @lg:items-center @lg:justify-between @lg:gap-4"
-                >
-                  <div className="min-w-0">
-                    <p className="truncate font-medium">{backup.description}</p>
-                    <p className="text-sm text-[var(--color-fg-muted)]">
-                      {new Date(backup.createdAt).toLocaleString(i18n.language)}
-                    </p>
-                    <p className="text-sm text-[var(--color-fg-muted)]">
-                      {t('settings.database.backup.counts', backup.counts)}
-                    </p>
-                    {backup.skipped > 0 && (
-                      <p className="text-sm text-[var(--color-fg-muted)]">
-                        {t('settings.database.backup.skipped', { count: backup.skipped })}
-                      </p>
-                    )}
-                  </div>
-                  <div className="flex flex-wrap gap-2 @lg:shrink-0">
-                    <Button type="button" variant="secondary" onClick={() => setDiffTarget(backup)}>
-                      {t('settings.database.backup.diff')}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      onClick={() => setRestoreTarget(backup)}
-                    >
-                      {t('settings.database.backup.restore')}
-                    </Button>
-                    <Button type="button" variant="danger" onClick={() => setDeleteTarget(backup)}>
-                      {t('settings.database.backup.delete')}
-                    </Button>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      )}
 
-      <div className={backupsConfigured ? 'mt-8 border-t border-[var(--color-border)] pt-6' : ''}>
-        <h3 className="mb-1 text-base font-semibold">{t('settings.database.export.title')}</h3>
-        <p className="mb-4 text-sm text-[var(--color-fg-muted)]">
-          {t('settings.database.export.description')}{' '}
-          <Link to="/import" className="underline hover:no-underline">
-            {t('settings.database.export.importLink')}
-          </Link>
-        </p>
-        {/* A plain download link, not a Button — no request/response to
+            <div className="mb-4">
+              <Button type="button" onClick={() => setCreateBackupOpen(true)}>
+                {t('settings.database.backup.createButton')}
+              </Button>
+            </div>
+
+            {backupsLoading ? (
+              <Spinner label={t('common.loading')} />
+            ) : backupsError ? (
+              <p className="text-sm text-[var(--color-danger)]">{t('common.somethingWentWrong')}</p>
+            ) : backupsData && backupsData.backups.length === 0 ? (
+              <p className="text-sm text-[var(--color-fg-muted)]">
+                {t('settings.database.backup.empty')}
+              </p>
+            ) : (
+              <ul className="@container flex flex-col gap-2">
+                {backupsData?.backups.map((backup) => (
+                  <li
+                    key={backup.id}
+                    className="flex flex-col gap-3 rounded-md border border-[var(--color-border)] p-3 @lg:flex-row @lg:items-center @lg:justify-between @lg:gap-4"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate font-medium">{backup.description}</p>
+                      <p className="text-sm text-[var(--color-fg-muted)]">
+                        {new Date(backup.createdAt).toLocaleString(i18n.language)}
+                      </p>
+                      <p className="text-sm text-[var(--color-fg-muted)]">
+                        {t('settings.database.backup.counts', backup.counts)}
+                      </p>
+                      {backup.skipped > 0 && (
+                        <p className="text-sm text-[var(--color-fg-muted)]">
+                          {t('settings.database.backup.skipped', { count: backup.skipped })}
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap gap-2 @lg:shrink-0">
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={() => setDiffTarget(backup)}
+                      >
+                        {t('settings.database.backup.diff')}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={() => setRestoreTarget(backup)}
+                      >
+                        {t('settings.database.backup.restore')}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="danger"
+                        onClick={() => setDeleteTarget(backup)}
+                      >
+                        {t('settings.database.backup.delete')}
+                      </Button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+
+        <div className={backupsConfigured ? 'mt-8 border-t border-[var(--color-border)] pt-6' : ''}>
+          <h3 className="mb-1 text-base font-semibold">{t('settings.database.export.title')}</h3>
+          <p className="mb-4 text-sm text-[var(--color-fg-muted)]">
+            {t('settings.database.export.description')}{' '}
+            <Link to="/import" className="underline hover:no-underline">
+              {t('settings.database.export.importLink')}
+            </Link>
+          </p>
+          {/* A plain download link, not a Button — no request/response to
             await, the browser just navigates and the server's
             Content-Disposition triggers a save. Styled to match Button's
             own primary-variant classes since there's no anchor variant of
             that component. */}
-        <a
-          href={api.account.exportUrl}
-          className="inline-flex items-center justify-center gap-2 rounded-md bg-[var(--color-primary)] px-4 py-2 text-sm font-medium text-[var(--color-primary-fg)] transition-colors hover:opacity-90"
+          <a
+            href={api.account.exportUrl}
+            className="inline-flex items-center justify-center gap-2 rounded-md bg-[var(--color-primary)] px-4 py-2 text-sm font-medium text-[var(--color-primary-fg)] transition-colors hover:opacity-90"
+          >
+            {t('settings.database.export.button')}
+          </a>
+        </div>
+
+        <div className="mt-8 border-t border-[var(--color-border)] pt-6">
+          <h3 className="mb-1 text-base font-semibold">{t('settings.database.clearTitle')}</h3>
+          <p className="mb-4 text-sm text-[var(--color-fg-muted)]">
+            {t('settings.database.description')}
+          </p>
+
+          <div className="flex flex-col gap-3">
+            {categories.map(({ key, label }) => (
+              <label key={key} className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={selected[key]}
+                  onChange={(e) => setSelected((prev) => ({ ...prev, [key]: e.target.checked }))}
+                />
+                {label}
+                <span className="text-[var(--color-fg-muted)]">{countLabel(key)}</span>
+              </label>
+            ))}
+            <div>
+              <Button
+                type="button"
+                variant="danger"
+                disabled={!anySelected}
+                onClick={() => setConfirmOpen(true)}
+              >
+                {t('settings.database.clearButton')}
+              </Button>
+            </div>
+          </div>
+        </div>
+
+        <Dialog
+          open={confirmOpen}
+          onClose={() => setConfirmOpen(false)}
+          title={t('settings.database.confirmTitle')}
         >
-          {t('settings.database.export.button')}
-        </a>
-      </div>
+          {/* Only the categories actually checked — mirrors
+            UnwatchConfirmDialog only listing the watches actually being
+            removed, not a static list of everything that could be. */}
+          <ul className="flex flex-col gap-1 text-sm text-[var(--color-fg-muted)]">
+            {categories
+              .filter(({ key }) => selected[key])
+              .map(({ key, label }) => (
+                <li key={key}>
+                  {label}
+                  {countLabel(key)}
+                </li>
+              ))}
+          </ul>
 
-      <div className="mt-8 border-t border-[var(--color-border)] pt-6">
-        <h3 className="mb-1 text-base font-semibold">{t('settings.database.clearTitle')}</h3>
-        <p className="mb-4 text-sm text-[var(--color-fg-muted)]">
-          {t('settings.database.description')}
-        </p>
-
-        <div className="flex flex-col gap-3">
-          {categories.map(({ key, label }) => (
-            <label key={key} className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={selected[key]}
-                onChange={(e) => setSelected((prev) => ({ ...prev, [key]: e.target.checked }))}
-              />
-              {label}
-              <span className="text-[var(--color-fg-muted)]">{countLabel(key)}</span>
-            </label>
-          ))}
-          <div>
+          <div className="mt-6 flex justify-end gap-2">
+            <Button type="button" variant="secondary" onClick={() => setConfirmOpen(false)}>
+              {t('common.cancel')}
+            </Button>
             <Button
               type="button"
               variant="danger"
-              disabled={!anySelected}
-              onClick={() => setConfirmOpen(true)}
+              isLoading={clearData.isPending}
+              onClick={() => clearData.mutate()}
             >
               {t('settings.database.clearButton')}
             </Button>
           </div>
-        </div>
-      </div>
+        </Dialog>
 
-      <Dialog
-        open={confirmOpen}
-        onClose={() => setConfirmOpen(false)}
-        title={t('settings.database.confirmTitle')}
-      >
-        {/* Only the categories actually checked — mirrors
-            UnwatchConfirmDialog only listing the watches actually being
-            removed, not a static list of everything that could be. */}
-        <ul className="flex flex-col gap-1 text-sm text-[var(--color-fg-muted)]">
-          {categories
-            .filter(({ key }) => selected[key])
-            .map(({ key, label }) => (
-              <li key={key}>
-                {label}
-                {countLabel(key)}
-              </li>
-            ))}
-        </ul>
-
-        <div className="mt-6 flex justify-end gap-2">
-          <Button type="button" variant="secondary" onClick={() => setConfirmOpen(false)}>
-            {t('common.cancel')}
-          </Button>
-          <Button
-            type="button"
-            variant="danger"
-            isLoading={clearData.isPending}
-            onClick={() => clearData.mutate()}
-          >
-            {t('settings.database.clearButton')}
-          </Button>
-        </div>
-      </Dialog>
-
-      <Dialog
-        open={createBackupOpen}
-        onClose={() => setCreateBackupOpen(false)}
-        title={t('settings.database.backup.createButton')}
-      >
-        <Field
-          label={t('settings.database.backup.descriptionLabel')}
-          value={backupDescription}
-          onChange={(e) => setBackupDescription(e.target.value)}
-          required
-        />
-        {createBackup.isError && (
-          <p className="mt-2 text-sm text-[var(--color-danger)]">
-            {t('common.somethingWentWrong')}
-          </p>
-        )}
-
-        <div className="mt-6 flex justify-end gap-2">
-          <Button type="button" variant="secondary" onClick={() => setCreateBackupOpen(false)}>
-            {t('common.cancel')}
-          </Button>
-          <Button
-            type="button"
-            disabled={backupDescription.trim().length === 0}
-            isLoading={createBackup.isPending}
-            onClick={() => createBackup.mutate()}
-          >
-            {t('settings.database.backup.createButton')}
-          </Button>
-        </div>
-      </Dialog>
-
-      <Dialog
-        open={Boolean(restoreTarget)}
-        onClose={() => setRestoreTarget(undefined)}
-        title={t('settings.database.backup.confirmRestoreTitle')}
-      >
-        {restoreTarget && (
-          <>
-            <p className="text-sm text-[var(--color-fg-muted)]">
-              {t('settings.database.backup.confirmRestoreBody', {
-                description: restoreTarget.description,
-                date: new Date(restoreTarget.createdAt).toLocaleString(i18n.language),
-              })}
+        <Dialog
+          open={createBackupOpen}
+          onClose={() => setCreateBackupOpen(false)}
+          title={t('settings.database.backup.createButton')}
+        >
+          <Field
+            label={t('settings.database.backup.descriptionLabel')}
+            value={backupDescription}
+            onChange={(e) => setBackupDescription(e.target.value)}
+            required
+          />
+          {createBackup.isError && (
+            <p className="mt-2 text-sm text-[var(--color-danger)]">
+              {t('common.somethingWentWrong')}
             </p>
-            {restoreBackup.isError && (
-              <p className="mt-2 text-sm text-[var(--color-danger)]">
-                {t('common.somethingWentWrong')}
+          )}
+
+          <div className="mt-6 flex justify-end gap-2">
+            <Button type="button" variant="secondary" onClick={() => setCreateBackupOpen(false)}>
+              {t('common.cancel')}
+            </Button>
+            <Button
+              type="button"
+              disabled={backupDescription.trim().length === 0}
+              isLoading={createBackup.isPending}
+              onClick={() => createBackup.mutate()}
+            >
+              {t('settings.database.backup.createButton')}
+            </Button>
+          </div>
+        </Dialog>
+
+        <Dialog
+          open={Boolean(restoreTarget)}
+          onClose={() => setRestoreTarget(undefined)}
+          title={t('settings.database.backup.confirmRestoreTitle')}
+        >
+          {restoreTarget && (
+            <>
+              <p className="text-sm text-[var(--color-fg-muted)]">
+                {t('settings.database.backup.confirmRestoreBody', {
+                  description: restoreTarget.description,
+                  date: new Date(restoreTarget.createdAt).toLocaleString(i18n.language),
+                })}
               </p>
-            )}
+              {restoreBackup.isError && (
+                <p className="mt-2 text-sm text-[var(--color-danger)]">
+                  {t('common.somethingWentWrong')}
+                </p>
+              )}
 
-            <div className="mt-6 flex justify-end gap-2">
-              <Button type="button" variant="secondary" onClick={() => setRestoreTarget(undefined)}>
-                {t('common.cancel')}
-              </Button>
-              <Button
-                type="button"
-                variant="danger"
-                isLoading={restoreBackup.isPending}
-                onClick={() => restoreBackup.mutate(restoreTarget.id)}
-              >
-                {t('settings.database.backup.restore')}
-              </Button>
-            </div>
-          </>
-        )}
-      </Dialog>
+              <div className="mt-6 flex justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => setRestoreTarget(undefined)}
+                >
+                  {t('common.cancel')}
+                </Button>
+                <Button
+                  type="button"
+                  variant="danger"
+                  isLoading={restoreBackup.isPending}
+                  onClick={() => restoreBackup.mutate(restoreTarget.id)}
+                >
+                  {t('settings.database.backup.restore')}
+                </Button>
+              </div>
+            </>
+          )}
+        </Dialog>
 
-      <Dialog
-        open={Boolean(deleteTarget)}
-        onClose={() => setDeleteTarget(undefined)}
-        title={t('settings.database.backup.confirmDeleteTitle')}
-      >
-        {deleteTarget && (
-          <>
-            <p className="text-sm text-[var(--color-fg-muted)]">
-              {t('settings.database.backup.confirmDeleteBody', {
-                description: deleteTarget.description,
-                date: new Date(deleteTarget.createdAt).toLocaleString(i18n.language),
-              })}
-            </p>
-            {deleteBackup.isError && (
-              <p className="mt-2 text-sm text-[var(--color-danger)]">
-                {t('common.somethingWentWrong')}
+        <Dialog
+          open={Boolean(deleteTarget)}
+          onClose={() => setDeleteTarget(undefined)}
+          title={t('settings.database.backup.confirmDeleteTitle')}
+        >
+          {deleteTarget && (
+            <>
+              <p className="text-sm text-[var(--color-fg-muted)]">
+                {t('settings.database.backup.confirmDeleteBody', {
+                  description: deleteTarget.description,
+                  date: new Date(deleteTarget.createdAt).toLocaleString(i18n.language),
+                })}
               </p>
-            )}
+              {deleteBackup.isError && (
+                <p className="mt-2 text-sm text-[var(--color-danger)]">
+                  {t('common.somethingWentWrong')}
+                </p>
+              )}
 
-            <div className="mt-6 flex justify-end gap-2">
-              <Button type="button" variant="secondary" onClick={() => setDeleteTarget(undefined)}>
-                {t('common.cancel')}
-              </Button>
-              <Button
-                type="button"
-                variant="danger"
-                isLoading={deleteBackup.isPending}
-                onClick={() => deleteBackup.mutate(deleteTarget.id)}
-              >
-                {t('settings.database.backup.delete')}
-              </Button>
-            </div>
-          </>
-        )}
-      </Dialog>
+              <div className="mt-6 flex justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => setDeleteTarget(undefined)}
+                >
+                  {t('common.cancel')}
+                </Button>
+                <Button
+                  type="button"
+                  variant="danger"
+                  isLoading={deleteBackup.isPending}
+                  onClick={() => deleteBackup.mutate(deleteTarget.id)}
+                >
+                  {t('settings.database.backup.delete')}
+                </Button>
+              </div>
+            </>
+          )}
+        </Dialog>
 
-      <Dialog
-        open={Boolean(diffTarget)}
-        onClose={() => setDiffTarget(undefined)}
-        title={t('settings.database.backup.diffTitle', { description: diffTarget?.description })}
-      >
-        {diffLoading ? (
-          <Spinner label={t('common.loading')} />
-        ) : diffError ? (
-          <p className="text-sm text-[var(--color-danger)]">{t('common.somethingWentWrong')}</p>
-        ) : diffData ? (
-          <ul className="flex flex-col gap-1 text-sm">
-            {categories.map(({ key, label }) => (
-              <li key={key} className="flex items-center justify-between gap-4">
-                <span>{label}</span>
-                <span className="text-[var(--color-fg-muted)]">
-                  {t('settings.database.backup.diffLine', diffData.diff[key])}
-                </span>
-              </li>
-            ))}
-          </ul>
-        ) : null}
+        <Dialog
+          open={Boolean(diffTarget)}
+          onClose={() => setDiffTarget(undefined)}
+          title={t('settings.database.backup.diffTitle', { description: diffTarget?.description })}
+        >
+          {diffLoading ? (
+            <Spinner label={t('common.loading')} />
+          ) : diffError ? (
+            <p className="text-sm text-[var(--color-danger)]">{t('common.somethingWentWrong')}</p>
+          ) : diffData ? (
+            <ul className="flex flex-col gap-1 text-sm">
+              {categories.map(({ key, label }) => (
+                <li key={key} className="flex items-center justify-between gap-4">
+                  <span>{label}</span>
+                  <span className="text-[var(--color-fg-muted)]">
+                    {t('settings.database.backup.diffLine', diffData.diff[key])}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : null}
 
-        <div className="mt-6 flex justify-end">
-          <Button type="button" variant="secondary" onClick={() => setDiffTarget(undefined)}>
-            {t('common.close')}
-          </Button>
-        </div>
-      </Dialog>
+          <div className="mt-6 flex justify-end">
+            <Button type="button" variant="secondary" onClick={() => setDiffTarget(undefined)}>
+              {t('common.close')}
+            </Button>
+          </div>
+        </Dialog>
+      </details>
     </Card>
   )
 }

@@ -9,6 +9,8 @@ import { Card } from '../ui/Card.js'
 import { Field } from '../ui/Field.js'
 import { Button } from '../ui/Button.js'
 import { Dialog } from '../ui/Dialog.js'
+import { ChevronDownIcon } from '../icons.js'
+import { usePanelOpen } from '../../lib/use-panel-open.js'
 
 /**
  * Bottom of AccountPage.tsx, deliberately last — James, 2026-08-25: the
@@ -38,12 +40,21 @@ import { Dialog } from '../ui/Dialog.js'
  * silently vanished section. The server enforces this independently
  * either way (`DELETE /auth/me` 403s an admin regardless of what the
  * client sends) — this is only ever a UX convenience, never the real gate.
+ *
+ * Collapsed by default like every other card on this page as of
+ * 2026-09-02 — see AdvancedPreferencesCard.tsx's doc comment for why
+ * `<details>` over a bespoke show/hide component. The red title color
+ * sits on the `<summary>` itself, not just the text, so the chevron
+ * icon picks it up too via `currentColor` (`icons.tsx`'s shared `Icon`
+ * wrapper) — deliberate, not an oversight, matching this card's danger
+ * theme even collapsed.
  */
 export function DeleteAccountCard() {
   const { t } = useTranslation()
   const { user } = useAuth()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const [open, setOpen] = usePanelOpen('panelAccountDelete')
   const isAdmin = user?.role === 'admin'
 
   const [confirmOpen, setConfirmOpen] = useState(false)
@@ -80,57 +91,60 @@ export function DeleteAccountCard() {
 
   return (
     <Card>
-      <h2 className="text-lg font-semibold text-[var(--color-danger)]">
-        {t('account.deleteTitle')}
-      </h2>
-      <div className="mt-1 mb-4 border-t border-[var(--color-border)]" />
-      <p className="mb-4 text-sm text-[var(--color-fg-muted)]">{t('account.deleteWarning')}</p>
-      <Button
-        type="button"
-        variant="danger"
-        disabled={isAdmin}
-        onClick={() => setConfirmOpen(true)}
-      >
-        {t('account.deleteButton')}
-      </Button>
-      {isAdmin && (
-        <p className="mt-2 text-xs text-[var(--color-fg-muted)]">
-          {t('account.deleteAdminBlocked')}
-        </p>
-      )}
+      <details className="group" open={open} onToggle={(e) => setOpen(e.currentTarget.open)}>
+        <summary className="flex cursor-pointer list-none items-center justify-between text-lg font-semibold text-[var(--color-danger)] [&::-webkit-details-marker]:hidden">
+          {t('account.deleteTitle')}
+          <ChevronDownIcon className="h-5 w-5 flex-shrink-0 transition-transform group-open:rotate-180" />
+        </summary>
+        <div className="mt-4 mb-4 border-t border-[var(--color-border)]" />
+        <p className="mb-4 text-sm text-[var(--color-fg-muted)]">{t('account.deleteWarning')}</p>
+        <Button
+          type="button"
+          variant="danger"
+          disabled={isAdmin}
+          onClick={() => setConfirmOpen(true)}
+        >
+          {t('account.deleteButton')}
+        </Button>
+        {isAdmin && (
+          <p className="mt-2 text-xs text-[var(--color-fg-muted)]">
+            {t('account.deleteAdminBlocked')}
+          </p>
+        )}
 
-      <Dialog open={confirmOpen} onClose={handleClose} title={t('account.deleteConfirmTitle')}>
-        <p className="mb-4 text-sm text-[var(--color-fg-muted)]">
-          {t('account.deleteConfirmBody', { email: user?.email })}
-        </p>
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          <Field
-            label={t('account.deleteConfirmEmail')}
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-            autoComplete="email"
-          />
-          <Field
-            label={t('account.deleteConfirmPassword')}
-            type="password"
-            value={currentPassword}
-            onChange={(e) => setCurrentPassword(e.target.value)}
-            required
-            autoComplete="current-password"
-            error={error}
-          />
-          <div className="mt-2 flex justify-end gap-2">
-            <Button type="button" variant="secondary" onClick={handleClose}>
-              {t('common.cancel')}
-            </Button>
-            <Button type="submit" variant="danger" isLoading={deleteAccount.isPending}>
-              {t('account.deleteButton')}
-            </Button>
-          </div>
-        </form>
-      </Dialog>
+        <Dialog open={confirmOpen} onClose={handleClose} title={t('account.deleteConfirmTitle')}>
+          <p className="mb-4 text-sm text-[var(--color-fg-muted)]">
+            {t('account.deleteConfirmBody', { email: user?.email })}
+          </p>
+          <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+            <Field
+              label={t('account.deleteConfirmEmail')}
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              autoComplete="email"
+            />
+            <Field
+              label={t('account.deleteConfirmPassword')}
+              type="password"
+              value={currentPassword}
+              onChange={(e) => setCurrentPassword(e.target.value)}
+              required
+              autoComplete="current-password"
+              error={error}
+            />
+            <div className="mt-2 flex justify-end gap-2">
+              <Button type="button" variant="secondary" onClick={handleClose}>
+                {t('common.cancel')}
+              </Button>
+              <Button type="submit" variant="danger" isLoading={deleteAccount.isPending}>
+                {t('account.deleteButton')}
+              </Button>
+            </div>
+          </form>
+        </Dialog>
+      </details>
     </Card>
   )
 }

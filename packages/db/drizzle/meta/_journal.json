@@ -204,6 +204,27 @@
       "when": 1788267633003,
       "tag": "0028_omniscient_nighthawk",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1788349635949,
+      "tag": "0029_add_webhook_claim_codes",
+      "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1788363736846,
+      "tag": "0030_add_instance_admin_email",
+      "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1788369000000,
+      "tag": "0031_rename_webhook_claim_codes_to_webhook_link_codes",
+      "breakpoints": true
     }
   ]
 }

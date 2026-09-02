@@ -174,9 +174,9 @@ function fakeTvdbWithEpisodeRedirect(): MetadataProvider {
 /** Account id "1" carries no special meaning any more — Plex's own docs
  * claim it's always the server owner, but that doesn't hold for real
  * payloads (see `resolveWebhookAccount`'s doc comment), so every
- * account, including this one, starts unclaimed like any other. Tests
- * that aren't specifically exercising the unclaimed/claim flow use
- * `createClaimedTokenAndCookie` below instead, which pre-claims it. */
+ * account, including this one, starts unlinked like any other. Tests
+ * that aren't specifically exercising the unlinked/link flow use
+ * `createLinkedTokenAndCookie` below instead, which pre-links it. */
 const DEFAULT_ACCOUNT = { id: 1, title: 'james' }
 
 async function createTokenAndCookie(app: ReturnType<typeof createApp>) {
@@ -191,10 +191,10 @@ async function createTokenAndCookie(app: ReturnType<typeof createApp>) {
 }
 
 /** For tests about what happens *after* an account is already linked —
- * pre-seeds the claim directly (bypassing the claim route itself, which
+ * pre-seeds the link directly (bypassing the link route itself, which
  * has its own dedicated tests in tokens.test.ts) so these tests can
  * focus purely on webhook behavior. */
-async function createClaimedTokenAndCookie(app: ReturnType<typeof createApp>) {
+async function createLinkedTokenAndCookie(app: ReturnType<typeof createApp>) {
   const { cookie, token, tokenId } = await createTokenAndCookie(app)
   const meRes = await app.request('/api/v1/auth/me', { headers: { cookie } })
   const { id: userId } = await json<{ id: string }>(meRes)
@@ -246,9 +246,9 @@ describe('POST /webhooks/plex/:token', () => {
     expect(res.status).toBe(401)
   })
 
-  it('logs a movie watch end to end for an already-claimed account', async () => {
+  it('logs a movie watch end to end for an already-linked account', async () => {
     const app = createApp({ db, metadataProviders: [fakeTmdb()] })
-    const { cookie, token } = await createClaimedTokenAndCookie(app)
+    const { cookie, token } = await createLinkedTokenAndCookie(app)
 
     const res = await postWebhook(app, token, plexMoviePayload())
     expect(res.status).toBe(200)
@@ -261,7 +261,7 @@ describe('POST /webhooks/plex/:token', () => {
 
   it('logs an episode watch end to end, resolving the show then the episode', async () => {
     const app = createApp({ db, metadataProviders: [fakeTmdb()] })
-    const { cookie, token } = await createClaimedTokenAndCookie(app)
+    const { cookie, token } = await createLinkedTokenAndCookie(app)
 
     const res = await postWebhook(app, token, plexEpisodePayload())
     expect(res.status).toBe(200)
@@ -276,7 +276,7 @@ describe('POST /webhooks/plex/:token', () => {
 
   it("skips logging a movie watch that already has an 'import' play for the same movie on the same day (cross-source dedup)", async () => {
     const app = createApp({ db, metadataProviders: [fakeTmdb()] })
-    const { cookie, token } = await createClaimedTokenAndCookie(app)
+    const { cookie, token } = await createLinkedTokenAndCookie(app)
     const meRes = await app.request('/api/v1/auth/me', { headers: { cookie } })
     const { id: userId } = await json<{ id: string }>(meRes)
 
@@ -308,7 +308,7 @@ describe('POST /webhooks/plex/:token', () => {
 
   it('resolves a show whose own native id actually identifies one of its episodes (TVDB id-space collision regression)', async () => {
     const app = createApp({ db, metadataProviders: [fakeTvdbWithEpisodeRedirect()] })
-    const { cookie, token } = await createClaimedTokenAndCookie(app)
+    const { cookie, token } = await createLinkedTokenAndCookie(app)
 
     const res = await postWebhook(app, token, {
       event: 'media.scrobble',
@@ -334,7 +334,7 @@ describe('POST /webhooks/plex/:token', () => {
 
   it('does not create a duplicate show when a later event redirects to an id already known under its own', async () => {
     const app = createApp({ db, metadataProviders: [fakeTvdbWithEpisodeRedirect()] })
-    const { cookie, token } = await createClaimedTokenAndCookie(app)
+    const { cookie, token } = await createLinkedTokenAndCookie(app)
 
     // First delivery resolves the show via its own real id (no redirect
     // needed) — same as an ordinary earlier watch.
@@ -381,7 +381,7 @@ describe('POST /webhooks/plex/:token', () => {
 
   it('is idempotent — the same scrobble delivered twice logs one play, not two', async () => {
     const app = createApp({ db, metadataProviders: [fakeTmdb()] })
-    const { token, cookie } = await createClaimedTokenAndCookie(app)
+    const { token, cookie } = await createLinkedTokenAndCookie(app)
 
     await postWebhook(app, token, plexMoviePayload())
     await postWebhook(app, token, plexMoviePayload())
@@ -395,7 +395,7 @@ describe('POST /webhooks/plex/:token', () => {
 
   it('200s without logging anything when no configured provider recognizes the title', async () => {
     const app = createApp({ db, metadataProviders: [fakeTmdb()] })
-    const { token } = await createClaimedTokenAndCookie(app)
+    const { token } = await createLinkedTokenAndCookie(app)
 
     const res = await postWebhook(app, token, {
       event: 'media.scrobble',
@@ -410,7 +410,7 @@ describe('POST /webhooks/plex/:token', () => {
 
   it('200s as a no-op for a non-scrobble event', async () => {
     const app = createApp({ db, metadataProviders: [fakeTmdb()] })
-    const { token } = await createClaimedTokenAndCookie(app)
+    const { token } = await createLinkedTokenAndCookie(app)
 
     const res = await postWebhook(app, token, {
       event: 'media.play',
@@ -424,7 +424,7 @@ describe('POST /webhooks/plex/:token', () => {
 
   it('200s without logging anything for an episode not found in the resolved season', async () => {
     const app = createApp({ db, metadataProviders: [fakeTmdb()] })
-    const { token } = await createClaimedTokenAndCookie(app)
+    const { token } = await createLinkedTokenAndCookie(app)
 
     const res = await postWebhook(app, token, {
       event: 'media.scrobble',
@@ -450,7 +450,7 @@ describe('POST /webhooks/plex/:token — multi-user attribution', () => {
 
   const MANAGED_ACCOUNT = { id: 2, title: 'kid-profile' }
 
-  it('account id 1 is not auto-claimed — regression guard for the flawed "owner is always 1" assumption', async () => {
+  it('account id 1 is not auto-linked — regression guard for the flawed "owner is always 1" assumption', async () => {
     const app = createApp({ db, metadataProviders: [fakeTmdb()] })
     const { token, tokenId } = await createTokenAndCookie(app)
 
@@ -468,7 +468,7 @@ describe('POST /webhooks/plex/:token — multi-user attribution', () => {
     expect(link?.userId).toBeNull()
   })
 
-  it('creates an unclaimed link and a pending event, logging nothing, for an account seen for the first time', async () => {
+  it('creates an unlinked link and a pending event, logging nothing, for an account seen for the first time', async () => {
     const app = createApp({ db, metadataProviders: [fakeTmdb()] })
     const { token, tokenId } = await createTokenAndCookie(app)
 
@@ -495,7 +495,7 @@ describe('POST /webhooks/plex/:token — multi-user attribution', () => {
     expect(pending?.event.ids).toEqual({ tmdb: '603' })
   })
 
-  it('still logs nothing on a second event from the same still-unclaimed account (no duplicate link row, one more pending event)', async () => {
+  it('still logs nothing on a second event from the same still-unlinked account (no duplicate link row, one more pending event)', async () => {
     const app = createApp({ db, metadataProviders: [fakeTmdb()] })
     const { token, tokenId } = await createTokenAndCookie(app)
 
@@ -519,7 +519,7 @@ describe('POST /webhooks/plex/:token — multi-user attribution', () => {
     expect(pending).toHaveLength(2)
   })
 
-  it('logs against the linked user, with their own locale, once claimed', async () => {
+  it('logs against the linked user, with their own locale, once linked', async () => {
     const app = createApp({ db, metadataProviders: [fakeTmdb()] })
     const { token, tokenId } = await createTokenAndCookie(app)
     const managedUserId = await createLocalUser(
@@ -528,9 +528,9 @@ describe('POST /webhooks/plex/:token — multi-user attribution', () => {
       'correct-horse-battery-staple',
     )
 
-    // First event discovers the account, unclaimed.
+    // First event discovers the account, unlinked.
     await postWebhook(app, token, plexMoviePayload(MANAGED_ACCOUNT))
-    // Simulates the Settings UI's claim action (the claim route's own
+    // Simulates the Settings UI's link action (the link route's own
     // replay behavior is covered in tokens.test.ts).
     await db
       .update(webhookAccountLinks)

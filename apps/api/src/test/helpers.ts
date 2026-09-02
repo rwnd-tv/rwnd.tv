@@ -23,6 +23,7 @@ const TABLES = [
   'invites',
   'login_attempts',
   'pending_webhook_events',
+  'webhook_link_codes',
   'webhook_account_links',
   'api_tokens',
   'sessions',

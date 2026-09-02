@@ -1,6 +1,7 @@
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi'
 import { desc, eq } from 'drizzle-orm'
 import {
+  createInviteRequestSchema,
   createInviteResponseSchema,
   listInvitesResponseSchema,
   type InviteStatus,
@@ -9,6 +10,7 @@ import { invites } from '@rwnd/db'
 import type { AppEnv } from '../types.js'
 import { requireAdmin } from '../middleware/auth.js'
 import { generateSecret, hashSecret } from '../lib/tokens.js'
+import { isEmailConfigured, sendInviteEmail } from '../lib/email.js'
 import { logSecurityEvent } from '../lib/security-log.js'
 
 export const inviteRoutes = new OpenAPIHono<AppEnv>()
@@ -38,8 +40,11 @@ inviteRoutes.openapi(
   createRoute({
     method: 'post',
     path: '/invites',
-    summary: 'Create an invite code (admin only)',
+    summary: 'Create an invite code (admin only), optionally emailing it',
     middleware: [requireAdmin] as const,
+    request: {
+      body: { content: { 'application/json': { schema: createInviteRequestSchema } } },
+    },
     responses: {
       201: {
         description: 'Invite created — the code is shown only in this response',
@@ -49,6 +54,7 @@ inviteRoutes.openapi(
     },
   }),
   async (c) => {
+    const { email } = c.req.valid('json')
     const db = c.get('db')
     const user = c.get('user')!
     const code = generateSecret(9)
@@ -61,7 +67,18 @@ inviteRoutes.openapi(
     if (!created) throw new Error('Failed to create invite')
 
     logSecurityEvent('invite_created', { userId: user.id })
-    return c.json({ id: created.id, code, expiresAt: expiresAt.toISOString() }, 201)
+
+    let emailSent = false
+    if (email && isEmailConfigured()) {
+      try {
+        await sendInviteEmail(email, code)
+        emailSent = true
+      } catch (err) {
+        console.error(`Failed to send invite email for invite ${created.id}:`, err)
+      }
+    }
+
+    return c.json({ id: created.id, code, expiresAt: expiresAt.toISOString(), emailSent }, 201)
   },
 )
 

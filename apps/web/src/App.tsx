@@ -22,6 +22,7 @@ import { WatchlistDetailPage } from './routes/WatchlistDetailPage.js'
 import { ImportPage } from './routes/ImportPage.js'
 import { SettingsPage } from './routes/SettingsPage.js'
 import { AccountPage } from './routes/AccountPage.js'
+import { LinkWebhookAccountPage } from './routes/LinkWebhookAccountPage.js'
 import { NotFoundPage } from './routes/NotFoundPage.js'
 import { LandingPage } from './routes/LandingPage.js'
 
@@ -66,6 +67,7 @@ const router = createBrowserRouter([
           { path: '/import', element: <ImportPage /> },
           { path: '/settings', element: <SettingsPage /> },
           { path: '/account', element: <AccountPage /> },
+          { path: '/link-account', element: <LinkWebhookAccountPage /> },
         ],
       },
     ],

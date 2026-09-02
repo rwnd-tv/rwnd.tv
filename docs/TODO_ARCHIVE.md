@@ -2158,6 +2158,62 @@ query.queryKey[0] !== 'auth' })` — drops every _other_ cached query
       logout both update immediately, and switching between James's and
       Carol's accounts no longer needs a refresh to show correct content.
 
+- [x] **Webhook attribution consent rework: link codes instead of direct-assign** (2026-09-02 added, done 2026-09-02)\
+      Closes a gap the M3 security review (ADR 0007) flagged but never
+      actually tracked: `GET /tokens/{id}/webhook-links` returned every
+      instance user's id and display name as `assignableUsers`, and the
+      token owner could `PATCH` any unclaimed (or already-linked) link
+      to any of them directly, with zero involvement from the person
+      being attributed. Real functionality (multi-user Plex support,
+      see the entry above), but a consent gap the ADR's own "Trust
+      model" section promised a follow-up for, which never made it into
+      this file.\
+      New model, deliberately close to the existing `invites` mechanism
+      rather than inventing new conventions: a token owner links an
+      account to *themselves* instantly (`POST .../link`, no code
+      needed), or generates a one-time code for anyone else
+      (`POST .../link-code`, same hashed-code/shown-once/7-day-TTL shape
+      as `invites`), which the actual target redeems
+      (`POST /webhook-links/redeem`, a new `webhook-links.ts` route
+      file, session-authed as the redeemer rather than scoped under the
+      token) either via the code's own emailed link
+      (`LinkWebhookAccountPage.tsx`, a confirmation step rather than
+      auto-firing on load, since a stale session on a shared device
+      could otherwise attribute someone else's history silently) or by
+      typing the code into `LinkedAccountsPanel.tsx` on the Settings
+      page. The direct-assign `PATCH` and `assignableUsers` are both
+      gone entirely, no admin escape hatch. `POST /tokens` deliberately
+      stays open to non-admins: once attribution requires a code the
+      target redeems, gating who can create a token buys nothing.\
+      New `webhook_link_codes` table, a shared
+      `replayPendingWebhookEvents` helper extracted out of the old
+      inline `PATCH` handler so self-link and code-redeem can't drift
+      apart, and a new `sendWebhookLinkEmail` (worded per the instance's
+      `registrationMode`, never interpolating the external account's own
+      possibly-attacker-influenced display name into the email body).\
+      Renamed "claim" to "link" throughout (routes, DB table, function
+      and component names, UI copy) partway through this work, James
+      2026-09-02: "small pain now for long term future consistency" -
+      users would understand "link" more readily than "claim". Also
+      merged the standalone claim/link panel into
+      `LinkedAccountsPanel.tsx` alongside the caller's own linked
+      accounts list (previously two separate Settings-page panels for
+      what's really one feature), which needed the pre-existing
+      per-token "Linked accounts" list on `TokensPanel.tsx` renamed to
+      "Detected accounts" to avoid two same-named panels on one page.\
+      Two adjacent bugs found and fixed while this was fresh in view:
+      unlinking from one of these two panels left the other showing
+      stale state until a manual refresh (React Query cache invalidation
+      only covered one panel's own query key); and the per-token
+      Detected accounts list had no `ORDER BY` at all, so its row order
+      could silently shuffle after an unrelated UPDATE (e.g. a
+      link/unlink elsewhere) - fixed to sort alphabetically by account
+      name, case-insensitively (`lower()`, since this instance's
+      `en_US.utf8` collation otherwise sorts every capitalized name
+      ahead of every lowercase one rather than interleaving them).\
+      `docs/adr/0007-security-posture.md` carries a dated addendum
+      superseding the two relevant Accepted-risk rows.
+
 ## Auth & accounts
 
 - [x] **"Forgot password" / account recovery, and email verification** (2026-08-23 15:46 added, done 2026-08-25) — M2\
@@ -3247,3 +3303,41 @@ up -d` pull-based quick start test (no local Docker CLI reachable
       array and `.gitignore`'s "Test / coverage" section (leaving
       `coverage/`, which is real). `pnpm lint`/`prettier --check` both
       clean afterward.
+- [x] **Instance admin contact email** (2026-09-02 added, done 2026-09-02)\
+      A new `adminEmail` field on `InstanceSettings`
+      (`packages/shared/src/schemas/settings.ts`, nullable, validated as
+      an email address), editable from `InstanceSettingsPanel.tsx`
+      (Settings page), blank by default so nothing changes for existing
+      instances until an admin sets one. Public by design, not
+      admin-only: it's meant to be findable by someone who needs to
+      reach the instance owner, e.g. a user locked out of their account,
+      the same reasoning `instanceName` already gets shown publicly for.
+      Threaded into the transactional emails that name the instance and
+      might plausibly prompt "who do I contact about this" (registration
+      instructions, account-already-exists notice, email-changed
+      notice), appended as `(contact: admin@example.com)` only when set;
+      omitted entirely when null rather than showing an empty parenthetical.
+- [x] **Account and Settings pages: collapsible panels, session-persisted, and a
+      reorganization pass** (2026-09-02 added, done 2026-09-02)\
+      Every panel on the Account, Settings and Import pages converted
+      from a plain `<Card>` to a native `<details>`/`<summary>`,
+      collapsed by default (James: cuts down how much scrolling either
+      page needs for something usually visited for one specific
+      setting), with two named exceptions left expanded by default -
+      Account's Profile panel and Settings' About panel, the two most
+      commonly-just-glanced-at ones. Collapsed state is remembered per
+      panel in its own session cookie (`use-panel-open.ts`, reusing the
+      existing `useSortCookie.ts` session-cookie precedent rather than
+      introducing `localStorage` alongside it), since a client-side route
+      change fully remounts these page components and would otherwise
+      reset every panel back to collapsed on every single page visit.
+      `ImportProgress.tsx` additionally auto-expands itself the moment an
+      import job starts, regardless of its last remembered state, so a
+      just-triggered import is never invisible behind a collapsed panel.\
+      Alongside this: `ChangePasswordCard.tsx` retitled to "Password";
+      Settings' `AboutPanel` moved to the top of that page; the two
+      previously-separate "Linked accounts"/"Claim a webhook account"
+      panels merged into one (see the webhook link-codes entry above),
+      which needed the per-token account list on `TokensPanel.tsx`
+      renamed from "Linked accounts" to "Detected accounts" to stop two
+      differently-scoped panels on the same page sharing a name.

@@ -120,7 +120,13 @@ describe('TmdbProvider.findByExternalId', () => {
     expect(id).toBe('74313')
   })
 
-  it('prefers a direct tv_results hit over an episode fallback when both are somehow present', async () => {
+  it('prefers the episode fallback over a tv_results hit when both are present (TMDB cross-reference bug regression)', async () => {
+    // Live-verified 2026-09-02 against a real Plex webhook: TMDB's own
+    // /find/411857?external_source=tvdb_id genuinely returns both —
+    // tv_results incorrectly pointing at an unrelated show ("Sisbro",
+    // 138346), tv_episode_results correctly identifying the real episode
+    // ("1990" S1E1 "Creed of Slaves", show_id 13380). Trusting tv_results
+    // here silently logged a completely wrong show against a real watch.
     const fetchMock = vi.fn().mockResolvedValueOnce(
       findResponse({
         movie_results: [],
@@ -131,7 +137,7 @@ describe('TmdbProvider.findByExternalId', () => {
     vi.stubGlobal('fetch', fetchMock)
 
     const id = await provider().findByExternalId('show', 'imdb', 'tt7579602', 'en-GB')
-    expect(id).toBe('1399')
+    expect(id).toBe('74313')
   })
 
   it('returns null when both result arrays are empty', async () => {

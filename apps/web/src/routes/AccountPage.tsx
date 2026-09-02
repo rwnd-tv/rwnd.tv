@@ -17,17 +17,28 @@ import { LogoutButton } from '../components/account/LogoutButton.js'
  * after first seeing it lower down. Email and Change Password have no
  * section heading of their own — "Account" already says what they are;
  * Profile, Sessions, Two-factor authentication, Preferences, and Advanced
- * Preferences are the actual named sections. Sessions and MFA sit right
- * after Change Password — all three are account-security actions from the
- * same 2026-08-29 security review — rather than lower down with
- * Preferences. See ProfileCard.tsx's doc comment for why Profile/
- * Preferences/Advanced Preferences each save independently rather than
- * sharing one cross-card form. Log out started as its own section at the
- * bottom, then moved the same day to sit inline with the page title —
- * James wanted it reachable without scrolling past everything else.
- * Delete account is deliberately last — the most destructive action on
- * the page belongs at the end, not competing for attention with
- * everything above it.
+ * preferences are the actual named sections. MFA sits right after Change
+ * Password — both are account-security actions from the same 2026-08-29
+ * security review — rather than lower down with Preferences. Sessions
+ * originally sat there too, then moved 2026-09-02 (James) to below
+ * Advanced preferences: unlike the security-review cluster it's a
+ * read-mostly status list, closer in spirit to the preferences/settings
+ * views above it than to a security action you'd take. Linked accounts /
+ * link a webhook account (the view and redeem halves of the link-code
+ * consent rework, `docs/adr/0007-security-posture.md`'s addendum)
+ * briefly lived here too (2026-09-02), then moved the same day to
+ * Settings, directly below TokensPanel — James decided both belong with
+ * the rest of the webhook/token machinery rather than on Account, and
+ * later the same day merged into one `LinkedAccountsPanel.tsx`
+ * (`components/settings/`) rather than two separate panels. See
+ * ProfileCard.tsx's doc comment for why
+ * Profile/Preferences/Advanced preferences each save independently
+ * rather than sharing one cross-card form. Log out started as its own
+ * section at the bottom, then moved the same day to sit inline with the
+ * page title — James wanted it reachable without scrolling past
+ * everything else. Delete account is deliberately last — the most
+ * destructive action on the page belongs at the end, not competing for
+ * attention with everything above it.
  */
 export function AccountPage() {
   const { t } = useTranslation()
@@ -41,10 +52,10 @@ export function AccountPage() {
       <ProfileCard />
       <EmailCard />
       <ChangePasswordCard />
-      <SessionsCard />
       <MfaCard />
       <PreferencesCard />
       <AdvancedPreferencesCard />
+      <SessionsCard />
       <DeleteAccountCard />
     </div>
   )

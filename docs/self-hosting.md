@@ -76,7 +76,7 @@ Plex webhooks (Plex Pass required) let rwnd.tv log a watch automatically as you 
 2. Copy the webhook URL shown next to it: it's `https://<your-instance>/api/v1/webhooks/plex/<token>`. The token lives in the URL path rather than a header because Plex's webhook feature can't send custom headers.
 3. In Plex, go to **Settings → Webhooks** and add that URL.
 
-**Multi-user Plex servers are a first-class case.** rwnd.tv doesn't guess which Plex account is "the owner": the first webhook event from each distinct Plex account shows up in Settings → API tokens as unclaimed, and you claim it to a rwnd.tv user (yourself, or another account on this instance) from there. Any watch that arrived before an account was claimed is logged retroactively the moment it's claimed, so you don't lose history by claiming an account a little late.
+**Multi-user Plex servers are a first-class case.** rwnd.tv doesn't guess which Plex account is "the owner": the first webhook event from each distinct Plex account shows up in Settings → API tokens as unlinked, next to a "This is me" button. If it's someone else on this instance, generate a one-time link code for their account instead: email it to them (if this instance has SMTP configured) and they just click the link, or show the code on screen and hand it to them to enter themselves on their own Settings page. Either way, it's never attributed to them without their own action. Any watch that arrived before an account was linked is logged retroactively the moment it's linked, so nobody loses history by linking an account a little late.
 
 ## Importing from Trakt
 

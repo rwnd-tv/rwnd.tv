@@ -52,6 +52,12 @@ export const instanceSettingsSchema = z.object({
   // This package's own package.json `version` — see apps/api/src/version.ts.
   // Derived, not admin-editable, same convention as environmentLabel above.
   appVersion: z.string(),
+  // Optional admin-set contact address, null until set. Deliberately on
+  // this public schema (not instanceAboutSchema below) — same reasoning
+  // as instanceName/registrationMode: it's meant to be readable by an
+  // anonymous visitor (e.g. "trouble signing up? contact ___"), and an
+  // operator who doesn't want that just never sets it.
+  adminEmail: z.string().trim().email().nullable(),
 })
 export type InstanceSettings = z.infer<typeof instanceSettingsSchema>
 

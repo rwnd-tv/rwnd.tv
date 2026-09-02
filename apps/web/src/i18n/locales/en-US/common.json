@@ -49,7 +49,7 @@
       },
       "plex": {
         "title": "Plex logs it for you",
-        "body": "Point Plex at your webhook URL and watches log themselves. Multi-user servers are first class: every Plex account seen is claimed to its own rwnd.tv user, and earlier watches are backfilled on claim."
+        "body": "Point Plex at your webhook URL and watches log themselves. Multi-user servers are first class: every Plex account seen is linked to its own rwnd.tv user, and earlier watches are backfilled once linked."
       },
       "trakt": {
         "title": "Bring your Trakt data",
@@ -264,6 +264,14 @@
     "success": "Your email address has been updated.",
     "invalidLink": "This confirmation link is invalid or has expired.",
     "continue": "Continue to rwnd.tv"
+  },
+  "linkAccount": {
+    "title": "Link this account",
+    "invalidLink": "This link is invalid or has expired.",
+    "confirmBody": "You're signed in as {{name}}. Linking this account will add its watch history to your own.",
+    "confirm": "Link this account",
+    "success": "This account is now linked to yours.",
+    "continue": "Go to Settings"
   },
   "dashboard": {
     "onDeck": {
@@ -710,13 +718,32 @@
         "copy": "Copy",
         "copied": "Copied"
       },
-      "linkedAccounts": {
-        "title": "Linked accounts",
-        "unclaimed": "Unclaimed",
-        "unassigned": "Unassigned",
-        "assignTo": "Assign {{name}} to",
-        "remove": "Remove"
+      "detectedAccounts": {
+        "title": "Detected accounts",
+        "unlinked": "Unlinked",
+        "thisIsMe": "This is me",
+        "or": "or",
+        "email": "Email",
+        "sendLinkEmail": "Send link email",
+        "showLinkCode": "Show link code",
+        "linkCodeCreated": "Copy this code now — it won't be shown again.",
+        "linkCodeEmailed": "Also emailed to {{email}}",
+        "copy": "Copy",
+        "copied": "Copied",
+        "unlink": "Unlink",
+        "remove": "Remove",
+        "removeConfirmTitle": "Remove this account?",
+        "removeConfirmBody": "This permanently removes {{name}} from this token's detected accounts. If it shows up again on a future webhook, it'll come back as unlinked."
       }
+    },
+    "linkedAccounts": {
+      "title": "Linked accounts",
+      "description": "Watch-history accounts (e.g. a Plex profile) that have been linked to you.",
+      "empty": "No linked accounts yet.",
+      "unlink": "Unlink",
+      "redeemDescription": "Have a link code from someone else's API tokens settings? Redeem it here to link a detected watch-history account to your own.",
+      "linkCode": "Link code",
+      "redeemSubmit": "Link"
     },
     "database": {
       "title": "Database",
@@ -770,6 +797,9 @@
       "registrationOpen": "Open — anyone can register",
       "registrationInvite": "Invite only",
       "registrationClosed": "Closed — admin creates accounts",
+      "adminEmail": "Admin email",
+      "adminEmailPlaceholder": "admin@example.com",
+      "adminEmailHint": "Shown publicly (e.g. on the login page) as a contact address for this instance. Leave blank to hide it.",
       "save": "Save changes",
       "environmentLabel": "This instance is labeled \"{{label}}\", set via the ENVIRONMENT_LABEL environment variable — not editable here.",
       "metadataProviders": "Metadata providers",
@@ -782,6 +812,8 @@
       "description": "Registration is invite-only — create a code to hand out. Each one works once and expires after 7 days.",
       "create": "Create invite",
       "createdOnce": "Copy this code now — it won't be shown again.",
+      "email": "Email (optional)",
+      "emailed": "Also emailed to {{email}}",
       "copy": "Copy",
       "copied": "Copied",
       "statusPending": "Pending",
@@ -806,7 +838,7 @@
     "changeEmailSubmit": "Send verification email",
     "changeEmailCancel": "Cancel",
     "changeEmailSuccess": "Verification email sent to {{email}} — click the link there to confirm the change.",
-    "changePasswordTitle": "Change password",
+    "passwordTitle": "Password",
     "changePasswordCurrent": "Current password",
     "changePasswordNew": "New password",
     "changePasswordSubmit": "Change password",
@@ -857,7 +889,7 @@
     "themeSystem": "Match system",
     "themeLight": "Light",
     "themeDark": "Dark",
-    "advancedPreferencesTitle": "Advanced Preferences",
+    "advancedPreferencesTitle": "Advanced preferences",
     "spoilerProtection": "Hide spoilers for unwatched episodes",
     "spoilerProtectionDescription": "Blurs episode stills, titles, and overviews you haven't watched yet, and show/season descriptions until fully watched. Click any blurred item to reveal it just for that view.",
     "onDeckFillGaps": "Fill gaps in Continue Watching",

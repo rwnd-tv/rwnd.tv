@@ -695,7 +695,13 @@ authRoutes.openapi(
     // principle unset SMTP_HOST between the two steps.
     if (before && isEmailConfigured()) {
       try {
-        await sendEmailChangedNotice(before.email, redeemed.newEmail)
+        const [settings] = await db.select().from(instanceSettings).limit(1)
+        await sendEmailChangedNotice(
+          before.email,
+          redeemed.newEmail,
+          settings?.instanceName ?? 'rwnd.tv',
+          settings?.adminEmail ?? null,
+        )
       } catch (err) {
         console.error(`Failed to send email-changed notice for user ${redeemed.userId}:`, err)
       }

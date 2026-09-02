@@ -32,6 +32,7 @@ const baseSettings: InstanceSettings = {
   emailConfigured: true,
   mfaAvailable: false,
   appVersion: '0.1.0',
+  adminEmail: null,
 }
 
 function renderRegisterPage(settingsOverrides: Partial<InstanceSettings> = {}) {

@@ -1,8 +1,11 @@
+import { useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import type { ImportJobFailure, ImportJobStatus } from '@rwnd/shared'
 import { api } from '../../lib/api-client.js'
 import { Card } from '../ui/Card.js'
+import { ChevronDownIcon } from '../icons.js'
+import { usePanelOpen } from '../../lib/use-panel-open.js'
 
 const ACTIVE_STATUSES: ReadonlySet<ImportJobStatus> = new Set(['pending', 'running'])
 
@@ -149,6 +152,29 @@ function formatDuration(totalSeconds: number): string {
   return hours > 0 ? `${hours}:${pad(minutes)}:${pad(secs)}` : `${minutes}:${pad(secs)}`
 }
 
+/** Collapsed by default like every panel on this page (2026-09-02) — see
+ * account/AdvancedPreferencesCard.tsx's doc comment for why `<details>`
+ * over a bespoke show/hide component, and use-panel-open.ts's doc
+ * comment for why its open/collapsed state is remembered in a session
+ * cookie rather than resetting on every page navigation. The outer
+ * `<details>` here nests around the failure-tree's own pre-existing
+ * `<details>` elements below without conflict — browsers support nested
+ * `<details>` natively, and only the outer one carries the
+ * `group`/chevron styling.
+ *
+ * Also auto-expands the moment a *new, active* job appears (started
+ * from TraktConnectCard/TraktZipImportCard/CsvImportCard, all of which
+ * invalidate `['import', 'jobs']` on success) — James, 2026-09-02, after
+ * finding that starting an import while this panel happened to be
+ * collapsed gave no visible feedback that anything had happened. Keyed
+ * on the job's own `id`, not just "a job exists" or "status is active":
+ * fires once per job so a manual collapse mid-import isn't immediately
+ * fought on the next 1.5s poll tick, and a job that's already
+ * completed/failed by the time this component first mounts (page
+ * reload onto old history, nothing just "started") doesn't force it
+ * open either. Shares the same underlying `setOpen` as the persisted
+ * cookie state above, so an auto-expand is remembered across navigation
+ * exactly like a manual one would be. */
 export function ImportProgress() {
   const { t } = useTranslation()
 
@@ -162,6 +188,16 @@ export function ImportProgress() {
   })
 
   const latest = data?.jobs[0]
+
+  const [open, setOpen] = usePanelOpen('panelImportProgress')
+  const autoOpenedJobId = useRef<string | undefined>(undefined)
+  useEffect(() => {
+    if (latest && latest.id !== autoOpenedJobId.current && ACTIVE_STATUSES.has(latest.status)) {
+      autoOpenedJobId.current = latest.id
+      setOpen(true)
+    }
+  }, [latest, setOpen])
+
   if (!latest) return null
 
   const total = latest.itemsTotal
@@ -195,91 +231,96 @@ export function ImportProgress() {
 
   return (
     <Card>
-      <h2 className="mb-1 text-lg font-semibold">{t('import.progress.title')}</h2>
-      <div className="mb-1 flex items-baseline justify-between gap-4 text-sm text-[var(--color-fg-muted)]">
-        <span>
-          {t(`import.progress.status.${latest.status}`)}
-          {' · '}
-          {t(`import.progress.source.${latest.source}`)}
-        </span>
-        {elapsedSeconds != null && (
-          <span className="text-right">
-            {t('import.progress.elapsed', { duration: formatDuration(elapsedSeconds) })}
-            {remainingSeconds != null &&
-              ` · ${t('import.progress.remaining', { duration: formatDuration(remainingSeconds) })}`}
+      <details className="group" open={open} onToggle={(e) => setOpen(e.currentTarget.open)}>
+        <summary className="flex cursor-pointer list-none items-center justify-between text-lg font-semibold [&::-webkit-details-marker]:hidden">
+          {t('import.progress.title')}
+          <ChevronDownIcon className="h-5 w-5 flex-shrink-0 transition-transform group-open:rotate-180" />
+        </summary>
+        <div className="mt-1 mb-1 flex items-baseline justify-between gap-4 text-sm text-[var(--color-fg-muted)]">
+          <span>
+            {t(`import.progress.status.${latest.status}`)}
+            {' · '}
+            {t(`import.progress.source.${latest.source}`)}
           </span>
-        )}
-      </div>
+          {elapsedSeconds != null && (
+            <span className="text-right">
+              {t('import.progress.elapsed', { duration: formatDuration(elapsedSeconds) })}
+              {remainingSeconds != null &&
+                ` · ${t('import.progress.remaining', { duration: formatDuration(remainingSeconds) })}`}
+            </span>
+          )}
+        </div>
 
-      <div
-        role="progressbar"
-        aria-valuenow={percent ?? undefined}
-        aria-valuemin={0}
-        aria-valuemax={100}
-        className="mb-2 h-2 w-full overflow-hidden rounded-full bg-[var(--color-border)]"
-      >
         <div
-          className="h-full rounded-full bg-[var(--color-primary)] transition-all"
-          style={{ width: percent != null ? `${percent}%` : '0%' }}
-        />
-      </div>
-      <p className="mb-4 text-sm text-[var(--color-fg-muted)]">
-        {t('import.progress.counts', {
-          processed: latest.itemsProcessed,
-          imported: latest.itemsImported,
-        })}
-      </p>
+          role="progressbar"
+          aria-valuenow={percent ?? undefined}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          className="mb-2 h-2 w-full overflow-hidden rounded-full bg-[var(--color-border)]"
+        >
+          <div
+            className="h-full rounded-full bg-[var(--color-primary)] transition-all"
+            style={{ width: percent != null ? `${percent}%` : '0%' }}
+          />
+        </div>
+        <p className="mb-4 text-sm text-[var(--color-fg-muted)]">
+          {t('import.progress.counts', {
+            processed: latest.itemsProcessed,
+            imported: latest.itemsImported,
+          })}
+        </p>
 
-      {latest.failures.length > 0 && (
-        <details>
-          <summary className="cursor-pointer text-sm font-medium">
-            {t('import.progress.failuresSummary', { count: latest.failures.length })}
-          </summary>
-          <ul className="mt-2 flex flex-col gap-1 text-sm text-[var(--color-fg-muted)]">
-            {buildFailureTree(latest.failures).map((show) => (
-              <li key={show.name}>
-                <details>
-                  <summary className="cursor-pointer">
-                    {show.name}
-                    {countBadge(show.total)}
-                  </summary>
-                  <ul className="mt-1 flex flex-col gap-1 pl-4">
-                    <FailureItems failures={show.direct} />
-                    {show.seasons.map((season) => (
-                      <li key={season.season}>
-                        <details>
-                          <summary className="cursor-pointer">
-                            {t('import.progress.season', { number: season.season })}
-                            {countBadge(season.total)}
-                          </summary>
-                          <ul className="mt-1 flex flex-col gap-1 pl-4">
-                            <FailureItems failures={season.direct} />
-                            {season.episodes.map((ep) => (
-                              <li key={ep.episode}>
-                                <details>
-                                  <summary className="cursor-pointer">
-                                    {t('import.progress.episode', { number: ep.episode })}
-                                    {countBadge(ep.failures.length)}
-                                  </summary>
-                                  <ul className="mt-1 flex flex-col gap-1 pl-4">
-                                    <FailureItems failures={ep.failures} />
-                                  </ul>
-                                </details>
-                              </li>
-                            ))}
-                          </ul>
-                        </details>
-                      </li>
-                    ))}
-                  </ul>
-                </details>
-              </li>
-            ))}
-          </ul>
-        </details>
-      )}
+        {latest.failures.length > 0 && (
+          <details>
+            <summary className="cursor-pointer text-sm font-medium">
+              {t('import.progress.failuresSummary', { count: latest.failures.length })}
+            </summary>
+            <ul className="mt-2 flex flex-col gap-1 text-sm text-[var(--color-fg-muted)]">
+              {buildFailureTree(latest.failures).map((show) => (
+                <li key={show.name}>
+                  <details>
+                    <summary className="cursor-pointer">
+                      {show.name}
+                      {countBadge(show.total)}
+                    </summary>
+                    <ul className="mt-1 flex flex-col gap-1 pl-4">
+                      <FailureItems failures={show.direct} />
+                      {show.seasons.map((season) => (
+                        <li key={season.season}>
+                          <details>
+                            <summary className="cursor-pointer">
+                              {t('import.progress.season', { number: season.season })}
+                              {countBadge(season.total)}
+                            </summary>
+                            <ul className="mt-1 flex flex-col gap-1 pl-4">
+                              <FailureItems failures={season.direct} />
+                              {season.episodes.map((ep) => (
+                                <li key={ep.episode}>
+                                  <details>
+                                    <summary className="cursor-pointer">
+                                      {t('import.progress.episode', { number: ep.episode })}
+                                      {countBadge(ep.failures.length)}
+                                    </summary>
+                                    <ul className="mt-1 flex flex-col gap-1 pl-4">
+                                      <FailureItems failures={ep.failures} />
+                                    </ul>
+                                  </details>
+                                </li>
+                              ))}
+                            </ul>
+                          </details>
+                        </li>
+                      ))}
+                    </ul>
+                  </details>
+                </li>
+              ))}
+            </ul>
+          </details>
+        )}
 
-      {latest.error && <p className="mt-2 text-sm text-[var(--color-danger)]">{latest.error}</p>}
+        {latest.error && <p className="mt-2 text-sm text-[var(--color-danger)]">{latest.error}</p>}
+      </details>
     </Card>
   )
 }

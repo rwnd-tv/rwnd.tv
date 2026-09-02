@@ -1,5 +1,6 @@
-import { plays } from '@rwnd/db'
-import type { Database } from '@rwnd/db'
+import { and, eq } from 'drizzle-orm'
+import { pendingWebhookEvents, plays } from '@rwnd/db'
+import type { Database, webhookAccountLinks } from '@rwnd/db'
 import type { MetadataProvider } from '../providers/types.js'
 import type { UserRecord } from '../types.js'
 import type { WatchEvent } from '../webhooks/plex.js'
@@ -18,9 +19,9 @@ import { hasCrossSourceDuplicate } from './plays.js'
  * missed by this, a low-stakes edge case next to the alternative of
  * unbounded duplicate plays from retries. `date` is the event's own
  * `watchedAt`, not necessarily "today" — a retroactively-replayed event
- * (`apps/api/src/routes/tokens.ts`'s webhook-link claim route) needs the
- * same key it would have gotten had the account already been claimed
- * when it first arrived, not one keyed off whenever the claim happens
+ * (`apps/api/src/routes/tokens.ts`'s webhook-link link route) needs the
+ * same key it would have gotten had the account already been linked
+ * when it first arrived, not one keyed off whenever the link happens
  * to occur. */
 function dailySourceRef(ratingKey: string, date: Date): string {
   return `${ratingKey}:${date.toISOString().slice(0, 10)}`
@@ -30,8 +31,8 @@ function dailySourceRef(ratingKey: string, date: Date): string {
  * Resolves one webhook event's movie/episode and logs it as a play for
  * `user` — the one piece of logic shared identically by a live webhook
  * delivery (`apps/api/src/routes/webhooks.ts`) and a retroactive replay
- * once a previously-unclaimed account gets linked
- * (`apps/api/src/routes/tokens.ts`'s webhook-link claim route), so the
+ * once a previously-unlinked account gets linked
+ * (`apps/api/src/routes/tokens.ts`'s webhook-link link route), so the
  * two paths can never drift apart. A title/episode none of the
  * configured providers recognize is logged server-side only
  * (`console.error`, matching the metadata refresher's own per-item
@@ -91,4 +92,42 @@ export async function logWebhookPlay(
     .insert(plays)
     .values({ userId: user.id, episodeId: episode.id, watchedAt, source: 'plex', sourceRef })
     .onConflictDoNothing()
+}
+
+/**
+ * Replays every `pendingWebhookEvents` row stashed for one link while it
+ * was unlinked, now that it's been linked by `user` — shared by every
+ * way a link can get linked (self-link and link-code redemption, both
+ * `apps/api/src/routes/tokens.ts` / `webhook-links.ts`). One-shot:
+ * whatever happens, the pending rows are gone afterward, same as a live
+ * delivery only ever gets one attempt. One event's unexpected failure (a
+ * provider bug, a transient network error — `logWebhookPlay`'s own "no
+ * configured provider recognizes this title" case already returns
+ * normally rather than throwing) must not stop the rest of this batch
+ * from replaying, or block the unconditional delete below — otherwise a
+ * single bad event wedges every *other* pending event for this account
+ * behind it indefinitely, never actually one-shot.
+ */
+export async function replayPendingWebhookEvents(
+  db: Database,
+  providers: MetadataProvider[],
+  user: UserRecord,
+  link: Pick<typeof webhookAccountLinks.$inferSelect, 'tokenId' | 'source' | 'externalAccountId'>,
+): Promise<void> {
+  const where = and(
+    eq(pendingWebhookEvents.tokenId, link.tokenId),
+    eq(pendingWebhookEvents.source, link.source),
+    eq(pendingWebhookEvents.externalAccountId, link.externalAccountId),
+  )
+  const pending = await db.select().from(pendingWebhookEvents).where(where)
+  if (pending.length === 0) return
+
+  for (const p of pending) {
+    try {
+      await logWebhookPlay(db, providers, user, p.event, p.watchedAt)
+    } catch (err) {
+      console.error(`Failed to replay pending webhook event ${p.id} on link:`, err)
+    }
+  }
+  await db.delete(pendingWebhookEvents).where(where)
 }

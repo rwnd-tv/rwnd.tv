@@ -71,3 +71,50 @@ ADR was written, in the 2026-08-29 follow-up pass; see
 Left as a historical record above rather than rewritten in place; the
 table reflects what was actually decided on 2026-08-26, and `asvs-l1.md`
 is the file to trust for current status.
+
+## Update (2026-09-02): webhook attribution consent rework
+
+The two remaining rows most relevant to this ADR's trust model
+(`assignableUsers` listing every instance user, and webhook plays
+attributable to another account without their consent) are now closed.
+The "confirm before attributing to me" step this ADR's Trust model
+section named as the intended follow-up was never actually written into
+`docs/TODO.md` as promised; it sat as a known, un-acted-on gap until this
+pass, prompted by M4's webhook-ingestion work about to add three more
+sources onto the same mechanism.
+
+**What changed.** `GET /tokens/{id}/webhook-links` no longer returns
+`assignableUsers` at all, and the direct-assign `PATCH` on a link is
+removed entirely: a token owner can no longer see every user on the
+instance, nor attribute a detected external account to any of them
+directly. In its place, a token owner can link an account to
+_themselves_ instantly (no consent step needed for attributing to
+yourself), or generate a one-time code (`webhook_link_codes`,
+`packages/db/src/schema.ts`) for anyone else, which the actual target
+redeems from their own account (`POST /webhook-links/redeem`,
+`apps/api/src/routes/webhook-links.ts`). Modelled closely on the
+existing `invites` mechanism, using the same hashed-code, shown-once,
+7-day-TTL shape. See that route file and `apps/api/src/routes/tokens.ts`
+for the implementation. (Originally built and named around "claim"
+throughout: routes, DB table, UI copy; then renamed to "link" later the
+same day. James felt "link" is the term users would actually
+understand, and the UI copy already used it in places before the rest
+of the naming caught up.)
+
+**What this does and doesn't fix.** Nobody's watch history can be
+written to, and no user can enumerate the instance's users, without that
+person's own action. It remains true, unchanged from the original trust
+model, that a token owner can route another person's plays into their
+_own_ account by generating a code and redeeming it themselves; that was
+never the threat this addresses, and the instance-as-trust-boundary
+framing in the Trust model section above still holds for what a
+malicious token owner can do to their _own_ account. `POST /tokens` also
+remains open to non-admins, deliberately: once attribution requires a
+code the target redeems, a non-admin token owner can no longer attribute
+anything to anyone else anyway, so gating token creation itself would
+only stop a household member wiring up their own media server, for no
+consent benefit.
+
+This supersedes the `assignableUsers`/no-consent-attribution rows in the
+Accepted risks table above; that table is left as the historical record
+of what was decided on 2026-08-26, per the note on the previous update.

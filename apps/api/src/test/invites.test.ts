@@ -40,10 +40,25 @@ describe('/api/v1/invites (F-22, M3 security review follow-up)', () => {
     const body = await json<CreateInviteResponse>(res)
     expect(body.code).toBeTruthy()
     expect(new Date(body.expiresAt).getTime()).toBeGreaterThan(Date.now())
+    // No email was given, so nothing should have been attempted.
+    expect(body.emailSent).toBe(false)
 
     // Only the hash is ever stored — the plaintext code never lands in the DB.
     const [row] = await db.select().from(invites).where(eq(invites.id, body.id))
     expect(row!.codeHash).not.toBe(body.code)
+  })
+
+  it('POST accepts an optional email without failing invite creation regardless of delivery outcome', async () => {
+    const cookie = await createAdminAndCookie()
+    const res = await app.request('/api/v1/invites', {
+      method: 'POST',
+      headers: { cookie, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'invitee@example.com' }),
+    })
+    expect(res.status).toBe(201)
+    const body = await json<CreateInviteResponse>(res)
+    expect(body.code).toBeTruthy()
+    expect(typeof body.emailSent).toBe('boolean')
   })
 
   it('POST rejects a non-admin', async () => {

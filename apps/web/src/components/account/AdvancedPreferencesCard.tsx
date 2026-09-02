@@ -6,6 +6,7 @@ import { useAuth } from '../../lib/use-auth.js'
 import { Card } from '../ui/Card.js'
 import { Button } from '../ui/Button.js'
 import { ChevronDownIcon } from '../icons.js'
+import { usePanelOpen } from '../../lib/use-panel-open.js'
 
 /**
  * Hide spoilers / fill gaps — collapsed by default, expandable (James,
@@ -20,6 +21,7 @@ export function AdvancedPreferencesCard() {
   const { t } = useTranslation()
   const { user } = useAuth()
   const queryClient = useQueryClient()
+  const [open, setOpen] = usePanelOpen('panelAccountAdvancedPreferences')
   const [spoilerProtectionEnabled, setSpoilerProtectionEnabled] = useState(
     user?.spoilerProtectionEnabled ?? true,
   )
@@ -37,7 +39,7 @@ export function AdvancedPreferencesCard() {
 
   return (
     <Card>
-      <details className="group">
+      <details className="group" open={open} onToggle={(e) => setOpen(e.currentTarget.open)}>
         <summary className="flex cursor-pointer list-none items-center justify-between text-lg font-semibold [&::-webkit-details-marker]:hidden">
           {t('account.advancedPreferencesTitle')}
           <ChevronDownIcon className="h-5 w-5 flex-shrink-0 transition-transform group-open:rotate-180" />

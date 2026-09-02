@@ -31,8 +31,8 @@ export const webhookRoutes = new OpenAPIHono<AppEnv>()
  * event for an account that hasn't been linked to a rwnd.tv user yet is
  * different: it's stashed in `pendingWebhookEvents` rather than
  * dropped, and becomes a real play retroactively the moment that
- * account gets claimed (`apps/api/src/routes/tokens.ts`'s webhook-link
- * claim route) — see `resolveWebhookAccount`'s doc comment for why
+ * account gets linked (`apps/api/src/routes/tokens.ts`'s webhook-link
+ * link route) — see `resolveWebhookAccount`'s doc comment for why
  * there's no way to know who it belongs to up front.
  */
 // A real Plex scrobble payload is a few KB; generous headroom over that

@@ -4,6 +4,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, ApiError } from '../../lib/api-client.js'
 import { Card } from '../ui/Card.js'
 import { Button } from '../ui/Button.js'
+import { ChevronDownIcon } from '../icons.js'
+import { usePanelOpen } from '../../lib/use-panel-open.js'
 
 // Kept in sync with apps/api/src/routes/imports.ts's own limit — checked
 // client-side too so an oversized file is rejected instantly rather than
@@ -17,11 +19,14 @@ const MAX_ZIP_BYTES = 25 * 1024 * 1024
  * configured at all (ImportPage.tsx), since that's the whole point: Trakt's
  * 2026 "Community App" policy caps a free account at one connected OAuth app
  * at a time, so this exists for whoever can't (or doesn't want to) use the
- * OAuth path.
+ * OAuth path. Collapsed by default like every panel on this page
+ * (2026-09-02) — see account/AdvancedPreferencesCard.tsx's doc comment
+ * for why `<details>` over a bespoke show/hide component.
  */
 export function TraktZipImportCard() {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
+  const [open, setOpen] = usePanelOpen('panelImportTraktZip')
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [file, setFile] = useState<File | null>(null)
   const [history, setHistory] = useState(true)
@@ -75,83 +80,90 @@ export function TraktZipImportCard() {
 
   return (
     <Card>
-      <h2 className="mb-1 text-lg font-semibold">{t('import.zip.title')}</h2>
-      <p className="mb-4 text-sm text-[var(--color-fg-muted)]">{t('import.zip.description')}</p>
+      <details className="group" open={open} onToggle={(e) => setOpen(e.currentTarget.open)}>
+        <summary className="flex cursor-pointer list-none items-center justify-between text-lg font-semibold [&::-webkit-details-marker]:hidden">
+          {t('import.zip.title')}
+          <ChevronDownIcon className="h-5 w-5 flex-shrink-0 transition-transform group-open:rotate-180" />
+        </summary>
+        <p className="mt-1 mb-4 text-sm text-[var(--color-fg-muted)]">
+          {t('import.zip.description')}
+        </p>
 
-      <h3 className="mb-1 text-sm font-semibold">{t('import.zip.chooseStepTitle')}</h3>
-      <div className="flex items-center gap-3">
-        <Button type="button" variant="secondary" onClick={() => fileInputRef.current?.click()}>
-          {t('import.zip.chooseFile')}
-        </Button>
-        <span className="truncate text-sm text-[var(--color-fg-muted)]">
-          {file ? file.name : t('import.zip.noFileChosen')}
-        </span>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".zip,application/zip"
-          onChange={handleFileChange}
-          className="sr-only"
-        />
-      </div>
-
-      {file && (
-        <div className="mt-4 border-t border-[var(--color-border)] pt-4">
-          <h3 className="mb-1 text-sm font-semibold">{t('import.start.title')}</h3>
-          <p className="mb-3 text-sm text-[var(--color-fg-muted)]">
-            {t('import.zip.startDescription')}
-          </p>
-          <form onSubmit={handleSubmit} className="flex flex-col gap-3">
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={history}
-                onChange={(e) => setHistory(e.target.checked)}
-              />
-              {t('import.start.history')}
-            </label>
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={ratings}
-                onChange={(e) => setRatings(e.target.checked)}
-              />
-              {t('import.start.ratings')}
-            </label>
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={watchlist}
-                onChange={(e) => setWatchlist(e.target.checked)}
-              />
-              {t('import.start.watchlist')}
-            </label>
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={dropped}
-                onChange={(e) => setDropped(e.target.checked)}
-              />
-              {t('import.start.dropped')}
-            </label>
-            <div>
-              <Button type="submit" isLoading={upload.isPending} disabled={Boolean(activeJob)}>
-                {t('import.start.submit')}
-              </Button>
-            </div>
-            {activeJob && (
-              <p className="text-sm text-[var(--color-fg-muted)]">
-                {t('import.start.alreadyRunning')}
-              </p>
-            )}
-            {error && (
-              <p role="alert" className="text-sm text-[var(--color-danger)]">
-                {error}
-              </p>
-            )}
-          </form>
+        <h3 className="mb-1 text-sm font-semibold">{t('import.zip.chooseStepTitle')}</h3>
+        <div className="flex items-center gap-3">
+          <Button type="button" variant="secondary" onClick={() => fileInputRef.current?.click()}>
+            {t('import.zip.chooseFile')}
+          </Button>
+          <span className="truncate text-sm text-[var(--color-fg-muted)]">
+            {file ? file.name : t('import.zip.noFileChosen')}
+          </span>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".zip,application/zip"
+            onChange={handleFileChange}
+            className="sr-only"
+          />
         </div>
-      )}
+
+        {file && (
+          <div className="mt-4 border-t border-[var(--color-border)] pt-4">
+            <h3 className="mb-1 text-sm font-semibold">{t('import.start.title')}</h3>
+            <p className="mb-3 text-sm text-[var(--color-fg-muted)]">
+              {t('import.zip.startDescription')}
+            </p>
+            <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={history}
+                  onChange={(e) => setHistory(e.target.checked)}
+                />
+                {t('import.start.history')}
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={ratings}
+                  onChange={(e) => setRatings(e.target.checked)}
+                />
+                {t('import.start.ratings')}
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={watchlist}
+                  onChange={(e) => setWatchlist(e.target.checked)}
+                />
+                {t('import.start.watchlist')}
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={dropped}
+                  onChange={(e) => setDropped(e.target.checked)}
+                />
+                {t('import.start.dropped')}
+              </label>
+              <div>
+                <Button type="submit" isLoading={upload.isPending} disabled={Boolean(activeJob)}>
+                  {t('import.start.submit')}
+                </Button>
+              </div>
+              {activeJob && (
+                <p className="text-sm text-[var(--color-fg-muted)]">
+                  {t('import.start.alreadyRunning')}
+                </p>
+              )}
+              {error && (
+                <p role="alert" className="text-sm text-[var(--color-danger)]">
+                  {error}
+                </p>
+              )}
+            </form>
+          </div>
+        )}
+      </details>
     </Card>
   )
 }

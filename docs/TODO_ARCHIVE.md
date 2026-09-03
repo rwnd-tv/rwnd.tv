@@ -2753,6 +2753,52 @@ DATABASE` ×2) — zero residue.\
       Sidebar.tsx/ProfileCard.tsx) so `UserRow.tsx`/`AdminUserPage.tsx`
       can point it at the new route instead of forcing the fallback.
 
+- [x] **Search, filters, and sort on the admin Users list** (2026-09-03
+      11:24 added, done 2026-09-03)\
+      `/admin`'s Users panel was a flat, unsorted-by-choice list; James
+      asked for the same treatment the Shows/Movies galleries already have
+      (text filter, facet filters, remembered sort), scaled to what a user
+      list actually needs rather than a literal copy: search by display
+      name or email, filter by role/MFA/email-verified, sort by name,
+      role, last login, or created. All client-side against the existing
+      flat `GET /admin/users` response — no API change, same "already in
+      memory, no pagination" situation as the galleries.\
+      Reused the gallery pattern directly, not a scaled-down substitute:
+      `LibraryControls.tsx` (already generic, already used outside
+      `components/library/` by HistoryPage.tsx) for the search box + sort
+      dropdown, a "Filters…" button expanding a `FiltersPanel.tsx` card
+      with one collapsible `*FilterPanel.tsx` section per facet
+      (`RoleFilterPanel`/`MfaFilterPanel`/`VerifiedFilterPanel`, new,
+      modelled on `StatusFilterPanel`/`DroppedFilterPanel`) plus a Reset
+      button, `useSortCookie.ts`/`useGenreFilterCookie.ts` for
+      persistence, and the `Intl.Collator`/nulls-sort-last-in-both-
+      directions comparator conventions from `library-filter.ts` (whose
+      `foldForSearch` got exported and reused rather than duplicated).
+      New pure-function module `lib/admin-user-filter.ts` mirrors
+      `library-filter.ts`'s own shape for the same reason: the only
+      non-trivial logic here worth unit-testing in isolation.\
+      First attempt put the three facets inline as `<Select>`s in the
+      controls row instead of behind the "Filters…" button, reasoning
+      that 3 simple facets didn't need hiding the way the galleries'
+      7+ do — reverted same day once tried live: three extra dropdowns
+      plus the search box and sort dropdown overflowed `LibraryControls`'
+      single flex row, wrapping awkwardly and squeezing the search box
+      (James, 2026-09-03). The collapsible panel isn't just for hiding
+      facets, it's what keeps the always-visible row narrow regardless of
+      facet count. Role filter (`RoleFilterPanel`, include/exclude per
+      value like `StatusFilterPanel`) offers all three real roles
+      (admin/user/owner), not just the two the TODO text originally
+      named — written before the owner role shipped the same day;
+      without a real Owner option the sole owner would need arbitrary
+      bucketing into another role whenever a role filter was active.\
+      One real bug caught by the new tests, not the type checker: `useSortCookie`
+      reads/writes actual `document.cookie`, which jsdom doesn't reset
+      between tests in the same file — a filter chosen in one test was
+      leaking into the next one's initial render. Fixed with an explicit
+      cookie-clearing `beforeEach` in `UsersPanel.test.tsx`, the first test
+      file in this codebase to exercise `useSortCookie` more than once per
+      file.
+
 ## Import
 
 - [x] **Build ZIP-upload import from Trakt's own "Export now" file** (2026-08-24 22:50 added, investigated 2026-08-24, done 2026-08-25) — M2\

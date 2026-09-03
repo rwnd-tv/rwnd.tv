@@ -59,37 +59,6 @@ Format:
       code that isn't theirs, so the page should make clear what's being
       authorized rather than a bare yes/no.
 
-- [ ] **Search, filters, and sort on the admin Users list** (2026-09-03 11:24 added)
-
-      `/admin`'s Users panel (`UsersPanel.tsx`) is a flat list today, no
-      search box, no filter panel, no sort control, unlike the Shows/
-      Movies galleries (`ShowsPage.tsx`/`MoviesPage.tsx`), which have all
-      three: a text filter (`filter`/`setFilter`), a collapsible
-      `FiltersPanel.tsx` (genre, release year, rating, dropped, one
-      `*FilterPanel.tsx` component per facet), and `useSortCookie.ts`-
-      backed sort options remembered per-page. James, 2026-09-03: wants
-      the same treatment here, scaled to what a user list actually has to
-      filter/sort by, not a literal copy of the show/movie facets:
-
-      - search by display name or email
-      - filter by role (admin/user), MFA on/off, email verified/
-        unverified
-      - sort by name, role, last login, created
-
-      Low priority while instances only have a handful of users
-      (self-hosted, no pagination on `GET /admin/users` either), but
-      would matter for a larger shared instance. Fine to build against
-      the existing flat `GET /admin/users` response client-side (filter/
-      sort in the browser, same as the gallery pages do) rather than
-      pushing query params to the API, unless the list grows large enough
-      that pagination becomes its own separate TODO.
-
-      `UsersPanel.tsx`'s rows are summary-only now (2026-09-03, see
-      `TODO_ARCHIVE.md`'s "Split the admin Users list..." entry) rather
-      than expanding inline, which is what makes this and the bulk-select
-      TODO below buildable without fighting each other in the first
-      place.
-
 - [ ] **Bulk select/actions on the admin Users list** (2026-09-03 11:26 added)
 
       Every action on `/admin` used to be per-row only, inline

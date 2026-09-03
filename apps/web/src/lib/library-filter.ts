@@ -8,8 +8,11 @@
 
 /** Case- and accent-insensitive: "amelie" should match "Amélie" — matters
  * regardless of UI locale, since a title itself (from TMDB) can carry
- * diacritics the user typing a search query might not bother with. */
-function foldForSearch(value: string): string {
+ * diacritics the user typing a search query might not bother with.
+ * Exported (2026-09-03) for `admin-user-filter.ts`'s name/email search,
+ * which wants the same fold but isn't gallery-specific enough to belong
+ * in this file. */
+export function foldForSearch(value: string): string {
   return value
     .toLocaleLowerCase()
     .normalize('NFD')

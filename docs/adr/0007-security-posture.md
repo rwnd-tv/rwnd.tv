@@ -163,3 +163,72 @@ already applies to any admin account: `docs/self-hosting.md`'s existing
 "worth turning on for admin accounts especially" MFA guidance is the
 relevant control, called out again there in this update's own edit to
 that file.
+
+## Update (2026-09-03): an "owner" role closes an admin-vs-admin gap
+
+The previous update (above, same day) shipped `assertNotLastAdmin`, which
+stops an instance ever reaching _zero_ admins. James flagged, while that
+work was still fresh, that it stops there: nothing prevented a rogue or
+compromised admin from demoting every _other_ admin down to `user` one at
+a time. Each individual demotion is legal on its own (the actor themselves
+stays admin, so the invariant above is never tripped), and the end state
+is one admin controlling the whole instance, fully within the rules as
+they stood. This is a real gap the trust model at the top of this ADR
+never claimed to cover: "every account is mutually trusted" was written
+about the webhook-attribution boundary, not about admins trusting each
+other not to lock one another out.
+
+**Fix: a third role, `owner`.** Exactly one at a time, and immune to
+demotion or deletion by an ordinary admin: `PATCH`/`DELETE
+/admin/users/{id}` (`apps/api/src/routes/admin-users.ts`) both reject
+outright the moment the target is the owner, regardless of who's asking,
+including the owner acting on themselves. The only way the role moves is
+`POST /auth/me/transfer-ownership`, gated by a new `requireOwner`
+middleware stricter than `requireAdmin`, which re-proves the caller's
+password and requires the target to already be an admin (not any user,
+a deliberate safety rail against handing ultimate control to someone
+never even trusted with admin access). The transfer itself demotes the
+outgoing owner to a plain admin in the same atomic, row-locked
+transaction, so there is always exactly one owner, never zero, never two.
+`owner` counts as `admin` everywhere `requireAdmin`/`isAdminRole` already
+gate (`packages/shared/src/schemas/common.ts`); it is a strict superset
+of admin privileges, not a parallel permission track.
+
+**The owner can lock themselves out of deleting their own account, on
+purpose.** `DELETE /auth/me` now refuses outright when the caller is the
+owner; they have to transfer ownership first (becoming a plain admin),
+at which point the ordinary last-admin-aware self-delete applies to them
+like anyone else. This is deliberate, not an oversight: it forces "step
+down" and "leave" to be two distinct, deliberate actions rather than one
+that could otherwise strand the instance ownerless.
+
+**Existing instances (dev and prod both already had an admin before this
+shipped).** `POST /setup` only assigns `owner` to a _new_ first account,
+so an already-set-up instance needed a one-time backfill: the
+oldest-created admin is promoted to owner automatically
+(`packages/db/src/seed.ts`, which already runs on every container start
+right after migrations, same place the `instance_settings` singleton row
+gets seeded). Idempotent, and deliberately not a SQL migration: Postgres
+forbids using a just-added enum value in the same transaction that added
+it, and drizzle's migrator runs every pending migration file in one
+transaction, so the backfill has to happen afterward, as a separate
+connection.
+
+**Residual risk, same shape as the self-lockout risk noted in the
+previous ADR update:** the owner role guarantees an owner _exists_ within
+the application's own role system, not that whoever holds it is
+trustworthy. An owner who transfers to someone who later turns out to be
+the rogue actor has simply moved the same trust problem one level up, and
+this role system has no way to stop that from inside the app.
+
+If the sole owner's account itself is lost (locked out, forgotten
+password with no working SMTP), that is not actually a dead end: whoever
+has access to the machine the instance runs on can reassign `role =
+'owner'` with a direct database update. This isn't a workaround standing
+in for a missing feature; it's the same trust boundary this ADR's own
+Trust model section already draws (James, 2026-09-03): a self-hosted
+instance is only ever as protected as the server it runs on, and whoever
+controls that server already has unmediated access to every row in the
+database regardless of what any in-app role says. A software-level
+recovery flow would only ever add convenience for that same
+already-trusted operator, not a new protection, so it isn't planned.

@@ -15,6 +15,7 @@ import {
   userSchema,
   listSessionsResponseSchema,
   loginMfaRequestSchema,
+  transferOwnershipRequestSchema,
   type MfaRequiredResponse,
 } from '@rwnd/shared'
 import { users, userCredentials, instanceSettings, invites } from '@rwnd/db'
@@ -49,6 +50,7 @@ import { serializeUser } from '../lib/serialize.js'
 import { hashSecret } from '../lib/tokens.js'
 import { ensureDefaultWatchlist } from '../lib/watchlists.js'
 import { assertNotLastAdmin, LastAdminError } from '../lib/admins.js'
+import { requireOwner } from '../middleware/auth.js'
 import {
   createPasswordResetToken,
   redeemPasswordResetToken,
@@ -726,7 +728,7 @@ authRoutes.openapi(
       204: { description: 'Account deleted' },
       400: {
         description:
-          "Current password is incorrect, the email doesn't match, or you're the last remaining admin",
+          "Current password is incorrect, the email doesn't match, you're the last remaining admin, or you're the owner",
       },
       401: { description: 'Not logged in' },
     },
@@ -758,6 +760,18 @@ authRoutes.openapi(
     // name to confirm" pattern.
     if (email !== user.email.toLowerCase()) {
       return c.json({ error: "That doesn't match your account's email address" }, 400)
+    }
+
+    // The owner can never delete their own account directly — doing so
+    // would leave the instance with no owner at all. They have to step
+    // down first (POST /auth/me/transfer-ownership below), which demotes
+    // them to a plain admin, at which point this route's ordinary
+    // last-admin-aware delete applies to them like anyone else.
+    if (user.role === 'owner') {
+      return c.json(
+        { error: 'Transfer ownership to another admin before deleting your account' },
+        400,
+      )
     }
 
     // Used to be a blanket "admins can't delete themselves at all" block
@@ -794,6 +808,80 @@ authRoutes.openapi(
     const env = loadEnv()
     clearSessionCookie(c, env)
 
+    return c.body(null, 204)
+  },
+)
+
+/**
+ * The only way the `owner` role ever moves (M4, docs/TODO_ARCHIVE.md) — an
+ * ordinary admin can never promote/demote/delete the owner
+ * (routes/admin-users.ts), so the owner has to hand the role on
+ * themselves. Demotes the caller to `admin` in the same atomic action, so
+ * there is always exactly one owner. Target must already be an admin
+ * (decided: not any user — a safety rail against transferring ultimate
+ * control to someone who was never even trusted with admin access).
+ */
+authRoutes.openapi(
+  createRoute({
+    method: 'post',
+    path: '/auth/me/transfer-ownership',
+    summary: 'Transfer ownership of this instance to another admin (owner only)',
+    middleware: [requireOwner] as const,
+    request: {
+      body: { content: { 'application/json': { schema: transferOwnershipRequestSchema } } },
+    },
+    responses: {
+      204: { description: 'Ownership transferred' },
+      400: { description: 'Current password is incorrect, or the target is not an admin' },
+      403: { description: 'Owner only' },
+      404: { description: 'Target user not found' },
+    },
+  }),
+  async (c) => {
+    const db = c.get('db')
+    const owner = c.get('user')!
+    const { targetUserId, currentPassword } = c.req.valid('json')
+
+    const [credential] = await db
+      .select()
+      .from(userCredentials)
+      .where(and(eq(userCredentials.userId, owner.id), eq(userCredentials.type, 'local')))
+      .limit(1)
+    // Same "re-prove the current password" reasoning as DELETE /auth/me —
+    // this is the single highest-privilege action in the app.
+    if (
+      !credential?.passwordHash ||
+      !(await verifyPassword(credential.passwordHash, currentPassword))
+    ) {
+      return c.json({ error: 'Current password is incorrect' }, 400)
+    }
+
+    const [target] = await db.select().from(users).where(eq(users.id, targetUserId)).limit(1)
+    if (!target) return c.json({ error: 'Target user not found' }, 404)
+    if (target.role !== 'admin') {
+      return c.json({ error: 'Ownership can only be transferred to an existing admin' }, 400)
+    }
+
+    // Locks the owner row before swapping — guards the same
+    // double-transfer race assertNotLastAdmin guards elsewhere (two
+    // concurrent transfers could otherwise both read "I'm still the
+    // owner" and both proceed). requireOwner already confirmed the
+    // caller's session says they're the owner; this re-checks under the
+    // lock rather than trusting that alone.
+    await db.transaction(async (tx) => {
+      const [currentOwner] = await tx
+        .select({ id: users.id })
+        .from(users)
+        .where(eq(users.role, 'owner'))
+        .for('update')
+      if (currentOwner?.id !== owner.id) {
+        throw new Error('Ownership changed concurrently — caller is no longer the owner')
+      }
+      await tx.update(users).set({ role: 'admin' }).where(eq(users.id, owner.id))
+      await tx.update(users).set({ role: 'owner' }).where(eq(users.id, targetUserId))
+    })
+
+    logSecurityEvent('owner_transferred', { fromUserId: owner.id, toUserId: targetUserId })
     return c.body(null, 204)
   },
 )

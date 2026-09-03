@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm'
+import { inArray } from 'drizzle-orm'
 import type { Tx } from '@rwnd/db'
 import { users } from '@rwnd/db'
 
@@ -28,12 +28,24 @@ export class LastAdminError extends Error {
  *
  * A no-op if `targetUserId` isn't currently an admin — demoting/deleting
  * an ordinary user obviously can't affect this invariant.
+ *
+ * Counts `owner` alongside `admin` (M4 "owner" role work,
+ * docs/TODO_ARCHIVE.md): `owner` is a strict superset of admin privileges
+ * (`isAdminRole`, packages/shared/src/schemas/common.ts), so an instance
+ * with one owner and one plain admin already has an owner fully capable of
+ * administering it — demoting/deleting that one plain admin down to zero
+ * *plain admins* is fine and should succeed, not 400 as "last admin". The
+ * owner itself is separately unremovable by anyone but themselves (see
+ * routes/admin-users.ts's explicit owner checks), so once an owner exists
+ * this invariant is always vacuously satisfied; kept anyway as defense in
+ * depth, same reasoning as the "provably unreachable" guard on
+ * `DELETE /admin/users/{id}`.
  */
 export async function assertNotLastAdmin(tx: Tx, targetUserId: string): Promise<void> {
   const admins = await tx
     .select({ id: users.id })
     .from(users)
-    .where(eq(users.role, 'admin'))
+    .where(inArray(users.role, ['admin', 'owner']))
     .for('update')
 
   const isTargetAnAdmin = admins.some((admin) => admin.id === targetUserId)

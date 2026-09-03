@@ -16,7 +16,7 @@ describe('POST /api/v1/setup', () => {
     expect(await res.json()).toEqual({ required: true })
   })
 
-  it('creates the first admin and logs them in', async () => {
+  it('creates the first account as owner (M4 "owner" role work) and logs them in', async () => {
     const res = await app.request('/api/v1/setup', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -28,9 +28,14 @@ describe('POST /api/v1/setup', () => {
     })
     expect(res.status).toBe(201)
     const body = await json<User>(res)
-    expect(body.role).toBe('admin')
+    expect(body.role).toBe('owner')
     expect(body.email).toBe('admin@example.com')
     expect(res.headers.get('set-cookie')).toMatch(/rwnd_session=/)
+
+    // Setup is done — an owner counts as satisfying "an admin exists",
+    // same as a plain admin would (routes/setup.ts's adminExists()).
+    const status = await app.request('/api/v1/setup')
+    expect(await status.json()).toEqual({ required: false })
   })
 
   it('rejects a breached password for the first admin too (ASVS V2.1.7)', async () => {

@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import type { AdminUserSummary, UserRole } from '@rwnd/shared'
+import type { AdminUserSummary, AssignableRole, UserRole } from '@rwnd/shared'
 import { api, ApiError } from '../../lib/api-client.js'
 import { useAuth } from '../../lib/use-auth.js'
 import { usePublicSettings } from '../../lib/use-public-settings.js'
@@ -13,9 +13,10 @@ import { ChevronDownIcon } from '../icons.js'
 import { UserSessions } from './UserSessions.js'
 import { DeleteUserDialog } from './DeleteUserDialog.js'
 
-const ROLE_KEY: Record<UserRole, 'roleAdmin' | 'roleUser'> = {
+const ROLE_KEY: Record<UserRole, 'roleAdmin' | 'roleUser' | 'roleOwner'> = {
   admin: 'roleAdmin',
   user: 'roleUser',
+  owner: 'roleOwner',
 }
 
 /** Small inline badge, same shape as SessionsCard.tsx's "This device" chip
@@ -46,6 +47,13 @@ function Badge({ children, tone = 'muted' }: { children: ReactNode; tone?: 'mute
  * add one just for this, every row renders the coloured-initials fallback
  * (`avatarUpdatedAt: null`). Display name plus email already identifies a
  * row unambiguously; real avatars here are a follow-up (docs/TODO.md).
+ *
+ * The owner's row (M4 "owner" role work, docs/TODO_ARCHIVE.md) is locked
+ * down further: no role `Select` (a static label instead) and no Delete
+ * button, for anyone — the owner can only be changed by themselves, via
+ * TransferOwnershipCard.tsx on the Account page. Password reset and
+ * session revoke stay available regardless of role; neither changes
+ * privilege.
  */
 export function UserRow({ user }: { user: AdminUserSummary }) {
   const { t, i18n } = useTranslation()
@@ -54,7 +62,7 @@ export function UserRow({ user }: { user: AdminUserSummary }) {
   const queryClient = useQueryClient()
 
   const [open, setOpen] = useState(false)
-  const [pendingRole, setPendingRole] = useState<UserRole | null>(null)
+  const [pendingRole, setPendingRole] = useState<AssignableRole | null>(null)
   const [roleError, setRoleError] = useState<string>()
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [resetSent, setResetSent] = useState(false)
@@ -63,7 +71,7 @@ export function UserRow({ user }: { user: AdminUserSummary }) {
   const isSelf = currentUser?.id === user.id
 
   const updateRole = useMutation({
-    mutationFn: (role: UserRole) => api.admin.updateUserRole(user.id, role),
+    mutationFn: (role: AssignableRole) => api.admin.updateUserRole(user.id, role),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['admin', 'users'] })
       // A self-demotion changes what the sidebar/AdminRoute should show
@@ -95,7 +103,7 @@ export function UserRow({ user }: { user: AdminUserSummary }) {
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <p className="min-w-0 truncate font-medium">{user.displayName}</p>
-              <Badge tone={user.role === 'admin' ? 'primary' : 'muted'}>
+              <Badge tone={user.role === 'user' ? 'muted' : 'primary'}>
                 {t(`admin.${ROLE_KEY[user.role]}`)}
               </Badge>
             </div>
@@ -127,15 +135,29 @@ export function UserRow({ user }: { user: AdminUserSummary }) {
           <div className="flex flex-col gap-3 border-t border-[var(--color-border)] pt-4">
             <h3 className="text-sm font-semibold">{t('admin.actionsTitle')}</h3>
 
-            <Select
-              label={t('admin.role')}
-              value={user.role}
-              onChange={(e) => setPendingRole(e.target.value as UserRole)}
-              disabled={updateRole.isPending}
-            >
-              <option value="user">{t('admin.roleUser')}</option>
-              <option value="admin">{t('admin.roleAdmin')}</option>
-            </Select>
+            {user.role === 'owner' ? (
+              // The owner's role is never changed from a dropdown, by
+              // anyone, including the owner themselves — only via
+              // TransferOwnershipCard.tsx on the Account page (see
+              // PATCH /admin/users/{id}'s server-side guard, which rejects
+              // this regardless of what the UI offers).
+              <div className="flex flex-col gap-1">
+                <span className="text-sm font-medium text-[var(--color-fg)]">
+                  {t('admin.role')}
+                </span>
+                <p className="text-sm text-[var(--color-fg-muted)]">{t('admin.ownerRoleLocked')}</p>
+              </div>
+            ) : (
+              <Select
+                label={t('admin.role')}
+                value={user.role}
+                onChange={(e) => setPendingRole(e.target.value as AssignableRole)}
+                disabled={updateRole.isPending}
+              >
+                <option value="user">{t('admin.roleUser')}</option>
+                <option value="admin">{t('admin.roleAdmin')}</option>
+              </Select>
+            )}
 
             {publicSettings?.emailConfigured && (
               <div className="flex items-center gap-2">
@@ -160,7 +182,7 @@ export function UserRow({ user }: { user: AdminUserSummary }) {
               </div>
             )}
 
-            {!isSelf && (
+            {!isSelf && user.role !== 'owner' && (
               <Button
                 type="button"
                 variant="danger"

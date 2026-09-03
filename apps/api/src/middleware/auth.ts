@@ -1,4 +1,5 @@
 import { createMiddleware } from 'hono/factory'
+import { isAdminRole } from '@rwnd/shared'
 import { resolveSession } from '../lib/session.js'
 import type { AppEnv } from '../types.js'
 import { loadEnv } from '../env.js'
@@ -78,10 +79,27 @@ export const requireSession = createMiddleware<AppEnv>(async (c, next) => {
   return
 })
 
-/** Requires an authenticated admin. Must run after requireSession. */
+/** Requires an authenticated admin — `owner` counts too (see
+ * `isAdminRole`'s doc comment, packages/shared/src/schemas/common.ts): it's
+ * a strict superset of admin privileges, not a separate tier that needs its
+ * own opt-in everywhere `requireAdmin` is already used. Must run after
+ * requireSession. */
 export const requireAdmin = createMiddleware<AppEnv>(async (c, next) => {
   const user = c.get('user')
-  if (!user || user.role !== 'admin') {
+  if (!user || !isAdminRole(user.role)) {
+    return c.json({ error: 'forbidden' }, 403)
+  }
+  await next()
+  return
+})
+
+/** Requires the current owner specifically — stricter than requireAdmin.
+ * Only `POST /auth/me/transfer-ownership` (routes/auth.ts, M4,
+ * docs/TODO_ARCHIVE.md) uses this; every other admin action is available
+ * to any admin, ordinary or owner. Must run after requireSession. */
+export const requireOwner = createMiddleware<AppEnv>(async (c, next) => {
+  const user = c.get('user')
+  if (!user || user.role !== 'owner') {
     return c.json({ error: 'forbidden' }, 403)
   }
   await next()

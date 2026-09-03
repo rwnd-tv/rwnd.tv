@@ -71,6 +71,7 @@ import {
   type TotpStatus,
   type TraktConnectionStatus,
   type TraktDevicePairing,
+  type TransferOwnershipRequest,
   type UpdateInstanceSettingsRequest,
   type UpdatePlayRequest,
   type UpdateProfileRequest,
@@ -208,6 +209,8 @@ export const api = {
     deleteAccount: (body: DeleteAccountRequest) => del<void>('/auth/me', body),
     listSessions: () => get<ListSessionsResponse>('/auth/me/sessions'),
     revokeSession: (id: string) => del<void>(`/auth/me/sessions/${encodeURIComponent(id)}`),
+    transferOwnership: (body: TransferOwnershipRequest) =>
+      post<void>('/auth/me/transfer-ownership', body),
   },
   mfa: {
     status: () => get<TotpStatus>('/auth/mfa/totp'),

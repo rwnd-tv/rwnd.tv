@@ -14,8 +14,36 @@ export type Locale = z.infer<typeof localeSchema>
 export const themeSchema = z.enum(['system', 'light', 'dark'])
 export type Theme = z.infer<typeof themeSchema>
 
-export const userRoleSchema = z.enum(['admin', 'user'])
+/** Matches `userRoleEnum` in packages/db/src/schema.ts. `owner` is a third,
+ * more privileged tier added for the M4 "owner" role work
+ * (docs/TODO_ARCHIVE.md): exactly one at a time, immune to demotion or
+ * deletion by an ordinary admin, transferable only by the current owner
+ * themselves (`POST /auth/me/transfer-ownership`, routes/auth.ts). It is
+ * never a settable value on `PATCH /admin/users/{id}` — see
+ * `assignableRoleSchema` below. */
+export const userRoleSchema = z.enum(['admin', 'user', 'owner'])
 export type UserRole = z.infer<typeof userRoleSchema>
+
+/** The subset of `userRoleSchema` an admin can set on another user via
+ * `PATCH /admin/users/{id}` (routes/admin-users.ts). Deliberately excludes
+ * `owner` — becoming owner only ever happens through the dedicated
+ * transfer action, never a role dropdown, so this is a validation-level
+ * guarantee rather than a runtime check every caller has to remember. */
+export const assignableRoleSchema = z.enum(['admin', 'user'])
+export type AssignableRole = z.infer<typeof assignableRoleSchema>
+
+/** `admin` and `owner` both count as "can administer this instance" —
+ * `owner` is a strict superset of `admin` privileges (see userRoleSchema's
+ * doc comment), so anywhere that gates on being an admin (`requireAdmin`,
+ * apps/api/src/middleware/auth.ts; every `role === 'admin'` check on the
+ * web side) must also admit an owner. One predicate here rather than each
+ * call site repeating `role === 'admin' || role === 'owner'` — a repo
+ * grep when this was introduced found four separate web-side literals
+ * that would otherwise have silently locked an owner out of the admin
+ * surface the moment one existed. */
+export function isAdminRole(role: UserRole): boolean {
+  return role === 'admin' || role === 'owner'
+}
 
 /** How a play was logged — matches `playSourceEnum` in packages/db/src/schema.ts.
  * Shared by plays.ts, library.ts, activity.ts, and backups.ts, all of which

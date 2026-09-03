@@ -218,4 +218,26 @@ describe('UsersPanel', () => {
     await userEvent.click(await screen.findByText('Admin', { selector: 'p' }))
     expect(screen.queryByRole('button', { name: 'Delete account' })).not.toBeInTheDocument()
   })
+
+  it("shows a static label instead of a role Select on the owner's row, and no delete button", async () => {
+    renderPanel([
+      adminUser(),
+      adminUser({
+        id: 'owner-1',
+        email: 'owner@example.com',
+        displayName: 'The Owner',
+        role: 'owner',
+      }),
+    ])
+    vi.mocked(api.admin.listUserSessions).mockResolvedValue({ sessions: [] })
+
+    await userEvent.click(await screen.findByText('The Owner'))
+    expect(screen.queryByLabelText('Role')).not.toBeInTheDocument()
+    expect(
+      screen.getByText(
+        "The owner's role can only be changed by the owner themselves, from their Account page.",
+      ),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Delete account' })).not.toBeInTheDocument()
+  })
 })

@@ -79,6 +79,10 @@ Admins get an **Admin** page in the sidebar: every user on the instance, their r
 
 **An instance can never end up with zero admins.** Demoting or deleting the last remaining admin is refused, both from this page and from that admin's own Account → Delete account. If you want to step back from administering an instance, promote someone else first.
 
+**One account is always the owner.** The first account created (whoever ran `/setup`) starts as the owner, a step above an ordinary admin: no other admin can demote, delete, or otherwise touch the owner's account, closing off a rogue-or-compromised-admin path that "at least one admin remains" alone doesn't cover (an admin could otherwise demote every _other_ admin, one at a time, and end up controlling the instance alone). The owner's role badge reads "Owner" on the Admin page instead of "Admin", and their row there has no role control or delete button for anyone.
+
+The owner can hand the role to another admin from their own Account page (**Transfer ownership**, re-enter your password to confirm): the target must already be an admin, and doing so demotes you to a regular admin in the same step. The owner can't delete their own account directly; step down first, then delete like any other admin.
+
 The password-reset action needs SMTP configured (see Email below) and doesn't appear otherwise, the same as every other email-sending feature in the app.
 
 ## Connecting Plex

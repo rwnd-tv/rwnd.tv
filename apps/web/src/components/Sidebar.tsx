@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { Link, NavLink } from 'react-router'
 import { useTranslation } from 'react-i18next'
+import { isAdminRole } from '@rwnd/shared'
 import { useAuth } from '../lib/use-auth.js'
 import { Avatar } from './Avatar.js'
 import {
@@ -73,9 +74,10 @@ function SidebarLink({
  * below; every nav link is unconditional now.)
  *
  * Admin (below) is the one link that *is* conditional again, on
- * `user?.role === 'admin'` — added with the M4 admin user-management work
- * (docs/TODO_ARCHIVE.md). This is a UX convenience only, same as every
- * other client-side role check in the app (AdminRoute.tsx's doc comment);
+ * `isAdminRole(user.role)` (admin or owner) — added with the M4 admin
+ * user-management work (docs/TODO_ARCHIVE.md). This is a UX convenience
+ * only, same as every other client-side role check in the app
+ * (AdminRoute.tsx's doc comment);
  * the server enforces independently.
  *
  * Below the `sm` breakpoint (640px), "collapsed" stops meaning "icon rail"
@@ -152,7 +154,7 @@ export function Sidebar({ collapsed, onNavigate }: { collapsed: boolean; onNavig
           collapsed={collapsed}
           onNavigate={onNavigate}
         />
-        {user?.role === 'admin' && (
+        {user && isAdminRole(user.role) && (
           <SidebarLink
             to="/admin"
             label={t('nav.admin')}

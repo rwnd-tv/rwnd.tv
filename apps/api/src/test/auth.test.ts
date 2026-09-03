@@ -5,7 +5,7 @@ import { instanceSettings, invites, users } from '@rwnd/db'
 import type { User } from '@rwnd/shared'
 import { generateSecret, hashSecret } from '../lib/tokens.js'
 import { generateTotp } from '../lib/totp.js'
-import { extractCookie, json, resetDb, testApp, testDb } from './helpers.js'
+import { createLocalUser, extractCookie, json, resetDb, testApp, testDb } from './helpers.js'
 
 const db = testDb()
 const app = testApp()
@@ -359,32 +359,61 @@ describe('auth', () => {
   // docs/TODO_ARCHIVE.md) — see lib/admins.ts#assertNotLastAdmin.
   describe('DELETE /auth/me admin self-delete', () => {
     it("refuses when the caller is the instance's only admin", async () => {
-      const created = await createUser('admin@example.com', 'correct-horse-battery-staple')
-      const cookie = extractCookie(created)!
+      // Two plain admins, no owner involved at all — bypasses POST /setup
+      // (which now creates an owner, not a plain admin, see the
+      // "owner" role describe block below) so this stays a clean test of
+      // the original last-admin invariant on its own.
+      const email = 'admin@example.com'
+      await createLocalUser(db, email, 'correct-horse-battery-staple', { role: 'admin' })
+      const loginRes = await app.request('/api/v1/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password: 'correct-horse-battery-staple' }),
+      })
+      const cookie = extractCookie(loginRes)!
 
       const res = await app.request('/api/v1/auth/me', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json', cookie },
-        body: JSON.stringify({
-          email: 'admin@example.com',
-          currentPassword: 'correct-horse-battery-staple',
-        }),
+        body: JSON.stringify({ email, currentPassword: 'correct-horse-battery-staple' }),
       })
       expect(res.status).toBe(400)
 
-      const [row] = await db.select().from(users).where(eq(users.email, 'admin@example.com'))
+      const [row] = await db.select().from(users).where(eq(users.email, email))
       expect(row).toBeDefined()
     })
 
     it('succeeds once a second admin exists', async () => {
-      const created = await createUser('admin@example.com', 'correct-horse-battery-staple')
-      const cookie = extractCookie(created)!
+      const email = 'admin@example.com'
+      await createLocalUser(db, email, 'correct-horse-battery-staple', { role: 'admin' })
+      await createLocalUser(db, 'second-admin@example.com', 'correct-horse-battery-staple', {
+        role: 'admin',
+      })
+      const loginRes = await app.request('/api/v1/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password: 'correct-horse-battery-staple' }),
+      })
+      const cookie = extractCookie(loginRes)!
 
-      // Directly, rather than through the admin-users.ts promote route —
-      // that route has its own dedicated test file.
-      await db.insert(users).values({
-        email: 'second-admin@example.com',
-        displayName: 'Second Admin',
+      const res = await app.request('/api/v1/auth/me', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json', cookie },
+        body: JSON.stringify({ email, currentPassword: 'correct-horse-battery-staple' }),
+      })
+      expect(res.status).toBe(204)
+
+      const [row] = await db.select().from(users).where(eq(users.email, email))
+      expect(row).toBeUndefined()
+    })
+  })
+
+  // M4 "owner" role work (docs/TODO_ARCHIVE.md).
+  describe('the "owner" role', () => {
+    it('refuses to self-delete when the caller is the owner, even with other admins present', async () => {
+      const created = await createUser('owner@example.com', 'correct-horse-battery-staple')
+      const cookie = extractCookie(created)!
+      await createLocalUser(db, 'admin@example.com', 'correct-horse-battery-staple', {
         role: 'admin',
       })
 
@@ -392,14 +421,152 @@ describe('auth', () => {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json', cookie },
         body: JSON.stringify({
-          email: 'admin@example.com',
+          email: 'owner@example.com',
           currentPassword: 'correct-horse-battery-staple',
         }),
       })
-      expect(res.status).toBe(204)
+      expect(res.status).toBe(400)
 
-      const [row] = await db.select().from(users).where(eq(users.email, 'admin@example.com'))
-      expect(row).toBeUndefined()
+      const [row] = await db.select().from(users).where(eq(users.email, 'owner@example.com'))
+      expect(row).toBeDefined()
+      expect(row!.role).toBe('owner')
+    })
+
+    it('lets a plain admin self-delete when only the owner remains (the owner backstops the instance)', async () => {
+      await createUser('owner@example.com', 'correct-horse-battery-staple')
+      const email = 'admin@example.com'
+      await createLocalUser(db, email, 'correct-horse-battery-staple', { role: 'admin' })
+      const loginRes = await app.request('/api/v1/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password: 'correct-horse-battery-staple' }),
+      })
+      const cookie = extractCookie(loginRes)!
+
+      const res = await app.request('/api/v1/auth/me', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json', cookie },
+        body: JSON.stringify({ email, currentPassword: 'correct-horse-battery-staple' }),
+      })
+      expect(res.status).toBe(204)
+    })
+
+    describe('POST /auth/me/transfer-ownership', () => {
+      it('rejects a caller who is not the owner', async () => {
+        await createUser('owner@example.com', 'correct-horse-battery-staple')
+        const targetId = await createLocalUser(
+          db,
+          'admin@example.com',
+          'correct-horse-battery-staple',
+          { role: 'admin' },
+        )
+        const loginRes = await app.request('/api/v1/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: 'admin@example.com',
+            password: 'correct-horse-battery-staple',
+          }),
+        })
+        const cookie = extractCookie(loginRes)!
+
+        const res = await app.request('/api/v1/auth/me/transfer-ownership', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', cookie },
+          body: JSON.stringify({
+            targetUserId: targetId,
+            currentPassword: 'correct-horse-battery-staple',
+          }),
+        })
+        expect(res.status).toBe(403)
+      })
+
+      it('rejects a target who is not an existing admin', async () => {
+        const created = await createUser('owner@example.com', 'correct-horse-battery-staple')
+        const cookie = extractCookie(created)!
+        const targetId = await createLocalUser(
+          db,
+          'plain@example.com',
+          'correct-horse-battery-staple',
+        )
+
+        const res = await app.request('/api/v1/auth/me/transfer-ownership', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', cookie },
+          body: JSON.stringify({
+            targetUserId: targetId,
+            currentPassword: 'correct-horse-battery-staple',
+          }),
+        })
+        expect(res.status).toBe(400)
+      })
+
+      it('rejects an unknown target user id', async () => {
+        const created = await createUser('owner@example.com', 'correct-horse-battery-staple')
+        const cookie = extractCookie(created)!
+
+        const res = await app.request('/api/v1/auth/me/transfer-ownership', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', cookie },
+          body: JSON.stringify({
+            targetUserId: '00000000-0000-0000-0000-000000000000',
+            currentPassword: 'correct-horse-battery-staple',
+          }),
+        })
+        expect(res.status).toBe(404)
+      })
+
+      it('rejects the wrong password', async () => {
+        const created = await createUser('owner@example.com', 'correct-horse-battery-staple')
+        const cookie = extractCookie(created)!
+        const targetId = await createLocalUser(
+          db,
+          'admin@example.com',
+          'correct-horse-battery-staple',
+          { role: 'admin' },
+        )
+
+        const res = await app.request('/api/v1/auth/me/transfer-ownership', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', cookie },
+          body: JSON.stringify({ targetUserId: targetId, currentPassword: 'wrong-password' }),
+        })
+        expect(res.status).toBe(400)
+      })
+
+      it('swaps both roles atomically and logs the event', async () => {
+        const spy = vi.spyOn(console, 'log').mockImplementation(() => {})
+        const created = await createUser('owner@example.com', 'correct-horse-battery-staple')
+        const ownerId = (await json<User>(created)).id
+        const cookie = extractCookie(created)!
+        const targetId = await createLocalUser(
+          db,
+          'admin@example.com',
+          'correct-horse-battery-staple',
+          { role: 'admin' },
+        )
+
+        const res = await app.request('/api/v1/auth/me/transfer-ownership', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', cookie },
+          body: JSON.stringify({
+            targetUserId: targetId,
+            currentPassword: 'correct-horse-battery-staple',
+          }),
+        })
+        expect(res.status).toBe(204)
+
+        const [newOwner] = await db.select().from(users).where(eq(users.id, targetId))
+        const [formerOwner] = await db.select().from(users).where(eq(users.id, ownerId))
+        expect(newOwner!.role).toBe('owner')
+        expect(formerOwner!.role).toBe('admin')
+
+        const call = spy.mock.calls.find(([prefix]) => prefix === '[security] owner_transferred')
+        expect(call).toBeTruthy()
+        const payload = JSON.parse(String(call![1])) as { fromUserId: string; toUserId: string }
+        expect(payload).toMatchObject({ fromUserId: ownerId, toUserId: targetId })
+        spy.mockRestore()
+      })
     })
   })
 })

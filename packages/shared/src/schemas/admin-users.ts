@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { userRoleSchema } from './common.js'
+import { assignableRoleSchema, userRoleSchema } from './common.js'
 
 /**
  * Backs `GET/PATCH/DELETE /admin/users` (apps/api/src/routes/admin-users.ts,
@@ -32,10 +32,23 @@ export const listAdminUsersResponseSchema = z.object({
 })
 export type ListAdminUsersResponse = z.infer<typeof listAdminUsersResponseSchema>
 
-/** `PATCH /admin/users/{id}` — promote/demote. The last-admin invariant
- * (an instance can never reach zero admins) is enforced server-side, not
- * expressible here. */
+/** `PATCH /admin/users/{id}` — promote/demote. `role` is `assignableRoleSchema`,
+ * not the full `userRoleSchema`: `owner` can never be set here, only through
+ * `POST /auth/me/transfer-ownership` (routes/auth.ts). The last-admin
+ * invariant (an instance can never reach zero admins) and the "can't touch
+ * the owner" guard are both enforced server-side, not expressible here. */
 export const updateUserRoleRequestSchema = z.object({
-  role: userRoleSchema,
+  role: assignableRoleSchema,
 })
 export type UpdateUserRoleRequest = z.infer<typeof updateUserRoleRequestSchema>
+
+/** `POST /auth/me/transfer-ownership` (routes/auth.ts) — the current owner
+ * hands the role to an existing admin, demoting themselves to `admin` in
+ * the same atomic action. `currentPassword` re-proves identity, same
+ * reasoning as `deleteAccountRequestSchema` (./auth.js): this is the
+ * single highest-privilege action in the app. */
+export const transferOwnershipRequestSchema = z.object({
+  targetUserId: z.string().uuid(),
+  currentPassword: z.string().min(1).max(256),
+})
+export type TransferOwnershipRequest = z.infer<typeof transferOwnershipRequestSchema>

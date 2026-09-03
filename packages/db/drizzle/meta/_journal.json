@@ -232,6 +232,13 @@
       "when": 1788427175343,
       "tag": "0032_add_users_last_login_at",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1788432730565,
+      "tag": "0033_add_owner_role",
+      "breakpoints": true
     }
   ]
 }

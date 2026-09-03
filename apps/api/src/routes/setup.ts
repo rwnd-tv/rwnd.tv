@@ -1,5 +1,5 @@
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi'
-import { eq } from 'drizzle-orm'
+import { inArray } from 'drizzle-orm'
 import { setupRequestSchema, userSchema } from '@rwnd/shared'
 import { users, userCredentials } from '@rwnd/db'
 import type { AppEnv } from '../types.js'
@@ -15,11 +15,15 @@ import { ensureDefaultWatchlist } from '../lib/watchlists.js'
 
 export const setupRoutes = new OpenAPIHono<AppEnv>()
 
+// Counts `owner` alongside `admin` (M4 "owner" role work,
+// docs/TODO_ARCHIVE.md) — the very first account created here is now
+// `owner`, not `admin` (see the insert below), so checking `role = 'admin'`
+// alone would make setup think it still needs to run after it just did.
 async function adminExists(db: AppEnv['Variables']['db']): Promise<boolean> {
   const [admin] = await db
     .select({ id: users.id })
     .from(users)
-    .where(eq(users.role, 'admin'))
+    .where(inArray(users.role, ['admin', 'owner']))
     .limit(1)
   return Boolean(admin)
 }
@@ -92,7 +96,12 @@ setupRoutes.openapi(
       .values({
         email: body.email,
         displayName: body.displayName,
-        role: 'admin',
+        // The very first account is the owner, not a plain admin (M4
+        // "owner" role work, docs/TODO_ARCHIVE.md) — the person physically
+        // deploying this instance is exactly who the owner role protects:
+        // no other admin can ever demote or delete them, only they can
+        // hand the role on (POST /auth/me/transfer-ownership).
+        role: 'owner',
         // Pre-verified rather than sent a verification email like a normal
         // registration (auth.ts's /auth/register) would — this is the
         // person physically deploying/configuring the instance, not

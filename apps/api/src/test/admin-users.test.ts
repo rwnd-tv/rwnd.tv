@@ -47,7 +47,9 @@ describe('/api/v1/admin/users (M4, docs/TODO_ARCHIVE.md)', () => {
       expect(body.users).toHaveLength(2)
 
       const adminRow = body.users.find((u) => u.id === admin.id)!
-      expect(adminRow.role).toBe('admin')
+      // The account created via POST /setup is the owner, not a plain
+      // admin (M4 "owner" role work, docs/TODO_ARCHIVE.md).
+      expect(adminRow.role).toBe('owner')
       // setup pre-verifies the first admin's email (routes/setup.ts).
       expect(adminRow.emailVerifiedAt).not.toBeNull()
       expect(adminRow.mfaEnabled).toBe(false)
@@ -139,17 +141,67 @@ describe('/api/v1/admin/users (M4, docs/TODO_ARCHIVE.md)', () => {
       expect(res.status).toBe(403)
     })
 
-    it("refuses to demote the instance's last remaining admin", async () => {
-      const admin = await createAdminAndCookie()
-      const res = await app.request(`/api/v1/admin/users/${admin.id}`, {
+    it("refuses to change the owner's role, even by the owner themselves", async () => {
+      // POST /setup's account is the owner (M4 "owner" role work,
+      // docs/TODO_ARCHIVE.md) — the owner's role only ever moves via
+      // POST /auth/me/transfer-ownership, never this route, regardless of
+      // who's calling.
+      const owner = await createAdminAndCookie()
+      const res = await app.request(`/api/v1/admin/users/${owner.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', cookie: owner.cookie },
+        body: JSON.stringify({ role: 'admin' }),
+      })
+      expect(res.status).toBe(400)
+      const body = await json<{ error: string }>(res)
+      expect(body.error).toContain("owner's role")
+
+      const [row] = await db.select().from(users).where(eq(users.id, owner.id))
+      expect(row!.role).toBe('owner')
+    })
+
+    it("another admin can't change the owner's role either", async () => {
+      const owner = await createAdminAndCookie()
+      const admin = await createUserAndCookie('second-admin@example.com', { role: 'admin' })
+      const res = await app.request(`/api/v1/admin/users/${owner.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', cookie: admin.cookie },
         body: JSON.stringify({ role: 'user' }),
       })
       expect(res.status).toBe(400)
 
+      const [row] = await db.select().from(users).where(eq(users.id, owner.id))
+      expect(row!.role).toBe('owner')
+    })
+
+    it('succeeds demoting the sole plain admin to user once an owner exists', async () => {
+      // Before the owner role existed, this was the exact scenario
+      // assertNotLastAdmin blocked (lib/admins.ts). Now that an owner
+      // always exists and counts as admin-equivalent, the owner backstops
+      // the instance and this demotion is fine — the inverse of the old
+      // behaviour, worth its own explicit test.
+      const owner = await createAdminAndCookie()
+      const admin = await createUserAndCookie('second-admin@example.com', { role: 'admin' })
+      const res = await app.request(`/api/v1/admin/users/${admin.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', cookie: owner.cookie },
+        body: JSON.stringify({ role: 'user' }),
+      })
+      expect(res.status).toBe(200)
+
       const [row] = await db.select().from(users).where(eq(users.id, admin.id))
-      expect(row!.role).toBe('admin')
+      expect(row!.role).toBe('user')
+    })
+
+    it('rejects role: "owner" in the request body (validation)', async () => {
+      const owner = await createAdminAndCookie()
+      const user = await createUserAndCookie('watcher@example.com')
+      const res = await app.request(`/api/v1/admin/users/${user.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', cookie: owner.cookie },
+        body: JSON.stringify({ role: 'owner' }),
+      })
+      expect(res.status).toBe(400)
     })
 
     it('404s an unknown user id', async () => {
@@ -236,20 +288,39 @@ describe('/api/v1/admin/users (M4, docs/TODO_ARCHIVE.md)', () => {
       // route (assertNotLastAdmin's call site above is defense in depth,
       // not a live path): the self-guard above already means `id` is
       // always a *different* user from the caller, so if `id` is an
-      // admin there are at least two admins before this delete and at
-      // least one (the caller) after it. This test is that positive case
-      // — proving the invariant doesn't over-block a legitimate delete.
-      const admin = await createAdminAndCookie()
+      // admin there are at least two admins-or-owner before this delete
+      // and at least one after it. This test is that positive case —
+      // proving the invariant doesn't over-block a legitimate delete.
+      // Deliberately two *plain* admins alongside the owner, not the
+      // owner itself — deleting the owner is always refused (see below).
+      await createAdminAndCookie()
+      const firstAdmin = await createUserAndCookie('first-admin@example.com', { role: 'admin' })
       const secondAdmin = await createUserAndCookie('second-admin@example.com', { role: 'admin' })
 
-      const res = await app.request(`/api/v1/admin/users/${admin.id}`, {
+      const res = await app.request(`/api/v1/admin/users/${secondAdmin.id}`, {
         method: 'DELETE',
-        headers: { cookie: secondAdmin.cookie },
+        headers: { cookie: firstAdmin.cookie },
       })
       expect(res.status).toBe(204)
 
-      const [row] = await db.select().from(users).where(eq(users.id, admin.id))
+      const [row] = await db.select().from(users).where(eq(users.id, secondAdmin.id))
       expect(row).toBeUndefined()
+    })
+
+    it("refuses to delete the owner's account, even by another admin", async () => {
+      const owner = await createAdminAndCookie()
+      const admin = await createUserAndCookie('second-admin@example.com', { role: 'admin' })
+
+      const res = await app.request(`/api/v1/admin/users/${owner.id}`, {
+        method: 'DELETE',
+        headers: { cookie: admin.cookie },
+      })
+      expect(res.status).toBe(400)
+      const body = await json<{ error: string }>(res)
+      expect(body.error).toContain('owner')
+
+      const [row] = await db.select().from(users).where(eq(users.id, owner.id))
+      expect(row).toBeDefined()
     })
 
     it('404s an unknown user id', async () => {

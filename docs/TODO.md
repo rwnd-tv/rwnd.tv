@@ -83,31 +83,6 @@ Format:
       (`GET /admin/users/{id}/avatar`), which felt like its own small
       unit of work rather than something to fold into the first pass.
 
-- [ ] **An "owner" role, immune to demotion/removal by other admins** (2026-09-03 11:03 added, M4'd 2026-09-03; M4)
-
-      The admin user-management work (see `TODO_ARCHIVE.md`'s "Admin UI
-      for managing user accounts" entry) added `lib/admins.ts`'s
-      `assertNotLastAdmin`, which stops an instance ever reaching *zero*
-      admins, but does nothing to stop a rogue or compromised admin from
-      demoting every *other* admin down to `user` one at a time (each
-      individual demotion is legal as long as the actor themselves stays
-      admin) and ending up the sole remaining admin, fully within the
-      rules as they stand today.
-
-      James, 2026-09-03: wants a third `userRoleEnum` value, `owner`,
-      exactly one at a time (same "invariant enforced in a locked
-      transaction" shape as `assertNotLastAdmin`, just "exactly one,
-      never removed except by itself" instead of "at least one"). The
-      first admin created via `POST /setup` becomes the owner; an
-      ordinary admin can never demote, delete, or otherwise touch the
-      owner account, and only the current owner can transfer the role
-      to someone else. Touches `routes/setup.ts`, `routes/admin-users.ts`,
-      `DELETE /auth/me`, the admin UI's role control, and
-      [ADR 0007](adr/0007-security-posture.md)'s trust model (this is an
-      admin-vs-admin distrust case the existing "every account is
-      mutually trusted" framing doesn't cover). James: this is expected
-      to be the next thing built after the admin UI itself ships.
-
 - [ ] **Search, filters, and sort on the admin Users list** (2026-09-03 11:24 added)
 
       `/admin`'s Users panel (`UsersPanel.tsx`) is a flat list today, no

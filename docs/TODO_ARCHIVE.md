@@ -2571,6 +2571,66 @@ DATABASE` ×2) — zero residue.\
       caller's own image) — every row falls back to the generated-
       initials avatar instead.
 
+- [x] **An "owner" role, immune to demotion/removal by other admins**
+      (2026-09-03 11:03 added, M4'd 2026-09-03, done 2026-09-03) — M4\
+      Flagged by James while the admin user-management work above was
+      still fresh: `lib/admins.ts`'s `assertNotLastAdmin` stops an
+      instance ever reaching *zero* admins, but nothing stopped a rogue
+      or compromised admin from demoting every *other* admin down to
+      `user` one at a time (each individual demotion legal on its own)
+      and ending up sole admin, fully within the rules as they stood.\
+      Fixed with a third role, `owner`, exactly one at a time.
+      `PATCH`/`DELETE /admin/users/{id}` (`routes/admin-users.ts`) both
+      refuse outright the moment the target is the owner, regardless of
+      who's asking, including the owner acting on themselves; a new
+      `updateUserRoleRequestSchema` can't even express `role: 'owner'`
+      in the request body. The role only ever moves via a new
+      self-service `POST /auth/me/transfer-ownership`
+      (`routes/auth.ts`), gated by a new `requireOwner` middleware
+      (stricter than `requireAdmin`), re-proving the caller's password
+      and requiring the target to already be an admin (decided: not any
+      user, a safety rail against handing ultimate control to someone
+      never even trusted with admin access). The transfer demotes the
+      outgoing owner to a plain admin in the same atomic, row-locked
+      transaction, so there is always exactly one owner. `owner` counts
+      as `admin` everywhere `requireAdmin` already gated (a new
+      `isAdminRole()` helper, `packages/shared/src/schemas/common.ts`) —
+      a repo-wide grep found four web-side literals
+      (`AdminRoute.tsx`, `Sidebar.tsx`, both of `SettingsPage.tsx`'s
+      panel gates) that would otherwise have silently locked an owner
+      out of the admin surface the moment one existed.\
+      `POST /setup` now creates the very first account as owner, not a
+      plain admin. Existing instances (dev and prod both already had an
+      admin from before this shipped) needed a one-time backfill:
+      `packages/db/src/seed.ts` promotes the oldest-created admin to
+      owner if none exists yet, idempotent, running on every container
+      start right after migrations. Deliberately not a second SQL
+      migration: Postgres forbids using a just-added enum value (`ALTER
+      TYPE ... ADD VALUE 'owner'`) within the same transaction that
+      added it, and drizzle's migrator runs every pending migration
+      file in one transaction, so the backfill has to happen afterward
+      as a separate connection.\
+      The owner can't delete their own account directly either
+      (`DELETE /auth/me` now refuses when the caller is the owner) —
+      they have to transfer ownership first, becoming a plain admin, at
+      which point the ordinary last-admin-aware self-delete applies to
+      them like anyone else. `assertNotLastAdmin` itself was widened to
+      count `owner` alongside `admin`, which is a real behaviour change,
+      not just defensive: an instance with one owner and one plain
+      admin can now have that one admin demoted or deleted freely, since
+      the owner alone is sufficient to administer the instance (this
+      used to 400 as "last admin").\
+      New `TransferOwnershipCard.tsx` on the Account page, visible only
+      to the owner, right before Delete account — same "most
+      consequential action last" placement `DeleteAccountCard.tsx`
+      already documents. See [ADR 0007](adr/0007-security-posture.md)'s
+      addendum for the full trust-model writeup, including the
+      deliberate residual risk: whoever has access to the server the
+      instance runs on can always reassign ownership with a direct
+      database update if the sole owner's account is ever lost, the
+      same trust boundary the rest of this ADR already draws for a
+      self-hosted instance, not a gap needing a software recovery flow.
+
 ## Import
 
 - [x] **Build ZIP-upload import from Trakt's own "Export now" file** (2026-08-24 22:50 added, investigated 2026-08-24, done 2026-08-25) — M2\

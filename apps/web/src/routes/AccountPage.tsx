@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next'
+import { useAuth } from '../lib/use-auth.js'
 import { EmailCard } from '../components/account/EmailCard.js'
 import { ChangePasswordCard } from '../components/account/ChangePasswordCard.js'
 import { SessionsCard } from '../components/account/SessionsCard.js'
@@ -6,6 +7,7 @@ import { MfaCard } from '../components/account/MfaCard.js'
 import { ProfileCard } from '../components/account/ProfileCard.js'
 import { PreferencesCard } from '../components/account/PreferencesCard.js'
 import { AdvancedPreferencesCard } from '../components/account/AdvancedPreferencesCard.js'
+import { TransferOwnershipCard } from '../components/account/TransferOwnershipCard.js'
 import { DeleteAccountCard } from '../components/account/DeleteAccountCard.js'
 import { LogoutButton } from '../components/account/LogoutButton.js'
 
@@ -36,12 +38,17 @@ import { LogoutButton } from '../components/account/LogoutButton.js'
  * rather than sharing one cross-card form. Log out started as its own
  * section at the bottom, then moved the same day to sit inline with the
  * page title — James wanted it reachable without scrolling past
- * everything else. Delete account is deliberately last — the most
- * destructive action on the page belongs at the end, not competing for
- * attention with everything above it.
+ * everything else. Transfer ownership (M4 "owner" role work,
+ * docs/TODO_ARCHIVE.md, only rendered for `role === 'owner'`) sits right
+ * before Delete account, same reasoning — the second most consequential
+ * action on the page, immediately ahead of the most destructive one.
+ * Delete account is deliberately last — the most destructive action on
+ * the page belongs at the end, not competing for attention with
+ * everything above it.
  */
 export function AccountPage() {
   const { t } = useTranslation()
+  const { user } = useAuth()
 
   return (
     <div className="flex flex-col gap-6">
@@ -56,6 +63,7 @@ export function AccountPage() {
       <PreferencesCard />
       <AdvancedPreferencesCard />
       <SessionsCard />
+      {user?.role === 'owner' && <TransferOwnershipCard />}
       <DeleteAccountCard />
     </div>
   )

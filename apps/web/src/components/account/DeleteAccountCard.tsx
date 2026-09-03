@@ -34,12 +34,16 @@ import { usePanelOpen } from '../../lib/use-panel-open.js'
  * block — James, 2026-08-25 — "a deliberately blunt first step while a
  * more considered answer gets thought through"; M4's admin
  * user-management work, docs/TODO_ARCHIVE.md, is that answer), provided
- * at least one other admin exists to keep administering the instance.
- * There's no client-side precheck for that (it would mean an extra API
- * call just to render this card) — the last-admin case surfaces as a
- * normal inline error on the password field below, same as a wrong
- * password or a mismatched email, since the server (`DELETE /auth/me`,
- * apps/api/src/routes/auth.ts) enforces the invariant either way.
+ * at least one other admin exists to keep administering the instance. The
+ * owner specifically can never delete themselves here at all — they'd
+ * have to transfer ownership first (TransferOwnershipCard.tsx, further
+ * down this page), which demotes them to a plain admin, at which point
+ * this card's ordinary last-admin-aware delete applies. There's no
+ * client-side precheck for either case (it would mean an extra API call
+ * just to render this card) — both surface as a normal inline error on
+ * the password field below, same as a wrong password or a mismatched
+ * email, since the server (`DELETE /auth/me`, apps/api/src/routes/auth.ts)
+ * enforces both invariants either way.
  *
  * Collapsed by default like every other card on this page as of
  * 2026-09-02 — see AdvancedPreferencesCard.tsx's doc comment for why

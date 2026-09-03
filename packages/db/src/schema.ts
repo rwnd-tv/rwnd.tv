@@ -42,7 +42,7 @@ const bytea = customType<{ data: Buffer }>({
 // Enums
 // ---------------------------------------------------------------------------
 
-export const userRoleEnum = pgEnum('user_role', ['admin', 'user'])
+export const userRoleEnum = pgEnum('user_role', ['admin', 'user', 'owner'])
 export const themeEnum = pgEnum('theme', ['system', 'light', 'dark'])
 export const credentialTypeEnum = pgEnum('credential_type', ['local', 'oidc'])
 export const registrationModeEnum = pgEnum('registration_mode', ['open', 'invite', 'closed'])

@@ -1,5 +1,5 @@
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi'
-import { and, asc, eq, isNotNull, sql } from 'drizzle-orm'
+import { and, asc, eq, isNotNull, ne, sql } from 'drizzle-orm'
 import {
   listAdminUsersResponseSchema,
   listSessionsResponseSchema,
@@ -116,7 +116,9 @@ adminUserRoutes.openapi(
     },
     responses: {
       200: { description: 'Updated', content: { 'application/json': { schema: userSchema } } },
-      400: { description: "Can't demote the last remaining admin" },
+      400: {
+        description: "Can't demote the last remaining admin, or change the owner's role here",
+      },
       403: { description: 'Admin only' },
       404: { description: 'User not found' },
     },
@@ -127,6 +129,27 @@ adminUserRoutes.openapi(
     const db = c.get('db')
     const admin = c.get('user')!
 
+    // The owner's role is only ever changed via
+    // POST /auth/me/transfer-ownership (routes/auth.ts) — never through
+    // this generic promote/demote route, regardless of who's calling,
+    // including the owner acting on themselves. `updateUserRoleRequestSchema`
+    // already can't set `role: 'owner'`; this is the other direction, an
+    // existing owner being demoted away from it.
+    const [target] = await db
+      .select({ role: users.role })
+      .from(users)
+      .where(eq(users.id, id))
+      .limit(1)
+    if (target?.role === 'owner') {
+      return c.json(
+        {
+          error:
+            "Can't change the owner's role here — transfer ownership from the Account page instead",
+        },
+        400,
+      )
+    }
+
     try {
       const updated = await db.transaction(async (tx) => {
         if (role === 'user') {
@@ -134,7 +157,16 @@ adminUserRoutes.openapi(
           // admin only ever adds one, never removes the last.
           await assertNotLastAdmin(tx, id)
         }
-        const [row] = await tx.update(users).set({ role }).where(eq(users.id, id)).returning()
+        // ne(users.role, 'owner') is defense in depth against the target
+        // becoming the owner between the check above and this write (e.g.
+        // a concurrent ownership transfer) — the same "provably
+        // unreachable in the common case, kept anyway" reasoning as
+        // DELETE /admin/users/{id} below.
+        const [row] = await tx
+          .update(users)
+          .set({ role })
+          .where(and(eq(users.id, id), ne(users.role, 'owner')))
+          .returning()
         return row ?? null
       })
 
@@ -174,7 +206,9 @@ adminUserRoutes.openapi(
     // account and apply to anyone who later reuses the address.
     responses: {
       204: { description: 'Deleted' },
-      400: { description: "Can't delete your own account here" },
+      400: {
+        description: "Can't delete your own account here, or the owner's account",
+      },
       403: { description: 'Admin only' },
       404: { description: 'User not found' },
     },
@@ -191,6 +225,19 @@ adminUserRoutes.openapi(
       return c.json({ error: 'Delete your own account from Account settings instead' }, 400)
     }
 
+    // The owner can never be deleted by another admin — only by
+    // themselves, and only after transferring ownership first (which
+    // makes them a plain admin, at which point DELETE /auth/me applies
+    // normally). See routes/auth.ts's POST /auth/me/transfer-ownership.
+    const [target] = await db
+      .select({ role: users.role })
+      .from(users)
+      .where(eq(users.id, id))
+      .limit(1)
+    if (target?.role === 'owner') {
+      return c.json({ error: "Can't delete the owner's account" }, 400)
+    }
+
     try {
       const deleted = await db.transaction(async (tx) => {
         // Provably unreachable given the self-guard above: reaching this
@@ -201,9 +248,12 @@ adminUserRoutes.openapi(
         // it stays correct even if the self-guard above is ever changed
         // without this line being revisited. See lib/admins.ts.
         await assertNotLastAdmin(tx, id)
+        // ne(users.role, 'owner') is defense in depth against the target
+        // becoming the owner between the check above and this write, same
+        // reasoning as PATCH /admin/users/{id}'s equivalent guard.
         const rows = await tx
           .delete(users)
-          .where(eq(users.id, id))
+          .where(and(eq(users.id, id), ne(users.role, 'owner')))
           .returning({ id: users.id, email: users.email })
         // Not a cascade — login_attempts is keyed by email with no FK
         // (see its doc comment), so it would otherwise silently outlive

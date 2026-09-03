@@ -12,7 +12,11 @@ import { assignableRoleSchema, userRoleSchema } from './common.js'
  * `mfaEnabled` (a `user_totp.confirmedAt IS NOT NULL` check) and
  * `sessionCount` (a grouped count on `sessions`) - so an admin can see
  * "is this account actually protected, and does it have live sessions"
- * without a separate round trip per row.
+ * without a separate round trip per row. `avatarUpdatedAt` (2026-09-03)
+ * mirrors `userSchema`'s own field of the same name - the image bytes
+ * themselves are never sent here either, just the presence flag/cache-buster
+ * a client needs to hit the new admin-only `GET /admin/users/{id}/avatar`
+ * (routes/admin-users.ts) instead of `GET /auth/me/avatar`.
  */
 export const adminUserSummarySchema = z.object({
   id: z.string().uuid(),
@@ -22,6 +26,7 @@ export const adminUserSummarySchema = z.object({
   createdAt: z.string().datetime(),
   lastLoginAt: z.string().datetime().nullable(),
   emailVerifiedAt: z.string().datetime().nullable(),
+  avatarUpdatedAt: z.string().datetime().nullable(),
   mfaEnabled: z.boolean(),
   sessionCount: z.number().int(),
 })

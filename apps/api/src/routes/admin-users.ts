@@ -25,6 +25,7 @@ import { sendPasswordResetEmail } from '../lib/email.js'
 import { getSessionToken } from '../lib/cookies.js'
 import { serializeUser } from '../lib/serialize.js'
 import { logSecurityEvent } from '../lib/security-log.js'
+import { extensionFor } from '../lib/image-sniff.js'
 
 /**
  * Admin-only user management (M4, docs/TODO_ARCHIVE.md): list every user on
@@ -71,6 +72,7 @@ adminUserRoutes.openapi(
         createdAt: users.createdAt,
         lastLoginAt: users.lastLoginAt,
         emailVerifiedAt: users.emailVerifiedAt,
+        avatarUpdatedAt: users.avatarUpdatedAt,
       })
       .from(users)
       .orderBy(asc(users.displayName))
@@ -98,6 +100,7 @@ adminUserRoutes.openapi(
         createdAt: row.createdAt.toISOString(),
         lastLoginAt: row.lastLoginAt?.toISOString() ?? null,
         emailVerifiedAt: row.emailVerifiedAt?.toISOString() ?? null,
+        avatarUpdatedAt: row.avatarUpdatedAt?.toISOString() ?? null,
         mfaEnabled: mfaEnabledUserIds.has(row.id),
         sessionCount: sessionCountByUser.get(row.id) ?? 0,
       })),
@@ -141,6 +144,7 @@ adminUserRoutes.openapi(
         createdAt: users.createdAt,
         lastLoginAt: users.lastLoginAt,
         emailVerifiedAt: users.emailVerifiedAt,
+        avatarUpdatedAt: users.avatarUpdatedAt,
       })
       .from(users)
       .where(eq(users.id, id))
@@ -167,11 +171,46 @@ adminUserRoutes.openapi(
       createdAt: row.createdAt.toISOString(),
       lastLoginAt: row.lastLoginAt?.toISOString() ?? null,
       emailVerifiedAt: row.emailVerifiedAt?.toISOString() ?? null,
+      avatarUpdatedAt: row.avatarUpdatedAt?.toISOString() ?? null,
       mfaEnabled: Boolean(totpRow),
       sessionCount: sessionCountRow!.count,
     })
   },
 )
+
+/**
+ * Serves another user's uploaded avatar — a plain Hono route, not
+ * `.openapi()`, same reasoning as `GET /auth/me/avatar` (routes/auth.ts):
+ * a raw-binary response doesn't fit the typed-JSON convention every other
+ * route in this file uses. `Avatar.tsx` is otherwise hardwired to that
+ * self-only route, so `/admin`'s user list and detail page both used to
+ * force the coloured-initials fallback for every row (`avatarUpdatedAt:
+ * null`) rather than show a real photo — see docs/TODO_ARCHIVE.md.
+ */
+adminUserRoutes.get('/admin/users/:id/avatar', requireAdmin, async (c) => {
+  const parsed = userIdParam.safeParse({ id: c.req.param('id') })
+  if (!parsed.success) return c.json({ error: 'User not found' }, 404)
+  const db = c.get('db')
+
+  const [row] = await db
+    .select({ avatarImage: users.avatarImage, avatarMimeType: users.avatarMimeType })
+    .from(users)
+    .where(eq(users.id, parsed.data.id))
+    .limit(1)
+  if (!row) return c.json({ error: 'User not found' }, 404)
+  if (!row.avatarImage || !row.avatarMimeType) {
+    return c.json({ error: 'No avatar set' }, 404)
+  }
+
+  // Same headers/caching reasoning as GET /auth/me/avatar — safe to cache
+  // aggressively since the frontend always requests this through a
+  // `?v=avatarUpdatedAt`-suffixed URL (Avatar.tsx), so a new upload is a
+  // new URL, never a stale cache hit.
+  c.header('Content-Type', row.avatarMimeType)
+  c.header('Cache-Control', 'private, max-age=31536000, immutable')
+  c.header('Content-Disposition', `inline; filename="avatar.${extensionFor(row.avatarMimeType)}"`)
+  return c.body(Uint8Array.from(row.avatarImage))
+})
 
 adminUserRoutes.openapi(
   createRoute({

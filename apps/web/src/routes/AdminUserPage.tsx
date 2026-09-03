@@ -117,7 +117,7 @@ export function AdminUserPage() {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center gap-4">
-        <Avatar user={{ ...user, avatarUpdatedAt: null }} size={48} />
+        <Avatar user={user} avatarUrl={(v) => api.admin.avatarUrl(user.id, v)} size={48} />
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <h1 className="truncate text-2xl font-semibold">{user.displayName}</h1>

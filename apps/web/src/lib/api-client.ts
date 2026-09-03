@@ -180,6 +180,10 @@ export const api = {
       del<void>(`/admin/users/${encodeURIComponent(id)}/sessions`),
     sendPasswordReset: (id: string) =>
       post<void>(`/admin/users/${encodeURIComponent(id)}/password-reset`),
+    /** Not fetched through api-client's own request() — same reasoning as
+     * `auth.avatarUrl` below: used directly as an <img> src. */
+    avatarUrl: (id: string, avatarUpdatedAt: string) =>
+      `/api/v1/admin/users/${encodeURIComponent(id)}/avatar?v=${encodeURIComponent(avatarUpdatedAt)}`,
   },
   auth: {
     login: (body: LoginRequest) => post<User | MfaRequiredResponse>('/auth/login', body),

@@ -27,6 +27,7 @@ function adminUser(overrides: Partial<AdminUserSummary> = {}): AdminUserSummary 
     createdAt: new Date().toISOString(),
     lastLoginAt: null,
     emailVerifiedAt: new Date().toISOString(),
+    avatarUpdatedAt: null,
     mfaEnabled: false,
     sessionCount: 0,
     ...overrides,

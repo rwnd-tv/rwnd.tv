@@ -16,8 +16,9 @@ const app = testApp()
  * adding a route without deciding its auth posture fails CI instead of
  * silently shipping public.
  *
- * Six routes are plain Hono routes rather than `.openapi()`-registered
- * (avatar upload/delete/get, the account export zip, and the two
+ * Seven routes are plain Hono routes rather than `.openapi()`-registered
+ * (avatar upload/delete/get for the caller's own, the admin-only
+ * avatar-get for another user, the account export zip, and the two
  * multipart import routes) and so don't appear in the generated document
  * at all — listed explicitly below instead.
  */
@@ -25,6 +26,7 @@ const PLAIN_ROUTES: ReadonlyArray<{ method: string; path: string }> = [
   { method: 'PUT', path: '/auth/me/avatar' },
   { method: 'DELETE', path: '/auth/me/avatar' },
   { method: 'GET', path: '/auth/me/avatar' },
+  { method: 'GET', path: '/admin/users/placeholder-value/avatar' },
   { method: 'GET', path: '/account/export' },
   { method: 'POST', path: '/import/trakt/zip' },
   { method: 'POST', path: '/import/csv' },
@@ -80,7 +82,7 @@ describe('route coverage — every /api/v1 route is either public or requires a 
     expect(checked.length).toBeGreaterThan(50)
   })
 
-  it('the six plain (non-openapi) routes all require a session', async () => {
+  it('the seven plain (non-openapi) routes all require a session', async () => {
     await resetDb(db)
     for (const { method, path } of PLAIN_ROUTES) {
       const res = await app.request(`/api/v1${path}`, { method })

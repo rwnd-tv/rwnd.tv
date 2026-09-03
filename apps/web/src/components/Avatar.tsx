@@ -27,10 +27,14 @@ function colorForUser(id: string): string {
 }
 
 /**
- * Always the *current* session's own avatar — backed by `GET /auth/me/avatar`,
+ * The caller's own avatar by default — backed by `GET /auth/me/avatar`,
  * which only ever serves the logged-in user's own image, not an arbitrary
- * user id. Used in Sidebar.tsx and ProfileForm.tsx, both of which only ever
- * have `useAuth()`'s own `user` to show.
+ * user id. Used unadorned in Sidebar.tsx and ProfileForm.tsx, both of which
+ * only ever have `useAuth()`'s own `user` to show. `UserRow.tsx`/
+ * `AdminUserPage.tsx` (2026-09-03) pass an explicit `avatarUrl` builder
+ * instead, pointed at the admin-only `GET /admin/users/{id}/avatar`
+ * (routes/admin-users.ts) — the one other route that can serve *someone
+ * else's* image, and only to an admin.
  *
  * No image uploaded (or none loaded yet) falls back to a single initial on a
  * colour derived from the user's id — same "no image → fall back to
@@ -43,9 +47,11 @@ function colorForUser(id: string): string {
 export function Avatar({
   user,
   size = 32,
+  avatarUrl = api.auth.avatarUrl,
 }: {
   user: Pick<User, 'id' | 'displayName' | 'avatarUpdatedAt'>
   size?: number
+  avatarUrl?: (avatarUpdatedAt: string) => string
 }) {
   return (
     <div
@@ -58,11 +64,7 @@ export function Avatar({
       }}
     >
       {user.avatarUpdatedAt ? (
-        <img
-          src={api.auth.avatarUrl(user.avatarUpdatedAt)}
-          alt=""
-          className="h-full w-full object-cover"
-        />
+        <img src={avatarUrl(user.avatarUpdatedAt)} alt="" className="h-full w-full object-cover" />
       ) : (
         <span aria-hidden="true" className="font-semibold">
           {user.displayName.charAt(0).toUpperCase()}

@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router'
 import { slugify, type AdminUserSummary } from '@rwnd/shared'
+import { api } from '../../lib/api-client.js'
 import { Avatar } from '../Avatar.js'
 import { Badge } from './role-badge.js'
 import { ROLE_KEY } from '../../lib/admin-role-labels.js'
@@ -47,11 +48,11 @@ function ChevronRightIcon() {
  * slug segment at all (still routed, see App.tsx) if slugifying leaves
  * nothing.
  *
- * No avatar-serving endpoint exists for another user's image (Avatar.tsx
- * is hardwired to `GET /auth/me/avatar`, the caller's own) — rather than
- * add one just for this, every row renders the coloured-initials fallback
- * (`avatarUpdatedAt: null`). Display name plus email already identifies a
- * row unambiguously; real avatars here are a follow-up (docs/TODO.md).
+ * Real avatars (2026-09-03, docs/TODO_ARCHIVE.md) via the admin-only
+ * `GET /admin/users/{id}/avatar` (routes/admin-users.ts) — `Avatar.tsx`'s
+ * `avatarUrl` prop points it there instead of its default `GET
+ * /auth/me/avatar`, the only other route that would otherwise leave every
+ * row here stuck on the coloured-initials fallback.
  */
 export function UserRow({ user }: { user: AdminUserSummary }) {
   const { t, i18n } = useTranslation()
@@ -64,7 +65,7 @@ export function UserRow({ user }: { user: AdminUserSummary }) {
         className="flex w-full items-center justify-between gap-4 rounded-md border border-[var(--color-border)] p-3 hover:bg-[var(--color-surface)]"
       >
         <div className="flex min-w-0 items-center gap-3">
-          <Avatar user={{ ...user, avatarUpdatedAt: null }} size={32} />
+          <Avatar user={user} avatarUrl={(v) => api.admin.avatarUrl(user.id, v)} size={32} />
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <p className="min-w-0 truncate font-medium">{user.displayName}</p>

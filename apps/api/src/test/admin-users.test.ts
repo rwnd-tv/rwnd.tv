@@ -76,6 +76,24 @@ async function generateCode(ownerCookie: string, tokenId: string, linkId: string
   return json<CreateWebhookLinkCodeResponse>(res)
 }
 
+// Same shape as avatar.test.ts's own copy — explicit `ArrayBuffer` generic
+// (not bare `Uint8Array`) since @types/node's ambient global redeclares
+// `Uint8Array` as `Uint8Array<ArrayBufferLike>`, which `new File([...])`
+// (lib.dom's `BlobPart`) no longer accepts.
+function jpegBytes(): Uint8Array<ArrayBuffer> {
+  const buf = new Uint8Array(64)
+  buf[0] = 0xff
+  buf[1] = 0xd8
+  buf[2] = 0xff
+  return buf
+}
+
+async function uploadAvatarAs(cookie: string) {
+  const form = new FormData()
+  form.set('file', new File([jpegBytes()], 'photo.jpg', { type: 'image/jpeg' }))
+  return app.request('/api/v1/auth/me/avatar', { method: 'PUT', headers: { cookie }, body: form })
+}
+
 describe('/api/v1/admin/users (M4, docs/TODO_ARCHIVE.md)', () => {
   beforeEach(() => resetDb(db))
 
@@ -191,6 +209,49 @@ describe('/api/v1/admin/users (M4, docs/TODO_ARCHIVE.md)', () => {
       const admin = await createAdminAndCookie()
       const res = await app.request(`/api/v1/admin/users/${admin.id}`)
       expect(res.status).toBe(401)
+    })
+  })
+
+  describe('GET /admin/users/{id}/avatar', () => {
+    it("serves another user's uploaded avatar with the sniffed Content-Type", async () => {
+      const admin = await createAdminAndCookie()
+      const user = await createUserAndCookie('watcher@example.com')
+      const upload = await uploadAvatarAs(user.cookie)
+      expect(upload.status).toBe(200)
+
+      const res = await app.request(`/api/v1/admin/users/${user.id}/avatar`, {
+        headers: { cookie: admin.cookie },
+      })
+      expect(res.status).toBe(200)
+      expect(res.headers.get('content-type')).toBe('image/jpeg')
+    })
+
+    it('404s when the target user has no avatar set', async () => {
+      const admin = await createAdminAndCookie()
+      const user = await createUserAndCookie('watcher@example.com')
+
+      const res = await app.request(`/api/v1/admin/users/${user.id}/avatar`, {
+        headers: { cookie: admin.cookie },
+      })
+      expect(res.status).toBe(404)
+    })
+
+    it('404s an unknown user id', async () => {
+      const admin = await createAdminAndCookie()
+      const res = await app.request(
+        '/api/v1/admin/users/00000000-0000-0000-0000-000000000000/avatar',
+        { headers: { cookie: admin.cookie } },
+      )
+      expect(res.status).toBe(404)
+    })
+
+    it('rejects a non-admin', async () => {
+      const admin = await createAdminAndCookie()
+      const user = await createUserAndCookie('plain@example.com')
+      const res = await app.request(`/api/v1/admin/users/${admin.id}/avatar`, {
+        headers: { cookie: user.cookie },
+      })
+      expect(res.status).toBe(403)
     })
   })
 

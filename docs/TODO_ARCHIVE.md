@@ -2734,6 +2734,25 @@ DATABASE` ×2) — zero residue.\
       `email_change_tokens`/`mfa_challenges` all delete their row
       outright on redemption instead of nulling a column.
 
+- [x] **Admin user list has no per-user avatars** (2026-09-03 added, done
+      2026-09-03)\
+      Flagged during the "Admin UI for managing user accounts" entry
+      above: `/admin`'s user list and `/admin/users/{id}` detail page both
+      forced the coloured-initials fallback for every row
+      (`{ ...user, avatarUpdatedAt: null }` in `UserRow.tsx`/
+      `AdminUserPage.tsx`), even for a user with a real uploaded photo —
+      `Avatar.tsx` was hardwired to `GET /auth/me/avatar`, which only ever
+      serves the *caller's own* image.\
+      Fixed with a new admin-only `GET /admin/users/{id}/avatar` (plain
+      Hono route, same reasoning as `GET /auth/me/avatar` itself: a
+      raw-binary response doesn't fit the typed-JSON `.openapi()`
+      convention), and `avatarUpdatedAt` added to `adminUserSummarySchema`
+      so the client knows whether to request an image at all.
+      `Avatar.tsx` gained an optional `avatarUrl` builder prop (default:
+      `api.auth.avatarUrl`, unchanged for its two self-avatar callers,
+      Sidebar.tsx/ProfileCard.tsx) so `UserRow.tsx`/`AdminUserPage.tsx`
+      can point it at the new route instead of forcing the fallback.
+
 ## Import
 
 - [x] **Build ZIP-upload import from Trakt's own "Export now" file** (2026-08-24 22:50 added, investigated 2026-08-24, done 2026-08-25) — M2\

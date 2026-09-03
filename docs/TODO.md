@@ -59,16 +59,6 @@ Format:
       code that isn't theirs, so the page should make clear what's being
       authorized rather than a bare yes/no.
 
-- [ ] **Admin user list has no per-user avatars** (2026-09-03 added)
-
-      `/admin`'s user list falls back to the generated-initials avatar
-      for every row (`avatarUpdatedAt: null`, `UserRow.tsx`) rather than
-      an uploaded photo. `Avatar.tsx`/`GET /auth/me/avatar` only ever
-      serve the *caller's own* image, so showing another user's would
-      need a new admin-only avatar-serving endpoint
-      (`GET /admin/users/{id}/avatar`), which felt like its own small
-      unit of work rather than something to fold into the first pass.
-
 - [ ] **Search, filters, and sort on the admin Users list** (2026-09-03 11:24 added)
 
       `/admin`'s Users panel (`UsersPanel.tsx`) is a flat list today, no

@@ -34,6 +34,14 @@ export async function createSession(
     ipAddress: meta.ipAddress,
   })
 
+  // Stamped here rather than at each of this helper's call sites (plain
+  // login, MFA completion, register, setup) so a future login path can't
+  // forget it — and a session is only ever created once a login has
+  // actually completed, so a password that stopped short of a required
+  // MFA second factor correctly never touches this. Backs the admin
+  // user-management list (apps/api/src/routes/admin-users.ts, M4).
+  await db.update(users).set({ lastLoginAt: new Date() }).where(eq(users.id, userId))
+
   return { token, expiresAt }
 }
 

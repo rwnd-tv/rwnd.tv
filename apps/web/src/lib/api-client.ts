@@ -4,6 +4,7 @@ import {
   type ActivitySort,
   type ApiToken,
   type BackupSummary,
+  type AdminUserSummary,
   type ChangeEmailRequest,
   type ChangePasswordRequest,
   type ClearDataRequest,
@@ -31,6 +32,7 @@ import {
   type InstanceSettings,
   type ListBackupsResponse,
   type ListActivityResponse,
+  type ListAdminUsersResponse,
   type ListImportJobsResponse,
   type ListLibraryMoviesResponse,
   type ListLibraryShowsResponse,
@@ -72,6 +74,7 @@ import {
   type UpdateInstanceSettingsRequest,
   type UpdatePlayRequest,
   type UpdateProfileRequest,
+  type UpdateUserRoleRequest,
   type UpdateWatchlistRequest,
   type UpNextResponse,
   type User,
@@ -159,6 +162,22 @@ export const api = {
     list: () => get<ListInvitesResponse>('/invites'),
     create: (body: CreateInviteRequest) => post<CreateInviteResponse>('/invites', body),
     delete: (id: string) => del<void>(`/invites/${encodeURIComponent(id)}`),
+  },
+  admin: {
+    listUsers: () => get<ListAdminUsersResponse>('/admin/users'),
+    updateUserRole: (id: string, role: UpdateUserRoleRequest['role']) =>
+      patch<AdminUserSummary>(`/admin/users/${encodeURIComponent(id)}`, {
+        role,
+      } satisfies UpdateUserRoleRequest),
+    deleteUser: (id: string) => del<void>(`/admin/users/${encodeURIComponent(id)}`),
+    listUserSessions: (id: string) =>
+      get<ListSessionsResponse>(`/admin/users/${encodeURIComponent(id)}/sessions`),
+    revokeUserSession: (id: string, sessionId: string) =>
+      del<void>(`/admin/users/${encodeURIComponent(id)}/sessions/${encodeURIComponent(sessionId)}`),
+    revokeAllUserSessions: (id: string) =>
+      del<void>(`/admin/users/${encodeURIComponent(id)}/sessions`),
+    sendPasswordReset: (id: string) =>
+      post<void>(`/admin/users/${encodeURIComponent(id)}/password-reset`),
   },
   auth: {
     login: (body: LoginRequest) => post<User | MfaRequiredResponse>('/auth/login', body),

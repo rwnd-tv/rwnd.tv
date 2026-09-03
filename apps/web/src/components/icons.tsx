@@ -112,3 +112,14 @@ export function ChevronDownIcon(props: SVGProps<SVGSVGElement>) {
     </Icon>
   )
 }
+
+export function UsersIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <Icon {...props}>
+      <circle cx="9" cy="8" r="3" />
+      <path d="M3 20a6 6 0 0112 0" />
+      <path d="M16 4.5a3 3 0 010 5.9" />
+      <path d="M15 14.5c2.9.4 5 2.3 5 5.5" />
+    </Icon>
+  )
+}

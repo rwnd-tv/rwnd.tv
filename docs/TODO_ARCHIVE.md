@@ -2524,6 +2524,53 @@ DATABASE` ×2) — zero residue.\
       rows themselves untouched, confirming the cascade is scoped to the
       user and doesn't reach into shared library data.
 
+- [x] **Admin UI for managing user accounts** (2026-09-02 21:59 added,
+      M4'd 2026-09-02, done 2026-09-03) — M4\
+      There was no admin-facing view of an instance's users at all: the
+      `admin`/`user` split (`packages/db/src/schema.ts`'s `userRoleEnum`)
+      only ever got set once, on the very first account at setup
+      (`routes/setup.ts`), with no route or page to list other users, see
+      their role or last login, promote/demote, revoke their sessions, or
+      delete an account other than your own (`DeleteAccountCard.tsx` was
+      self-service only).\
+      Shipped as a new top-level `/admin` page (sidebar, admin-only,
+      `AdminRoute.tsx`), backed by `apps/api/src/routes/admin-users.ts`
+      (`requireAdmin`-gated throughout, mirroring `routes/invites.ts`'s
+      shape): list every user (role, last login, email-verified, MFA-
+      confirmed, session count), promote/demote, view and revoke a user's
+      sessions individually or all at once, trigger a password-reset
+      email (reuses `POST /auth/forgot-password`'s own token+send pair —
+      an admin never sets or sees another user's password directly), or
+      delete an account. A new nullable `users.last_login_at` column
+      backs "last login", stamped once inside `createSession()`
+      (`lib/session.ts`) rather than at each of its four call sites, so a
+      future login path can't forget it, and correctly *not* stamped by
+      an MFA challenge that never completes (no session is created for
+      that branch).\
+      The old blanket "admins can't delete themselves" rule on
+      `DELETE /auth/me` was replaced by a real invariant instead of just
+      building the new admin routes alongside it: `lib/admins.ts`'s
+      `assertNotLastAdmin`, shared by both the self-service delete route
+      and the new admin promote/delete routes, enforced inside a
+      `SELECT ... FOR UPDATE` transaction so two concurrent demotions
+      can't race past each other and leave zero admins (same reasoning as
+      the invite double-redemption fix). Deleting your own account
+      through the admin route is refused (400) — that stays
+      `DELETE /auth/me`'s job, since it re-proves your password and typed
+      email, which the admin route doesn't. `login_attempts` (keyed by
+      email, no FK to `users`) is now cleared explicitly on delete too,
+      closing a small pre-existing gap where a lockout could outlive the
+      account and apply to whoever next registered that address.\
+      Two things named in review but deliberately left for later, logged
+      as their own TODO.md items: `webhook_account_links.userId` is
+      nullable but still `ON DELETE cascade` (arguably should be
+      `SET NULL`, reverting to the normal "seen, not yet linked" state
+      instead of destroying the whole detected-account mapping), and
+      there's no way to show another user's uploaded avatar on the admin
+      list (`Avatar.tsx`/`GET /auth/me/avatar` only ever serve the
+      caller's own image) — every row falls back to the generated-
+      initials avatar instead.
+
 ## Import
 
 - [x] **Build ZIP-upload import from Trakt's own "Export now" file** (2026-08-24 22:50 added, investigated 2026-08-24, done 2026-08-25) — M2\

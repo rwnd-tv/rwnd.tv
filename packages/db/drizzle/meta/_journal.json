@@ -225,6 +225,13 @@
       "when": 1788369000000,
       "tag": "0031_rename_webhook_claim_codes_to_webhook_link_codes",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1788427175343,
+      "tag": "0032_add_users_last_login_at",
+      "breakpoints": true
     }
   ]
 }

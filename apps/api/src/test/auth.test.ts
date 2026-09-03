@@ -4,6 +4,7 @@ import { eq, inArray } from 'drizzle-orm'
 import { instanceSettings, invites, users } from '@rwnd/db'
 import type { User } from '@rwnd/shared'
 import { generateSecret, hashSecret } from '../lib/tokens.js'
+import { generateTotp } from '../lib/totp.js'
 import { extractCookie, json, resetDb, testApp, testDb } from './helpers.js'
 
 const db = testDb()
@@ -275,6 +276,130 @@ describe('auth', () => {
         .from(users)
         .where(inArray(users.email, ['racer-a@example.com', 'racer-b@example.com']))
       expect(created).toHaveLength(1)
+    })
+  })
+
+  // M4 admin user-management work (docs/TODO_ARCHIVE.md) — backs the
+  // "last login" column on GET /admin/users (routes/admin-users.ts).
+  describe('lastLoginAt stamping (lib/session.ts#createSession)', () => {
+    it('is stamped on setup and again on every subsequent login', async () => {
+      const created = await createUser('user@example.com', 'correct-horse-battery-staple')
+      const { id: userId } = await json<User>(created)
+
+      const [afterSetup] = await db.select().from(users).where(eq(users.id, userId))
+      expect(afterSetup!.lastLoginAt).not.toBeNull()
+
+      // Postgres timestamp resolution is finer than a JS Date's, but two
+      // requests in the same test can still land in the same millisecond
+      // — advance the clock explicitly rather than risk a flaky `>`.
+      await new Promise((resolve) => setTimeout(resolve, 5))
+      await app.request('/api/v1/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: 'user@example.com',
+          password: 'correct-horse-battery-staple',
+        }),
+      })
+
+      const [afterLogin] = await db.select().from(users).where(eq(users.id, userId))
+      expect(afterLogin!.lastLoginAt!.getTime()).toBeGreaterThan(afterSetup!.lastLoginAt!.getTime())
+    })
+
+    it('is not stamped by a login that only issues an MFA challenge', async () => {
+      const created = await createUser('user@example.com', 'correct-horse-battery-staple')
+      const { id: userId } = await json<User>(created)
+      const cookie = extractCookie(created)!
+
+      const enrolled = await json<{ secret: string; otpauthUri: string }>(
+        await app.request('/api/v1/auth/mfa/totp/enroll', { method: 'POST', headers: { cookie } }),
+      )
+      await app.request('/api/v1/auth/mfa/totp/confirm', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', cookie },
+        body: JSON.stringify({ code: generateTotp(enrolled.secret) }),
+      })
+
+      const [afterEnroll] = await db.select().from(users).where(eq(users.id, userId))
+      const stampAfterEnroll = afterEnroll!.lastLoginAt!.getTime()
+
+      await new Promise((resolve) => setTimeout(resolve, 5))
+      const challengeRes = await app.request('/api/v1/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: 'user@example.com',
+          password: 'correct-horse-battery-staple',
+        }),
+      })
+      const challenge = await json<{ mfaRequired: true; challengeToken: string }>(challengeRes)
+      expect(challenge.mfaRequired).toBe(true)
+
+      // No session was created by the challenge alone — lastLoginAt is
+      // unchanged.
+      const [afterChallenge] = await db.select().from(users).where(eq(users.id, userId))
+      expect(afterChallenge!.lastLoginAt!.getTime()).toBe(stampAfterEnroll)
+
+      // Completing the second factor does create a session, so it does
+      // update the stamp.
+      await app.request('/api/v1/auth/login/mfa', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          challengeToken: challenge.challengeToken,
+          code: generateTotp(enrolled.secret),
+        }),
+      })
+      const [afterMfaLogin] = await db.select().from(users).where(eq(users.id, userId))
+      expect(afterMfaLogin!.lastLoginAt!.getTime()).toBeGreaterThan(stampAfterEnroll)
+    })
+  })
+
+  // Replaces the old blanket "admins can't delete themselves" rule (M4,
+  // docs/TODO_ARCHIVE.md) — see lib/admins.ts#assertNotLastAdmin.
+  describe('DELETE /auth/me admin self-delete', () => {
+    it("refuses when the caller is the instance's only admin", async () => {
+      const created = await createUser('admin@example.com', 'correct-horse-battery-staple')
+      const cookie = extractCookie(created)!
+
+      const res = await app.request('/api/v1/auth/me', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json', cookie },
+        body: JSON.stringify({
+          email: 'admin@example.com',
+          currentPassword: 'correct-horse-battery-staple',
+        }),
+      })
+      expect(res.status).toBe(400)
+
+      const [row] = await db.select().from(users).where(eq(users.email, 'admin@example.com'))
+      expect(row).toBeDefined()
+    })
+
+    it('succeeds once a second admin exists', async () => {
+      const created = await createUser('admin@example.com', 'correct-horse-battery-staple')
+      const cookie = extractCookie(created)!
+
+      // Directly, rather than through the admin-users.ts promote route —
+      // that route has its own dedicated test file.
+      await db.insert(users).values({
+        email: 'second-admin@example.com',
+        displayName: 'Second Admin',
+        role: 'admin',
+      })
+
+      const res = await app.request('/api/v1/auth/me', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json', cookie },
+        body: JSON.stringify({
+          email: 'admin@example.com',
+          currentPassword: 'correct-horse-battery-staple',
+        }),
+      })
+      expect(res.status).toBe(204)
+
+      const [row] = await db.select().from(users).where(eq(users.email, 'admin@example.com'))
+      expect(row).toBeUndefined()
     })
   })
 })

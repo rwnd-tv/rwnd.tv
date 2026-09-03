@@ -59,6 +59,143 @@ Format:
       code that isn't theirs, so the page should make clear what's being
       authorized rather than a bare yes/no.
 
+- [ ] **`webhook_account_links.userId`'s delete cascade destroys the whole mapping row** (2026-09-03 added)
+
+      Flagged during the admin user-management build (see
+      `TODO_ARCHIVE.md`'s "Admin UI for managing user accounts" entry):
+      deleting a user cascades on `webhook_account_links.userId`, but
+      that column is nullable and its normal "not yet linked" state
+      already means `null`. `ON DELETE cascade` destroys the whole row
+      (token, source, external account id, display name, first/last
+      seen) instead of just reverting it to unlinked, so the Plex account
+      has to be re-detected from a fresh webhook event before it can be
+      linked again. `SET NULL` looks like the right fix, but it's a
+      schema change to a different feature with its own migration and
+      tests, so it wasn't folded into that work.
+
+- [ ] **Admin user list has no per-user avatars** (2026-09-03 added)
+
+      `/admin`'s user list falls back to the generated-initials avatar
+      for every row (`avatarUpdatedAt: null`, `UserRow.tsx`) rather than
+      an uploaded photo. `Avatar.tsx`/`GET /auth/me/avatar` only ever
+      serve the *caller's own* image, so showing another user's would
+      need a new admin-only avatar-serving endpoint
+      (`GET /admin/users/{id}/avatar`), which felt like its own small
+      unit of work rather than something to fold into the first pass.
+
+- [ ] **An "owner" role, immune to demotion/removal by other admins** (2026-09-03 11:03 added, M4'd 2026-09-03; M4)
+
+      The admin user-management work (see `TODO_ARCHIVE.md`'s "Admin UI
+      for managing user accounts" entry) added `lib/admins.ts`'s
+      `assertNotLastAdmin`, which stops an instance ever reaching *zero*
+      admins, but does nothing to stop a rogue or compromised admin from
+      demoting every *other* admin down to `user` one at a time (each
+      individual demotion is legal as long as the actor themselves stays
+      admin) and ending up the sole remaining admin, fully within the
+      rules as they stand today.
+
+      James, 2026-09-03: wants a third `userRoleEnum` value, `owner`,
+      exactly one at a time (same "invariant enforced in a locked
+      transaction" shape as `assertNotLastAdmin`, just "exactly one,
+      never removed except by itself" instead of "at least one"). The
+      first admin created via `POST /setup` becomes the owner; an
+      ordinary admin can never demote, delete, or otherwise touch the
+      owner account, and only the current owner can transfer the role
+      to someone else. Touches `routes/setup.ts`, `routes/admin-users.ts`,
+      `DELETE /auth/me`, the admin UI's role control, and
+      [ADR 0007](adr/0007-security-posture.md)'s trust model (this is an
+      admin-vs-admin distrust case the existing "every account is
+      mutually trusted" framing doesn't cover). James: this is expected
+      to be the next thing built after the admin UI itself ships.
+
+- [ ] **Search, filters, and sort on the admin Users list** (2026-09-03 11:24 added)
+
+      `/admin`'s Users panel (`UsersPanel.tsx`) is a flat list today, no
+      search box, no filter panel, no sort control, unlike the Shows/
+      Movies galleries (`ShowsPage.tsx`/`MoviesPage.tsx`), which have all
+      three: a text filter (`filter`/`setFilter`), a collapsible
+      `FiltersPanel.tsx` (genre, release year, rating, dropped, one
+      `*FilterPanel.tsx` component per facet), and `useSortCookie.ts`-
+      backed sort options remembered per-page. James, 2026-09-03: wants
+      the same treatment here, scaled to what a user list actually has to
+      filter/sort by, not a literal copy of the show/movie facets:
+
+      - search by display name or email
+      - filter by role (admin/user), MFA on/off, email verified/
+        unverified
+      - sort by name, role, last login, created
+
+      Low priority while instances only have a handful of users
+      (self-hosted, no pagination on `GET /admin/users` either), but
+      would matter for a larger shared instance. Fine to build against
+      the existing flat `GET /admin/users` response client-side (filter/
+      sort in the browser, same as the gallery pages do) rather than
+      pushing query params to the API, unless the list grows large enough
+      that pagination becomes its own separate TODO.
+
+- [ ] **Bulk select/actions on the admin Users list** (2026-09-03 11:26 added)
+
+      Every action on `/admin` today is per-row only (`UserRow.tsx`,
+      expand-then-act). James, 2026-09-03: wants a bulk-select mode like
+      the Activity/History page's (`HistoryPage.tsx`: a `Set<string>` of
+      selected ids, a "N selected" action bar that appears once anything's
+      checked, `api.activity.removeMany(...)` for the bulk call) or the
+      per-show watch tables' simpler row-checkbox-plus-confirm-dialog
+      version (`WatchHistoryTable.tsx`), whichever fits better once this
+      is actually designed. Wants mass delete, mass password reset, and
+      mass session revoke at minimum; possibly mass promote/demote too.
+
+      The single-item routes already exist (`routes/admin-users.ts`) and
+      a bulk action can start as a client-side loop over them (no new API
+      route needed for a first pass), but a few things need deciding
+      before building:
+
+      - **Partial failure.** A bulk delete/demote can include an account
+        that individually 400s (the last-admin invariant,
+        `lib/admins.ts#assertNotLastAdmin`) or a delete that 400s because
+        it's the acting admin's own row. The UI needs to report "3 of 4
+        succeeded, 1 refused: X" rather than silently stopping or
+        swallowing the failure.
+      - **Self-exclusion.** The acting admin's own row already hides the
+        single-row Delete button (`UserRow.tsx`); a bulk selection needs
+        the same rule; either exclude self from "select all" or disable
+        that one checkbox.
+      - Mass password reset already fails closed today when SMTP isn't
+        configured (`requireEmailConfigured`); the bulk UI just needs to
+        surface that the same way the single-row version does, not
+        silently no-op for the whole batch.
+
+- [ ] **Split the admin Users list into a summary list plus a per-user detail page** (2026-09-03 11:31 added)
+
+      `UserRow.tsx` today expands inline (`<details>`) to show a user's
+      full session list, role control, password-reset button, and delete
+      button, right inside the list. James, 2026-09-03: wants the list to
+      become summary-only rows, each linking out to a dedicated
+      `/admin/users/{id}` detail page that holds everything the expanded
+      row currently does.
+
+      Agreed this is the right direction, not just acceptable, for three
+      reasons: inline expansion doesn't scale (a real session list alone
+      can be several rows, pushing every row below it around); it
+      actively fights the bulk-select TODO above (a checkbox-driven list
+      wants uniform, compact rows, not rows that can balloon open); and
+      it's the pattern every other list in this app with real per-item
+      depth already uses (`/shows/:slug`, `/watchlists/:id`) rather than
+      an inline expand, which only ever made sense here because
+      `UserRow.tsx` copied `SessionsCard.tsx`'s single-card idiom onto a
+      multi-row list.
+
+      URL: `/admin/users/{id}`, matching the existing `/shows/:slug`/
+      `/watchlists/:id` detail-route convention, not nested any other
+      way. `UserSessions.tsx`, the role `Select`, the password-reset
+      button, and `DeleteUserDialog.tsx` all move to the new
+      `AdminUserPage.tsx` largely as-is; `UserRow.tsx` shrinks to the
+      summary line (avatar, name/email, role/MFA/verified badges, last
+      login) plus a link/click-through, no local `open` state left to
+      manage. Should land before or alongside the bulk-select and
+      search/filter/sort TODOs above, since both of those assume the
+      list is summary-only rows.
+
 ## Metadata & matching
 
 - [ ] **IMDb ratings on Movies (and maybe TV Shows)** (2026-09-01 13:35 added, shelved 2026-09-01, not on any milestone)
@@ -156,19 +293,3 @@ source of truth for scope; this is just so a TODO listing is complete.
 - [ ] **Public/shareable profile pages** (2026-08-23 15:38 added; Not yet scheduled)
 
       A public view of a user's watch history/stats.
-
-- [ ] **Admin UI for managing user accounts** (2026-09-02 21:59 added, M4'd 2026-09-02; M4)
-
-      There's no admin-facing view of an instance's users at all today:
-      the `admin`/`user` split (`packages/db/src/schema.ts`'s
-      `userRoleEnum`) only ever gets set once, on the very first account
-      at setup (`routes/setup.ts`), with no route or page to list other
-      users, see their role or last login, promote/demote, revoke their
-      sessions, or delete an account other than your own
-      (`DeleteAccountCard.tsx` is self-service only). An admin on a
-      shared instance currently has no way to do any of this short of a
-      direct database query.
-
-      James, 2026-09-02: needed to actually operate an instance, not
-      just a nice-to-have; milestoned M4 straight away rather than left
-      unscheduled.

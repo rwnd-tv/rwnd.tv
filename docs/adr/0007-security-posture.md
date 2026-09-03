@@ -118,3 +118,48 @@ consent benefit.
 This supersedes the `assignableUsers`/no-consent-attribution rows in the
 Accepted risks table above; that table is left as the historical record
 of what was decided on 2026-08-26, per the note on the previous update.
+
+## Update (2026-09-03): admin user-management
+
+M4's admin user-management work (`apps/api/src/routes/admin-users.ts`,
+`docs/TODO_ARCHIVE.md`) adds a privileged surface this ADR should record
+two decisions about, plus a small correction to the Accepted risks table.
+
+**An instance can never reach zero admins.** `lib/admins.ts`'s
+`assertNotLastAdmin` is the single enforcement point, shared by the new
+admin promote/delete routes and the (relaxed, see below) self-service
+`DELETE /auth/me`. It runs inside a `db.transaction`, locking every admin
+row with `for('update')` first, so two concurrent demotions of two
+different admins can't each observe "another admin exists" and both
+proceed: same reasoning as the invite double-redemption fix earlier in
+this review. This guarantees an admin row exists, not that it's
+_reachable_: an admin can still demote themselves down to a sole
+remaining admin nobody else controls, stranding the instance with no
+recovery path short of a direct database edit. Accepted, not fixed;
+a real recovery hatch (an env-var-driven "promote this email on boot",
+say) is a separate feature, not part of this pass.
+
+**An admin never sets or sees another user's password.** The
+password-reset action on `/admin` (`POST /admin/users/{id}/password-
+reset`) reuses the exact token-and-send pair `POST /auth/forgot-password`
+already uses (`createPasswordResetToken` + `sendPasswordResetEmail`):
+an admin can only trigger the same emailed link the user could request
+themselves, never observe or choose the new password.
+
+**Correction to the Accepted risks table above.** "No session list/
+revoke-my-sessions UI" was closed on the self-service side back in the
+original review (`GET/DELETE /auth/me/sessions`, still referenced by
+that row's wording); this update additionally closes the _admin_ half:
+`GET /admin/users/{id}/sessions` and its revoke-one/revoke-all
+counterparts give an admin the same visibility into another user's
+sessions.
+
+**`GET /admin/users` raises the value of an admin session.** It returns
+every user's email address and login/verification/MFA status in one
+response, so the account-enumeration and PII-disclosure surface a
+compromised admin cookie already implied is now a single authenticated
+request away, not a database query away. No new mitigation beyond what
+already applies to any admin account: `docs/self-hosting.md`'s existing
+"worth turning on for admin accounts especially" MFA guidance is the
+relevant control, called out again there in this update's own edit to
+that file.

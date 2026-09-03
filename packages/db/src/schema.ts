@@ -103,6 +103,19 @@ export const users = pgTable('users', {
   // resend option), not enforced anywhere.
   emailVerifiedAt: timestamp('email_verified_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  // Backs the admin user-management list (apps/api/src/routes/admin-users.ts,
+  // M4, docs/TODO_ARCHIVE.md) — a real column rather than derived from
+  // `sessions`, since a session row disappears on logout and on expiry
+  // cleanup, which would make "last login" go blank for someone who simply
+  // signed out. Stamped once inside createSession() (lib/session.ts) rather
+  // than at each of that helper's several call sites (login, MFA
+  // completion, register, setup), so a future login path can't forget it —
+  // and because a session is only ever created once a login has actually
+  // completed, a password that stopped short of a required MFA second
+  // factor correctly never touches this column. Null means "hasn't signed
+  // in since this column existed" (backfilled null, not retroactively
+  // guessed at).
+  lastLoginAt: timestamp('last_login_at', { withTimezone: true }),
 })
 
 /**

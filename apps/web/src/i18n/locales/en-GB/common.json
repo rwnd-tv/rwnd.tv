@@ -194,6 +194,7 @@
     "watchlists": "Watchlists",
     "history": "History",
     "import": "Import",
+    "admin": "Admin",
     "settings": "Settings",
     "account": "Account",
     "logout": "Log out"
@@ -825,6 +826,42 @@
       "empty": "No invites yet."
     }
   },
+  "admin": {
+    "title": "Admin",
+    "usersTitle": "Users",
+    "usersDescription": "Every user on this instance. Promote or demote a role, revoke a session, send a password reset, or delete an account.",
+    "usersEmpty": "No users yet.",
+    "actionsTitle": "Actions",
+    "role": "Role",
+    "roleAdmin": "Admin",
+    "roleUser": "User",
+    "lastLoginNever": "Never signed in",
+    "mfaOn": "MFA on",
+    "mfaOff": "MFA off",
+    "verified": "Verified",
+    "unverified": "Unverified",
+    "promoteConfirmTitle": "Promote to admin?",
+    "promoteConfirmBody": "{{name}} will be able to manage every user on this instance, including promoting and demoting other admins.",
+    "demoteConfirmTitle": "Remove admin access?",
+    "demoteConfirmBody": "{{name}} will no longer be able to manage users or instance settings.",
+    "demoteSelfWarning": "You're removing your own admin access. You won't be able to undo this yourself — another admin would need to promote you back.",
+    "promote": "Promote",
+    "demote": "Remove admin access",
+    "sendPasswordReset": "Send password reset",
+    "passwordResetSent": "Reset email sent.",
+    "deleteUser": "Delete account",
+    "deleteConfirmTitle": "Delete this account?",
+    "deleteConfirmBody": "This will permanently delete the account and everything in it — watch history, ratings, watchlists, dropped shows, API tokens, and any connected services. This can't be undone. To confirm, type the account's email address ({{email}}) below.",
+    "deleteConfirmEmail": "Email address",
+    "sessionsTitle": "Sessions",
+    "sessionsEmpty": "No active sessions.",
+    "sessionsRevoke": "Revoke",
+    "sessionsRevokeAll": "Revoke all",
+    "sessionsUnknownDevice": "Unknown device",
+    "sessionsLastUsed": "Last used {{date}}",
+    "sessionsNeverUsed": "Never used since login",
+    "sessionsCreated": "Signed in {{date}}"
+  },
   "account": {
     "title": "Account",
     "email": "Email",
@@ -902,8 +939,7 @@
     "deleteConfirmTitle": "Delete your account?",
     "deleteConfirmBody": "This will permanently delete your account and everything in it. This can't be undone. To confirm, type your email address ({{email}}) and current password below.",
     "deleteConfirmEmail": "Email address",
-    "deleteConfirmPassword": "Current password",
-    "deleteAdminBlocked": "Admin accounts can't be deleted yet."
+    "deleteConfirmPassword": "Current password"
   },
   "metadata": {
     "source": "Metadata: {{provider}}",

@@ -20,6 +20,7 @@ const SECTION_KEYS: Record<string, string> = {
   '/import': 'nav.import',
   '/settings': 'nav.settings',
   '/account': 'nav.account',
+  '/admin': 'nav.admin',
 }
 
 /**

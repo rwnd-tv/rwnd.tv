@@ -65,8 +65,21 @@ rwnd.tv holds personal data (your watch history, email address, and, if you conn
 - **Don't expose port 3000 directly** if a reverse proxy is meant to be the only way in. Set `BIND_ADDRESS=127.0.0.1` so the container only accepts connections from the host itself, and let the proxy be the sole path from outside. Leave it unset (the default, all interfaces) for a pure-LAN deployment with no proxy in front.
 - **Registration defaults to closed.** The first person to load the app becomes the admin (see Quick start above); after that, nobody else can create an account until you open registration from Settings → Instance, or switch it to invite-only and create invites from Settings → Invites (admin only; each invite is single-use and shows its code once).
 - **Passwords are checked against [Have I Been Pwned](https://haveibeenpwned.com/)'s breach database** whenever one is set (first-admin setup, registration, password change, password reset): only the first 5 characters of the password's SHA-1 hash are ever sent (the [k-anonymity range API](https://haveibeenpwned.com/API/v3#PwnedPasswords)), never the password itself. If this instance has no outbound internet access, the check simply fails open and allows the password; it's an enhancement, not a requirement, so an air-gapped or LAN-only deployment isn't blocked from setting passwords at all.
-- **Two-factor authentication (TOTP) is available to any user**, opt-in, from Account → Two-factor authentication; requires `ENCRYPTION_KEY` to be set (see the table above), and hides itself in the UI otherwise. Worth turning on for admin accounts especially.
+- **Two-factor authentication (TOTP) is available to any user**, opt-in, from Account → Two-factor authentication; requires `ENCRYPTION_KEY` to be set (see the table above), and hides itself in the UI otherwise. Worth turning on for admin accounts especially: an admin session can read every other user's email address (see Managing users below), which raises the value of that cookie beyond an ordinary account's.
 - **Verify the image you're running.** Every published image is cosign-signed, with an SBOM and build provenance attached; see [Verifying the image](#verifying-the-image) below.
+
+## Managing users
+
+Admins get an **Admin** page in the sidebar: every user on the instance, their role, last login, whether their email is verified, and whether they have two-factor authentication on. From there an admin can:
+
+- **Promote or demote** a user between the `admin` and `user` roles.
+- **Send a password reset email** to a user, using the same reset link the "Forgot password" flow sends: an admin never sets or sees another user's password directly.
+- **View and revoke a user's sessions**, individually or all at once, the same session list a user sees for themselves under Account → Sessions.
+- **Delete a user's account.** This is permanent and cascades: their watch history, ratings, watchlists, dropped shows and API tokens all go with it, and so does any invite or Plex account-link code they personally created (if they're an admin who created any).
+
+**An instance can never end up with zero admins.** Demoting or deleting the last remaining admin is refused, both from this page and from that admin's own Account → Delete account. If you want to step back from administering an instance, promote someone else first.
+
+The password-reset action needs SMTP configured (see Email below) and doesn't appear otherwise, the same as every other email-sending feature in the app.
 
 ## Connecting Plex
 

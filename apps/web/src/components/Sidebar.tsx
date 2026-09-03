@@ -10,6 +10,7 @@ import {
   MoviesIcon,
   SettingsIcon,
   ShowsIcon,
+  UsersIcon,
   WatchlistsIcon,
 } from './icons.js'
 
@@ -70,6 +71,12 @@ function SidebarLink({
  * network request. (No longer also fetches usePublicSettings — that was
  * only ever for the now-removed traktConfigured gate on the Import link
  * below; every nav link is unconditional now.)
+ *
+ * Admin (below) is the one link that *is* conditional again, on
+ * `user?.role === 'admin'` — added with the M4 admin user-management work
+ * (docs/TODO_ARCHIVE.md). This is a UX convenience only, same as every
+ * other client-side role check in the app (AdminRoute.tsx's doc comment);
+ * the server enforces independently.
  *
  * Below the `sm` breakpoint (640px), "collapsed" stops meaning "icon rail"
  * and means "hidden entirely" instead — an icon rail still ate a real slice
@@ -145,6 +152,15 @@ export function Sidebar({ collapsed, onNavigate }: { collapsed: boolean; onNavig
           collapsed={collapsed}
           onNavigate={onNavigate}
         />
+        {user?.role === 'admin' && (
+          <SidebarLink
+            to="/admin"
+            label={t('nav.admin')}
+            icon={<UsersIcon />}
+            collapsed={collapsed}
+            onNavigate={onNavigate}
+          />
+        )}
         <SidebarLink
           to="/settings"
           label={t('nav.settings')}

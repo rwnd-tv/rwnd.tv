@@ -30,16 +30,16 @@ import { usePanelOpen } from '../../lib/use-panel-open.js'
  * category counts) — this deletes everything, so there's nothing to
  * itemize.
  *
- * Admin accounts can't delete themselves (James, 2026-08-25 — a
- * deliberately blunt first step while a more considered answer, e.g.
- * requiring another admin promoted first once that route exists, gets
- * thought through). Button disabled rather than the whole card hidden,
- * with an explanatory note — same "still visible, just not usable, with
- * a stated reason" shape as Clear database's own disabled state
- * (DatabasePanel.tsx, disabled until a category's checked) rather than a
- * silently vanished section. The server enforces this independently
- * either way (`DELETE /auth/me` 403s an admin regardless of what the
- * client sends) — this is only ever a UX convenience, never the real gate.
+ * An admin *can* delete their own account here (used to be a blanket
+ * block — James, 2026-08-25 — "a deliberately blunt first step while a
+ * more considered answer gets thought through"; M4's admin
+ * user-management work, docs/TODO_ARCHIVE.md, is that answer), provided
+ * at least one other admin exists to keep administering the instance.
+ * There's no client-side precheck for that (it would mean an extra API
+ * call just to render this card) — the last-admin case surfaces as a
+ * normal inline error on the password field below, same as a wrong
+ * password or a mismatched email, since the server (`DELETE /auth/me`,
+ * apps/api/src/routes/auth.ts) enforces the invariant either way.
  *
  * Collapsed by default like every other card on this page as of
  * 2026-09-02 — see AdvancedPreferencesCard.tsx's doc comment for why
@@ -55,7 +55,6 @@ export function DeleteAccountCard() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [open, setOpen] = usePanelOpen('panelAccountDelete')
-  const isAdmin = user?.role === 'admin'
 
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [email, setEmail] = useState('')
@@ -98,19 +97,9 @@ export function DeleteAccountCard() {
         </summary>
         <div className="mt-4 mb-4 border-t border-[var(--color-border)]" />
         <p className="mb-4 text-sm text-[var(--color-fg-muted)]">{t('account.deleteWarning')}</p>
-        <Button
-          type="button"
-          variant="danger"
-          disabled={isAdmin}
-          onClick={() => setConfirmOpen(true)}
-        >
+        <Button type="button" variant="danger" onClick={() => setConfirmOpen(true)}>
           {t('account.deleteButton')}
         </Button>
-        {isAdmin && (
-          <p className="mt-2 text-xs text-[var(--color-fg-muted)]">
-            {t('account.deleteAdminBlocked')}
-          </p>
-        )}
 
         <Dialog open={confirmOpen} onClose={handleClose} title={t('account.deleteConfirmTitle')}>
           <p className="mb-4 text-sm text-[var(--color-fg-muted)]">

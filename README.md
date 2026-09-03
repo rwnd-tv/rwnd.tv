@@ -45,7 +45,7 @@ rwnd.tv (rewind dot tv) is an open source, self-hosted app for tracking the TV s
 - **Library**: search movies and TV episodes via TMDB and/or TheTVDB, log watches manually, poster-wall galleries for shows and movies with filters (genre, release year, rating, dropped) and twelve sort orders, per-episode progress, 5-star ratings, any number of named watchlists, and a unified Activity feed of every watch/rating/watchlist change
 - **Getting your data in and out**: Trakt import (OAuth device flow or a ZIP export upload, either works with no callback URL or reachable server), CSV import/export round-tripping the same open format, and per-user backup/restore independent of a full database dump
 - **Automation**: Plex webhook ingestion that logs watches as they happen, with first-class multi-user Plex server support (each Plex account linked to its own rwnd.tv user); per-user API tokens back it
-- **Instance**: light/dark/system theming, en-GB/en-US locales, and a documented HTTP API (OpenAPI 3.1, session-gated Swagger UI at `/api/docs`)
+- **Instance**: light/dark/system theming, en-GB/en-US locales, a documented HTTP API (OpenAPI 3.1, session-gated Swagger UI at `/api/docs`), and an admin user-management page (roles, last login, sessions, password reset, account deletion)
 
 ## Quick start
 

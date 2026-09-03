@@ -48,6 +48,7 @@ import { setSessionCookie, clearSessionCookie, getSessionToken } from '../lib/co
 import { serializeUser } from '../lib/serialize.js'
 import { hashSecret } from '../lib/tokens.js'
 import { ensureDefaultWatchlist } from '../lib/watchlists.js'
+import { assertNotLastAdmin, LastAdminError } from '../lib/admins.js'
 import {
   createPasswordResetToken,
   redeemPasswordResetToken,
@@ -77,8 +78,10 @@ class InvalidInviteCodeError extends Error {}
  * resend-verification, and initiating an email change) — see
  * instanceSettingsSchema's `emailConfigured` doc comment for why redeeming
  * a token you already have isn't gated the same way. Same shape as
- * `apps/api/src/routes/backups.ts`'s `requireBackupsConfigured`. */
-const requireEmailConfigured = createMiddleware<AppEnv>(async (c, next) => {
+ * `apps/api/src/routes/backups.ts`'s `requireBackupsConfigured`. Exported
+ * (unlike that one) because routes/admin-users.ts's admin-triggered
+ * password reset reuses it verbatim rather than duplicating the check. */
+export const requireEmailConfigured = createMiddleware<AppEnv>(async (c, next) => {
   if (!isEmailConfigured()) {
     return c.json({ error: 'Email is not configured on this instance' }, 404)
   }
@@ -721,25 +724,17 @@ authRoutes.openapi(
     },
     responses: {
       204: { description: 'Account deleted' },
-      400: { description: "Current password is incorrect, or the email doesn't match" },
+      400: {
+        description:
+          "Current password is incorrect, the email doesn't match, or you're the last remaining admin",
+      },
       401: { description: 'Not logged in' },
-      403: { description: 'Admin accounts cannot delete themselves' },
     },
   }),
   async (c) => {
     const db = c.get('db')
     const user = c.get('user')!
     const { email, currentPassword } = c.req.valid('json')
-
-    // Blanket block, not just a sole-admin check — James, 2026-08-25: a
-    // deliberately blunt first step while a more considered answer (e.g.
-    // requiring another admin to be promoted first, once that route
-    // exists — docs/TODO.md) gets thought through. Checked before the
-    // password/email work below since it's unconditional either way, not
-    // dependent on what was typed.
-    if (user.role === 'admin') {
-      return c.json({ error: "Admin accounts can't be deleted" }, 403)
-    }
 
     const [credential] = await db
       .select()
@@ -765,13 +760,36 @@ authRoutes.openapi(
       return c.json({ error: "That doesn't match your account's email address" }, 400)
     }
 
-    // Every other table referencing this user cascades on delete —
-    // plays, ratings, watchlist_items, dropped_shows, sessions,
-    // api_tokens (and in turn its own webhook_account_links/
-    // pending_webhook_events), user_credentials, trakt_connections,
-    // import_jobs, and the three account-token tables. See each table's
-    // own `userId` FK in packages/db/src/schema.ts.
-    await db.delete(users).where(eq(users.id, user.id))
+    // Used to be a blanket "admins can't delete themselves at all" block
+    // here — James, 2026-08-25: a deliberately blunt first step while a
+    // more considered answer got thought through. M4's admin
+    // user-management work (docs/TODO_ARCHIVE.md) is that answer: an
+    // admin can now delete their own account, provided at least one other
+    // admin exists to keep administering the instance. assertNotLastAdmin
+    // is a no-op for a non-admin caller, and runs inside the same
+    // transaction as the delete itself so a concurrent demotion elsewhere
+    // can't race past it — see lib/admins.ts.
+    try {
+      await db.transaction(async (tx) => {
+        await assertNotLastAdmin(tx, user.id)
+        // Every other table referencing this user cascades on delete —
+        // plays, ratings, watchlist_items, dropped_shows, sessions,
+        // api_tokens (and in turn its own webhook_account_links/
+        // pending_webhook_events), user_credentials, trakt_connections,
+        // import_jobs, and the three account-token tables. See each
+        // table's own `userId` FK in packages/db/src/schema.ts.
+        await tx.delete(users).where(eq(users.id, user.id))
+        // Not a cascade — login_attempts is keyed by email with no FK
+        // (see its doc comment), so it would otherwise silently outlive
+        // the account and apply to anyone who later reuses this address.
+        await clearLoginAttempts(tx, user.email)
+      })
+    } catch (err) {
+      if (err instanceof LastAdminError) {
+        return c.json({ error: err.message }, 400)
+      }
+      throw err
+    }
 
     const env = loadEnv()
     clearSessionCookie(c, env)

@@ -1,6 +1,7 @@
 import { createBrowserRouter, RouterProvider } from 'react-router'
 import { Layout } from './components/Layout.js'
 import { ProtectedRoute } from './components/ProtectedRoute.js'
+import { AdminRoute } from './components/AdminRoute.js'
 import type { RouteHandle } from './lib/route-handle.js'
 import { SetupPage } from './routes/SetupPage.js'
 import { LoginPage } from './routes/LoginPage.js'
@@ -22,6 +23,7 @@ import { WatchlistDetailPage } from './routes/WatchlistDetailPage.js'
 import { ImportPage } from './routes/ImportPage.js'
 import { SettingsPage } from './routes/SettingsPage.js'
 import { AccountPage } from './routes/AccountPage.js'
+import { AdminPage } from './routes/AdminPage.js'
 import { LinkWebhookAccountPage } from './routes/LinkWebhookAccountPage.js'
 import { NotFoundPage } from './routes/NotFoundPage.js'
 import { LandingPage } from './routes/LandingPage.js'
@@ -68,6 +70,10 @@ const router = createBrowserRouter([
           { path: '/settings', element: <SettingsPage /> },
           { path: '/account', element: <AccountPage /> },
           { path: '/link-account', element: <LinkWebhookAccountPage /> },
+          {
+            element: <AdminRoute />,
+            children: [{ path: '/admin', element: <AdminPage /> }],
+          },
         ],
       },
     ],

@@ -96,14 +96,20 @@ export async function json<T>(res: Response): Promise<T> {
 /**
  * Inserts a local-credential user directly, bypassing setup/registration —
  * for tests that need a *second* user (setup only ever creates one admin,
- * and registration may be closed).
+ * and registration may be closed). `role` defaults to `'user'`; pass
+ * `{ role: 'admin' }` for admin-users.ts tests that need a *second* admin
+ * (the last-admin invariant, lib/admins.ts).
  */
 export async function createLocalUser(
   db: Database,
   email: string,
   password: string,
+  opts: { role?: 'admin' | 'user' } = {},
 ): Promise<string> {
-  const [user] = await db.insert(users).values({ email, displayName: email }).returning()
+  const [user] = await db
+    .insert(users)
+    .values({ email, displayName: email, role: opts.role ?? 'user' })
+    .returning()
   if (!user) throw new Error('Failed to create test user')
   await db
     .insert(userCredentials)

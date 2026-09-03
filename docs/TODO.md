@@ -59,20 +59,6 @@ Format:
       code that isn't theirs, so the page should make clear what's being
       authorized rather than a bare yes/no.
 
-- [ ] **`webhook_account_links.userId`'s delete cascade destroys the whole mapping row** (2026-09-03 added)
-
-      Flagged during the admin user-management build (see
-      `TODO_ARCHIVE.md`'s "Admin UI for managing user accounts" entry):
-      deleting a user cascades on `webhook_account_links.userId`, but
-      that column is nullable and its normal "not yet linked" state
-      already means `null`. `ON DELETE cascade` destroys the whole row
-      (token, source, external account id, display name, first/last
-      seen) instead of just reverting it to unlinked, so the Plex account
-      has to be re-detected from a fresh webhook event before it can be
-      linked again. `SET NULL` looks like the right fix, but it's a
-      schema change to a different feature with its own migration and
-      tests, so it wasn't folded into that work.
-
 - [ ] **Admin user list has no per-user avatars** (2026-09-03 added)
 
       `/admin`'s user list falls back to the generated-initials avatar

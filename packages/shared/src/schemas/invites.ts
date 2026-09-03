@@ -7,10 +7,13 @@ import { z } from 'zod'
  * these back `POST/GET/DELETE /invites` (apps/api/src/routes/invites.ts),
  * admin-only.
  *
- * `status` is computed from `usedBy`/`expiresAt`, not stored — there's no
- * separate `used`/`expired` column on the `invites` table
- * (packages/db/src/schema.ts), just the two columns redemption already
- * needs.
+ * `status` is computed from `usedAt`/`expiresAt`, not stored as a status
+ * column of its own. `usedAt` (not `usedBy`, despite the name) is the
+ * actual one-shot marker — `usedBy` is a nullable FK to `users`, so it
+ * used to double as the "is this used" check too, until deleting the
+ * redeemer was found to silently revive an already-spent code (see
+ * `usedAt`'s own doc comment on the `invites` table,
+ * packages/db/src/schema.ts).
  */
 export const inviteStatusSchema = z.enum(['pending', 'used', 'expired'])
 export type InviteStatus = z.infer<typeof inviteStatusSchema>

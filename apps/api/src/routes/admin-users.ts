@@ -263,13 +263,18 @@ adminUserRoutes.openapi(
     // routes/auth.ts's DELETE /auth/me for the same list. Two are worth
     // flagging here specifically: `invites.createdBy` and
     // `webhook_link_codes.createdBy` also cascade, so deleting an admin
-    // deletes every still-pending invite/link code they created; and
-    // `webhook_account_links.userId` is nullable but still `ON DELETE
-    // cascade`, so deleting a user destroys that detected-Plex-account
-    // mapping row entirely (including its firstSeenAt history) rather
-    // than resetting it to the normal unlinked state. Whether that link
-    // row should instead be `set null` is a real question but a separate
-    // change (see docs/TODO.md). `login_attempts` has no FK at all (it's
+    // deletes every still-pending invite/link code they created (as does
+    // `webhook_link_codes.usedBy`, 2026-09-03: a spent code must not
+    // become live again for the rest of its TTL just because its
+    // redeemer was later deleted). `invites.usedBy` still reverts to null
+    // on delete too, same as it always has, but that's harmless now —
+    // `invites.usedAt` (2026-09-03) is the actual one-shot gate and isn't
+    // touched by this cascade. `webhook_account_links.userId` is the one
+    // exception to "everything cascades": it's `ON DELETE set null`
+    // (2026-09-03; was `cascade`), reverting the row to the normal
+    // "seen, not yet linked" state instead of destroying it, since the
+    // row usually belongs to a different person (the token owner) than
+    // the user being deleted. `login_attempts` has no FK at all (it's
     // keyed by email, not userId) so it can't cascade — cleared
     // explicitly below instead, or a lockout would silently outlive the
     // account and apply to anyone who later reuses the address.

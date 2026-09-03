@@ -239,6 +239,20 @@
       "when": 1788432730565,
       "tag": "0033_add_owner_role",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1788464204741,
+      "tag": "0034_relax_webhook_link_user_cascades",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1788467336819,
+      "tag": "0035_add_invites_used_at",
+      "breakpoints": true
     }
   ]
 }

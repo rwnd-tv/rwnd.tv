@@ -282,7 +282,16 @@ export const apiTokens = pgTable(
  * `apps/api/src/lib/webhook-plays.ts` for what happens to any watch
  * that arrived while still unlinked). Deleting the parent token
  * cascades — a revoked webhook's account mappings have nothing left to
- * attach to. */
+ * attach to. Deleting the linked *user*, in contrast, only sets
+ * `userId` back to null (2026-09-03; was `cascade` until then) rather
+ * than destroying the row: the token owner and the linked user are
+ * deliberately different people (a household member redeems a link
+ * code against a token they don't own — see
+ * `apps/api/src/lib/api-tokens.ts`), so deleting that member shouldn't
+ * cost the token owner the detected account's name and sighting
+ * history too. `set null` reverts it to the same "seen, not yet
+ * linked" state the self-service unlink route already writes by hand
+ * (`apps/api/src/routes/webhook-links.ts`). */
 export const webhookAccountLinks = pgTable(
   'webhook_account_links',
   {
@@ -296,7 +305,7 @@ export const webhookAccountLinks = pgTable(
     // match key, just so the link UI shows a human a name instead of a
     // bare number. Refreshed on every sighting in case it changes.
     externalAccountName: text('external_account_name').notNull(),
-    userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id').references(() => users.id, { onDelete: 'set null' }),
     firstSeenAt: timestamp('first_seen_at', { withTimezone: true }).notNull().defaultNow(),
     lastSeenAt: timestamp('last_seen_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -319,7 +328,12 @@ export const webhookAccountLinks = pgTable(
  * the whole instance — generating a new code for a link supersedes (and
  * deletes) any prior unused one, so at most one is ever live per link.
  * Deleting the parent link cascades, same as deleting a token cascades
- * through to its links. Named `webhookLinkCodes` (not `...ClaimCodes`)
+ * through to its links. `usedBy` cascades too (2026-09-03; was
+ * `set null` until then): a spent code must not quietly become live
+ * again for the rest of its TTL just because its redeemer's account
+ * was later deleted, which is what leaving it null-but-present would
+ * do given the redeem route only checks `usedBy IS NULL`. Named
+ * `webhookLinkCodes` (not `...ClaimCodes`)
  * as of 2026-09-02 — the whole feature was renamed from "claim" to
  * "link" throughout (code, routes, UI copy) since James felt "link" is
  * the term users would actually understand; renamed the table itself
@@ -333,7 +347,7 @@ export const webhookLinkCodes = pgTable('webhook_link_codes', {
   createdBy: uuid('created_by')
     .notNull()
     .references(() => users.id, { onDelete: 'cascade' }),
-  usedBy: uuid('used_by').references(() => users.id, { onDelete: 'set null' }),
+  usedBy: uuid('used_by').references(() => users.id, { onDelete: 'cascade' }),
   expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 })
@@ -433,6 +447,18 @@ export const loginAttempts = pgTable('login_attempts', {
   lastFailedAt: timestamp('last_failed_at', { withTimezone: true }).notNull().defaultNow(),
 })
 
+/** A one-time code an admin hands out to let someone register when
+ * `registrationMode` is `'invite'` (`POST /invites`/`POST /auth/register`,
+ * `apps/api/src/routes/invites.ts`/`routes/auth.ts`). `usedBy` is
+ * attribution only — who redeemed it, kept around for nothing more than
+ * display — not the one-shot gate itself: it's a nullable FK to `users`
+ * with `ON DELETE set null`, so a plain `usedBy IS NULL` check (the whole
+ * scheme until 2026-09-03) silently came back true again the moment the
+ * redeemer's account was deleted, reviving an already-spent code for the
+ * rest of its TTL. `usedAt`, set alongside `usedBy` at redemption and never
+ * touched by any FK, is the real "has this been used" answer — same
+ * reasoning `userRecoveryCodes.usedAt` above already used for the same
+ * problem. */
 export const invites = pgTable('invites', {
   id: uuid('id').primaryKey().defaultRandom(),
   codeHash: text('code_hash').notNull().unique(),
@@ -440,6 +466,7 @@ export const invites = pgTable('invites', {
     .notNull()
     .references(() => users.id, { onDelete: 'cascade' }),
   usedBy: uuid('used_by').references(() => users.id, { onDelete: 'set null' }),
+  usedAt: timestamp('used_at', { withTimezone: true }),
   expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 })

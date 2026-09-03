@@ -21,8 +21,8 @@ export const inviteRoutes = new OpenAPIHono<AppEnv>()
 // that, and an admin can always create a fresh one.
 const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000
 
-function statusOf(invite: { usedBy: string | null; expiresAt: Date }): InviteStatus {
-  if (invite.usedBy) return 'used'
+function statusOf(invite: { usedAt: Date | null; expiresAt: Date }): InviteStatus {
+  if (invite.usedAt) return 'used'
   if (invite.expiresAt.getTime() < Date.now()) return 'expired'
   return 'pending'
 }
@@ -101,7 +101,7 @@ inviteRoutes.openapi(
     const rows = await db
       .select({
         id: invites.id,
-        usedBy: invites.usedBy,
+        usedAt: invites.usedAt,
         expiresAt: invites.expiresAt,
         createdAt: invites.createdAt,
       })

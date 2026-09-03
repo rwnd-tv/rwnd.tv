@@ -2680,6 +2680,60 @@ DATABASE` ×2) — zero residue.\
       (`components/admin/role-badge.tsx`, `lib/admin-role-labels.ts`) once
       two files needed them.
 
+- [x] **`webhook_account_links.userId`'s delete cascade destroys the
+      whole mapping row** (2026-09-03 added, done 2026-09-03)\
+      Flagged during the "Admin UI for managing user accounts" entry
+      above: `webhook_account_links.userId` is nullable and null already
+      means "seen, not yet linked", but the column was still
+      `ON DELETE cascade`, so deleting a user destroyed the whole
+      detected-account mapping row (token, source, external account id,
+      display name, first/last seen) instead of just reverting it to
+      unlinked. This mattered specifically because the token owner and
+      the linked user are deliberately different people (a household
+      member redeems a one-time link code against a webhook token they
+      don't own, `apps/api/src/lib/api-tokens.ts`): deleting that member
+      cost the *token owner* their detected account's name and sighting
+      history, not just the deleted user's own data.\
+      Fixed by changing the FK to `ON DELETE set null`
+      (`packages/db/src/schema.ts`, migration
+      `0034_relax_webhook_link_user_cascades.sql`), reverting the row to
+      the same unlinked state the self-service unlink route already
+      writes by hand. No application code needed to change: every read
+      site already branched on `userId` being null.\
+      One related fix rode along in the same migration:
+      `webhook_link_codes.usedBy` was already `ON DELETE set null`, which
+      would have let a spent link code become redeemable again for the
+      rest of its 7-day TTL the moment its redeemer was deleted (the
+      redeem route only checks `usedBy IS NULL`). Flipped to
+      `ON DELETE cascade` instead, so a spent code dies with its
+      redeemer.
+
+- [x] **`invites.usedBy`'s `set null` on delete makes a spent invite code
+      reusable** (2026-09-03 added, done 2026-09-03)\
+      Found live on dev.rwnd.tv while verifying the
+      `webhook_account_links.userId` fix above: registered a throwaway
+      user with a fresh invite code, deleted that user through `/admin`,
+      and the invite flipped from "Used" back to "Pending" in
+      Settings > Invites — `POST /auth/register`'s claim query gated
+      purely on `isNull(invites.usedBy)`, and that column is
+      `ON DELETE set null`, so deleting the redeemer silently revived
+      the code for the rest of its 7-day TTL.\
+      Unlike the webhook-link fix, reverting to "unused" isn't the right
+      behaviour here — an invite must stay dead once redeemed, full
+      stop. Fixed by adding an independent `invites.usedAt` timestamp
+      (migration `0035_add_invites_used_at.sql`), set alongside `usedBy`
+      at redemption and never touched by any FK, matching the exact
+      precedent already in this schema for the same problem:
+      `userRecoveryCodes.usedAt`, whose own doc comment already said
+      "same reasoning as `invites`' `usedBy` over an outright delete."
+      The registration claim query and `GET /invites`'s pending/used/
+      expired status both switched to gating on `usedAt`; `usedBy` stays
+      as attribution only. A grep for the same "nullable FK doubles as
+      the used-flag" shape elsewhere in the schema turned up nothing
+      else at risk: `password_reset_tokens`/`email_verification_tokens`/
+      `email_change_tokens`/`mfa_challenges` all delete their row
+      outright on redemption instead of nulling a column.
+
 ## Import
 
 - [x] **Build ZIP-upload import from Trakt's own "Export now" file** (2026-08-24 22:50 added, investigated 2026-08-24, done 2026-08-25) — M2\

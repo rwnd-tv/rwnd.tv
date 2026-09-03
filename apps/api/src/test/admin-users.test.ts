@@ -1,13 +1,24 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { eq } from 'drizzle-orm'
-import { loginAttempts, passwordResetTokens, sessions, userCredentials, users } from '@rwnd/db'
+import {
+  loginAttempts,
+  passwordResetTokens,
+  sessions,
+  userCredentials,
+  users,
+  webhookAccountLinks,
+  webhookLinkCodes,
+} from '@rwnd/db'
 import type {
   AdminUserSummary,
+  CreateApiTokenResponse,
+  CreateWebhookLinkCodeResponse,
   EnrollTotpResponse,
   ListAdminUsersResponse,
   ListSessionsResponse,
 } from '@rwnd/shared'
 import { generateTotp } from '../lib/totp.js'
+import { hashSecret } from '../lib/tokens.js'
 import { createLocalUser, extractCookie, json, resetDb, testApp, testDb } from './helpers.js'
 
 const db = testDb()
@@ -31,6 +42,38 @@ async function createUserAndCookie(email: string, opts: { role?: 'admin' | 'user
     body: JSON.stringify({ email, password: 'correct-horse-battery-staple' }),
   })
   return { id, cookie: extractCookie(res)! }
+}
+
+async function createToken(cookie: string) {
+  const res = await app.request('/api/v1/tokens', {
+    method: 'POST',
+    headers: { cookie, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: 'Plex' }),
+  })
+  return json<CreateApiTokenResponse>(res)
+}
+
+async function seedLink(tokenId: string) {
+  const [link] = await db
+    .insert(webhookAccountLinks)
+    .values({
+      tokenId,
+      source: 'plex',
+      externalAccountId: '2',
+      externalAccountName: 'kid-profile',
+    })
+    .returning()
+  if (!link) throw new Error('failed to insert link')
+  return link
+}
+
+async function generateCode(ownerCookie: string, tokenId: string, linkId: string) {
+  const res = await app.request(`/api/v1/tokens/${tokenId}/webhook-links/${linkId}/link-code`, {
+    method: 'POST',
+    headers: { cookie: ownerCookie, 'Content-Type': 'application/json' },
+    body: JSON.stringify({}),
+  })
+  return json<CreateWebhookLinkCodeResponse>(res)
 }
 
 describe('/api/v1/admin/users (M4, docs/TODO_ARCHIVE.md)', () => {
@@ -288,6 +331,76 @@ describe('/api/v1/admin/users (M4, docs/TODO_ARCHIVE.md)', () => {
         .from(userCredentials)
         .where(eq(userCredentials.userId, user.id))
       expect(remainingCredentials).toHaveLength(0)
+    })
+
+    it('reverts a webhook link to unlinked, rather than destroying it, when the deleted user redeemed it on someone else’s token (2026-09-03, docs/TODO_ARCHIVE.md)', async () => {
+      const owner = await createAdminAndCookie()
+      const token = await createToken(owner.cookie)
+      const link = await seedLink(token.id)
+      const { code } = await generateCode(owner.cookie, token.id, link.id)
+
+      const redeemer = await createUserAndCookie('redeemer@example.com')
+      const redeemRes = await app.request('/api/v1/webhook-links/redeem', {
+        method: 'POST',
+        headers: { cookie: redeemer.cookie, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code }),
+      })
+      expect(redeemRes.status).toBe(200)
+
+      const res = await app.request(`/api/v1/admin/users/${redeemer.id}`, {
+        method: 'DELETE',
+        headers: { cookie: owner.cookie },
+      })
+      expect(res.status).toBe(204)
+
+      // The token owner keeps the detected-account mapping — name and
+      // sighting history intact — reverted to "seen, not yet linked"
+      // rather than destroyed along with the redeemer's account.
+      const [row] = await db
+        .select()
+        .from(webhookAccountLinks)
+        .where(eq(webhookAccountLinks.id, link.id))
+      expect(row).toBeDefined()
+      expect(row?.userId).toBeNull()
+      expect(row?.externalAccountName).toBe('kid-profile')
+
+      // The spent code dies with its redeemer — it must not quietly
+      // become live again for the rest of its TTL.
+      const [codeRow] = await db
+        .select()
+        .from(webhookLinkCodes)
+        .where(eq(webhookLinkCodes.codeHash, hashSecret(code)))
+      expect(codeRow).toBeUndefined()
+
+      const secondRedeemer = await createUserAndCookie('second-redeemer@example.com')
+      const replayRes = await app.request('/api/v1/webhook-links/redeem', {
+        method: 'POST',
+        headers: { cookie: secondRedeemer.cookie, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code }),
+      })
+      expect(replayRes.status).toBe(400)
+    })
+
+    it('still deletes the webhook link outright when the deleted user is the token owner', async () => {
+      const admin = await createAdminAndCookie()
+      const owner = await createUserAndCookie('token-owner@example.com')
+      const token = await createToken(owner.cookie)
+      const link = await seedLink(token.id)
+
+      const res = await app.request(`/api/v1/admin/users/${owner.id}`, {
+        method: 'DELETE',
+        headers: { cookie: admin.cookie },
+      })
+      expect(res.status).toBe(204)
+
+      // The token itself cascades away with its owner, taking every link
+      // on it with it via tokenId — unaffected by this change, since
+      // there's nothing left for an unlinked row to attach to.
+      const [row] = await db
+        .select()
+        .from(webhookAccountLinks)
+        .where(eq(webhookAccountLinks.id, link.id))
+      expect(row).toBeUndefined()
     })
 
     it("clears the deleted account's login lockout row, even though it has no FK", async () => {

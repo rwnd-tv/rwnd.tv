@@ -308,14 +308,21 @@ authRoutes.openapi(
 
     // The invite claim and user creation happen in one transaction so a
     // concurrent double-redemption of the same invite code can't create
-    // two accounts from it — the UPDATE's WHERE usedBy IS NULL clause is
-    // what makes the claim itself atomic; a plain select-then-update had
-    // a race between the two steps (M3 security review, F-13). The user
-    // has to be created *before* the claim, not after — `invites.usedBy`
-    // has a foreign key to `users.id`, so claiming with a not-yet-real id
-    // would violate it. If the claim then fails, throwing rolls back the
+    // two accounts from it — the UPDATE's WHERE clause is what makes the
+    // claim itself atomic; a plain select-then-update had a race between
+    // the two steps (M3 security review, F-13). The user has to be
+    // created *before* the claim, not after — `invites.usedBy` has a
+    // foreign key to `users.id`, so claiming with a not-yet-real id would
+    // violate it. If the claim then fails, throwing rolls back the
     // user/credential/watchlist inserts too, so a losing race leaves no
     // orphaned account behind.
+    //
+    // `usedAt`, not `usedBy`, is the real one-shot gate (2026-09-03):
+    // `usedBy` is a nullable FK to `users` with `ON DELETE set null`, so
+    // gating solely on it meant deleting the redeemer silently revived
+    // their code for the rest of its TTL. `usedAt` is never touched by
+    // that cascade — both are still set together, `usedBy` just for
+    // attribution/display (Settings > Invites).
     let user: typeof users.$inferSelect
     try {
       user = await db.transaction(async (tx) => {
@@ -339,10 +346,11 @@ authRoutes.openapi(
         if (registrationMode === 'invite') {
           const [claimed] = await tx
             .update(invites)
-            .set({ usedBy: created.id })
+            .set({ usedBy: created.id, usedAt: new Date() })
             .where(
               and(
                 eq(invites.codeHash, hashSecret(body.inviteCode!)),
+                isNull(invites.usedAt),
                 isNull(invites.usedBy),
                 gt(invites.expiresAt, new Date()),
               ),
@@ -788,10 +796,18 @@ authRoutes.openapi(
         await assertNotLastAdmin(tx, user.id)
         // Every other table referencing this user cascades on delete —
         // plays, ratings, watchlist_items, dropped_shows, sessions,
-        // api_tokens (and in turn its own webhook_account_links/
-        // pending_webhook_events), user_credentials, trakt_connections,
-        // import_jobs, and the three account-token tables. See each
-        // table's own `userId` FK in packages/db/src/schema.ts.
+        // api_tokens (and in turn its own pending_webhook_events),
+        // user_credentials, trakt_connections, import_jobs, and the
+        // three account-token tables. Two exceptions: if this user had
+        // redeemed a webhook link code against *someone else's* token,
+        // that link's `userId` only sets back to null (2026-09-03; was
+        // `cascade`) rather than deleting the row, reverting it to
+        // "seen, not yet linked" for the token owner rather than costing
+        // them the detected account's history; and if this user had
+        // redeemed an invite, `invites.usedBy` sets back to null too, but
+        // harmlessly — `invites.usedAt` (2026-09-03) is the real one-shot
+        // gate and isn't touched by this cascade. See each table's own
+        // FK in packages/db/src/schema.ts.
         await tx.delete(users).where(eq(users.id, user.id))
         // Not a cascade — login_attempts is keyed by email with no FK
         // (see its doc comment), so it would otherwise silently outlive

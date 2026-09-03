@@ -1,6 +1,7 @@
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi'
 import { and, asc, eq, isNotNull, ne, sql } from 'drizzle-orm'
 import {
+  adminUserSummarySchema,
   listAdminUsersResponseSchema,
   listSessionsResponseSchema,
   updateUserRoleRequestSchema,
@@ -100,6 +101,74 @@ adminUserRoutes.openapi(
         mfaEnabled: mfaEnabledUserIds.has(row.id),
         sessionCount: sessionCountByUser.get(row.id) ?? 0,
       })),
+    })
+  },
+)
+
+/**
+ * Single-user counterpart to the list above — backs AdminUserPage.tsx (M4
+ * "split the list into a summary list plus a per-user detail page" work,
+ * docs/TODO_ARCHIVE.md), same reasoning every other detail page in this app
+ * (`GET /library/shows/{slug}`, `GET /watchlists/{id}`) fetches its one item
+ * directly rather than the page filtering an already-fetched list.
+ */
+adminUserRoutes.openapi(
+  createRoute({
+    method: 'get',
+    path: '/admin/users/{id}',
+    summary: 'Get one user on the instance (admin only)',
+    middleware: [requireAdmin] as const,
+    request: { params: userIdParam },
+    responses: {
+      200: {
+        description: 'User',
+        content: { 'application/json': { schema: adminUserSummarySchema } },
+      },
+      403: { description: 'Admin only' },
+      404: { description: 'User not found' },
+    },
+  }),
+  async (c) => {
+    const { id } = c.req.valid('param')
+    const db = c.get('db')
+
+    const [row] = await db
+      .select({
+        id: users.id,
+        email: users.email,
+        displayName: users.displayName,
+        role: users.role,
+        createdAt: users.createdAt,
+        lastLoginAt: users.lastLoginAt,
+        emailVerifiedAt: users.emailVerifiedAt,
+      })
+      .from(users)
+      .where(eq(users.id, id))
+      .limit(1)
+    if (!row) return c.json({ error: 'User not found' }, 404)
+
+    const [[totpRow], [sessionCountRow]] = await Promise.all([
+      db
+        .select({ id: userTotp.id })
+        .from(userTotp)
+        .where(and(eq(userTotp.userId, id), isNotNull(userTotp.confirmedAt)))
+        .limit(1),
+      db
+        .select({ count: sql<number>`count(*)`.mapWith(Number) })
+        .from(sessions)
+        .where(eq(sessions.userId, id)),
+    ])
+
+    return c.json({
+      id: row.id,
+      email: row.email,
+      displayName: row.displayName,
+      role: row.role,
+      createdAt: row.createdAt.toISOString(),
+      lastLoginAt: row.lastLoginAt?.toISOString() ?? null,
+      emailVerifiedAt: row.emailVerifiedAt?.toISOString() ?? null,
+      mfaEnabled: Boolean(totpRow),
+      sessionCount: sessionCountRow!.count,
     })
   },
 )

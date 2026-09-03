@@ -18,10 +18,16 @@ export function DeleteUserDialog({
   user,
   open,
   onClose,
+  onDeleted,
 }: {
   user: AdminUserSummary
   open: boolean
   onClose: () => void
+  /** Called after a successful delete, in addition to the usual
+   * invalidate-and-close — AdminUserPage.tsx uses this to navigate back to
+   * `/admin`, since the page it's showing no longer exists once its user is
+   * gone. UsersPanel.tsx has no need for it (the list stays put). */
+  onDeleted?: () => void
 }) {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
@@ -33,6 +39,7 @@ export function DeleteUserDialog({
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['admin', 'users'] })
       handleClose()
+      onDeleted?.()
     },
     onError: (err) =>
       setError(err instanceof ApiError ? err.message : t('common.somethingWentWrong')),

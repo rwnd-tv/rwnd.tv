@@ -2631,6 +2631,55 @@ DATABASE` ×2) — zero residue.\
       same trust boundary the rest of this ADR already draws for a
       self-hosted instance, not a gap needing a software recovery flow.
 
+- [x] **Split the admin Users list into a summary list plus a per-user
+      detail page** (2026-09-03 11:31 added, done 2026-09-03)\
+      `UserRow.tsx` used to expand inline (`<details>`, local `open`
+      state) to show a user's full session list, role control,
+      password-reset button, and delete button, right inside the `/admin`
+      list. James flagged this while the admin UI work was still fresh:
+      inline expansion doesn't scale (a real session list alone can run
+      to several rows, pushing every row below it around), it fought the
+      still-open bulk-select TODO (a checkbox-driven list wants uniform
+      rows, not ones that can balloon open), and it was the one list in
+      this app with real per-item depth that didn't link to a detail page
+      the way `/shows/:slug`/`/watchlists/:id` already do.\
+      Split into `UserRow.tsx` (summary-only: avatar, name/email,
+      role/MFA/verified badges, last login, wrapped in a `Link` to
+      `/admin/users/{id}/{slug}` with a page-local `ChevronRightIcon`,
+      same one-icon-per-file convention `SeasonDetailPage.tsx` already
+      uses) and a new `AdminUserPage.tsx` holding everything the expanded
+      row used to: `UserSessions.tsx`, the role `Select`/owner-locked
+      label, the password-reset button, and `DeleteUserDialog.tsx` (now
+      with an `onDeleted` callback so deleting a user from their own page
+      navigates back to `/admin`, since the page it was showing no longer
+      exists). A new `GET /admin/users/{id}` endpoint backs it, matching
+      every other detail page in this app (`GET /library/shows/{slug}`,
+      `GET /watchlists/{id}`) fetching its one item directly rather than
+      filtering an already-fetched list. `PageTitleEffect.tsx` got the
+      same dynamic-breadcrumb treatment as those other detail pages.\
+      \
+      The `{slug}` segment (James: "the guid is pretty user unfriendly")
+      is `displayName` slugified client-side purely for readability
+      (Stack Overflow/Jira-style) — never persisted, never checked for
+      uniqueness, and ignored entirely when resolving the page, so a
+      stale slug after a later display-name change never breaks a
+      bookmarked or shared link; the bare `/admin/users/{id}` (no slug)
+      still routes too, both for that reason and because `displayName`
+      isn't guaranteed slug-safe (no collision suffixing, could be
+      all-punctuation/emoji) the way a show/movie title is, so unlike
+      `/shows/:slug` the id has to stay the real key. The transform
+      itself moved from `apps/api/src/lib/slug.ts` into
+      `packages/shared/src/slug.ts` so `apps/web` could reuse it, with
+      the API re-exporting it for its existing importers.\
+      Deliberately not added: a `Card` wrapper (every existing `Card`
+      usage is an Account/Settings/Import `<details>` panel; detail pages
+      in this app don't use `Card` at all) or a "back to Users" link (no
+      existing detail page has one; the sidebar and browser back already
+      cover it). The `Badge` component and the role-to-label mapping both
+      moved out of `UserRow.tsx` into their own shared files
+      (`components/admin/role-badge.tsx`, `lib/admin-role-labels.ts`) once
+      two files needed them.
+
 ## Import
 
 - [x] **Build ZIP-upload import from Trakt's own "Export now" file** (2026-08-24 22:50 added, investigated 2026-08-24, done 2026-08-25) — M2\

@@ -109,6 +109,48 @@ describe('/api/v1/admin/users (M4, docs/TODO_ARCHIVE.md)', () => {
     })
   })
 
+  describe('GET /admin/users/{id}', () => {
+    it('returns one user with the same shape as the list', async () => {
+      const admin = await createAdminAndCookie()
+      const user = await createUserAndCookie('watcher@example.com')
+
+      const res = await app.request(`/api/v1/admin/users/${user.id}`, {
+        headers: { cookie: admin.cookie },
+      })
+      expect(res.status).toBe(200)
+      const body = await json<AdminUserSummary>(res)
+      expect(body.id).toBe(user.id)
+      expect(body.email).toBe('watcher@example.com')
+      expect(body.role).toBe('user')
+      expect(body.lastLoginAt).not.toBeNull()
+      expect(body.sessionCount).toBe(1)
+      expect(body.mfaEnabled).toBe(false)
+    })
+
+    it('404s an unknown user id', async () => {
+      const admin = await createAdminAndCookie()
+      const res = await app.request('/api/v1/admin/users/00000000-0000-0000-0000-000000000000', {
+        headers: { cookie: admin.cookie },
+      })
+      expect(res.status).toBe(404)
+    })
+
+    it('rejects a non-admin', async () => {
+      const admin = await createAdminAndCookie()
+      const user = await createUserAndCookie('plain@example.com')
+      const res = await app.request(`/api/v1/admin/users/${admin.id}`, {
+        headers: { cookie: user.cookie },
+      })
+      expect(res.status).toBe(403)
+    })
+
+    it('rejects an unauthenticated request', async () => {
+      const admin = await createAdminAndCookie()
+      const res = await app.request(`/api/v1/admin/users/${admin.id}`)
+      expect(res.status).toBe(401)
+    })
+  })
+
   describe('PATCH /admin/users/{id}', () => {
     it('promotes and demotes a user, changing what they can access', async () => {
       const admin = await createAdminAndCookie()

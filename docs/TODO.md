@@ -108,17 +108,28 @@ Format:
       pushing query params to the API, unless the list grows large enough
       that pagination becomes its own separate TODO.
 
+      `UsersPanel.tsx`'s rows are summary-only now (2026-09-03, see
+      `TODO_ARCHIVE.md`'s "Split the admin Users list..." entry) rather
+      than expanding inline, which is what makes this and the bulk-select
+      TODO below buildable without fighting each other in the first
+      place.
+
 - [ ] **Bulk select/actions on the admin Users list** (2026-09-03 11:26 added)
 
-      Every action on `/admin` today is per-row only (`UserRow.tsx`,
-      expand-then-act). James, 2026-09-03: wants a bulk-select mode like
-      the Activity/History page's (`HistoryPage.tsx`: a `Set<string>` of
-      selected ids, a "N selected" action bar that appears once anything's
-      checked, `api.activity.removeMany(...)` for the bulk call) or the
-      per-show watch tables' simpler row-checkbox-plus-confirm-dialog
-      version (`WatchHistoryTable.tsx`), whichever fits better once this
-      is actually designed. Wants mass delete, mass password reset, and
-      mass session revoke at minimum; possibly mass promote/demote too.
+      Every action on `/admin` used to be per-row only, inline
+      (`UserRow.tsx`, expand-then-act); as of 2026-09-03 (see
+      `TODO_ARCHIVE.md`'s "Split the admin Users list..." entry) they live
+      on each user's own `/admin/users/{id}/{slug}` page instead, and
+      `UsersPanel.tsx`'s rows are already the summary-only, uniform shape
+      a bulk-select mode needs. James, 2026-09-03: wants a bulk-select
+      mode like the Activity/History page's (`HistoryPage.tsx`: a
+      `Set<string>` of selected ids, a "N selected" action bar that
+      appears once anything's checked, `api.activity.removeMany(...)` for
+      the bulk call) or the per-show watch tables' simpler
+      row-checkbox-plus-confirm-dialog version (`WatchHistoryTable.tsx`),
+      whichever fits better once this is actually designed. Wants mass
+      delete, mass password reset, and mass session revoke at minimum;
+      possibly mass promote/demote too.
 
       The single-item routes already exist (`routes/admin-users.ts`) and
       a bulk action can start as a client-side loop over them (no new API
@@ -131,45 +142,45 @@ Format:
         it's the acting admin's own row. The UI needs to report "3 of 4
         succeeded, 1 refused: X" rather than silently stopping or
         swallowing the failure.
-      - **Self-exclusion.** The acting admin's own row already hides the
-        single-row Delete button (`UserRow.tsx`); a bulk selection needs
-        the same rule; either exclude self from "select all" or disable
-        that one checkbox.
+      - **Self-exclusion.** `AdminUserPage.tsx` already hides the delete
+        button on the acting admin's own page; a bulk selection on the
+        list needs the same rule; either exclude self from "select all"
+        or disable that one checkbox.
       - Mass password reset already fails closed today when SMTP isn't
         configured (`requireEmailConfigured`); the bulk UI just needs to
-        surface that the same way the single-row version does, not
+        surface that the same way the single-item version does, not
         silently no-op for the whole batch.
 
-- [ ] **Split the admin Users list into a summary list plus a per-user detail page** (2026-09-03 11:31 added)
+## Watchlists
 
-      `UserRow.tsx` today expands inline (`<details>`) to show a user's
-      full session list, role control, password-reset button, and delete
-      button, right inside the list. James, 2026-09-03: wants the list to
-      become summary-only rows, each linking out to a dedicated
-      `/admin/users/{id}` detail page that holds everything the expanded
-      row currently does.
+- [ ] **`/watchlists/{id}` puts a raw UUID in the URL** (2026-09-03 13:44 added)
 
-      Agreed this is the right direction, not just acceptable, for three
-      reasons: inline expansion doesn't scale (a real session list alone
-      can be several rows, pushing every row below it around); it
-      actively fights the bulk-select TODO above (a checkbox-driven list
-      wants uniform, compact rows, not rows that can balloon open); and
-      it's the pattern every other list in this app with real per-item
-      depth already uses (`/shows/:slug`, `/watchlists/:id`) rather than
-      an inline expand, which only ever made sense here because
-      `UserRow.tsx` copied `SessionsCard.tsx`'s single-card idiom onto a
-      multi-row list.
+      James, 2026-09-03, on being shown this route as precedent while
+      designing `/admin/users/{id}`'s URL: "I would regard that as a
+      defect and not a pattern to be replicated." A bare
+      `/watchlists/8f2c1b7e-...` is unreadable, unmemorable, and tells
+      the person looking at their own address bar nothing.
 
-      URL: `/admin/users/{id}`, matching the existing `/shows/:slug`/
-      `/watchlists/:id` detail-route convention, not nested any other
-      way. `UserSessions.tsx`, the role `Select`, the password-reset
-      button, and `DeleteUserDialog.tsx` all move to the new
-      `AdminUserPage.tsx` largely as-is; `UserRow.tsx` shrinks to the
-      summary line (avatar, name/email, role/MFA/verified badges, last
-      login) plus a link/click-through, no local `open` state left to
-      manage. Should land before or alongside the bulk-select and
-      search/filter/sort TODOs above, since both of those assume the
-      list is summary-only rows.
+      The cheap fix is the one `/admin/users/{id}/{slug}` just shipped
+      with (see `TODO_ARCHIVE.md`'s "Split the admin Users list..."
+      entry): append a cosmetic slug segment built from the watchlist
+      name, keep resolving the page by the id alone, and let a stale slug
+      after a rename keep working. Nothing to migrate, no new column.
+
+      A real `/watchlists/{slug}` is the more ambitious version and is
+      plausible here in a way it wasn't for users: watchlist names are
+      already unique per user (`watchlists_user_name_idx` on
+      `userId, name`), and a list is only ever browsed by its owner, so
+      the name is a genuine key within the scope that matters. It would
+      still need a stored slug column with collision suffixing, though,
+      since unique names don't imply unique slugs ("Sci-Fi!" and "Sci Fi"
+      both slugify to `sci-fi`) and a name could be emoji or punctuation
+      only, slugifying to nothing at all. Renames would also need a
+      decision: repoint the slug and break old links, or keep the
+      original the way `generateUniqueShowSlug` deliberately does.
+
+      Worth grepping for other raw-UUID routes at the same time rather
+      than fixing this one in isolation.
 
 ## Metadata & matching
 

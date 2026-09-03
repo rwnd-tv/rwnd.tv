@@ -1,20 +1,12 @@
 import { eq, like, or } from 'drizzle-orm'
 import type { Database, Tx } from '@rwnd/db'
 import { movies, shows } from '@rwnd/db'
+import { slugify } from '@rwnd/shared'
 
-/** Same transform as the `0004_same_iron_patriot.sql` (shows) and
- * `0009_concerned_randall_flagg.sql` (movies) backfill migrations — keep
- * all three in sync, or old and new rows end up with inconsistently
- * formatted slugs. Exported for apps/api/src/backup/paths.ts, which reuses
- * it verbatim for the human-readable part of a backup's filename — same
- * "lowercase, non-alphanumeric runs collapse to one dash" rule applies
- * equally well to free-text there. */
-export function slugify(title: string): string {
-  return title
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-}
+/** Moved to packages/shared so apps/web can reuse the same transform (for
+ * the cosmetic slug segment of /admin/users/{id}/{slug}) — re-exported here
+ * since apps/api/src/backup/paths.ts already imports it from this module. */
+export { slugify }
 
 /**
  * The `-2`, `-3`, ... suffix scan shared by generateUniqueShowSlug and

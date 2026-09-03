@@ -24,6 +24,7 @@ import { ImportPage } from './routes/ImportPage.js'
 import { SettingsPage } from './routes/SettingsPage.js'
 import { AccountPage } from './routes/AccountPage.js'
 import { AdminPage } from './routes/AdminPage.js'
+import { AdminUserPage } from './routes/AdminUserPage.js'
 import { LinkWebhookAccountPage } from './routes/LinkWebhookAccountPage.js'
 import { NotFoundPage } from './routes/NotFoundPage.js'
 import { LandingPage } from './routes/LandingPage.js'
@@ -72,7 +73,11 @@ const router = createBrowserRouter([
           { path: '/link-account', element: <LinkWebhookAccountPage /> },
           {
             element: <AdminRoute />,
-            children: [{ path: '/admin', element: <AdminPage /> }],
+            children: [
+              { path: '/admin', element: <AdminPage /> },
+              { path: '/admin/users/:id', element: <AdminUserPage /> },
+              { path: '/admin/users/:id/:slug', element: <AdminUserPage /> },
+            ],
           },
         ],
       },

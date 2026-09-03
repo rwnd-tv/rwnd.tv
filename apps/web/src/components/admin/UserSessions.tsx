@@ -5,8 +5,9 @@ import { Button } from '../ui/Button.js'
 import { Spinner } from '../ui/Spinner.js'
 
 /**
- * A user's active sessions, from inside their expanded row on
- * UsersPanel.tsx. Near-identical markup to
+ * A user's active sessions, filling the Sessions panel on
+ * AdminUserPage.tsx (originally their expanded row on UsersPanel.tsx,
+ * before that list became summary-only). Near-identical markup to
  * apps/web/src/components/account/SessionsCard.tsx (that component's own
  * list, just pointed at someone else's account instead of the caller's)
  * — deliberately not factored into one shared component, since the two
@@ -46,9 +47,13 @@ export function UserSessions({ userId }: { userId: string }) {
 
   return (
     <div className="flex flex-col gap-2">
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold">{t('admin.sessionsTitle')}</h3>
-        {sessions.length > 1 && (
+      {/* No heading of its own: the Sessions panel this renders inside
+          (AdminUserPage.tsx) already carries that title, and having both
+          read "Sessions" one above the other was just noise (James,
+          2026-09-03). "Revoke all" keeps the row, right-aligned where it
+          already sat. */}
+      {sessions.length > 1 && (
+        <div className="flex items-center justify-end">
           <Button
             type="button"
             variant="secondary"
@@ -57,8 +62,8 @@ export function UserSessions({ userId }: { userId: string }) {
           >
             {t('admin.sessionsRevokeAll')}
           </Button>
-        )}
-      </div>
+        </div>
+      )}
       <ul className="flex flex-col gap-2">
         {sessions.map((session) => (
           <li key={session.id} className="rounded-md border border-[var(--color-border)] p-3">

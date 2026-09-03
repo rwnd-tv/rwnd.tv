@@ -166,6 +166,7 @@ export const api = {
   },
   admin: {
     listUsers: () => get<ListAdminUsersResponse>('/admin/users'),
+    getUser: (id: string) => get<AdminUserSummary>(`/admin/users/${encodeURIComponent(id)}`),
     updateUserRole: (id: string, role: UpdateUserRoleRequest['role']) =>
       patch<AdminUserSummary>(`/admin/users/${encodeURIComponent(id)}`, {
         role,

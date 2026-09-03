@@ -40,6 +40,11 @@ export function PageTitleEffect() {
   const seasonMatch = useMatch('/shows/:slug/season/:seasonNumber')
   const movieMatch = useMatch('/movies/:slug')
   const watchlistMatch = useMatch('/watchlists/:id')
+  // The trailing slug segment (UserRow.tsx) is cosmetic only — either match
+  // gives the same params.id, which is all this needs.
+  const adminUserSlugMatch = useMatch('/admin/users/:id/:slug')
+  const adminUserBareMatch = useMatch('/admin/users/:id')
+  const adminUserMatch = adminUserSlugMatch ?? adminUserBareMatch
   // Either show match supplies a slug — a season page needs the show's
   // title too, same as the show page itself.
   const slug = showMatch?.params.slug ?? seasonMatch?.params.slug
@@ -81,6 +86,14 @@ export function PageTitleEffect() {
     enabled: Boolean(watchlistId),
   })
 
+  // Same queryKey as AdminUserPage.tsx.
+  const adminUserId = adminUserMatch?.params.id
+  const { data: adminUser } = useQuery({
+    queryKey: ['admin', 'users', adminUserId],
+    queryFn: () => api.admin.getUser(adminUserId!),
+    enabled: Boolean(adminUserId),
+  })
+
   useEffect(() => {
     const base = settings?.environmentLabel ? `[${settings.environmentLabel}] rwnd.tv` : 'rwnd.tv'
     const segments = [base]
@@ -108,6 +121,9 @@ export function PageTitleEffect() {
     } else if (watchlistMatch) {
       segments.push(t('nav.watchlists'))
       if (watchlist) segments.push(watchlist.name)
+    } else if (adminUserMatch) {
+      segments.push(t('nav.admin'))
+      if (adminUser) segments.push(adminUser.displayName)
     }
 
     document.title = segments.join(' > ')
@@ -118,10 +134,14 @@ export function PageTitleEffect() {
     seasonMatch,
     movieMatch,
     watchlistMatch,
+    adminUserSlugMatch,
+    adminUserBareMatch,
+    adminUserMatch,
     show,
     season,
     movie,
     watchlist,
+    adminUser,
     t,
   ])
 

@@ -186,3 +186,27 @@ source of truth for scope; this is just so a TODO listing is complete.
       The related 30-day "recently watched" window gap is already fixed
       (see TODO_ARCHIVE.md) — this item is now specifically about the
       between-seasons local-data gap, not the recency window.
+
+- [ ] **History calendar feed: timed events instead of all-day** (2026-09-04 added; Not yet scheduled)
+
+      History events are currently all-day (`buildHistoryEvents`,
+      `apps/api/src/calendar/build.ts`), even though `plays.watchedAt` is a
+      precise timestamp, not just a date. Give them a real DTSTART/DTEND
+      instead: start at `watchedAt`, end at `watchedAt` +
+      `episodes.runtimeMinutes` (or `movies.runtimeMinutes` for a movie
+      play) when that column is populated.
+
+      If the computed end would overlap the *next* play chronologically
+      (plays are already ordered by `watchedAt` in that function), cut it
+      short to that next play's start instead. Watch sessions commonly
+      skip opening/closing credits, so a naive start+runtime end would
+      routinely overlap the next thing watched back-to-back.
+
+      `apps/api/src/lib/ics.ts` only ever emits `VALUE=DATE` events today
+      (see its own top-of-file comment); needs a timed-event path
+      alongside the existing all-day one, since the TV Shows feed
+      (`buildShowsEvents`) stays all-day regardless (`episodes.firstAired`
+      is a bare date, no time-of-day to build a DTSTART from). Undecided:
+      what to fall back to when `runtimeMinutes` is null (no cached
+      runtime yet) — plausibly all-day for that one event, or a fixed
+      default duration; needs a decision before implementing.

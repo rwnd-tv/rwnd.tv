@@ -33,7 +33,7 @@ import { Spinner } from '../components/ui/Spinner.js'
 const SHOTS = '/landing'
 const GRADIENT = 'linear-gradient(135deg, #d946ef 0%, #f59e0b 100%)'
 
-const FEATURE_KEYS = ['log', 'plex', 'trakt', 'galleries', 'lists', 'export'] as const
+const FEATURE_KEYS = ['log', 'plex', 'trakt', 'galleries', 'lists', 'export', 'calendar'] as const
 const STEP_KEYS = ['run', 'import', 'current'] as const
 const GALLERY_SHOTS = {
   films: 'movies',

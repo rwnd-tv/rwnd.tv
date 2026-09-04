@@ -66,6 +66,10 @@
       "export": {
         "title": "Your data stays yours",
         "body": "Export a CSV file per category (history, ratings, watchlist, dropped shows), zipped and downloadable from Settings. Open formats, no lock-in, by design."
+      },
+      "calendar": {
+        "title": "Subscribe to your calendar",
+        "body": "Personal History and TV Shows feeds, each a webcal:// URL to paste into Google Calendar, Apple Calendar, or any other app that supports it. Descriptions link back to the episode or movie, and respect your spoiler-protection setting."
       }
     },
     "selfHost": {
@@ -153,7 +157,7 @@
       },
       "dropIn": {
         "q": "Is it a drop-in Trakt replacement yet?",
-        "a": "Not entirely. Import, logging, galleries, watchlists, ratings and Plex scrobbling all work. A calendar of upcoming episodes is still to come; stats and insights and shareable profiles aren't scheduled yet."
+        "a": "Not entirely. Import, logging, galleries, watchlists, ratings, Plex scrobbling and calendar feeds all work. Stats and insights and shareable profiles aren't scheduled yet."
       },
       "metadata": {
         "q": "Where does the metadata come from?",

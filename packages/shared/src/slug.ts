@@ -6,8 +6,15 @@
  * purely cosmetic slug segment of `/admin/users/{id}/{slug}`, which is never
  * persisted or checked for uniqueness. */
 export function slugify(title: string): string {
-  return title
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
+  return (
+    title
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      // (?<!-) instead of a bare `-+$`: without it, the alternative can start
+      // matching at any offset within a trailing run, and a backtracking
+      // engine tries every one of them (CodeQL js/polynomial-redos) — the
+      // collapse above never actually produces a multi-dash run, but this
+      // keeps the regex safe on its own rather than relying on that.
+      .replace(/^-+|(?<!-)-+$/g, '')
+  )
 }

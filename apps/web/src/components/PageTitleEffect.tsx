@@ -39,9 +39,14 @@ export function PageTitleEffect() {
   const showMatch = useMatch('/shows/:slug')
   const seasonMatch = useMatch('/shows/:slug/season/:seasonNumber')
   const movieMatch = useMatch('/movies/:slug')
-  const watchlistMatch = useMatch('/watchlists/:id')
-  // The trailing slug segment (UserRow.tsx) is cosmetic only — either match
-  // gives the same params.id, which is all this needs.
+  // Both of these detail routes carry a trailing cosmetic slug segment
+  // (WatchlistsPage.tsx, UserRow.tsx) that the pages themselves ignore, and
+  // this file re-matches routes itself rather than inheriting App.tsx's —
+  // either match gives the same params.id, which is all this needs, so the
+  // slugged and bare forms collapse into one match here.
+  const watchlistSlugMatch = useMatch('/watchlists/:id/:slug')
+  const watchlistBareMatch = useMatch('/watchlists/:id')
+  const watchlistMatch = watchlistSlugMatch ?? watchlistBareMatch
   const adminUserSlugMatch = useMatch('/admin/users/:id/:slug')
   const adminUserBareMatch = useMatch('/admin/users/:id')
   const adminUserMatch = adminUserSlugMatch ?? adminUserBareMatch
@@ -133,6 +138,8 @@ export function PageTitleEffect() {
     showMatch,
     seasonMatch,
     movieMatch,
+    watchlistSlugMatch,
+    watchlistBareMatch,
     watchlistMatch,
     adminUserSlugMatch,
     adminUserBareMatch,

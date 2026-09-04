@@ -3098,6 +3098,50 @@ DATABASE` ×2) — zero residue.\
       noted this sandbox previously had no live Postgres to verify
       against at all. `pnpm lint`/`typecheck`/`format:check` all clean.
 
+- [x] **`/watchlists/{id}` puts a raw UUID in the URL** (2026-09-03 13:44
+      added, done 2026-09-04)\
+      James, 2026-09-03, on being shown this route as precedent while
+      designing `/admin/users/{id}`'s URL: "I would regard that as a
+      defect and not a pattern to be replicated." Fixed with the cheap
+      option he confirmed: the exact cosmetic-slug pattern
+      `/admin/users/{id}/{slug}` shipped the day before (see "Split the
+      admin Users list..." above), applied verbatim to
+      `/watchlists/{id}/{slug}`. Frontend only — no migration, no new
+      column, no API change: `GET /watchlists/{id}` still validates its id
+      as `uuidSchema` and never sees the slug, since `api-client.ts`'s
+      `watchlists.get`/`update`/`delete` all take the id alone.\
+      `WatchlistsPage.tsx` builds the segment with
+      `slugify(watchlist.name)` (`packages/shared/src/slug.ts`, the same
+      helper `UserRow.tsx` uses), falling back to the slugless URL when a
+      name slugifies to nothing; `App.tsx` registers `/watchlists/:id/:slug`
+      as a second route onto the same component, carrying
+      `handle: fullWidthHandle` like its sibling (without it the page
+      would silently drop from full-viewport width to the 896px reading
+      column on any slugged URL, since `Layout.tsx` sizes itself off
+      `useMatches()`); and `WatchlistDetailPage.tsx` still resolves by
+      `{id}` alone, with nothing canonicalizing or redirecting, so a stale
+      slug after a rename (including one made from the watchlist's own
+      page) keeps working, same as James confirmed for the admin
+      precedent. `PageTitleEffect.tsx` got the same
+      dual-match-then-merge treatment its `/admin/users` breadcrumb
+      already had, since it re-matches routes itself and doesn't pick up
+      a new sibling route automatically.\
+      The more ambitious version this item also sketched, a real stored
+      `/watchlists/{slug}` with its own column and collision suffixing,
+      was deliberately not taken: unique-per-user names still don't imply
+      unique slugs ("Sci-Fi!" and "Sci Fi" both give `sci-fi`), a name can
+      be emoji or punctuation only, and it would have forced a rename
+      policy (repoint and break old links, or freeze the original the way
+      `generateUniqueShowSlug` does) for a URL only its owner ever sees.\
+      The "worth grepping for other raw-UUID routes" note was checked:
+      `/watchlists/:id` and `/admin/users/:id` were the only two in
+      `App.tsx`, so this closes the class rather than one instance.\
+      **Verified**: new `apps/web/src/routes/WatchlistsPage.test.tsx`
+      covers both link-construction branches, including the empty-slug
+      fallback, the one branch the admin version's own test never
+      exercised. `pnpm lint`/`format:check`/`typecheck` clean, full
+      `apps/web` test suite (109 tests) run.
+
 ## Security
 
 - [x] **Full security review before M3 closes** (2026-08-26 added, done 2026-08-29) — M3\

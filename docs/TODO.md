@@ -96,37 +96,6 @@ Format:
         surface that the same way the single-item version does, not
         silently no-op for the whole batch.
 
-## Watchlists
-
-- [ ] **`/watchlists/{id}` puts a raw UUID in the URL** (2026-09-03 13:44 added)
-
-      James, 2026-09-03, on being shown this route as precedent while
-      designing `/admin/users/{id}`'s URL: "I would regard that as a
-      defect and not a pattern to be replicated." A bare
-      `/watchlists/8f2c1b7e-...` is unreadable, unmemorable, and tells
-      the person looking at their own address bar nothing.
-
-      The cheap fix is the one `/admin/users/{id}/{slug}` just shipped
-      with (see `TODO_ARCHIVE.md`'s "Split the admin Users list..."
-      entry): append a cosmetic slug segment built from the watchlist
-      name, keep resolving the page by the id alone, and let a stale slug
-      after a rename keep working. Nothing to migrate, no new column.
-
-      A real `/watchlists/{slug}` is the more ambitious version and is
-      plausible here in a way it wasn't for users: watchlist names are
-      already unique per user (`watchlists_user_name_idx` on
-      `userId, name`), and a list is only ever browsed by its owner, so
-      the name is a genuine key within the scope that matters. It would
-      still need a stored slug column with collision suffixing, though,
-      since unique names don't imply unique slugs ("Sci-Fi!" and "Sci Fi"
-      both slugify to `sci-fi`) and a name could be emoji or punctuation
-      only, slugifying to nothing at all. Renames would also need a
-      decision: repoint the slug and break old links, or keep the
-      original the way `generateUniqueShowSlug` deliberately does.
-
-      Worth grepping for other raw-UUID routes at the same time rather
-      than fixing this one in isolation.
-
 ## Metadata & matching
 
 - [ ] **IMDb ratings on Movies (and maybe TV Shows)** (2026-09-01 13:35 added, shelved 2026-09-01, not on any milestone)

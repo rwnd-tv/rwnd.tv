@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { slugify } from '@rwnd/shared'
 import { api, ApiError } from '../lib/api-client.js'
 import { PosterGrid } from '../components/library/PosterGrid.js'
 import { PosterTile } from '../components/library/PosterTile.js'
@@ -12,9 +13,21 @@ import { Spinner } from '../components/ui/Spinner.js'
 /**
  * Index of the current user's watchlists (apps/api/src/routes/watchlists.ts)
  * — one tile per list, Default always first (the API's own ordering), each
- * linking to WatchlistDetailPage.tsx. Same PosterGrid/PosterTile shell as
- * ShowsPage.tsx/MoviesPage.tsx, but far simpler: no filter/sort controls —
- * a user has a handful of lists, not hundreds of titles.
+ * linking to `/watchlists/{id}/{slug}` (WatchlistDetailPage.tsx). Same
+ * PosterGrid/PosterTile shell as ShowsPage.tsx/MoviesPage.tsx, but far
+ * simpler: no filter/sort controls — a user has a handful of lists, not
+ * hundreds of titles.
+ *
+ * The `{slug}` segment is the list's name slugified client-side, purely
+ * for a readable URL (the same treatment `/admin/users/{id}/{slug}` got,
+ * see UserRow.tsx) — it's never persisted, never checked for uniqueness,
+ * and WatchlistDetailPage.tsx ignores it entirely when resolving the page
+ * (the `{id}` alone does that), so a slug left stale by a later rename
+ * never breaks a bookmarked or shared link. Names are unique per user
+ * (`watchlists_user_name_idx`) but their slugs aren't ("Sci-Fi!" and
+ * "Sci Fi" both give `sci-fi`) and a name can be emoji or punctuation
+ * only, so the id stays the real key; falls back to no slug segment at
+ * all (still routed, see App.tsx) if slugifying leaves nothing.
  */
 export function WatchlistsPage() {
   const { t } = useTranslation()
@@ -55,19 +68,22 @@ export function WatchlistsPage() {
 
       {!isError && data && (
         <PosterGrid>
-          {data.watchlists.map((watchlist) => (
-            <PosterTile
-              key={watchlist.id}
-              title={watchlist.name}
-              year={null}
-              posterPath={watchlist.coverPosterPath}
-              to={`/watchlists/${watchlist.id}`}
-            >
-              <p className="text-xs text-[var(--color-fg-muted)]">
-                {t('watchlists.itemCount', { count: watchlist.itemCount })}
-              </p>
-            </PosterTile>
-          ))}
+          {data.watchlists.map((watchlist) => {
+            const slug = slugify(watchlist.name)
+            return (
+              <PosterTile
+                key={watchlist.id}
+                title={watchlist.name}
+                year={null}
+                posterPath={watchlist.coverPosterPath}
+                to={slug ? `/watchlists/${watchlist.id}/${slug}` : `/watchlists/${watchlist.id}`}
+              >
+                <p className="text-xs text-[var(--color-fg-muted)]">
+                  {t('watchlists.itemCount', { count: watchlist.itemCount })}
+                </p>
+              </PosterTile>
+            )
+          })}
         </PosterGrid>
       )}
 

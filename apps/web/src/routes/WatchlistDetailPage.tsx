@@ -78,12 +78,21 @@ function RemoveIcon() {
 }
 
 /**
- * One watchlist's shows and movies (apps/api/src/routes/watchlists.ts) —
- * WatchlistsPage.tsx's per-tile drill-down. Lighter than ShowsPage.tsx/
- * MoviesPage.tsx: title filter + sort only, no filter-panel stack — a
- * watchlist holds a handful of titles, not the whole library, and none of
- * the genre/status/rating dimensions those pages filter by apply to
- * "should this be on my list" in the first place.
+ * `/watchlists/{id}/{slug}` — one watchlist's shows and movies
+ * (apps/api/src/routes/watchlists.ts), WatchlistsPage.tsx's per-tile
+ * drill-down. Lighter than ShowsPage.tsx/MoviesPage.tsx: title filter +
+ * sort only, no filter-panel stack — a watchlist holds a handful of
+ * titles, not the whole library, and none of the genre/status/rating
+ * dimensions those pages filter by apply to "should this be on my list"
+ * in the first place.
+ *
+ * The `{slug}` is cosmetic and ignored here (see WatchlistsPage.tsx, which
+ * builds it from the list's name); `{id}` alone resolves the page, and the
+ * slugless `/watchlists/{id}` still routes to this same component. Nothing
+ * canonicalizes or redirects, so a slug left stale by a rename, including
+ * one made from this very page's own rename dialog below, stays harmless
+ * rather than breaking a bookmarked link. Same treatment as
+ * `/admin/users/{id}/{slug}` (AdminUserPage.tsx).
  */
 export function WatchlistDetailPage() {
   const { t } = useTranslation()

@@ -66,6 +66,11 @@ const router = createBrowserRouter([
           { path: '/movies/:slug', element: <MovieDetailPage />, handle: fullWidthHandle },
           { path: '/watchlists', element: <WatchlistsPage />, handle: fullWidthHandle },
           { path: '/watchlists/:id', element: <WatchlistDetailPage />, handle: fullWidthHandle },
+          {
+            path: '/watchlists/:id/:slug',
+            element: <WatchlistDetailPage />,
+            handle: fullWidthHandle,
+          },
           { path: '/history', element: <HistoryPage />, handle: fullWidthHandle },
           { path: '/import', element: <ImportPage /> },
           { path: '/settings', element: <SettingsPage /> },

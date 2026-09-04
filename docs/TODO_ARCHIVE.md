@@ -1330,6 +1330,124 @@ currently-dropped shows, since a row can have both
       by the weekday window, still falls back to the day/month format for
       its (always past, often more-than-a-day-old) dates.
 
+- [x] **Calendar of upcoming episodes, rescoped as webcal/iCal subscription feeds** (2026-08-23 15:33 added, M4'd 2026-08-28, rescoped and done 2026-09-04)\
+      James redirected this from an in-app view to something bigger in one
+      dimension, smaller in another: personal webcal/iCal feeds pasted
+      into an external calendar app (Google/Apple/Thunderbird/etc), the
+      way he already does for an F1 calendar. Two feed types, one row per
+      user each: **History** (one event per watched movie/episode,
+      watched-only — narrower than the app's own History/Activity page)
+      and **TV Shows** (one event per upcoming episode air date, for
+      shows the user follows — same candidate rule as the Dashboard's Up
+      Next row). A **Movies feed and an in-app UI that consumes these
+      same feeds were both explicitly deferred**, see TODO.md.\
+      New `calendar_feeds` table (one row per user per feed type, unique
+      on `(user_id, feed_type)`), token stored both hashed (lookup) and
+      AES-256-GCM encrypted (`lib/crypto.ts`) since a subscription URL
+      must be re-copyable indefinitely, unlike a one-time-reveal API
+      token — gated on the optional `ENCRYPTION_KEY` env var, same
+      `calendarFeedsAvailable` pattern as MFA. Hand-rolled RFC 5545
+      writer (`apps/api/src/lib/ics.ts`, 13 unit tests) rather than a
+      dependency: correct CRLF line endings, 75-*octet* (not character)
+      line folding, `DTEND` exclusivity for all-day events, TEXT
+      escaping, and a stable `DTSTAMP`/`UID` scheme so a subscribing
+      client updates events in place across refreshes instead of
+      duplicating them. `queue.ts`'s On Deck/Up Next candidate logic was
+      split into a provider-agnostic half (`lib/followed-shows.ts`,
+      shared with the new feed) and a provider-hydration half
+      (`hydrateProviderTargets`), which only On Deck/Up Next still need.
+      Route shape mirrors the Plex webhook precedent: `GET
+      /calendar/:token/feed.ics` takes the bearer secret as a URL path
+      segment (a calendar client can't send a custom auth header), rate-
+      limited per-token; management CRUD lives at `/calendar-feeds`.\
+      **Follow-up shipped same day**: James found a real gap live on
+      dev.rwnd.tv — a show he'd watched to completion months earlier
+      (Star Trek: Starfleet Academy, last watched 2026-03-13) and never
+      watchlisted had silently vanished from its own TV Shows feed once
+      the inherited 30-day "recently watched" window passed, confirmed by
+      querying dev's database directly (no watchlist row, no dropped row,
+      episodes correctly cached locally — the row just no longer counted
+      as "followed"). Fixed with a new per-feed `includeAllWatched`
+      setting: `getFollowedShows`'s existing `windowDays` option
+      (`apps/api/src/lib/followed-shows.ts`, added during the original
+      pass for exactly this future need) now accepts `null` to drop the
+      recency cutoff entirely rather than just widen it.\
+      Verified live: deployed to dev.rwnd.tv, `GET /settings` confirmed
+      returning `calendarFeedsAvailable: true` and a clean migration run
+      before any manual testing; James created both feed types through
+      the real Settings UI, subscribed from Thunderbird (Windows — no
+      Mac available), and confirmed both populated correctly, including
+      the `includeAllWatched` fix bringing Starfleet Academy's episodes
+      back. Google Calendar's own subscription-refresh lag was ruled out
+      as a false alarm along the way (a live check of James's actual
+      Google Calendar showed the TV Shows feed correctly populated with
+      both past and future dates once Google got around to re-fetching);
+      dev.rwnd.tv was briefly made public and then reverted to private
+      once real-client testing was done, since Google/Apple fetch a
+      subscribed URL from their own servers rather than the client
+      device.\
+      **Second follow-up, same day**: James asked for the episode/movie
+      synopsis as each event's `DESCRIPTION`, respecting the normal
+      spoiler rule (only shown if already watched, or
+      `spoilerProtectionEnabled` is off). Episode overview turned out not
+      to be cached anywhere — the season detail route
+      (`apps/api/src/routes/library/seasons.ts`) had always fetched it
+      live per page view — so this needed a new nullable
+      `episodes.overview` column, persisted by `resolveSeason`
+      (`apps/api/src/lib/media.ts`, `ProviderEpisode.overview` was
+      already being fetched and discarded on every `getSeason()` call)
+      plus a capped, self-terminating one-off backfill drain in
+      `apps/api/src/metadata/refresh.ts` (mirroring the existing
+      per-episode IMDb-id backfill, but keyed on season since one
+      `getSeason()` call fills a whole season's overviews at once) using
+      a new `overviewCheckedAt` "we asked, not we found" column — without
+      it, a season with any permanently synopsis-less episode (an unaired
+      one) would look like a candidate forever and get re-fetched every
+      pass.\
+      A second, independent bug surfaced along the way: DTSTAMP was
+      derived only from each row's own `createdAt`, which never changes
+      again once a play is logged or an episode is first inserted — so a
+      description backfilled well after the fact never advanced DTSTAMP,
+      leaving already-cached clients with no signal to re-fetch it. Fixed
+      via a new `latestOf()` helper picking the later of a row's
+      `createdAt` and the referenced content's own last-touched timestamp
+      (`overviewCheckedAt` for episodes, `movies.metadataRefreshedAt` for
+      movies).\
+      A third, more subtle bug was found live, the hard way: the TV Shows
+      feed's per-episode "has this user watched it" check was a
+      correlated `EXISTS` subquery hand-written as a raw `sql` fragment
+      inside a single-table (`FROM episodes`, no joins) query. Drizzle
+      renders every column reference in a joinless query unqualified
+      (safe at the outer level, since only one table is in scope there) —
+      but that same blanket un-qualification also stripped the table
+      prefix *inside* the subquery's own nested scope, where a bare `id`
+      is ambiguous between the correlated `episodes.id` and the
+      subquery's own local `plays.id`. Postgres resolved it to the
+      innermost table, so the check silently compared a play against its
+      own row id and was always false — every episode in the feed came
+      back "unwatched," permanently hiding every description behind the
+      spoiler check regardless of real watch status, while the History
+      feed (already a multi-table join, so unaffected by the same
+      un-qualification pass) showed descriptions correctly the whole
+      time — the discrepancy between the two feeds is what pointed at a
+      real bug rather than a client caching quirk. Root-caused by logging
+      the query's own `.toSQL()` output directly rather than guessing
+      further, then fixed by switching to a real `LEFT JOIN` +
+      `bool_or(...)` aggregate (grouped by `episodes.id` alone, valid per
+      Postgres's primary-key functional-dependency rule) — a join forces
+      every reference to be qualified for real disambiguation, which this
+      class of bug can't survive. Worth remembering generally: a
+      hand-written raw-`sql` fragment nested inside a joinless Drizzle
+      query is not safe to assume keeps its own column qualifiers.\
+      Verified live on dev.rwnd.tv end-to-end, including the exact
+      episode James flagged (Star Trek: Starfleet Academy — S01E01):
+      confirmed via direct `psql` queries that `overview`/
+      `overviewCheckedAt` were populated (both via the show's own
+      "Refresh metadata" button and the backfill's first pass filling 100
+      seasons on container startup), then confirmed the description
+      appeared correctly in a freshly resubscribed Thunderbird calendar
+      after the join fix shipped.
+
 ## Movies
 
 - [x] **Bring Movies up to parity with TV Shows, where appropriate — Phase 1** (2026-08-23 15:05 added, done 2026-08-23)\

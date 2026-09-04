@@ -33,6 +33,7 @@ import { accountRoutes } from './routes/account.js'
 import { backupRoutes } from './routes/backups.js'
 import { webhookRoutes } from './routes/webhooks.js'
 import { webhookLinkRoutes } from './routes/webhook-links.js'
+import { calendarRoutes } from './routes/calendar.js'
 import { inviteRoutes } from './routes/invites.js'
 import { mfaRoutes } from './routes/mfa.js'
 import { adminUserRoutes } from './routes/admin-users.js'
@@ -197,6 +198,7 @@ export function createApp(services?: { db: Database; metadataProviders: Metadata
   v1.route('/', accountRoutes)
   v1.route('/', backupRoutes)
   v1.route('/', webhookRoutes)
+  v1.route('/', calendarRoutes)
   v1.route('/', webhookLinkRoutes)
   v1.route('/', inviteRoutes)
   v1.route('/', mfaRoutes)

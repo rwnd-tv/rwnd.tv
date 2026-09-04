@@ -737,6 +737,42 @@
         "removeConfirmBody": "This permanently removes {{name}} from this token's detected accounts. If it shows up again on a future webhook, it'll come back as unlinked."
       }
     },
+    "calendarFeeds": {
+      "title": "Calendar feeds",
+      "description": "Subscribe from Google Calendar, Apple Calendar, or any other app that supports webcal/iCal feeds.",
+      "create": "Create feed",
+      "subscribe": "Subscribe",
+      "copy": "Copy",
+      "copied": "Copied",
+      "save": "Save",
+      "saved": "Saved",
+      "lastSynced": "Last synced {{date}}",
+      "neverSynced": "Never synced",
+      "regenerate": "Regenerate",
+      "regenerateConfirmTitle": "Regenerate this feed's URL?",
+      "regenerateConfirmBody": "The current URL stops working immediately. Any calendar app already subscribed to it will need the new URL pasted in again.",
+      "delete": "Delete feed",
+      "deleteConfirmTitle": "Delete this calendar feed?",
+      "deleteConfirmBody": "This stops the feed working everywhere it's subscribed to. You can create a new one at any time, with a new URL.",
+      "history": {
+        "title": "History",
+        "description": "One event per watched movie or episode, on the day you watched it (in your own timezone).",
+        "includeMovies": "Include movies",
+        "includeMoviesDescription": "Movies you've logged as watched.",
+        "includeShows": "Include TV episodes",
+        "includeShowsDescription": "Episodes you've logged as watched."
+      },
+      "shows": {
+        "title": "TV Shows",
+        "description": "One event per upcoming episode air date, for shows you're following: recently watched, or on your watchlist.",
+        "includeDropped": "Include dropped shows",
+        "includeDroppedDescription": "Off by default — a show you've dropped is excluded from this feed too.",
+        "futureOnly": "Only upcoming episodes",
+        "futureOnlyDescription": "On by default. Turn off to also include episodes that have already aired.",
+        "includeAllWatched": "Include every show I've ever watched",
+        "includeAllWatchedDescription": "Off by default — a show only counts as followed if you've watched it in the last 30 days, or it's on a watchlist. Turn this on to keep a show in this feed indefinitely once you've watched any of it, even years later."
+      }
+    },
     "linkedAccounts": {
       "title": "Linked accounts",
       "description": "Watch-history accounts (e.g. a Plex profile) that have been linked to you.",

@@ -287,6 +287,7 @@ export async function resolveSeason(
     locale,
   )
   if (seasonEpisodes.length > 0) {
+    const checkedAt = new Date()
     await db
       .insert(episodes)
       .values(
@@ -297,9 +298,26 @@ export async function resolveSeason(
           title: e.title,
           runtimeMinutes: e.runtimeMinutes,
           firstAired: e.firstAired,
+          overview: e.overview,
+          overviewCheckedAt: checkedAt,
         })),
       )
-      .onConflictDoNothing()
+      // Every other column here is still onConflictDoNothing in spirit —
+      // title/runtimeMinutes/firstAired only ever get written once, on
+      // first insert — but `overview`/`overviewCheckedAt` update on every
+      // call, set regardless of whether the provider actually had a
+      // synopsis this time (same "we asked, not we found" convention as
+      // `imdbCheckedAt`). This is what makes an existing row's overview
+      // self-heal the next time its season is organically resolved (a
+      // page view, the airing-show sweep, or the one-off backfill below),
+      // without touching the other fields' established behaviour.
+      .onConflictDoUpdate({
+        target: [episodes.showId, episodes.seasonNumber, episodes.episodeNumber],
+        set: {
+          overview: sql`excluded.overview`,
+          overviewCheckedAt: sql`excluded.overview_checked_at`,
+        },
+      })
   }
   return db
     .select({

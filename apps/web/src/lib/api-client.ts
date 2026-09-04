@@ -5,6 +5,8 @@ import {
   type ApiToken,
   type BackupSummary,
   type AdminUserSummary,
+  type CalendarFeed,
+  type CalendarFeedType,
   type ChangeEmailRequest,
   type ChangePasswordRequest,
   type ClearDataRequest,
@@ -12,6 +14,7 @@ import {
   type CreateApiTokenRequest,
   type CreateApiTokenResponse,
   type CreateBackupRequest,
+  type CreateCalendarFeedRequest,
   type CreateImportJobRequest,
   type CreatePlayRequest,
   type CreateInviteRequest,
@@ -31,6 +34,7 @@ import {
   type InstanceAbout,
   type InstanceSettings,
   type ListBackupsResponse,
+  type ListCalendarFeedsResponse,
   type ListActivityResponse,
   type ListAdminUsersResponse,
   type ListImportJobsResponse,
@@ -72,6 +76,7 @@ import {
   type TraktConnectionStatus,
   type TraktDevicePairing,
   type TransferOwnershipRequest,
+  type UpdateCalendarFeedRequest,
   type UpdateInstanceSettingsRequest,
   type UpdatePlayRequest,
   type UpdateProfileRequest,
@@ -238,6 +243,15 @@ export const api = {
       post<CreateWebhookLinkCodeResponse>(`/tokens/${id}/webhook-links/${linkId}/link-code`, body),
     deleteWebhookLink: (id: string, linkId: string) =>
       del<void>(`/tokens/${id}/webhook-links/${linkId}`),
+  },
+  calendarFeeds: {
+    list: () => get<ListCalendarFeedsResponse>('/calendar-feeds'),
+    create: (body: CreateCalendarFeedRequest) => post<CalendarFeed>('/calendar-feeds', body),
+    update: (feedType: CalendarFeedType, body: UpdateCalendarFeedRequest) =>
+      patch<CalendarFeed>(`/calendar-feeds/${feedType}`, body),
+    regenerate: (feedType: CalendarFeedType) =>
+      post<CalendarFeed>(`/calendar-feeds/${feedType}/regenerate`),
+    delete: (feedType: CalendarFeedType) => del<void>(`/calendar-feeds/${feedType}`),
   },
   webhookLinks: {
     redeem: (body: RedeemWebhookLinkRequest) =>

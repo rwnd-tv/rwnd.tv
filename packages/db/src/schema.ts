@@ -58,6 +58,11 @@ export const importJobStatusEnum = pgEnum('import_job_status', [
   'failed',
   'cancelled',
 ])
+// 'movies' deliberately not a member yet: a release-date calendar needs
+// its own data plumbing (no release-date column, no provider field, no
+// refresh cadence for unreleased movies) that doesn't exist today — see
+// docs/TODO.md's "Movies calendar feed" follow-up.
+export const calendarFeedTypeEnum = pgEnum('calendar_feed_type', ['history', 'shows'])
 
 // ---------------------------------------------------------------------------
 // Identity
@@ -263,6 +268,76 @@ export const apiTokens = pgTable(
   // Backs every load of the API-tokens settings page
   // (apps/api/src/routes/tokens.ts).
   (table) => [index('api_tokens_user_idx').on(table.userId)],
+)
+
+/**
+ * One user's subscribable iCal/webcal feed, one row per feed type
+ * (calendar_feeds_user_type_idx enforces "at most one of each"). A
+ * deliberately separate table from `apiTokens` above rather than a
+ * `type` column on it: `resolveApiToken` (apps/api/src/lib/api-tokens.ts)
+ * deliberately does *not* resolve to a user, because one webhook token
+ * can serve several media-server users — a calendar feed is the
+ * opposite, inherently exactly one person's, so it resolves to a user
+ * the way `resolveSession` does. See apps/api/src/lib/calendar-feeds.ts.
+ *
+ * `tokenHash` is the lookup key on the feed-serving hot path, same
+ * unsalted-SHA-256-of-a-CSPRNG-value convention as sessions/apiTokens.
+ * `tokenEncrypted` is the same secret, AES-256-GCM (lib/crypto.ts), and
+ * exists only so Settings can re-display the URL every time it's
+ * opened: unlike an API token (shown once, then only its hash is kept),
+ * a subscription URL has to be re-copyable whenever the user sets up
+ * another device, and this capability is narrow enough — read-only,
+ * one derived view, one user — that the recoverability is worth it.
+ * Same "must be replayed, not just compared" category as
+ * traktConnections/userTotp; see lib/crypto.ts's doc comment. Gated on
+ * `ENCRYPTION_KEY` being configured (apps/api/src/routes/settings.ts's
+ * `calendarFeedsAvailable`), same as MFA.
+ *
+ * All four settings booleans live on one row even though only two apply
+ * per feed type (includeMovies/includeShows for 'history',
+ * includeDropped/futureOnly for 'shows') — flat, typed, defaultable
+ * columns, matching importJobs' own multi-flag set rather than an
+ * untyped jsonb blob. The API never exposes or accepts the two that
+ * don't apply to a given row's type (see
+ * packages/shared/src/schemas/calendar.ts).
+ */
+export const calendarFeeds = pgTable(
+  'calendar_feeds',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    feedType: calendarFeedTypeEnum('feed_type').notNull(),
+    tokenHash: text('token_hash').notNull().unique(),
+    tokenEncrypted: text('token_encrypted').notNull(),
+    /** 'history' only — which watched-item types appear. */
+    includeMovies: boolean('include_movies').notNull().default(true),
+    includeShows: boolean('include_shows').notNull().default(true),
+    /** 'shows' only — dropped shows are excluded unless opted back in. */
+    includeDropped: boolean('include_dropped').notNull().default(false),
+    /** 'shows' only — only episodes airing today or later, in the
+     * user's own timezone. False means no lower bound at all. */
+    futureOnly: boolean('future_only').notNull().default(true),
+    /** 'shows' only — false (default) means "followed" is the normal
+     * rule (watched in the last 30 days, or watchlisted); true drops
+     * the recency window entirely, so any show ever watched counts as
+     * followed too (still subject to includeDropped). Added after a
+     * real report: a show watched to completion months ago, never
+     * watchlisted, silently vanished from its own feed once the
+     * 30-day window passed. See getFollowedShows's `windowDays`
+     * option (apps/api/src/lib/followed-shows.ts). */
+    includeAllWatched: boolean('include_all_watched').notNull().default(false),
+    /** Backs the "Last synced" hint in Settings. Null until the feed
+     * has actually been fetched once. Written on a throttle, not on
+     * every GET — see resolveCalendarFeed. */
+    lastAccessedAt: timestamp('last_accessed_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  // At most one feed of each type per user, and simultaneously the
+  // index backing GET /calendar-feeds' list-by-user — user_id is this
+  // index's leading column, so no separate user_idx is needed.
+  (table) => [uniqueIndex('calendar_feeds_user_type_idx').on(table.userId, table.feedType)],
 )
 
 /** Maps one external account (a Plex user, on one specific webhook
@@ -668,6 +743,31 @@ export const episodes = pgTable(
     title: text('title'),
     runtimeMinutes: integer('runtime_minutes'),
     firstAired: date('first_aired'),
+    /**
+     * Episode-level synopsis. Unlike movies/shows' own `overview` column,
+     * this one was historically never cached — the season detail route
+     * (apps/api/src/routes/library/seasons.ts) fetched it live from the
+     * provider on every page view instead, since `ProviderEpisode.overview`
+     * already rides along for free on the same `getSeason()` call that
+     * populates the rest of this row. Added so the calendar feed
+     * (apps/api/src/calendar/build.ts) can include it without a live
+     * per-event provider fetch, which its own design explicitly rules out.
+     * Null for an episode the provider has no synopsis for yet (common
+     * pre-air) or one resolved before this column existed, until its
+     * season is next resolved (`resolveSeason`, apps/api/src/lib/media.ts)
+     * or backfilled (apps/api/src/metadata/refresh.ts).
+     */
+    overview: text('overview'),
+    /** When `overview` was last (re)fetched from the provider — set on
+     * every `resolveSeason` call regardless of outcome, same "we asked,
+     * not we found" convention as `imdbCheckedAt` right below. Exists so
+     * the overview backfill pass (apps/api/src/metadata/refresh.ts) can
+     * tell "checked, provider genuinely has none yet" (e.g. an unaired
+     * episode) apart from "never checked" — without it, a season with
+     * any such episode would look like a candidate forever and get
+     * needlessly re-fetched every single pass, including the same pass
+     * that just resolved it. */
+    overviewCheckedAt: timestamp('overview_checked_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     /**
      * When this episode's IMDb id was last looked up — set on every check
@@ -688,6 +788,14 @@ export const episodes = pgTable(
       table.seasonNumber,
       table.episodeNumber,
     ),
+    // The TV Shows calendar feed (apps/api/src/calendar/build.ts) asks
+    // "every episode of these N shows airing on/after date D" — a range
+    // query across many shows at once, unlike every existing episode
+    // lookup (all of which are one specific show+season+episode). The
+    // index above already serves the show_id half; this makes the date
+    // bound itself selective too, which is what matters in the default
+    // futureOnly case where only a sliver of rows qualify.
+    index('episodes_first_aired_idx').on(table.firstAired),
   ],
 )
 
@@ -1008,6 +1116,7 @@ export const usersRelations = relations(users, ({ many, one }) => ({
   credentials: many(userCredentials),
   sessions: many(sessions),
   apiTokens: many(apiTokens),
+  calendarFeeds: many(calendarFeeds),
   webhookAccountLinks: many(webhookAccountLinks),
   plays: many(plays),
   traktConnection: one(traktConnections, {
@@ -1078,6 +1187,10 @@ export const apiTokensRelations = relations(apiTokens, ({ one, many }) => ({
   user: one(users, { fields: [apiTokens.userId], references: [users.id] }),
   webhookAccountLinks: many(webhookAccountLinks),
   pendingWebhookEvents: many(pendingWebhookEvents),
+}))
+
+export const calendarFeedsRelations = relations(calendarFeeds, ({ one }) => ({
+  user: one(users, { fields: [calendarFeeds.userId], references: [users.id] }),
 }))
 
 export const webhookAccountLinksRelations = relations(webhookAccountLinks, ({ one }) => ({

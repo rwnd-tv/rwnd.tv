@@ -135,10 +135,6 @@ source of truth for scope; this is just so a TODO listing is complete.
       the core logging loop M3 was narrowed to (2026-08-26, see
       ROADMAP.md's M3 framing).
 
-- [ ] **Calendar of upcoming episodes** (2026-08-23 15:33 added, un-M3'd 2026-08-26, M4'd 2026-08-28; M4)
-
-      A view of what's airing next across the shows you're following.
-
 - [ ] **OIDC login** (2026-08-23 15:34 added, un-M3'd 2026-08-26; Not yet scheduled)
 
       The `user_credentials` schema was designed for this from M1; see
@@ -156,3 +152,37 @@ source of truth for scope; this is just so a TODO listing is complete.
 - [ ] **Public/shareable profile pages** (2026-08-23 15:38 added; Not yet scheduled)
 
       A public view of a user's watch history/stats.
+
+- [ ] **In-app calendar UI consuming the webcal feeds** (2026-09-04 added; Not yet scheduled)
+
+      The History/TV Shows webcal feeds (see TODO_ARCHIVE.md) were
+      deliberately scoped as URL feeds only, meant to be pasted into an
+      external calendar app. Building a page in rwnd.tv itself that
+      renders that same event data was explicitly called out as a
+      second, later task when the feeds were designed, not part of this
+      pass.
+
+- [ ] **Movies calendar feed** (2026-09-04 added; Not yet scheduled)
+
+      Deferred when the History/TV Shows feeds shipped (see
+      TODO_ARCHIVE.md) — no release-date infrastructure exists yet.
+      Needs a `movies.releaseDate` column, a `ProviderMovie` release-date
+      field (TMDB already fetches and discards this value today; TVDB
+      doesn't model it at all), and a real refresh cadence for
+      unreleased/near-release movies (today's ~5-month compliance-only
+      cadence is far too coarse for anything releasing soon).
+
+- [ ] **TV Shows calendar feed misses a show between seasons** (2026-09-04 added; Not yet scheduled)
+
+      `refresh.ts` only resolves a show's *current* season, so a show
+      that's finished airing with its next season announced but not yet
+      in TMDB's season list has no local episode rows, and is silently
+      absent from the TV Shows calendar feed
+      (`apps/api/src/calendar/build.ts`) even though it'd still appear in
+      the live-fetched Dashboard Up Next row. The calendar feed
+      deliberately never does a live per-request provider fetch, so this
+      needs a refresh-cadence improvement rather than a feed-side fix.
+
+      The related 30-day "recently watched" window gap is already fixed
+      (see TODO_ARCHIVE.md) — this item is now specifically about the
+      between-seasons local-data gap, not the recency window.

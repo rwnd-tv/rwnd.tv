@@ -253,6 +253,27 @@
       "when": 1788467336819,
       "tag": "0035_add_invites_used_at",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1788527784453,
+      "tag": "0036_add_calendar_feeds",
+      "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1788532672337,
+      "tag": "0037_add_calendar_feed_include_all_watched",
+      "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1788534726040,
+      "tag": "0038_add_episodes_overview",
+      "breakpoints": true
     }
   ]
 }

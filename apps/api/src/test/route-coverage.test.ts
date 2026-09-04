@@ -134,4 +134,16 @@ describe('route coverage — every /api/v1 route is either public or requires a 
     const body = (await res.json()) as { error: string }
     expect(body.error).toBe('Invalid token')
   })
+
+  it('GET /calendar/:token/feed.ics is reached without a session — rejected by its own token check, not requireSession', async () => {
+    // Deliberately public (see middleware/auth.ts's CALENDAR_FEED_PATH).
+    // Same reasoning as the Plex case above: the useful assertion is that
+    // the *reason* is the route's own "Invalid token", proving the
+    // request wasn't blocked by the global session gate before reaching
+    // the handler.
+    const res = await app.request('/api/v1/calendar/not-a-real-token/feed.ics')
+    expect(res.status).toBe(401)
+    const body = (await res.json()) as { error: string }
+    expect(body.error).toBe('Invalid token')
+  })
 })

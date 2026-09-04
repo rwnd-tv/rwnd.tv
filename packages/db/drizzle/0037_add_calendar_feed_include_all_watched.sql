@@ -1,0 +1,1 @@
+ALTER TABLE "calendar_feeds" ADD COLUMN "include_all_watched" boolean DEFAULT false NOT NULL;

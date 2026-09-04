@@ -26,6 +26,7 @@ const TABLES = [
   'webhook_link_codes',
   'webhook_account_links',
   'api_tokens',
+  'calendar_feeds',
   'sessions',
   'mfa_challenges',
   'user_recovery_codes',

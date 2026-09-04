@@ -40,8 +40,19 @@ export const PUBLIC_ROUTES: ReadonlyArray<{ method: string; path: string }> = [
 // the token itself is the variable part of the path.
 const WEBHOOK_TOKEN_PREFIX = '/webhooks/plex/'
 
+// A calendar app subscribing to a webcal/iCal URL can't set an
+// Authorization header either — same problem, same solution as the Plex
+// webhook above (see routes/calendar.ts). Matched by full pattern rather
+// than by bare prefix, unlike WEBHOOK_TOKEN_PREFIX: nothing else is or
+// will be mounted under POST /webhooks/plex/, but `/calendar/` is a
+// namespace `/calendar-feeds` (the session-gated management routes)
+// already lives right next to, and a bare prefix exemption would
+// silently publish more than intended.
+const CALENDAR_FEED_PATH = /^\/calendar\/[^/]+\/feed\.ics$/
+
 function isPublicRoute(method: string, path: string): boolean {
   if (method === 'POST' && path.startsWith(WEBHOOK_TOKEN_PREFIX)) return true
+  if (method === 'GET' && CALENDAR_FEED_PATH.test(path)) return true
   return PUBLIC_ROUTES.some((route) => route.method === method && route.path === path)
 }
 

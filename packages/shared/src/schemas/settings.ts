@@ -49,6 +49,16 @@ export const instanceSettingsSchema = z.object({
   // rather than letting someone start enrolling into a feature that'll
   // 503 on confirmation.
   mfaAvailable: z.boolean(),
+  // True when this instance has ENCRYPTION_KEY configured — same gate as
+  // mfaAvailable above, and for the same reason: a calendar feed's
+  // subscription URL must be re-copyable indefinitely (unlike an API
+  // token's one-time reveal), so the secret is encrypted at rest rather
+  // than only hashed, the same "must be replayed, not just compared"
+  // category Trakt tokens and TOTP secrets already use
+  // (apps/api/src/lib/crypto.ts). The web app hides the Settings >
+  // Calendar feeds panel entirely when false, rather than letting someone
+  // create a feed that can never redisplay its own URL.
+  calendarFeedsAvailable: z.boolean(),
   // This package's own package.json `version` — see apps/api/src/version.ts.
   // Derived, not admin-editable, same convention as environmentLabel above.
   appVersion: z.string(),
@@ -69,6 +79,7 @@ export const updateInstanceSettingsRequestSchema = instanceSettingsSchema
     backupsConfigured: true,
     emailConfigured: true,
     mfaAvailable: true,
+    calendarFeedsAvailable: true,
     appVersion: true,
   })
   .partial()

@@ -32,6 +32,7 @@ const baseSettings: InstanceSettings = {
   backupsConfigured: false,
   emailConfigured: false,
   mfaAvailable: false,
+  calendarFeedsAvailable: false,
   appVersion: '0.1.0',
   adminEmail: null,
 }

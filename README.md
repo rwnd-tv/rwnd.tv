@@ -12,7 +12,7 @@ rwnd.tv (rewind dot tv) is an open source, self-hosted app for tracking the TV s
 
 ## Status
 
-**v1.0.7: ready for real use, with M4 underway.** Milestones 1–3 are done: local accounts, search and manual logging, Trakt/CSV import, Plex webhook ingestion, watchlists and ratings, and a full OWASP ASVS 4.0.3 Level 1 security review. M4 has also shipped admin user-management, an owner role, and IMDb deep links; broader webhook ingestion (Tautulli/Jellyfin/Emby/Kodi) and an upcoming-episodes calendar remain open. See [docs/ROADMAP.md](docs/ROADMAP.md) for the full history and what's next.
+**v1.0.7: ready for real use, with M4 underway.** Milestones 1–3 are done: local accounts, search and manual logging, Trakt/CSV import, Plex webhook ingestion, watchlists and ratings, and a full OWASP ASVS 4.0.3 Level 1 security review. M4 has also shipped admin user-management, an owner role, IMDb deep links, and personal webcal/iCal calendar feeds; broader webhook ingestion (Tautulli/Jellyfin/Emby/Kodi) remains open. See [docs/ROADMAP.md](docs/ROADMAP.md) for the full history and what's next.
 
 ## Screenshots
 
@@ -43,7 +43,7 @@ rwnd.tv (rewind dot tv) is an open source, self-hosted app for tracking the TV s
 
 - **Accounts**: local accounts (Argon2id), admin-configurable registration (open / invite / closed), session list & revoke, optional TOTP two-factor authentication, "forgot password" and email verification (self-hosters bring their own SMTP relay)
 - **Library**: search movies and TV episodes via TMDB and/or TheTVDB, log watches manually, poster-wall galleries for shows and movies with filters (genre, release year, rating, dropped) and twelve sort orders, per-episode progress, 5-star ratings, any number of named watchlists, and a unified Activity feed of every watch/rating/watchlist change
-- **Getting your data in and out**: Trakt import (OAuth device flow or a ZIP export upload, either works with no callback URL or reachable server), CSV import/export round-tripping the same open format, and per-user backup/restore independent of a full database dump
+- **Getting your data in and out**: Trakt import (OAuth device flow or a ZIP export upload, either works with no callback URL or reachable server), CSV import/export round-tripping the same open format, per-user backup/restore independent of a full database dump, and personal webcal/iCal calendar feeds (watch history, upcoming episodes) to subscribe to from Google/Apple/any other compatible calendar app
 - **Automation**: Plex webhook ingestion that logs watches as they happen, with first-class multi-user Plex server support (each Plex account linked to its own rwnd.tv user); per-user API tokens back it
 - **Instance**: light/dark/system theming, en-GB/en-US locales, a documented HTTP API (OpenAPI 3.1, session-gated Swagger UI at `/api/docs`), and an admin user-management page (a searchable/filterable/sortable list plus a per-user detail page: roles including an owner role immune to demotion, last login, sessions, password reset, account deletion, and bulk actions across several accounts at once)
 

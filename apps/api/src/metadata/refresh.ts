@@ -60,6 +60,14 @@ const REQUEST_STAGGER_MS = 150
 // in about 19 daily passes (~3 weeks).
 const EPISODE_IMDB_BACKFILL_PER_PASS = 250
 
+// One-off drain of seasons with at least one episode missing its overview
+// (added after episodes.overview itself — see that column's doc comment,
+// packages/db/src/schema.ts). Capped per pass like the IMDb backfill above,
+// but keyed on season, not episode: `resolveSeason` fetches and writes a
+// whole season's overviews in one provider call, so this is naturally far
+// cheaper than a per-episode drain would be.
+const EPISODE_OVERVIEW_BACKFILL_SEASONS_PER_PASS = 100
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
@@ -500,6 +508,76 @@ async function backfillEpisodeImdbIds(
   return filled
 }
 
+/** Distinct (show, season) pairs with at least one episode never checked
+ * for `overview` — `overviewCheckedAt IS NULL`, not `overview IS NULL`,
+ * for exactly the reason `findEpisodesNeedingImdbCheck` above checks
+ * `imdbCheckedAt` rather than the id column itself: a season with a
+ * genuinely synopsis-less unaired episode must still drop out of this
+ * candidate set once resolved, or it would look like a candidate forever
+ * and get needlessly re-fetched every pass — including the very pass
+ * that just resolved it (`resolveSeason` sets `overviewCheckedAt` on
+ * every episode it touches, so this shrinks the same way the IMDb
+ * candidate set does). */
+async function findSeasonsNeedingOverviewBackfill(
+  db: Database,
+): Promise<{ showId: string; seasonNumber: number }[]> {
+  return db
+    .selectDistinct({ showId: episodes.showId, seasonNumber: episodes.seasonNumber })
+    .from(episodes)
+    .where(isNull(episodes.overviewCheckedAt))
+    .orderBy(episodes.showId, episodes.seasonNumber)
+    .limit(EPISODE_OVERVIEW_BACKFILL_SEASONS_PER_PASS)
+}
+
+/**
+ * One-off drain of episodes that predate `overview` being cached at all
+ * (see that column's own doc comment) — the calendar feed
+ * (apps/api/src/calendar/build.ts) needs it locally rather than fetched
+ * live per event. `resolveSeason` (apps/api/src/lib/media.ts) does the
+ * actual fetch-and-upsert; this just walks every season still missing
+ * it, oldest-added-show first, the same per-item try/catch-and-skip
+ * shape as the IMDb backfill above.
+ */
+async function backfillEpisodeOverviews(
+  db: Database,
+  ordered: MetadataProvider[],
+  locale: string,
+): Promise<number> {
+  const candidates = await findSeasonsNeedingOverviewBackfill(db)
+  if (candidates.length === 0) return 0
+
+  const targets = await pickRefreshTargets(
+    db,
+    'show',
+    [...new Set(candidates.map((c) => c.showId))],
+    ordered,
+  )
+
+  let seasonsFilled = 0
+  for (const candidate of candidates) {
+    const target = targets.get(candidate.showId)
+    if (!target) continue
+    try {
+      await resolveSeason(
+        db,
+        target.provider,
+        candidate.showId,
+        target.externalId,
+        candidate.seasonNumber,
+        locale,
+      )
+      seasonsFilled += 1
+    } catch (err) {
+      console.error(
+        `Episode overview backfill failed for show ${candidate.showId} season ${candidate.seasonNumber}:`,
+        err,
+      )
+    }
+    await sleep(REQUEST_STAGGER_MS)
+  }
+  return seasonsFilled
+}
+
 /**
  * Runs one full pass: finds every stale show/movie and refetches it from
  * whichever configured provider has an id for it, in admin-configured
@@ -516,7 +594,12 @@ async function backfillEpisodeImdbIds(
 export async function runMetadataRefresh(
   db: Database,
   providers: MetadataProvider[],
-): Promise<{ showsRefreshed: number; moviesRefreshed: number; episodeImdbIdsFilled: number }> {
+): Promise<{
+  showsRefreshed: number
+  moviesRefreshed: number
+  episodeImdbIdsFilled: number
+  episodeOverviewSeasonsFilled: number
+}> {
   const [locale, ordered, staleShows, staleMovies] = await Promise.all([
     currentLocale(db),
     orderedProviders(db, providers),
@@ -576,8 +659,9 @@ export async function runMetadataRefresh(
   }
 
   const episodeImdbIdsFilled = await backfillEpisodeImdbIds(db, ordered, locale)
+  const episodeOverviewSeasonsFilled = await backfillEpisodeOverviews(db, ordered, locale)
 
-  return { showsRefreshed, moviesRefreshed, episodeImdbIdsFilled }
+  return { showsRefreshed, moviesRefreshed, episodeImdbIdsFilled, episodeOverviewSeasonsFilled }
 }
 
 /**
@@ -592,14 +676,27 @@ export function scheduleMetadataRefresh(db: Database, providers: MetadataProvide
   const DAY_MS = 24 * 60 * 60 * 1000
   const run = () =>
     runMetadataRefresh(db, providers)
-      .then(({ showsRefreshed, moviesRefreshed, episodeImdbIdsFilled }) => {
-        if (showsRefreshed || moviesRefreshed || episodeImdbIdsFilled) {
-          console.log(
-            `Metadata refresh: ${showsRefreshed} show(s), ${moviesRefreshed} movie(s) updated, ` +
-              `${episodeImdbIdsFilled} episode IMDb id(s) filled.`,
-          )
-        }
-      })
+      .then(
+        ({
+          showsRefreshed,
+          moviesRefreshed,
+          episodeImdbIdsFilled,
+          episodeOverviewSeasonsFilled,
+        }) => {
+          if (
+            showsRefreshed ||
+            moviesRefreshed ||
+            episodeImdbIdsFilled ||
+            episodeOverviewSeasonsFilled
+          ) {
+            console.log(
+              `Metadata refresh: ${showsRefreshed} show(s), ${moviesRefreshed} movie(s) updated, ` +
+                `${episodeImdbIdsFilled} episode IMDb id(s) filled, ` +
+                `${episodeOverviewSeasonsFilled} episode overview season(s) filled.`,
+            )
+          }
+        },
+      )
       .catch((err: unknown) => console.error('Metadata refresh pass failed:', err))
   void run()
   setInterval(() => void run(), DAY_MS)

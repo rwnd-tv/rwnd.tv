@@ -42,7 +42,7 @@ All configuration is environment variables, set in `.env`. `.env.example` covers
 | `ENVIRONMENT_LABEL`   | No                               | A small badge in the header plus a browser-tab-title prefix, handy for telling a staging/dev instance apart from production at a glance                                              |
 | `TRAKT_CLIENT_ID`     | No                               | Enables Trakt import (Settings > Import); free app at trakt.tv/oauth/applications                                                                                                    |
 | `TRAKT_CLIENT_SECRET` | Only if `TRAKT_CLIENT_ID` is set | Paired with the client id above                                                                                                                                                      |
-| `ENCRYPTION_KEY`      | Only if `TRAKT_CLIENT_ID` is set | 32 bytes, base64 (`openssl rand -base64 32`); encrypts stored Trakt tokens, and is also required for anyone to enable two-factor authentication                                      |
+| `ENCRYPTION_KEY`      | Only if `TRAKT_CLIENT_ID` is set | 32 bytes, base64 (`openssl rand -base64 32`); encrypts stored Trakt tokens, and is also required for anyone to enable two-factor authentication or subscribe to a calendar feed      |
 | `BACKUP_DIR`          | No                               | Enables per-user backup/restore (Settings > Database); see Backups below                                                                                                             |
 | `SMTP_HOST`           | No                               | Enables account verification and "Forgot password?" emails; see Email below                                                                                                          |
 | `SMTP_PORT`           | Only if `SMTP_HOST` is set       | Defaults to `587`                                                                                                                                                                    |
@@ -105,6 +105,17 @@ Two independent paths, both under **Import** in the sidebar:
 - **Upload a Trakt export ZIP**: on trakt.tv, go to Settings → Data → "Export now" to download a ZIP of your data, then upload it here. Needs no credentials at all.
 
 Both exist because Trakt's 2026 "Community App" policy caps a free Trakt account at one connected third-party OAuth app at a time; the ZIP path is there for whenever that's already spent on something else.
+
+## Calendar feeds
+
+Requires `ENCRYPTION_KEY` (see the config table above); the feature hides itself in Settings otherwise. Each user can create up to two personal, read-only calendar feeds from **Settings → Calendar feeds**:
+
+- **History**: one event per movie or episode you've logged as watched, on the day you watched it.
+- **TV Shows**: one event per upcoming episode air date, for shows you're following (recently watched, or on a watchlist).
+
+Both are customizable (which content counts, dropped shows, future-only) and give a `webcal://` URL to paste into Google Calendar, Apple Calendar, or any other app that supports webcal/iCal subscriptions. The URL is a bearer secret, so treat it like a password: anyone who has it can read that feed. **Regenerate** in Settings issues a new URL and immediately invalidates the old one everywhere it's subscribed. A Movies feed isn't available yet; see `docs/TODO.md`.
+
+Each event includes the episode/movie synopsis as its description, where available. History never withholds it (everything there is already watched), but TV Shows respects your normal spoiler protection setting: an unwatched episode's description is omitted, same as it would be blurred on the episode's own page.
 
 ## Verifying the image
 

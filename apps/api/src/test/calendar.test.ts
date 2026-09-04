@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { eq } from 'drizzle-orm'
 import { episodes, movies, plays, shows, users } from '@rwnd/db'
 import type { CalendarFeed, ListCalendarFeedsResponse, ListWatchlistsResponse } from '@rwnd/shared'
-import { extractCookie, json, resetDb, testApp, testDb } from './helpers.js'
+import { createLocalUser, extractCookie, json, resetDb, testApp, testDb } from './helpers.js'
 
 const db = testDb()
 const app = testApp()
@@ -175,7 +175,17 @@ describe('calendar feeds', () => {
     it("isolates feeds between users — one user's feed is invisible and unaddressable by another", async () => {
       const cookieA = await createUserAndCookie('a@example.com')
       await createFeed(cookieA, 'history')
-      const cookieB = await createUserAndCookie('b@example.com')
+
+      // /setup only ever creates the instance's first (owner) account —
+      // a second user needs the createLocalUser + login route other test
+      // files already use for this (e.g. library.test.ts, plays.test.ts).
+      await createLocalUser(db, 'b@example.com', 'correct-horse-battery-staple')
+      const loginB = await app.request('/api/v1/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: 'b@example.com', password: 'correct-horse-battery-staple' }),
+      })
+      const cookieB = extractCookie(loginB)!
 
       const listRes = await app.request('/api/v1/calendar-feeds', { headers: { cookie: cookieB } })
       expect((await json<ListCalendarFeedsResponse>(listRes)).feeds).toHaveLength(0)

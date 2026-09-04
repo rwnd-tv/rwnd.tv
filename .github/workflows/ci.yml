@@ -103,17 +103,49 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
-      # M3 security review (F-19): fails the build on a known-vulnerable
-      # dependency at high severity or above — complements Dependabot's
-      # weekly bumps (.github/dependabot.yml) rather than replacing them.
+      # M3 security review (F-19), migrated 2026-09-04 from `pnpm audit`:
+      # that command calls npm's live bulk-advisories API
+      # (registry.npmjs.org/-/npm/v1/security/advisories/bulk), which
+      # started timing out intermittently and failing this job with no
+      # real vulnerability behind it. Trivy already runs later in this
+      # same job for the Docker image scan, reads from its own downloaded
+      # vulnerability DB instead of a live per-run API call, and draws
+      # from the same underlying GHSA advisory data npm's own audit
+      # backend uses — verified against this repo's actual lockfile
+      # before switching. Dev dependencies excluded by default (Trivy's
+      # own default), matching pnpm audit --prod's scope. node_modules
+      # skipped since it's already installed by this point in the job and
+      # Trivy only needs the lockfile, not the installed tree. Deliberately
+      # not ignore-unfixed here (unlike the image scan below) — pnpm audit
+      # had no such carve-out, and this keeps the same strictness.
       - name: Audit dependencies (high/critical)
-        run: pnpm audit --prod --audit-level=high
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          skip-dirs: node_modules
+          severity: HIGH,CRITICAL
+          exit-code: '1'
+          version: v0.74.0
 
       # Non-blocking: surfaces lower-severity and dev-only findings without
       # wedging main over something like the already-tracked "Hold TS 7
-      # bump" item (docs/TODO.md) — visibility, not a gate.
+      # bump" item (docs/TODO.md) — visibility, not a gate. include-dev-deps
+      # (via the TRIVY_INCLUDE_DEV_DEPS env var — Trivy has no matching
+      # action input) widens scope back out from the prod-only blocking
+      # scan above, same as pnpm audit's own informational step had no
+      # --prod flag.
       - name: Audit dependencies (informational)
-        run: pnpm audit --audit-level=low || true
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          skip-dirs: node_modules
+          severity: UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL
+          exit-code: '0'
+          version: v0.74.0
+        env:
+          TRIVY_INCLUDE_DEV_DEPS: true
 
       - name: Run database migrations
         run: pnpm db:migrate

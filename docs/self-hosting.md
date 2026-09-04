@@ -77,6 +77,8 @@ Admins get an **Admin** page in the sidebar: every user on the instance, their r
 - **View and revoke a user's sessions**, individually or all at once, the same session list a user sees for themselves under Account → Sessions.
 - **Delete a user's account.** This is permanent and cascades: their watch history, ratings, watchlists, dropped shows and API tokens all go with it, and so does any invite or Plex account-link code they personally created (if they're an admin who created any).
 
+**Any of the four actions above can be applied to several accounts at once**, by ticking rows on the Admin page and using the bar that appears. The acting admin's own account can never be included in a bulk action; anything the server refuses for a particular account (the owner's account, an account with no password to reset) is reported per account once the batch finishes, rather than failing the whole selection.
+
 **An instance can never end up with zero admins.** Demoting or deleting the last remaining admin is refused, both from this page and from that admin's own Account → Delete account. If you want to step back from administering an instance, promote someone else first.
 
 **One account is always the owner.** The first account created (whoever ran `/setup`) starts as the owner, a step above an ordinary admin: no other admin can demote, delete, or otherwise touch the owner's account, closing off a rogue-or-compromised-admin path that "at least one admin remains" alone doesn't cover (an admin could otherwise demote every _other_ admin, one at a time, and end up controlling the instance alone). The owner's role badge reads "Owner" on the Admin page instead of "Admin", and their row there has no role control or delete button for anyone.

@@ -59,43 +59,6 @@ Format:
       code that isn't theirs, so the page should make clear what's being
       authorized rather than a bare yes/no.
 
-- [ ] **Bulk select/actions on the admin Users list** (2026-09-03 11:26 added, M4'd 2026-09-04; M4)
-
-      Every action on `/admin` used to be per-row only, inline
-      (`UserRow.tsx`, expand-then-act); as of 2026-09-03 (see
-      `TODO_ARCHIVE.md`'s "Split the admin Users list..." entry) they live
-      on each user's own `/admin/users/{id}/{slug}` page instead, and
-      `UsersPanel.tsx`'s rows are already the summary-only, uniform shape
-      a bulk-select mode needs. James, 2026-09-03: wants a bulk-select
-      mode like the Activity/History page's (`HistoryPage.tsx`: a
-      `Set<string>` of selected ids, a "N selected" action bar that
-      appears once anything's checked, `api.activity.removeMany(...)` for
-      the bulk call) or the per-show watch tables' simpler
-      row-checkbox-plus-confirm-dialog version (`WatchHistoryTable.tsx`),
-      whichever fits better once this is actually designed. Wants mass
-      delete, mass password reset, and mass session revoke at minimum;
-      possibly mass promote/demote too.
-
-      The single-item routes already exist (`routes/admin-users.ts`) and
-      a bulk action can start as a client-side loop over them (no new API
-      route needed for a first pass), but a few things need deciding
-      before building:
-
-      - **Partial failure.** A bulk delete/demote can include an account
-        that individually 400s (the last-admin invariant,
-        `lib/admins.ts#assertNotLastAdmin`) or a delete that 400s because
-        it's the acting admin's own row. The UI needs to report "3 of 4
-        succeeded, 1 refused: X" rather than silently stopping or
-        swallowing the failure.
-      - **Self-exclusion.** `AdminUserPage.tsx` already hides the delete
-        button on the acting admin's own page; a bulk selection on the
-        list needs the same rule; either exclude self from "select all"
-        or disable that one checkbox.
-      - Mass password reset already fails closed today when SMTP isn't
-        configured (`requireEmailConfigured`); the bulk UI just needs to
-        surface that the same way the single-item version does, not
-        silently no-op for the whole batch.
-
 ## Metadata & matching
 
 - [ ] **IMDb ratings on Movies (and maybe TV Shows)** (2026-09-01 13:35 added, shelved 2026-09-01, not on any milestone)

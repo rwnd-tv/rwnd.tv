@@ -53,16 +53,54 @@ function ChevronRightIcon() {
  * `avatarUrl` prop points it there instead of its default `GET
  * /auth/me/avatar`, the only other route that would otherwise leave every
  * row here stuck on the coloured-initials fallback.
+ *
+ * The selection checkbox (M4, bulk select/actions, docs/TODO_ARCHIVE.md)
+ * has to sit *outside* the `<Link>`, not inside it: nesting interactive
+ * content inside an `<a>` is invalid HTML, and a click on the checkbox
+ * would otherwise also navigate. `selected`/`onToggleSelect`/
+ * `selectAriaLabel` follow the same prop shape `ActivityTile.tsx` already
+ * uses for HistoryPage.tsx's own bulk-select checkboxes — no shared
+ * `Checkbox` component exists in `components/ui/`, every checkbox in this
+ * app is a bare `<input>`. `selectDisabled` covers two cases the parent
+ * knows about and this component doesn't: this is the acting admin's own
+ * row (UsersPanel.tsx excludes self from every bulk action), or a batch is
+ * currently running. `selectTitle` carries the "why" for the former —
+ * matching this app's own rule (see AdminUserPage.tsx's doc comment) that
+ * a disabled control should say why rather than just going quiet.
  */
-export function UserRow({ user }: { user: AdminUserSummary }) {
+export function UserRow({
+  user,
+  selected,
+  onToggleSelect,
+  selectDisabled,
+  selectAriaLabel,
+  selectTitle,
+}: {
+  user: AdminUserSummary
+  selected: boolean
+  onToggleSelect: () => void
+  selectDisabled: boolean
+  selectAriaLabel: string
+  selectTitle?: string
+}) {
   const { t, i18n } = useTranslation()
   const slug = slugify(user.displayName)
 
   return (
-    <li>
+    <li className="flex items-center gap-3">
+      <label className="flex shrink-0 items-center">
+        <span className="sr-only">{selectAriaLabel}</span>
+        <input
+          type="checkbox"
+          checked={selected}
+          disabled={selectDisabled}
+          title={selectTitle}
+          onChange={onToggleSelect}
+        />
+      </label>
       <Link
         to={slug ? `/admin/users/${user.id}/${slug}` : `/admin/users/${user.id}`}
-        className="flex w-full items-center justify-between gap-4 rounded-md border border-[var(--color-border)] p-3 hover:bg-[var(--color-surface)]"
+        className="flex min-w-0 flex-1 items-center justify-between gap-4 rounded-md border border-[var(--color-border)] p-3 hover:bg-[var(--color-surface)]"
       >
         <div className="flex min-w-0 items-center gap-3">
           <Avatar user={user} avatarUrl={(v) => api.admin.avatarUrl(user.id, v)} size={32} />

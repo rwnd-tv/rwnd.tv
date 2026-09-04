@@ -2799,6 +2799,70 @@ DATABASE` ×2) — zero residue.\
       file in this codebase to exercise `useSortCookie` more than once per
       file.
 
+- [x] **Bulk select/actions on the admin Users list** (2026-09-03 11:26
+      added, M4'd 2026-09-04, done 2026-09-04; M4)\
+      All four actions James asked for shipped in one pass rather than the
+      "at minimum" three: mass delete, mass password reset, mass session
+      revoke, and mass promote/demote. A client-side loop
+      (`lib/bulk-action.ts#runBulkAction`, `Promise.allSettled`) over the
+      existing single-item `routes/admin-users.ts` calls, not a new bulk
+      API route or schema — the single-item routes already carry every
+      per-account refusal (owner immunity, last-admin, no local
+      credential) a batch needs to report individually.\
+      **Self-exclusion, decided broader than just delete.** The acting
+      admin's own row can never be selected for *any* bulk action, not
+      only delete (which the API already refused): revoking your own
+      sessions or demoting yourself mid-batch is a footgun the single-item
+      pages never had to worry about. The owner's row is deliberately
+      *not* pre-filtered out of selection, though — a bulk action against
+      the owner just fails per-row through the existing API guards and
+      shows up in the partial-failure report, rather than duplicating
+      owner-detection in five places.\
+      **New `UserBulkActions.tsx`**, not inlined into `UsersPanel.tsx` the
+      way `HistoryPage.tsx` inlines its one bulk mutation: this needed five
+      mutations, a confirm dialog, a partial-failure report, and an SMTP
+      gate, and inlining would have roughly doubled `UsersPanel.tsx` and
+      buried the filter/sort logic it exists for.
+      `UsersPanel.tsx` owns *what is ticked* (a `Set<string>` of selected
+      ids, a "Select all" checkbox with real tri-state `indeterminate`
+      support, self-exclusion); `UserBulkActions.tsx` owns *what happens
+      to it*. Selection is deliberately derived from the full unfiltered
+      `data.users` rather than pruned against the active filter's view —
+      typing in the filter box to find the next person to tick is the
+      likeliest way anyone builds a multi-row selection, and pruning
+      against the filtered view would silently drop earlier picks the
+      moment the filter changes. A row hidden by the current filter but
+      still selected shows up as "N hidden by the current filter" in the
+      action bar rather than disappearing invisibly.\
+      Delete/promote/demote confirm via a `Dialog` (matching each
+      action's own single-item precedent on `AdminUserPage.tsx`); password
+      reset and session revoke fire straight from the bar, also matching
+      their single-item precedents. Bulk delete doesn't reuse
+      `DeleteUserDialog.tsx`'s type-the-email confirmation (no single email
+      for N accounts) — a plain title plus a listed-names body instead,
+      matching `WatchHistoryTable.tsx`'s own bulk-delete confirm shape.\
+      The partial-failure report ("3 of 4 accounts deleted", with an
+      expandable "1 refused" naming the account and the exact API error)
+      is a new inline `<details>` pattern adapted from
+      `ImportProgress.tsx`'s `FailureItems` — no toast/snackbar system
+      exists anywhere in this app, and this didn't introduce one. Refused
+      accounts stay selected after a batch (so they're readable against
+      their row and easy to retry); successes drop out, the opposite of
+      `HistoryPage.tsx`'s unconditional clear-on-success, since a partial
+      failure is the whole reason this exists. Every bar trigger disables
+      while a batch is in flight, both to stop two overlapping batches from
+      a rage-click and to freeze row checkboxes mid-action.\
+      **Verified**: `lib/bulk-action.test.ts` (5 tests, including one that
+      specifically catches an index-to-item mispairing regression in the
+      `Promise.allSettled` zip), a new `UserBulkActions.test.tsx` (10
+      tests covering every action's success and partial-failure path, the
+      SMTP gate, cancel, and the in-flight lockout), and `UsersPanel.test.tsx`
+      extended with 6 selection-layer tests (self-exclusion,
+      select-all-minus-self, selection surviving a filter change,
+      indeterminate state, the bar's appear/Clear behaviour, and the
+      busy-freeze). `pnpm lint`/`format:check`/`typecheck` clean, full
+      `apps/web` suite (130 tests) run.
+
 ## Import
 
 - [x] **Build ZIP-upload import from Trakt's own "Export now" file** (2026-08-24 22:50 added, investigated 2026-08-24, done 2026-08-25) — M2\

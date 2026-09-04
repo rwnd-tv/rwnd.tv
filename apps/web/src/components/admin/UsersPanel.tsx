@@ -36,6 +36,7 @@ import { RoleFilterPanel } from './RoleFilterPanel.js'
 import { MfaFilterPanel } from './MfaFilterPanel.js'
 import { VerifiedFilterPanel } from './VerifiedFilterPanel.js'
 import { UserRow } from './UserRow.js'
+import { UserBulkActions } from './UserBulkActions.js'
 
 const SORT_KEYS = [
   'nameAsc',
@@ -102,6 +103,8 @@ export function UsersPanel() {
 
   const [filter, setFilter] = useState('')
   const [filtersOpen, setFiltersOpen] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [isBulkBusy, setIsBulkBusy] = useState(false)
   const [sortBy, setSortBy] = useSortCookie('rwnd_admin_users_sort', SORT_KEYS, 'nameAsc')
   const [roleFilters, setRoleFilters] = useGenreFilterCookie('rwnd_admin_users_role_filters')
   const [mfaMode, setMfaMode] = useSortCookie<MfaFilterMode>(
@@ -133,6 +136,48 @@ export function UsersPanel() {
     const byVerified = filterByVerified(byMfa, verifiedMode)
     return sortUsers(byVerified, sortBy, locale)
   }, [data, filter, roleFilters, mfaMode, verifiedMode, sortBy, locale])
+
+  // Selection is derived from the full, unfiltered `data.users` rather than
+  // pruned against the filtered `users` view above: typing in the filter
+  // box to find the next person to tick is the likeliest way anyone builds
+  // a multi-row selection, and pruning against the filtered view would
+  // silently drop earlier picks the moment the filter changes. An id that
+  // genuinely no longer exists (deleted in another tab) simply stops
+  // appearing here on the next refetch; one merely hidden by the current
+  // filter is retained and still acted on (see hiddenSelectedCount below,
+  // which surfaces that rather than leaving it invisible).
+  const selectedUsers = useMemo(
+    () => (data?.users ?? []).filter((u) => selectedIds.has(u.id)),
+    [data, selectedIds],
+  )
+  const visibleIds = useMemo(() => new Set(users.map((u) => u.id)), [users])
+  const hiddenSelectedCount = selectedUsers.filter((u) => !visibleIds.has(u.id)).length
+
+  // Self is excluded from bulk selection entirely (not just from delete,
+  // which the API itself already refuses): revoking your own sessions or
+  // demoting yourself mid-batch is a footgun the single-item pages don't
+  // have to worry about, since this list manages *other* users — your own
+  // account is managed from Account settings. The owner is deliberately
+  // NOT excluded here; a bulk action against the owner just fails per-item
+  // through the existing API guards and shows up in UserBulkActions.tsx's
+  // partial-failure report, rather than needing owner-detection duplicated
+  // here too.
+  const selectableUsers = useMemo(
+    () => users.filter((u) => u.id !== currentUser?.id),
+    [users, currentUser],
+  )
+  const allSelected =
+    selectableUsers.length > 0 && selectableUsers.every((u) => selectedIds.has(u.id))
+  const someSelected = selectableUsers.some((u) => selectedIds.has(u.id))
+
+  function toggleUserSelected(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
 
   return (
     <Card>
@@ -212,6 +257,14 @@ export function UsersPanel() {
               </FiltersPanel>
             )}
 
+            <UserBulkActions
+              selectedUsers={selectedUsers}
+              hiddenSelectedCount={hiddenSelectedCount}
+              onClearSelection={() => setSelectedIds(new Set())}
+              onSelectionSettled={(remainingIds) => setSelectedIds(new Set(remainingIds))}
+              onBusyChange={setIsBulkBusy}
+            />
+
             {users.length === 0 ? (
               <p className="text-sm text-[var(--color-fg-muted)]">
                 {filter.trim()
@@ -219,11 +272,47 @@ export function UsersPanel() {
                   : t('admin.usersNoFilterMatches')}
               </p>
             ) : (
-              <ul className="flex flex-col gap-2">
-                {users.map((user) => (
-                  <UserRow key={user.id} user={user} />
-                ))}
-              </ul>
+              <>
+                <label className="flex w-fit items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={allSelected}
+                    disabled={isBulkBusy || selectableUsers.length === 0}
+                    ref={(el) => {
+                      // `indeterminate` is DOM-property-only, not a React
+                      // prop — the callback ref is the one imperative line
+                      // in this file, needed purely to set it.
+                      if (el) el.indeterminate = someSelected && !allSelected
+                    }}
+                    onChange={() =>
+                      setSelectedIds(
+                        allSelected ? new Set() : new Set(selectableUsers.map((u) => u.id)),
+                      )
+                    }
+                  />
+                  {t('admin.bulk.selectAll')}
+                </label>
+                <ul className="flex flex-col gap-2">
+                  {users.map((user) => {
+                    const isSelf = user.id === currentUser?.id
+                    return (
+                      <UserRow
+                        key={user.id}
+                        user={user}
+                        selected={selectedIds.has(user.id)}
+                        selectDisabled={isSelf || isBulkBusy}
+                        selectAriaLabel={
+                          isSelf
+                            ? t('admin.bulk.selectSelfDisabled')
+                            : t('admin.bulk.selectAria', { name: user.displayName })
+                        }
+                        selectTitle={isSelf ? t('admin.bulk.selectSelfTooltip') : undefined}
+                        onToggleSelect={() => toggleUserSelected(user.id)}
+                      />
+                    )
+                  })}
+                </ul>
+              </>
             )}
           </div>
         ) : (

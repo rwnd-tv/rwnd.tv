@@ -59,7 +59,7 @@ Format:
       code that isn't theirs, so the page should make clear what's being
       authorized rather than a bare yes/no.
 
-- [ ] **Bulk select/actions on the admin Users list** (2026-09-03 11:26 added)
+- [ ] **Bulk select/actions on the admin Users list** (2026-09-03 11:26 added, M4'd 2026-09-04; M4)
 
       Every action on `/admin` used to be per-row only, inline
       (`UserRow.tsx`, expand-then-act); as of 2026-09-03 (see

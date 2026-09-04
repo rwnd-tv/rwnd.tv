@@ -19,7 +19,7 @@
       "status": "v{{version}}, ready for real use",
       "title": "Track what you watch, on your own server.",
       "body": "rwnd.tv is an open source, self-hosted app for tracking the TV shows and movies you watch: a replacement for trakt.tv that you run yourself. Log by hand, import your Trakt history, or let Plex log it for you.",
-      "meta": "MIT licensed · Docker image on GHCR · Node 26 + PostgreSQL · Light, dark and system themes"
+      "meta": "MIT licensed · Docker image on GHCR · PostgreSQL · Light, dark and system themes"
     },
     "strip": {
       "m1": {
@@ -107,7 +107,7 @@
     },
     "status": {
       "title": "Where the project actually is",
-      "body": "All three milestones are done and v{{version}} is out. The roadmap in the repo is a living document and this page follows it rather than getting ahead of it.",
+      "body": "The first three milestones are done, and v{{version}} is out — the fourth is already underway. The roadmap in the repo is a living document and this page follows it rather than getting ahead of it.",
       "done": "done",
       "inProgress": "in progress",
       "m1": {
@@ -153,7 +153,7 @@
       },
       "dropIn": {
         "q": "Is it a drop-in Trakt replacement yet?",
-        "a": "Not entirely. Import, logging, galleries, watchlists, ratings and Plex scrobbling all work. A calendar of upcoming episodes is planned for the next milestone; stats and insights and shareable profiles aren't scheduled yet."
+        "a": "Not entirely. Import, logging, galleries, watchlists, ratings and Plex scrobbling all work. A calendar of upcoming episodes is still to come; stats and insights and shareable profiles aren't scheduled yet."
       },
       "metadata": {
         "q": "Where does the metadata come from?",

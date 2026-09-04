@@ -46,11 +46,12 @@ pnpm build
 ```
 
 CI (`.github/workflows/ci.yml`) runs all of the above, on both amd64 and
-arm64, plus a few things not worth running on every save locally:
-`pnpm audit --prod --audit-level=high` (blocking), a real `pnpm db:migrate`
-against a Postgres service container, a Docker build, and a Trivy
-HIGH/CRITICAL scan of the built image. `pnpm knip` in particular has no
-config (`knip.json` is empty) and is easy to trip with an unused export or
+arm64, plus a few things not worth running on every save locally: a
+Trivy filesystem scan of the dependency tree for HIGH/CRITICAL
+vulnerabilities (blocking), a real `pnpm db:migrate` against a Postgres
+service container, a Docker build, and a separate Trivy HIGH/CRITICAL
+scan of the built image. `pnpm knip` in particular has no config
+(`knip.json` is empty) and is easy to trip with an unused export or
 file; run it locally rather than finding out from CI.
 
 The test suite needs a live Postgres: it truncates tables between tests

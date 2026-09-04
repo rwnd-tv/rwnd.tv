@@ -41,21 +41,30 @@ real release cut first. A plain push to `main` only moves the `edge`
 image tag; `latest` (and prod, which is pinned to a specific digest, not
 a floating tag) only updates on a version tag push:
 
-1. Bump the `version` field in all five `package.json` files (root,
+1. Before bumping the version, scan `README.md`, `docs/self-hosting.md`,
+   `CONTRIBUTING.md`, relevant ADRs, `docs/screenshots/`, and the landing
+   page copy for anything that's gone stale relative to the commits since
+   the last tag (a version number baked into prose, a milestone claim
+   that's since moved, a feature description missing something that
+   shipped). Flag it and ask whether to update first, rather than cutting
+   the version and coming back to docs afterward. A quick scan is enough;
+   it doesn't need a full research pass unless something looks genuinely
+   off.
+2. Bump the `version` field in all five `package.json` files (root,
    `apps/api`, `apps/web`, `packages/db`, `packages/shared`) to the same
    new version, commit as "Bump version to X.Y.Z", tag that commit
    `vX.Y.Z`, push both the commit and the tag.
-2. Wait for the tag-triggered Release workflow to finish (`gh run watch
+3. Wait for the tag-triggered Release workflow to finish (`gh run watch
 <run-id> --exit-status`, or `gh run list` to find it): it builds,
    scans, signs, and publishes the new image, and moves `latest`.
-3. Verify the published image is actually signed by this repo's own
+4. Verify the published image is actually signed by this repo's own
    release workflow before touching prod. See
    `docs/self-hosting.md#verifying-the-image` for the exact `cosign
 verify` command. cosign isn't installed everywhere; if missing on the
    home-server, install to `~/bin/cosign` (a user-writable path, since
    `sudo` isn't available non-interactively over SSH) rather than skip
    the check.
-4. Prod's `rwnd-tv` service lives in the home-server's single shared
+5. Prod's `rwnd-tv` service lives in the home-server's single shared
    `/pool/docker/docker-compose.yaml` (alongside every other service
    there, so edit only the one `image:` line), pinned by digest rather
    than by a floating tag: a digest can't be silently swapped out from

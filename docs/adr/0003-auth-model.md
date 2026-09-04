@@ -22,7 +22,7 @@ Ship local accounts only in M1, but split the schema so OIDC is a later _adapter
 - `user_credentials`: one row per way a user can authenticate. Today only `type = 'local'` (email + Argon2id password hash) is populated; `type = 'oidc'` (issuer + subject) is modelled in the schema and constrained via check constraints, but no OIDC flow exists yet.
 - `sessions` / `api_tokens`: both key off `user_id` alone and store only a hash of the bearer secret, never the raw value. Browser sessions use httpOnly cookies; `api_tokens` exist specifically for webhooks and other non-interactive clients, and are the mechanism M2's Plex/Tautulli ingestion will authenticate with.
 
-Registration is admin-configurable (`instance_settings.registration_mode`: `open` / `invite` / `closed`), defaulting to `closed` so a self-hosted instance exposed to the internet doesn't accidentally accept public signups. The very first admin account is created through a one-time `POST /setup` flow, not through registration.
+Registration is admin-configurable (`instance_settings.registration_mode`: `open` / `invite` / `closed`), defaulting to `closed` so a self-hosted instance exposed to the internet doesn't accidentally accept public signups. The very first account is created through a one-time `POST /setup` flow, not through registration, and becomes the instance's owner rather than a plain admin (see [ADR 0007](0007-security-posture.md)'s addendum for why that role exists and how it differs from `admin`).
 
 ## Consequences
 

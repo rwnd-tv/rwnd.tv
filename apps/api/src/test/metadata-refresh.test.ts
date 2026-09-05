@@ -148,6 +148,13 @@ async function insertMovie(opts: {
   /** Defaults to null, same as a real row before its first fetch — same
    * "should NOT be refetched" caveat as `genres` above. */
   voteAverage?: number | null
+  /** Defaults to null (never fetched), same "should NOT be refetched"
+   * caveat as `genres`/`voteAverage` above — for the never-had-release-
+   * dates-fetched backfill clause (findStaleMovies). */
+  releaseDates?: Record<string, string> | null
+  /** Defaults to null. Only relevant to the near-release refresh tier —
+   * a null releaseDate never matches that clause regardless of age. */
+  releaseDate?: string | null
 }) {
   const [movie] = await db
     .insert(movies)
@@ -159,6 +166,8 @@ async function insertMovie(opts: {
       metadataRefreshedAt: opts.metadataRefreshedAt,
       genres: opts.genres ?? [],
       voteAverage: opts.voteAverage ?? null,
+      releaseDates: opts.releaseDates ?? null,
+      releaseDate: opts.releaseDate ?? null,
     })
     .returning()
   if (!movie) throw new Error('failed to insert movie')
@@ -1030,6 +1039,7 @@ describe('metadata refresh', () => {
       tmdbId: 21,
       metadataRefreshedAt: new Date(),
       genres: ['Drama'], // already has genres — only the rating clause should catch this
+      releaseDates: {}, // already fetched — isolates the rating clause
     })
     vi.stubGlobal(
       'fetch',
@@ -1053,6 +1063,7 @@ describe('metadata refresh', () => {
       metadataRefreshedAt: new Date(),
       genres: ['Comedy'],
       voteAverage: 6.9,
+      releaseDates: {}, // already fetched, and no near-release date (releaseDate stays null)
     })
     const fetchMock = vi.fn()
     vi.stubGlobal('fetch', fetchMock)
@@ -1068,6 +1079,7 @@ describe('metadata refresh', () => {
       metadataRefreshedAt: new Date(Date.now() - 200 * DAY_MS), // past the ~5 month compliance cutoff
       genres: ['Horror'],
       voteAverage: 5.5,
+      releaseDates: {}, // isolates the compliance clause from the never-fetched one
     })
     vi.stubGlobal(
       'fetch',
@@ -1081,6 +1093,76 @@ describe('metadata refresh', () => {
 
     const result = await runMetadataRefresh(db, [provider])
     expect(result.moviesRefreshed).toBe(1)
+  })
+
+  // The Movies calendar feed's own backfill/refresh tier — see
+  // findStaleMovies' own comments (apps/api/src/metadata/refresh.ts) for
+  // the reasoning each of these isolates.
+  it('refetches a recently-refreshed, fully-rated movie if it has never had release dates fetched', async () => {
+    const movie = await insertMovie({
+      tmdbId: 24,
+      metadataRefreshedAt: new Date(),
+      genres: ['Sci-Fi'],
+      voteAverage: 8.0,
+      // releaseDates left null (never fetched) — the only clause this
+      // should isolate.
+    })
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(tmdbMovieResponse({ id: 24, genres: ['Sci-Fi'], voteAverage: 8.0 }), {
+            status: 200,
+          }),
+      ),
+    )
+
+    const result = await runMetadataRefresh(db, [provider])
+    expect(result.moviesRefreshed).toBe(1)
+    const [updated] = await db.select().from(movies).where(eq(movies.id, movie.id))
+    expect(updated?.releaseDates).toEqual({})
+  })
+
+  it('refetches a fully-populated movie releasing soon, even though it was refreshed recently by shows/compliance standards', async () => {
+    const soon = new Date(Date.now() + 14 * DAY_MS).toISOString().slice(0, 10)
+    await insertMovie({
+      tmdbId: 25,
+      metadataRefreshedAt: new Date(Date.now() - 10 * DAY_MS), // past the 7-day release cadence
+      genres: ['Action'],
+      voteAverage: 7.0,
+      releaseDates: { GB: soon },
+      releaseDate: soon,
+    })
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(tmdbMovieResponse({ id: 25, genres: ['Action'], voteAverage: 7.0 }), {
+            status: 200,
+          }),
+      ),
+    )
+
+    const result = await runMetadataRefresh(db, [provider])
+    expect(result.moviesRefreshed).toBe(1)
+  })
+
+  it('does not refetch a fully-populated movie whose release date is long past the near-release window', async () => {
+    const longAgo = new Date(Date.now() - 300 * DAY_MS).toISOString().slice(0, 10)
+    await insertMovie({
+      tmdbId: 26,
+      metadataRefreshedAt: new Date(Date.now() - 10 * DAY_MS), // past the 7-day release cadence...
+      genres: ['Drama'],
+      voteAverage: 6.0,
+      releaseDates: { GB: longAgo },
+      releaseDate: longAgo, // ...but well outside the near-release window, so it doesn't matter
+    })
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await runMetadataRefresh(db, [provider])
+    expect(result.moviesRefreshed).toBe(0)
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 
   it('skips a movie with no known TMDB id without crashing the sweep', async () => {

@@ -6,6 +6,8 @@ import type { MovieDetail } from '@rwnd/shared'
 import { api, ApiError } from '../lib/api-client.js'
 import { useAuth } from '../lib/use-auth.js'
 import { invalidateWatchData } from '../lib/query-client.js'
+import { formatReleaseDate } from '../lib/date.js'
+import { regionFlagClassName } from '../lib/flag.js'
 import { useMovieWatchActions } from '../lib/use-movie-watch-actions.js'
 import { TMDB_LOGO_URL } from '../lib/tmdb.js'
 import { TVDB_LOGO_DARK_BG_URL, TVDB_LOGO_LIGHT_BG_URL, tvdbMovieUrl } from '../lib/tvdb.js'
@@ -77,16 +79,6 @@ function RefreshIcon() {
       <path d="M21 3v6h-6" />
     </svg>
   )
-}
-
-/** Same "2012" / "2012 - 2014" shape as ShowDetailPage's own
- * watchedPeriodRange — duplicated rather than shared, since sharing a
- * two-line pure function isn't worth a new file either page would need to
- * import from. */
-function watchedPeriodRange(firstWatchedAt: string, lastWatchedAt: string): string {
-  const firstYear = new Date(firstWatchedAt).getFullYear()
-  const lastYear = new Date(lastWatchedAt).getFullYear()
-  return firstYear === lastYear ? String(firstYear) : `${firstYear} - ${lastYear}`
 }
 
 /**
@@ -212,11 +204,32 @@ export function MovieDetailPage() {
         </div>
 
         <div className="flex min-w-0 flex-col gap-3">
-          <h1 className="text-2xl font-semibold">{movie.title}</h1>
+          <h1 className="text-2xl font-semibold">
+            {movie.title}
+            {movie.year !== null && (
+              <span className="text-[var(--color-fg-muted)]"> ({movie.year})</span>
+            )}
+          </h1>
           <div className="flex flex-wrap items-center gap-x-1.5 text-sm text-[var(--color-fg-muted)]">
             {(
               [
-                movie.year,
+                // The release date this user should see (their own
+                // region's, where TMDB has one, else the primary date),
+                // with a flag next to it when it's genuinely regional —
+                // see movieDetailSchema's releaseDate/releaseRegion doc
+                // comments. No fallback to the year here — it's already
+                // shown next to the title above.
+                movie.releaseDate ? (
+                  <span className="inline-flex items-center gap-1.5">
+                    {movie.releaseRegion && regionFlagClassName(movie.releaseRegion) && (
+                      <span
+                        className={regionFlagClassName(movie.releaseRegion)!}
+                        aria-hidden="true"
+                      />
+                    )}
+                    {formatReleaseDate(movie.releaseDate, locale)}
+                  </span>
+                ) : null,
                 movie.genres.length > 0 ? movie.genres.join(', ') : null,
                 movie.runtimeMinutes !== null
                   ? t('movieDetail.runtime', { minutes: movie.runtimeMinutes })
@@ -376,19 +389,6 @@ export function MovieDetailPage() {
             <p className="text-xs text-[var(--color-danger)]">{t('common.somethingWentWrong')}</p>
           )}
 
-          {movie.firstWatchedAt && movie.lastWatchedAt ? (
-            <p className="text-xs text-[var(--color-fg-muted)]">
-              {t('movieDetail.watchedPeriod', {
-                range: watchedPeriodRange(movie.firstWatchedAt, movie.lastWatchedAt),
-              })}
-            </p>
-          ) : (
-            movie.hasUnknownWatchDate && (
-              <p className="text-xs text-[var(--color-fg-muted)]">
-                {t('movieDetail.watchedUnknown')}
-              </p>
-            )
-          )}
           {movie.watchedCount > 1 && (
             <p className="text-xs text-[var(--color-fg-muted)]">
               {t('movieDetail.watchedCount', { count: movie.watchedCount })}

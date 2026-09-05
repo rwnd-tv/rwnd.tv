@@ -34,6 +34,8 @@ function fakeTmdb(): MetadataProvider {
         genres: [],
         voteAverage: null,
         imdbId: null,
+        releaseDate: null,
+        releaseDates: null,
       }
     },
     async getShow(externalId) {

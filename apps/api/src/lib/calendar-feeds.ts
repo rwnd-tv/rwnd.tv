@@ -21,7 +21,10 @@ export function generateCalendarToken(encryptionKey: string): {
 /** Row -> wire shape, decrypting the token for re-display — see
  * `calendarFeeds`' doc comment (packages/db/src/schema.ts) for why this
  * one secret is recoverable rather than only hash-checkable. Only the
- * two settings that apply to the row's own `feedType` are included. */
+ * settings that apply to the row's own `feedType` are included. An
+ * exhaustive switch, not a ternary — with three feed types a binary
+ * ternary would silently mis-serialize the odd one out; this way a
+ * fourth type is a compile error instead. */
 export function serializeCalendarFeed(
   row: typeof calendarFeeds.$inferSelect,
   encryptionKey: string,
@@ -31,13 +34,15 @@ export function serializeCalendarFeed(
     lastAccessedAt: row.lastAccessedAt?.toISOString() ?? null,
     createdAt: row.createdAt.toISOString(),
   }
-  return row.feedType === 'history'
-    ? {
+  switch (row.feedType) {
+    case 'history':
+      return {
         feedType: 'history',
         ...shared,
         settings: { includeMovies: row.includeMovies, includeShows: row.includeShows },
       }
-    : {
+    case 'shows':
+      return {
         feedType: 'shows',
         ...shared,
         settings: {
@@ -46,6 +51,13 @@ export function serializeCalendarFeed(
           includeAllWatched: row.includeAllWatched,
         },
       }
+    case 'movies':
+      return {
+        feedType: 'movies',
+        ...shared,
+        settings: { futureOnly: row.futureOnly, includeAllWatched: row.includeAllWatched },
+      }
+  }
 }
 
 export interface ResolvedCalendarFeed {

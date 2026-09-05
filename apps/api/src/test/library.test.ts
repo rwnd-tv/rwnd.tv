@@ -3126,6 +3126,48 @@ describe('library', () => {
       expect(detail.imdbId).toBe('tt0111')
     })
 
+    it("returns the account's own region's release date, with releaseRegion set", async () => {
+      const cookie = await createUserAndCookie()
+      const userId = await meId(cookie)
+      const [movie] = await db
+        .insert(movies)
+        .values({
+          title: 'A Movie',
+          slug: 'a-region-movie',
+          releaseDate: '2099-01-05',
+          releaseDates: { GB: '2099-01-12' },
+        })
+        .returning()
+      if (!movie) throw new Error('failed to insert movie')
+      await db.update(users).set({ locale: 'en-GB' }).where(eq(users.id, userId))
+
+      const res = await app.request(`/api/v1/library/movies/${movie.slug}`, { headers: { cookie } })
+      const detail = await json<MovieDetail>(res)
+      expect(detail.releaseDate).toBe('2099-01-12')
+      expect(detail.releaseRegion).toBe('GB')
+    })
+
+    it('falls back to the primary release date, with a null releaseRegion, when the account region has no entry', async () => {
+      const cookie = await createUserAndCookie()
+      const userId = await meId(cookie)
+      const [movie] = await db
+        .insert(movies)
+        .values({
+          title: 'A Movie',
+          slug: 'a-fallback-movie',
+          releaseDate: '2099-01-05',
+          releaseDates: { US: '2099-01-06' },
+        })
+        .returning()
+      if (!movie) throw new Error('failed to insert movie')
+      await db.update(users).set({ locale: 'en-GB' }).where(eq(users.id, userId))
+
+      const res = await app.request(`/api/v1/library/movies/${movie.slug}`, { headers: { cookie } })
+      const detail = await json<MovieDetail>(res)
+      expect(detail.releaseDate).toBe('2099-01-05')
+      expect(detail.releaseRegion).toBeNull()
+    })
+
     it("returns metadata and the current user's watch status", async () => {
       const cookie = await createUserAndCookie()
       const userId = await meId(cookie)

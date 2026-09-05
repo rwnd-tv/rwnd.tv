@@ -56,6 +56,14 @@ const showsFeed: CalendarFeed = {
   createdAt: new Date().toISOString(),
 }
 
+const moviesFeed: CalendarFeed = {
+  feedType: 'movies',
+  token: 'rwndcal_ghi789',
+  settings: { futureOnly: true, includeAllWatched: false },
+  lastAccessedAt: null,
+  createdAt: new Date().toISOString(),
+}
+
 function renderPanel(feeds: CalendarFeed[], settingsOverrides: Partial<InstanceSettings> = {}) {
   vi.mocked(api.settings.get).mockResolvedValue({ ...baseSettings, ...settingsOverrides })
   const response: ListCalendarFeedsResponse = { feeds }
@@ -164,6 +172,24 @@ describe('CalendarFeedsPanel', () => {
     })
   })
 
+  it('saves the Movies feed settings, with no includeDropped key', async () => {
+    renderPanel([moviesFeed])
+    vi.mocked(api.calendarFeeds.update).mockResolvedValue({
+      ...moviesFeed,
+      settings: { ...moviesFeed.settings, includeAllWatched: true },
+    })
+
+    await userEvent.click(
+      await screen.findByRole('checkbox', { name: "Include every movie I've ever watched" }),
+    )
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(api.calendarFeeds.update).toHaveBeenCalledWith('movies', {
+      futureOnly: true,
+      includeAllWatched: true,
+    })
+  })
+
   it('only regenerates the feed after confirming in the dialog', async () => {
     renderPanel([historyFeed])
     vi.mocked(api.calendarFeeds.regenerate).mockResolvedValue({
@@ -202,7 +228,7 @@ describe('CalendarFeedsPanel', () => {
     vi.mocked(api.calendarFeeds.create).mockResolvedValue(historyFeed)
 
     const createButtons = await screen.findAllByRole('button', { name: 'Create feed' })
-    expect(createButtons).toHaveLength(2)
+    expect(createButtons).toHaveLength(3)
     await userEvent.click(createButtons[0]!)
 
     expect(api.calendarFeeds.create).toHaveBeenCalledWith({ feedType: 'history' })

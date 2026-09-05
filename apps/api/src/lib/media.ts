@@ -104,6 +104,11 @@ export async function resolveMovie(
       posterPath: fetched.posterPath,
       genres: fetched.genres,
       voteAverage: fetched.voteAverage,
+      releaseDate: fetched.releaseDate,
+      // `?? {}`, not `?? null` — a freshly-resolved movie has already been
+      // asked, so it shouldn't look like an unfetched row to the metadata
+      // refresher's findStaleMovies (see movies.releaseDates' doc comment).
+      releaseDates: fetched.releaseDates ?? {},
       metadataSource: provider.source,
     })
     .returning()

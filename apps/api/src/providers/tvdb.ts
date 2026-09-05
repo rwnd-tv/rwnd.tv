@@ -351,6 +351,11 @@ export class TvdbProvider implements MetadataProvider {
       genres: (movie.genres ?? []).map((g) => g.name),
       voteAverage: null,
       imdbId: imdbIdFromRemoteIds(movie.remoteIds),
+      // TVDB's movie record (even the full, non-`short` form) has no
+      // release-date concept at all — same "structurally can't supply
+      // this" case as voteAverage above.
+      releaseDate: null,
+      releaseDates: null,
     }
   }
 

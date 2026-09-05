@@ -50,6 +50,32 @@ const AIRING_STATUSES = ['Returning Series', 'In Production', 'Planned', 'Pilot'
 // than an attempt to run at the limit.
 const REQUEST_STAGGER_MS = 150
 
+// How often a movie whose release date is still moving is worth another
+// TMDB call — the Movies calendar feed's counterpart to
+// AIRING_REFRESH_INTERVAL_MS above. Same 7-day cadence, same reasoning.
+const MOVIE_RELEASE_REFRESH_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000 // 7 days
+
+// How far back from today a movie's primary release date can be and still
+// be worth the 7-day cadence above, rather than falling back to the
+// 5-month compliance clock. Release dates shift constantly before release,
+// and a regional date (e.g. a UK theatrical date months behind the US one)
+// is often not announced until well after the primary release has already
+// happened — so this window extends backwards past "today", unlike
+// findStaleShows' forward-only announced-season clause.
+const MOVIE_RELEASE_WINDOW_DAYS = 180
+
+// Every existing movie starts with `releaseDates IS NULL` the moment this
+// column ships (see findStaleMovies below), and that clause has no upper
+// bound of its own — on a library with thousands of movies, the very first
+// pass after deploy would otherwise try to refresh the whole thing in one
+// unattended run. Capped here instead of adding a LIMIT to findStaleMovies
+// itself: a LIMIT there ordered by anything stable would let a movie with
+// no configured-provider id (skipped, never refreshed) permanently occupy
+// a candidate slot every single pass — this cap is applied only against
+// movies actually attempted below, so a skip never consumes it. At 500/day
+// and REQUEST_STAGGER_MS, even a 5,000-movie library drains in ~10 days.
+const MOVIE_REFRESH_PER_PASS = 500
+
 // One-off drain of episodes that predate IMDb ids being fetched at all
 // (~4,700 on the reference instance at time of writing). Capped per pass
 // and self-terminating: every episode touched gets `imdbCheckedAt` set
@@ -348,6 +374,10 @@ async function findStaleShows(db: Database): Promise<RefreshCandidate[]> {
 
 async function findStaleMovies(db: Database): Promise<RefreshCandidate[]> {
   const complianceCutoff = new Date(Date.now() - COMPLIANCE_MAX_AGE_MS)
+  const releaseCutoff = new Date(Date.now() - MOVIE_RELEASE_REFRESH_INTERVAL_MS)
+  const releaseWindowStart = new Date(Date.now() - MOVIE_RELEASE_WINDOW_DAYS * 24 * 60 * 60 * 1000)
+    .toISOString()
+    .slice(0, 10)
   const rows = await db
     .select({ id: movies.id })
     .from(movies)
@@ -364,12 +394,29 @@ async function findStaleMovies(db: Database): Promise<RefreshCandidate[]> {
         sql`cardinality(${movies.genres}) = 0`,
         // Never had a rating fetched — same reasoning/tradeoff.
         isNull(movies.voteAverage),
+        // Never had release dates fetched at all — the movies-calendar-feed
+        // counterpart of the genres clause above, but a strictly better
+        // one: refreshOneMovie writes a (possibly empty) object on every
+        // attempt, so unlike genres this candidate set genuinely drains to
+        // zero after one pass and never re-matches. See
+        // MOVIE_REFRESH_PER_PASS for how the resulting one-time backfill
+        // wave is kept from refreshing an entire library in a single pass.
+        isNull(movies.releaseDates),
+        // Releasing soon, or released recently enough that a laggard
+        // region's date can still move — keyed on the already-cached local
+        // `releaseDate` column, so evaluating this costs no provider calls,
+        // only actually refreshing a match does (same design rule as
+        // findStaleShows' announced-season clause above). A null
+        // releaseDate never matches this clause, which is intentional: see
+        // the deliberate omission noted below.
+        and(
+          lt(movies.metadataRefreshedAt, releaseCutoff),
+          gte(movies.releaseDate, releaseWindowStart),
+        ),
         // Everyone else, on the compliance clock. No `slug` clause is
         // needed here — unlike genres/voteAverage, a movie's slug is
         // backfilled once by migration 0009 and never refetched (see
         // refreshOneMovie below), so there's nothing for a sweep to catch.
-        // No airing-status clause either — movies have no `status` and
-        // never gain new episodes.
         lt(movies.metadataRefreshedAt, complianceCutoff),
       ),
     )
@@ -379,6 +426,16 @@ async function findStaleMovies(db: Database): Promise<RefreshCandidate[]> {
 // Same deliberate omission as findStaleShows' own comment above: no
 // "never populated imdb id" clause, for the same reasoning (563/580
 // movies already covered at the time this was added).
+
+// Deliberately NO `isNull(movies.releaseDate)` clause in the near-release
+// tier above, for the same reasoning as the "never populated imdb id"
+// omission: a movie TMDB genuinely has no release date for would match
+// this clause forever, every 7 days, rather than draining. The
+// `isNull(movies.releaseDates)` clause already covers "never fetched" —
+// once fetched (even to `{}`), a movie with no near/recent release date
+// simply isn't a candidate for this tier, and self-heals on the
+// compliance clock or the manual "refresh metadata" button like any other
+// permanently-empty field.
 
 /**
  * Exported for the manual "refresh metadata" button
@@ -545,6 +602,16 @@ export async function refreshOneMovie(
       posterPath: fetched.posterPath,
       genres: fetched.genres,
       voteAverage: fetched.voteAverage,
+      // Plain overwrite, same as every other field above — if this
+      // provider is TVDB (no release-date concept at all), this correctly
+      // wipes any dates a previous TMDB refresh had cached, exactly like
+      // voteAverage already does. Consistent with ADR 0006's "winner takes
+      // all per row" design; no cross-provider fallback here.
+      releaseDate: fetched.releaseDate,
+      // `?? {}`, not `?? null` — see movies.releaseDates' doc comment on
+      // why this write, on every attempt regardless of outcome, is the
+      // negative cache the refresh tier depends on.
+      releaseDates: fetched.releaseDates ?? {},
       metadataSource: provider.source,
       metadataRefreshedAt: new Date(),
     })
@@ -1092,9 +1159,17 @@ export async function runMetadataRefresh(
     ordered,
   )
   let moviesRefreshed = 0
+  let moviesAttempted = 0
   for (const candidate of staleMovies) {
+    // No configured provider has any id for this movie — a no-op skip,
+    // same as the shows loop above, and deliberately NOT counted against
+    // MOVIE_REFRESH_PER_PASS: a movie with no provider id would otherwise
+    // permanently occupy a slot every pass without ever actually
+    // refreshing (see that constant's own comment).
     const target = movieTargets.get(candidate.id)
     if (!target) continue
+    if (moviesAttempted >= MOVIE_REFRESH_PER_PASS) break
+    moviesAttempted += 1
     try {
       await refreshOneMovie(
         db,

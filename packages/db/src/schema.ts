@@ -58,11 +58,7 @@ export const importJobStatusEnum = pgEnum('import_job_status', [
   'failed',
   'cancelled',
 ])
-// 'movies' deliberately not a member yet: a release-date calendar needs
-// its own data plumbing (no release-date column, no provider field, no
-// refresh cadence for unreleased movies) that doesn't exist today — see
-// docs/TODO.md's "Movies calendar feed" follow-up.
-export const calendarFeedTypeEnum = pgEnum('calendar_feed_type', ['history', 'shows'])
+export const calendarFeedTypeEnum = pgEnum('calendar_feed_type', ['history', 'shows', 'movies'])
 
 // ---------------------------------------------------------------------------
 // Identity
@@ -314,19 +310,23 @@ export const calendarFeeds = pgTable(
     /** 'history' only — which watched-item types appear. */
     includeMovies: boolean('include_movies').notNull().default(true),
     includeShows: boolean('include_shows').notNull().default(true),
-    /** 'shows' only — dropped shows are excluded unless opted back in. */
+    /** 'shows' only — dropped shows are excluded unless opted back in.
+     * No 'movies' equivalent: dropping is a shows-only concept, there is
+     * no droppedMovies table. */
     includeDropped: boolean('include_dropped').notNull().default(false),
-    /** 'shows' only — only episodes airing today or later, in the
-     * user's own timezone. False means no lower bound at all. */
+    /** 'shows' and 'movies' — only episodes/movies airing/releasing today
+     * or later, in the user's own timezone. False means no lower bound
+     * at all. */
     futureOnly: boolean('future_only').notNull().default(true),
-    /** 'shows' only — false (default) means "followed" is the normal
-     * rule (watched in the last 30 days, or watchlisted); true drops
-     * the recency window entirely, so any show ever watched counts as
-     * followed too (still subject to includeDropped). Added after a
-     * real report: a show watched to completion months ago, never
-     * watchlisted, silently vanished from its own feed once the
-     * 30-day window passed. See getFollowedShows's `windowDays`
-     * option (apps/api/src/lib/followed-shows.ts). */
+    /** 'shows' and 'movies' — false (default) means "followed" is the
+     * normal rule (watched in the last 30 days, or watchlisted); true
+     * drops the recency window entirely, so anything ever watched counts
+     * as followed too (still subject to includeDropped for shows).
+     * Added after a real report: a show watched to completion months
+     * ago, never watchlisted, silently vanished from its own feed once
+     * the 30-day window passed. See getFollowedShows's/
+     * getFollowedMovies's `windowDays` option (apps/api/src/lib/
+     * followed-shows.ts, followed-movies.ts). */
     includeAllWatched: boolean('include_all_watched').notNull().default(false),
     /** Backs the "Last synced" hint in Settings. Null until the feed
      * has actually been fetched once. Written on a throttle, not on
@@ -647,6 +647,38 @@ export const movies = pgTable('movies', {
   // shows.voteAverage below. Not the user's own rating of the movie —
   // that's the separate `ratings` table.
   voteAverage: real('vote_average'),
+  // TMDB's primary release date ('YYYY-MM-DD', string mode like
+  // episodes.firstAired below — drops straight into an ICS all-day event
+  // with no parsing). Its own scalar column rather than folded into
+  // releaseDates below, for two reasons: there's no country code for
+  // "worldwide" to key a global date under, and the movies-calendar-feed
+  // refresh tier (apps/api/src/metadata/refresh.ts's findStaleMovies)
+  // needs a plain comparable date, not a jsonb lookup. Null until the
+  // metadata refresher has cached this movie, or genuinely null for a
+  // movie TMDB has no release date for.
+  releaseDate: date('release_date'),
+  // Per-region release dates, ISO 3166-1 alpha-2 → 'YYYY-MM-DD' (e.g.
+  // { "GB": "2026-03-12", "US": "2026-03-05" }) — a self-hosted user's
+  // Movies calendar feed shows their own region's date where one exists
+  // (apps/api/src/lib/release-date.ts resolves which; apps/api/src/
+  // calendar/build.ts's buildMoviesEvents uses it). Pre-reduced at write
+  // time (apps/api/src/providers/tmdb.ts's earliestRegionalDate: earliest
+  // theatrical release in that region, else earliest date of any type)
+  // rather than storing TMDB's raw per-region/per-type structure — that's
+  // 15-40KB per movie across 40-80 countries and would get TOASTed out of
+  // line on a row this frequently read, for data (premiere/festival/
+  // digital/physical dates, certifications) nothing here uses. Fully
+  // re-derivable from TMDB on refresh, so a future change to the
+  // reduction rule is just "clear this column, let the refresher refill
+  // it" — same recovery path every other cached field already has.
+  //
+  // NULL means "never asked a provider yet" (a refresh candidate); `{}`
+  // means "asked, provider had no regional dates for this title" — this
+  // distinction IS the negative cache the refresh tier needs, so there's
+  // no separate releaseDatesCheckedAt column, unlike episodes.
+  // overviewCheckedAt/imdbCheckedAt/runtimeCheckedAt below (movies has no
+  // "we asked but genuinely found nothing" case beyond this one field).
+  releaseDates: jsonb('release_dates').$type<Record<string, string>>(),
   // Which provider last wrote the fields above — recorded at write time
   // rather than derived from external_ids + the priority order at read
   // time, since those two answer different questions once the priority

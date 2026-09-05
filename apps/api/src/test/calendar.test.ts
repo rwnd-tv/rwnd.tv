@@ -27,7 +27,7 @@ async function meId(cookie: string) {
   return (await json<{ id: string }>(res)).id
 }
 
-async function createFeed(cookie: string, feedType: 'history' | 'shows') {
+async function createFeed(cookie: string, feedType: 'history' | 'shows' | 'movies') {
   const res = await app.request('/api/v1/calendar-feeds', {
     method: 'POST',
     headers: { cookie, 'Content-Type': 'application/json' },
@@ -758,6 +758,180 @@ describe('calendar feeds', () => {
       const dtstampAfter = after.match(new RegExp(`UID:${uid}\\r\\nDTSTAMP:(\\S+)`))?.[1]
       expect(dtstampAfter).toBeTruthy()
       expect(dtstampAfter).not.toBe(dtstampBefore)
+    })
+  })
+
+  describe('movies feed content', () => {
+    it("shows the account's own region's release date, falling back to the primary date for a different region", async () => {
+      const cookie = await createUserAndCookie()
+      const userId = await meId(cookie)
+      const [movie] = await db
+        .insert(movies)
+        .values({
+          title: 'A Movie',
+          slug: 'a-movie',
+          releaseDate: '2099-01-05',
+          releaseDates: { GB: '2099-01-12' },
+        })
+        .returning()
+      await addToDefaultWatchlist(cookie, 'a-movie', 'movies')
+
+      await db.update(users).set({ locale: 'en-GB' }).where(eq(users.id, userId))
+      const feed = await createFeed(cookie, 'movies')
+      const gbBody = await (await app.request(`/api/v1/calendar/${feed.token}/feed.ics`)).text()
+      expect(gbBody).toContain(`UID:movie-${movie!.id}@rwnd.tv`)
+      expect(gbBody).toContain('DTSTART;VALUE=DATE:20990112')
+
+      // A US user has no GB-specific entry to find, so falls back to the
+      // movie's primary release date instead.
+      await db.update(users).set({ locale: 'en-US' }).where(eq(users.id, userId))
+      const usBody = await (await app.request(`/api/v1/calendar/${feed.token}/feed.ics`)).text()
+      expect(usBody).toContain('DTSTART;VALUE=DATE:20990105')
+    })
+
+    it('respects futureOnly, defaulting to true', async () => {
+      const cookie = await createUserAndCookie()
+      const [past, future] = await db
+        .insert(movies)
+        .values([
+          { title: 'Past Movie', slug: 'past-movie', releaseDate: '2020-01-01' },
+          { title: 'Future Movie', slug: 'future-movie', releaseDate: '2099-01-01' },
+        ])
+        .returning()
+      await addToDefaultWatchlist(cookie, 'past-movie', 'movies')
+      await addToDefaultWatchlist(cookie, 'future-movie', 'movies')
+
+      const feed = await createFeed(cookie, 'movies')
+      const futureOnlyBody = await (
+        await app.request(`/api/v1/calendar/${feed.token}/feed.ics`)
+      ).text()
+      expect(futureOnlyBody).toContain(`UID:movie-${future!.id}@rwnd.tv`)
+      expect(futureOnlyBody).not.toContain(`UID:movie-${past!.id}@rwnd.tv`)
+
+      await app.request('/api/v1/calendar-feeds/movies', {
+        method: 'PATCH',
+        headers: { cookie, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ futureOnly: false }),
+      })
+      const allBody = await (await app.request(`/api/v1/calendar/${feed.token}/feed.ics`)).text()
+      expect(allBody).toContain(`UID:movie-${future!.id}@rwnd.tv`)
+      expect(allBody).toContain(`UID:movie-${past!.id}@rwnd.tv`)
+    })
+
+    it('includes a watchlisted movie with no watch history at all', async () => {
+      const cookie = await createUserAndCookie()
+      const [movie] = await db
+        .insert(movies)
+        .values({ title: 'A Movie', slug: 'a-movie', releaseDate: '2099-01-01' })
+        .returning()
+      await addToDefaultWatchlist(cookie, 'a-movie', 'movies')
+
+      const feed = await createFeed(cookie, 'movies')
+      const body = await (await app.request(`/api/v1/calendar/${feed.token}/feed.ics`)).text()
+      expect(body).toContain(`UID:movie-${movie!.id}@rwnd.tv`)
+    })
+
+    it('excludes a movie last watched over 30 days ago by default, and includes it when includeAllWatched is set', async () => {
+      const cookie = await createUserAndCookie()
+      const userId = await meId(cookie)
+      const [movie] = await db
+        .insert(movies)
+        .values({ title: 'A Movie', slug: 'a-movie', releaseDate: '2020-01-01' })
+        .returning()
+      const oldWatch = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000)
+      await db.insert(plays).values({ userId, movieId: movie!.id, watchedAt: oldWatch })
+
+      // futureOnly is on by default, and this movie already released — turn
+      // it off so watch-recency, not futureOnly, is what's under test.
+      const feed = await createFeed(cookie, 'movies')
+      await app.request('/api/v1/calendar-feeds/movies', {
+        method: 'PATCH',
+        headers: { cookie, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ futureOnly: false }),
+      })
+      const withoutAllWatched = await (
+        await app.request(`/api/v1/calendar/${feed.token}/feed.ics`)
+      ).text()
+      expect(withoutAllWatched).not.toContain(`UID:movie-${movie!.id}@rwnd.tv`)
+
+      await app.request('/api/v1/calendar-feeds/movies', {
+        method: 'PATCH',
+        headers: { cookie, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ includeAllWatched: true }),
+      })
+      const withAllWatched = await (
+        await app.request(`/api/v1/calendar/${feed.token}/feed.ics`)
+      ).text()
+      expect(withAllWatched).toContain(`UID:movie-${movie!.id}@rwnd.tv`)
+    })
+
+    it('never includes a movie with no release date at all', async () => {
+      const cookie = await createUserAndCookie()
+      const [movie] = await db
+        .insert(movies)
+        .values({ title: 'A Movie', slug: 'a-movie', releaseDate: null })
+        .returning()
+      await addToDefaultWatchlist(cookie, 'a-movie', 'movies')
+
+      const feed = await createFeed(cookie, 'movies')
+      const body = await (await app.request(`/api/v1/calendar/${feed.token}/feed.ics`)).text()
+      expect(body).not.toContain(`UID:movie-${movie!.id}@rwnd.tv`)
+    })
+
+    it("omits an unwatched movie's DESCRIPTION when spoiler protection is on (the default), but includes a watched one's", async () => {
+      const cookie = await createUserAndCookie()
+      const userId = await meId(cookie)
+      const [unwatched, watched] = await db
+        .insert(movies)
+        .values([
+          {
+            title: 'Unwatched Movie',
+            slug: 'unwatched-movie',
+            releaseDate: '2099-01-01',
+            overview: 'An unwatched synopsis.',
+          },
+          {
+            title: 'Watched Movie',
+            slug: 'watched-movie',
+            releaseDate: '2099-01-08',
+            overview: 'A watched synopsis.',
+          },
+        ])
+        .returning()
+      await db.insert(plays).values({ userId, movieId: watched!.id, watchedAt: new Date() })
+      await addToDefaultWatchlist(cookie, 'unwatched-movie', 'movies')
+      await addToDefaultWatchlist(cookie, 'watched-movie', 'movies')
+
+      const feed = await createFeed(cookie, 'movies')
+      const body = await (await app.request(`/api/v1/calendar/${feed.token}/feed.ics`)).text()
+      expect(body).toContain(`UID:movie-${unwatched!.id}@rwnd.tv`)
+      expect(body).not.toContain('An unwatched synopsis.')
+      expect(body).toContain('DESCRIPTION:A watched synopsis.')
+
+      await app.request('/api/v1/auth/me', {
+        method: 'PATCH',
+        headers: { cookie, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ spoilerProtectionEnabled: false }),
+      })
+      const unprotectedBody = await (
+        await app.request(`/api/v1/calendar/${feed.token}/feed.ics`)
+      ).text()
+      expect(unprotectedBody).toContain('DESCRIPTION:An unwatched synopsis.')
+    })
+
+    it('PATCH only ever writes futureOnly/includeAllWatched, never includeDropped', async () => {
+      const cookie = await createUserAndCookie()
+      await createFeed(cookie, 'movies')
+
+      const res = await app.request('/api/v1/calendar-feeds/movies', {
+        method: 'PATCH',
+        headers: { cookie, 'Content-Type': 'application/json' },
+        // includeDropped doesn't apply to 'movies' — silently ignored.
+        body: JSON.stringify({ futureOnly: false, includeDropped: true }),
+      })
+      expect(res.status).toBe(200)
+      const updated = await json<CalendarFeed>(res)
+      expect(updated.settings).toEqual({ futureOnly: false, includeAllWatched: false })
     })
   })
 })

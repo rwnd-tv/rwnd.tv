@@ -95,6 +95,20 @@ export interface ProviderMovie {
    * as ProviderSeason.externalId: a provider that can't supply one must
    * say so explicitly rather than the field being silently absent. */
   imdbId: string | null
+  /** Primary release date ('YYYY-MM-DD'), or null if the provider has
+   * none. Required, not optional — same convention as imdbId above; a
+   * provider with no concept of a release date (TVDB) says so explicitly
+   * with null rather than omitting the field. */
+  releaseDate: string | null
+  /** Per-region release dates, ISO 3166-1 alpha-2 → 'YYYY-MM-DD', already
+   * reduced to one date per region (earliest theatrical release, else
+   * earliest of any type — see TmdbProvider.earliestRegionalDate). Null
+   * means this provider has no concept of regional release dates at all
+   * (TVDB); an empty object means it does, and had none for this title.
+   * That null/empty distinction is load-bearing for the metadata
+   * refresher's negative cache — see packages/db/src/schema.ts's
+   * `movies.releaseDates` doc comment. */
+  releaseDates: Record<string, string> | null
 }
 
 export interface ProviderShow {

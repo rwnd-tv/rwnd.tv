@@ -164,6 +164,68 @@ function ShowsSettingsForm({ feed }: { feed: Extract<CalendarFeed, { feedType: '
   )
 }
 
+/** Same shape as ShowsSettingsForm above, minus includeDropped — movies
+ * have no dropped concept. */
+function MoviesSettingsForm({ feed }: { feed: Extract<CalendarFeed, { feedType: 'movies' }> }) {
+  const { t } = useTranslation()
+  const queryClient = useQueryClient()
+  const [futureOnly, setFutureOnly] = useState(feed.settings.futureOnly)
+  const [includeAllWatched, setIncludeAllWatched] = useState(feed.settings.includeAllWatched)
+  const dirty =
+    futureOnly !== feed.settings.futureOnly || includeAllWatched !== feed.settings.includeAllWatched
+
+  const updateSettings = useMutation({
+    mutationFn: () => api.calendarFeeds.update('movies', { futureOnly, includeAllWatched }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['calendarFeeds'] }),
+  })
+
+  function handleSubmit(e: FormEvent) {
+    e.preventDefault()
+    updateSettings.mutate()
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+      <div className="flex flex-col gap-1">
+        <label className="flex items-center gap-2 text-sm font-medium">
+          <input
+            type="checkbox"
+            checked={futureOnly}
+            onChange={(e) => setFutureOnly(e.target.checked)}
+          />
+          {t('settings.calendarFeeds.movies.futureOnly')}
+        </label>
+        <p className="text-xs text-[var(--color-fg-muted)]">
+          {t('settings.calendarFeeds.movies.futureOnlyDescription')}
+        </p>
+      </div>
+      <div className="flex flex-col gap-1">
+        <label className="flex items-center gap-2 text-sm font-medium">
+          <input
+            type="checkbox"
+            checked={includeAllWatched}
+            onChange={(e) => setIncludeAllWatched(e.target.checked)}
+          />
+          {t('settings.calendarFeeds.movies.includeAllWatched')}
+        </label>
+        <p className="text-xs text-[var(--color-fg-muted)]">
+          {t('settings.calendarFeeds.movies.includeAllWatchedDescription')}
+        </p>
+      </div>
+      <div className="flex items-center gap-3">
+        <Button type="submit" disabled={!dirty} isLoading={updateSettings.isPending}>
+          {t('settings.calendarFeeds.save')}
+        </Button>
+        {!dirty && updateSettings.isSuccess && (
+          <span className="text-sm text-[var(--color-fg-muted)]">
+            {t('settings.calendarFeeds.saved')}
+          </span>
+        )}
+      </div>
+    </form>
+  )
+}
+
 /**
  * Shared shell for one feed type's row: the create button before a feed
  * exists, or the URL/settings/regenerate/delete block once it does.
@@ -256,8 +318,7 @@ function FeedRow({
 
 /**
  * Subscription feeds for Google/Apple/other webcal-compatible calendar
- * apps (History + TV Shows; Movies deferred, see docs/TODO.md — no
- * release-date infrastructure exists yet). Self-gates on
+ * apps: History, TV Shows, and Movies. Self-gates on
  * `calendarFeedsAvailable`, same shape as InvitesPanel.tsx self-gating on
  * `registrationMode` — this instance has no `ENCRYPTION_KEY` configured,
  * so there's nowhere to durably store a re-copyable token (see
@@ -322,6 +383,9 @@ export function CalendarFeedsPanel() {
   const showsFeed = data?.feeds.find(
     (feed): feed is Extract<CalendarFeed, { feedType: 'shows' }> => feed.feedType === 'shows',
   )
+  const moviesFeed = data?.feeds.find(
+    (feed): feed is Extract<CalendarFeed, { feedType: 'movies' }> => feed.feedType === 'movies',
+  )
 
   return (
     <Card>
@@ -367,6 +431,21 @@ export function CalendarFeedsPanel() {
               locale={i18n.language}
             >
               {showsFeed && <ShowsSettingsForm feed={showsFeed} />}
+            </FeedRow>
+
+            <FeedRow
+              feed={moviesFeed}
+              title={t('settings.calendarFeeds.movies.title')}
+              description={t('settings.calendarFeeds.movies.description')}
+              onCreate={() => createFeed.mutate('movies')}
+              creating={createFeed.isPending && createFeed.variables === 'movies'}
+              copied={copiedFeedType === 'movies'}
+              onCopy={() => moviesFeed && copyToken('movies', moviesFeed.token)}
+              onRegenerate={() => setRegenerateTarget('movies')}
+              onDelete={() => setDeleteTarget('movies')}
+              locale={i18n.language}
+            >
+              {moviesFeed && <MoviesSettingsForm feed={moviesFeed} />}
             </FeedRow>
           </div>
         )}

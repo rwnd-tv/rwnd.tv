@@ -25,10 +25,12 @@ export const calendarRoutes = new OpenAPIHono<AppEnv>()
 const CALENDAR_NAMES: Record<z.infer<typeof calendarFeedTypeSchema>, string> = {
   history: 'rwnd.tv — History',
   shows: 'rwnd.tv — TV Shows',
+  movies: 'rwnd.tv — Movies',
 }
 const CALENDAR_FILENAMES: Record<z.infer<typeof calendarFeedTypeSchema>, string> = {
   history: 'rwnd-tv-history.ics',
   shows: 'rwnd-tv-tv-shows.ics',
+  movies: 'rwnd-tv-movies.ics',
 }
 
 // Keyed on the URL token, not IP, for the same reason the Plex webhook
@@ -93,7 +95,7 @@ calendarRoutes.openapi(
     summary: "List the current user's calendar feeds",
     responses: {
       200: {
-        description: 'Calendar feeds (0-2 entries)',
+        description: 'Calendar feeds (0-3 entries)',
         content: { 'application/json': { schema: listCalendarFeedsResponseSchema } },
       },
     },
@@ -190,24 +192,38 @@ calendarRoutes.openapi(
     const db = c.get('db')
     const userId = c.get('user')!.id
 
-    // Only the two keys applicable to this feed's own type ever get
-    // written — updateCalendarFeedRequestSchema deliberately accepts all
-    // four so a caller doesn't need to know which apply, but writing an
-    // inapplicable one would be silently meaningless at best.
-    const set =
-      feedType === 'history'
-        ? { includeMovies: patch.includeMovies, includeShows: patch.includeShows }
-        : {
+    // Only the keys applicable to this feed's own type ever get written —
+    // updateCalendarFeedRequestSchema deliberately accepts every feed
+    // type's keys so a caller doesn't need to know which apply, but
+    // writing an inapplicable one would be silently meaningless at best.
+    // An exhaustive switch, not a ternary — see serializeCalendarFeed's
+    // own comment on why, with three feed types now.
+    const set = (() => {
+      switch (feedType) {
+        case 'history':
+          return { includeMovies: patch.includeMovies, includeShows: patch.includeShows }
+        case 'shows':
+          return {
             includeDropped: patch.includeDropped,
             futureOnly: patch.futureOnly,
             includeAllWatched: patch.includeAllWatched,
           }
+        case 'movies':
+          return { futureOnly: patch.futureOnly, includeAllWatched: patch.includeAllWatched }
+      }
+    })()
 
-    const [row] = await db
-      .update(calendarFeeds)
-      .set(set)
-      .where(and(eq(calendarFeeds.userId, userId), eq(calendarFeeds.feedType, feedType)))
-      .returning()
+    const where = and(eq(calendarFeeds.userId, userId), eq(calendarFeeds.feedType, feedType))
+    // Every applicable key came through as `undefined` (a body of only
+    // inapplicable keys, which updateCalendarFeedRequestSchema's own doc
+    // comment promises is a no-op) — Drizzle's `.set()` filters undefined
+    // values, and an update left with nothing to set emits `update ...
+    // set  where ...`, a genuine SQL syntax error at execution time
+    // rather than a no-op. Skip the write and just re-select instead.
+    const hasChange = Object.values(set).some((value) => value !== undefined)
+    const [row] = hasChange
+      ? await db.update(calendarFeeds).set(set).where(where).returning()
+      : await db.select().from(calendarFeeds).where(where).limit(1)
     if (!row) return c.json({ error: 'Feed not found' }, 404)
 
     return c.json(serializeCalendarFeed(row, env.ENCRYPTION_KEY))

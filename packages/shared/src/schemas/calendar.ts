@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-export const calendarFeedTypeSchema = z.enum(['history', 'shows'])
+export const calendarFeedTypeSchema = z.enum(['history', 'shows', 'movies'])
 export type CalendarFeedType = z.infer<typeof calendarFeedTypeSchema>
 
 /** 'history' only — which watched-item types appear. */
@@ -20,6 +20,18 @@ export const showsFeedSettingsSchema = z.object({
   includeAllWatched: z.boolean(),
 })
 export type ShowsFeedSettings = z.infer<typeof showsFeedSettingsSchema>
+
+/** 'movies' only — same candidate rule and settings as 'shows' above,
+ * minus `includeDropped`: dropping is a shows-only concept, there is no
+ * droppedMovies table. A movie counts as "followed" if it's on any
+ * watchlist, or was watched in the last 30 days (or ever, with
+ * `includeAllWatched`); `futureOnly` limits the feed to movies releasing
+ * today or later. */
+export const moviesFeedSettingsSchema = z.object({
+  futureOnly: z.boolean(),
+  includeAllWatched: z.boolean(),
+})
+export type MoviesFeedSettings = z.infer<typeof moviesFeedSettingsSchema>
 
 /**
  * Discriminated on `feedType` so only the settings that mean anything for
@@ -52,6 +64,13 @@ export const calendarFeedSchema = z.discriminatedUnion('feedType', [
     feedType: z.literal('shows'),
     token: z.string(),
     settings: showsFeedSettingsSchema,
+    lastAccessedAt: z.string().datetime().nullable(),
+    createdAt: z.string().datetime(),
+  }),
+  z.object({
+    feedType: z.literal('movies'),
+    token: z.string(),
+    settings: moviesFeedSettingsSchema,
     lastAccessedAt: z.string().datetime().nullable(),
     createdAt: z.string().datetime(),
   }),

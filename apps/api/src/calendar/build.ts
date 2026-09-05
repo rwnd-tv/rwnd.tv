@@ -4,6 +4,8 @@ import type { Database } from '@rwnd/db'
 import { episodes, movies, plays, shows, users, type calendarFeeds } from '@rwnd/db'
 import type { IcsEvent } from '../lib/ics.js'
 import { getFollowedShows } from '../lib/followed-shows.js'
+import { getFollowedMovies } from '../lib/followed-movies.js'
+import { localeRegion, releaseDateExpr } from '../lib/release-date.js'
 
 /**
  * Hard ceiling on VEVENTs in one feed. A user with tens of thousands of
@@ -355,6 +357,88 @@ async function buildShowsEvents(
   }))
 }
 
+/**
+ * Movie release dates, region-resolved per user — the Movies calendar
+ * feed. Structurally a clone of buildShowsEvents above: same all-day
+ * shape, same futureOnly-as-string-compare gate, same leftJoin+bool_or
+ * watched flag (see that query's own comment for why this can't be a
+ * correlated EXISTS). The one real difference is that the date being
+ * filtered/ordered/limited on is a SQL expression (releaseDateExpr,
+ * apps/api/src/lib/release-date.ts) rather than a plain column — legal
+ * everywhere a column would be (WHERE, ORDER BY, and under GROUP BY
+ * movies.id, by the same primary-key functional-dependency rule
+ * buildShowsEvents already relies on for episodes.id), so futureOnly
+ * filtering and MAX_CALENDAR_EVENTS both apply to the *actual* per-user
+ * resolved date, not the primary one.
+ *
+ * The candidate set here (watched-or-watchlisted movies) is inherently
+ * far smaller than "every episode of every followed show", so
+ * MAX_CALENDAR_EVENTS is a ceiling in this feed, not expected to bind.
+ */
+async function buildMoviesEvents(
+  db: Database,
+  user: typeof users.$inferSelect,
+  feed: typeof calendarFeeds.$inferSelect,
+  baseUrl: string | undefined,
+): Promise<IcsEvent[]> {
+  const followed = await getFollowedMovies(db, user.id, {
+    windowDays: feed.includeAllWatched ? null : undefined,
+  })
+  if (followed.length === 0) return []
+
+  const today = localDay(new Date(), user.timezone)
+  const region = localeRegion(user.locale)
+  const moviesById = new Map(followed.map((movie) => [movie.id, movie]))
+
+  const rows = await db
+    .select({
+      movieId: movies.id,
+      createdAt: movies.createdAt,
+      overview: movies.overview,
+      metadataRefreshedAt: movies.metadataRefreshedAt,
+      releaseDate: releaseDateExpr(region),
+      watched: sql<boolean>`bool_or(${plays.id} is not null)`,
+    })
+    .from(movies)
+    .leftJoin(plays, and(eq(plays.movieId, movies.id), eq(plays.userId, user.id)))
+    .where(
+      and(
+        inArray(
+          movies.id,
+          followed.map((movie) => movie.id),
+        ),
+        isNotNull(releaseDateExpr(region)),
+        feed.futureOnly ? gte(releaseDateExpr(region), today) : undefined,
+      ),
+    )
+    .groupBy(movies.id)
+    .orderBy(desc(releaseDateExpr(region)))
+    .limit(MAX_CALENDAR_EVENTS)
+
+  return rows.map((row) => {
+    const movie = moviesById.get(row.movieId)!
+    return {
+      uid: `movie-${row.movieId}@rwnd.tv`,
+      date: row.releaseDate!,
+      // Uses `movie.year` (derived from the primary release date), which
+      // can disagree with `row.releaseDate` (the user's regional date) by
+      // a year for a movie releasing right around New Year's in one
+      // region and not the other — accepted, same as the rest of this
+      // feed's events staying brief; the movie's own detail page (which
+      // shows the resolved date with a region flag) is where that gets
+      // disambiguated.
+      summary: movie.year !== null ? `${movie.title} (${movie.year})` : movie.title,
+      // Same spoiler rule as buildShowsEvents — see that query's own
+      // comment.
+      description: withLink(
+        user.spoilerProtectionEnabled && !row.watched ? undefined : (row.overview ?? undefined),
+        baseUrl ? `${baseUrl}/movies/${movie.slug}` : undefined,
+      ),
+      stamp: latestOf(row.createdAt, row.metadataRefreshedAt),
+    }
+  })
+}
+
 export async function buildCalendarEvents(
   db: Database,
   user: typeof users.$inferSelect,
@@ -366,7 +450,15 @@ export async function buildCalendarEvents(
    * header behind an arbitrary reverse proxy). */
   baseUrl: string | undefined,
 ): Promise<IcsEvent[]> {
-  return feed.feedType === 'history'
-    ? buildHistoryEvents(db, user, feed, baseUrl)
-    : buildShowsEvents(db, user, feed, baseUrl)
+  // An exhaustive switch, not a ternary — see serializeCalendarFeed's own
+  // comment (apps/api/src/lib/calendar-feeds.ts) for why, with three feed
+  // types now.
+  switch (feed.feedType) {
+    case 'history':
+      return buildHistoryEvents(db, user, feed, baseUrl)
+    case 'shows':
+      return buildShowsEvents(db, user, feed, baseUrl)
+    case 'movies':
+      return buildMoviesEvents(db, user, feed, baseUrl)
+  }
 }

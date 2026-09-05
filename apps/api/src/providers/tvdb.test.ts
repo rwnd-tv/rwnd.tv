@@ -122,7 +122,7 @@ describe('TvdbProvider.searchMulti', () => {
 describe('TvdbProvider.getMovie / getShow', () => {
   afterEach(() => vi.unstubAllGlobals())
 
-  it('getMovie never populates voteAverage — TVDB score is not a comparable rating', async () => {
+  it('getMovie never populates voteAverage or release dates — TVDB has neither concept', async () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(loginOk())
@@ -151,6 +151,8 @@ describe('TvdbProvider.getMovie / getShow', () => {
       genres: ['Action'],
       voteAverage: null,
       imdbId: null,
+      releaseDate: null,
+      releaseDates: null,
     })
   })
 

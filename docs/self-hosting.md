@@ -108,14 +108,15 @@ Both exist because Trakt's 2026 "Community App" policy caps a free Trakt account
 
 ## Calendar feeds
 
-Requires `ENCRYPTION_KEY` (see the config table above); the feature hides itself in Settings otherwise. Each user can create up to two personal, read-only calendar feeds from **Settings → Calendar feeds**:
+Requires `ENCRYPTION_KEY` (see the config table above); the feature hides itself in Settings otherwise. Each user can create up to three personal, read-only calendar feeds from **Settings → Calendar feeds**:
 
 - **History**: one event per movie or episode you've logged as watched, at the time you watched it.
 - **TV Shows**: one event per upcoming episode air date, for shows you're following (recently watched, or on a watchlist).
+- **Movies**: one event per movie release date, for movies you're following (recently watched, or on a watchlist), shown in your own region where available.
 
-Both are customizable (which content counts, dropped shows, future-only) and give a `webcal://` URL to paste into Google Calendar, Apple Calendar, or any other app that supports webcal/iCal subscriptions. The URL is a bearer secret, so treat it like a password: anyone who has it can read that feed. **Regenerate** in Settings issues a new URL and immediately invalidates the old one everywhere it's subscribed. A Movies feed isn't available yet; see `docs/TODO.md`.
+All three are customizable (which content counts, dropped shows, future-only) and give a `webcal://` URL to paste into Google Calendar, Apple Calendar, or any other app that supports webcal/iCal subscriptions. The URL is a bearer secret, so treat it like a password: anyone who has it can read that feed. **Regenerate** in Settings issues a new URL and immediately invalidates the old one everywhere it's subscribed.
 
-Each event includes the episode/movie synopsis as its description, where available. History never withholds it (everything there is already watched), but TV Shows respects your normal spoiler protection setting: an unwatched episode's description is omitted, same as it would be blurred on the episode's own page.
+Each event includes the episode/movie synopsis as its description, where available. History never withholds it (everything there is already watched); TV Shows and Movies both respect your normal spoiler protection setting: an unwatched episode or movie's description is omitted, same as it would be blurred on its own page.
 
 ## Verifying the image
 

@@ -211,3 +211,16 @@ export function localDayEndISO(dayString: string): string {
   const [year, month, day] = dayString.split('-').map(Number)
   return new Date(year!, month! - 1, day, 23, 59, 59, 999).toISOString()
 }
+
+/**
+ * Formats a bare 'YYYY-MM-DD' release date (movieDetailSchema's
+ * `releaseDate`) for display. Parses from parts like localDayStartISO
+ * above, not `new Date(dateString)` directly — the latter parses a bare
+ * date as UTC midnight, which renders a day early for anyone west of UTC
+ * (a real bug elsewhere in this codebase, EpisodeDetailPage.tsx's own air
+ * date rendering — not fixed there by this change, just not copied here).
+ */
+export function formatReleaseDate(dayString: string, locale: string): string {
+  const [year, month, day] = dayString.split('-').map(Number)
+  return new Date(year!, month! - 1, day).toLocaleDateString(locale, { dateStyle: 'medium' })
+}

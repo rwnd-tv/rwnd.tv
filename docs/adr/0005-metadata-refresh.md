@@ -86,3 +86,49 @@ show/movie refresh it sits next to:
   `resolveMovie`, which only ever fill a missing id
   (`{ correct: false }`), since most existing `imdb` rows came from
   Trakt/Plex, a source TMDB can now actively correct.
+
+## Update (2026-09-05)
+
+The Decision section's "anything else, movies included, is refetched once
+older than ~5 months" and `findStaleMovies`' own former comment ("no
+airing-status clause either — movies have no `status` and never gain new
+episodes") are both now wrong: movies gained a time-varying field of their
+own — release dates, cached for the new Movies calendar feed — and
+`findStaleMovies` gained a tier for it, following the same design rule as
+the announced-season clause above (a movie releasing soon, or recently
+enough that a laggard region's date can still move, is worth another TMDB
+call on a 7-day cadence, evaluated against the already-cached local
+`movies.release_date` scalar column so the check itself costs no provider
+calls). Unlike the announced-season clause, this window extends
+_backwards_ from today too, not just forwards: a region's date is often
+not announced until well after the primary release already happened.
+
+Two deliberate omissions worth recording, both following existing
+precedent in this ADR rather than introducing anything new:
+
+- No `releaseDate IS NULL` clause on the near-release tier — same
+  reasoning as the "never populated imdb id" omission in the 2026-09-01
+  update above: it would never drain, matching a genuinely dateless movie
+  forever instead of once. A separate `isNull(movies.release_dates)`
+  clause covers "never fetched at all" instead, and self-terminates the
+  same way the genres/voteAverage clauses always have (`refreshOneMovie`
+  writes at least `{}` on every attempt).
+- No new `*CheckedAt` column, unlike `episodes.overview_checked_at`/
+  `imdb_checked_at`/`runtime_checked_at`. `movies.release_dates` being
+  nullable already carries the same "we asked, not we found" distinction
+  (`NULL` = never asked, `{}` = asked, found nothing) that those columns
+  exist to provide elsewhere, so a second column would be redundant here.
+
+This also does not weaken the compliance-floor framing two updates above:
+refreshing a movie _more_ often than the ~5-month ceiling is always within
+TMDB's terms (§0002) — the only thing that ever needs restating here is
+that movies are no longer exempt from every non-compliance refresh tier,
+not that the compliance obligation itself has changed. One new safeguard
+was added rather than relied on the existing unbounded scan: because every
+existing movie starts with `release_dates IS NULL` the moment this ships,
+`findStaleMovies`' own result set is uncapped, but the movie refresh
+loop in `runMetadataRefresh` now caps _actual refresh attempts_ per pass
+(`MOVIE_REFRESH_PER_PASS`), counted only against movies that have a
+provider id to refresh from — a movie skipped for lacking one is not
+counted, so it can't permanently occupy a cap slot the way a naive
+`LIMIT` ordered by any stable column would.

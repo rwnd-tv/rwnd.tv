@@ -72,6 +72,8 @@ function fakeTvdbProvider(): MetadataProvider {
         genres: [],
         voteAverage: null,
         imdbId: null,
+        releaseDate: null,
+        releaseDates: null,
       }
     },
     async getShow(externalId) {

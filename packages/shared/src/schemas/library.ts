@@ -578,6 +578,18 @@ export const movieDetailSchema = z.object({
   voteAverage: z.number().nullable(),
   /** See libraryShowSchema's `myRating` for what this means. */
   myRating: ratingValueSchema.nullable(),
+  /** The release date this user should see — their own region's date
+   * where TMDB has one, else the primary release date. Plain
+   * `'YYYY-MM-DD'` string, same convention as showDetailSchema's
+   * `firstAired`-shaped fields, never `.date()`/`.datetime()`. Null only
+   * when TMDB has no release date for this movie at all. See
+   * apps/api/src/lib/release-date.ts's `resolveReleaseDate`. */
+  releaseDate: z.string().nullable(),
+  /** Which region `releaseDate` actually came from — non-null only when
+   * the date is genuinely that region's own (never set on a fallback to
+   * the primary date), so the movie page shows a country flag only next
+   * to a date it actually describes. */
+  releaseRegion: z.string().nullable(),
   /** See showDetailSchema's field of the same name. */
   myWatchlistIds: z.array(uuidSchema),
   /** TMDB's own numeric id for this movie, for linking to its TMDB page —

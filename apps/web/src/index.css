@@ -1,4 +1,12 @@
 @import 'tailwindcss';
+/* Country flags for the movie release-date fact (MovieDetailPage.tsx) — a
+ * real SVG per region, not a Unicode flag-emoji sequence: Windows' emoji
+ * font ships no flag glyphs at all (a deliberate Microsoft omission), so
+ * relying on the emoji renders as bare letters there regardless of
+ * browser. Vite resolves each class's url(...) to its own bundled asset;
+ * a viewer's browser only ever fetches the handful of flags actually
+ * rendered on a page, not all ~260 in the sheet. */
+@import 'flag-icons/css/flag-icons.min.css';
 
 /*
  * Theme tokens. Defaults are the light palette; dark overrides apply either

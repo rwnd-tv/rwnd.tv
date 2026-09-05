@@ -201,7 +201,7 @@ describe('TmdbProvider.findByExternalId', () => {
 describe('TmdbProvider imdbId', () => {
   afterEach(() => vi.unstubAllGlobals())
 
-  it('getMovie reads imdb_id from the top level, without append_to_response', async () => {
+  it('getMovie reads imdb_id from the top level, appending only release_dates (not external_ids, which it already has)', async () => {
     const fetchMock = vi.fn().mockResolvedValueOnce(
       new Response(
         JSON.stringify({
@@ -218,7 +218,7 @@ describe('TmdbProvider imdbId', () => {
     const movie = await provider().getMovie('603', 'en-GB')
     expect(movie.imdbId).toBe('tt0133093')
     const [url] = fetchMock.mock.calls[0] as [URL]
-    expect(url.searchParams.has('append_to_response')).toBe(false)
+    expect(url.searchParams.get('append_to_response')).toBe('release_dates')
   })
 
   it('getMovie normalizes an empty imdb_id to null', async () => {
@@ -357,5 +357,108 @@ describe('TmdbProvider air dates', () => {
     )
     const season = await provider().getSeason('1396', 1, 'en-GB')
     expect(season.episodes[0]?.firstAired).toBeNull()
+  })
+})
+
+describe('TmdbProvider release dates', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('prefers the earliest theatrical release in a region over an earlier non-theatrical one', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            id: 603,
+            title: 'The Matrix',
+            release_date: '1999-03-30',
+            release_dates: {
+              results: [
+                {
+                  iso_3166_1: 'GB',
+                  release_dates: [
+                    { type: 1, release_date: '1999-01-01T00:00:00.000Z' }, // Premiere, earlier
+                    { type: 3, release_date: '1999-06-11T00:00:00.000Z' }, // Theatrical
+                    { type: 2, release_date: '1999-06-18T00:00:00.000Z' }, // Theatrical (limited)
+                  ],
+                },
+              ],
+            },
+          }),
+          { status: 200 },
+        ),
+      ),
+    )
+    const movie = await provider().getMovie('603', 'en-GB')
+    expect(movie.releaseDate).toBe('1999-03-30')
+    expect(movie.releaseDates).toEqual({ GB: '1999-06-11' })
+  })
+
+  it('falls back to the earliest date of any type when a region has no theatrical release', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            id: 603,
+            title: 'The Matrix',
+            release_dates: {
+              results: [
+                {
+                  iso_3166_1: 'JP',
+                  release_dates: [
+                    { type: 4, release_date: '1999-09-01T00:00:00.000Z' }, // Digital
+                    { type: 6, release_date: '1999-10-01T00:00:00.000Z' }, // TV
+                  ],
+                },
+              ],
+            },
+          }),
+          { status: 200 },
+        ),
+      ),
+    )
+    const movie = await provider().getMovie('603', 'en-GB')
+    expect(movie.releaseDates).toEqual({ JP: '1999-09-01' })
+  })
+
+  it('skips a region entry whose only dates are empty strings, and drops an unusable region entirely', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            id: 603,
+            title: 'The Matrix',
+            release_dates: {
+              results: [
+                { iso_3166_1: 'FR', release_dates: [{ type: 3, release_date: '' }] },
+                {
+                  iso_3166_1: 'DE',
+                  release_dates: [{ type: 3, release_date: '1999-08-19T00:00:00.000Z' }],
+                },
+              ],
+            },
+          }),
+          { status: 200 },
+        ),
+      ),
+    )
+    const movie = await provider().getMovie('603', 'en-GB')
+    expect(movie.releaseDates).toEqual({ DE: '1999-08-19' })
+  })
+
+  it('normalizes a missing release_dates block to an empty object, not null', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify({ id: 603, title: 'The Matrix' }), { status: 200 }),
+        ),
+    )
+    const movie = await provider().getMovie('603', 'en-GB')
+    expect(movie.releaseDate).toBeNull()
+    expect(movie.releaseDates).toEqual({})
   })
 })

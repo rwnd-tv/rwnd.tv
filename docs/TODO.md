@@ -162,13 +162,3 @@ source of truth for scope; this is just so a TODO listing is complete.
       second, later task when the feeds were designed, not part of this
       pass.
 
-- [ ] **Movies calendar feed** (2026-09-04 added; Not yet scheduled)
-
-      Deferred when the History/TV Shows feeds shipped (see
-      TODO_ARCHIVE.md) — no release-date infrastructure exists yet.
-      Needs a `movies.releaseDate` column, a `ProviderMovie` release-date
-      field (TMDB already fetches and discards this value today; TVDB
-      doesn't model it at all), and a real refresh cadence for
-      unreleased/near-release movies (today's ~5-month compliance-only
-      cadence is far too coarse for anything releasing soon).
-

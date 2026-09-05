@@ -18,6 +18,7 @@ import { pickRefreshTarget, refreshOneMovie } from '../../metadata/refresh.js'
 import { orderedProviders } from '../../providers/priority.js'
 import { isProviderSource } from '../../lib/provider-source.js'
 import { getMyWatchlistIds, getOwnedWatchlist } from '../../lib/watchlists.js'
+import { localeRegion, resolveReleaseDate } from '../../lib/release-date.js'
 import {
   addToWatchlist,
   getExternalId,
@@ -151,11 +152,14 @@ movieRoutes.openapi(
   }),
   async (c) => {
     const { slug } = c.req.valid('param')
-    const userId = c.get('user')!.id
+    const user = c.get('user')!
+    const userId = user.id
     const db = c.get('db')
 
     const movie = await getMovieBySlug(db, slug)
     if (!movie) return c.json({ error: 'Movie not found' }, 404)
+
+    const resolvedReleaseDate = resolveReleaseDate(movie, localeRegion(user.locale))
 
     // Every query below depends only on `movie.id`/`userId`, not on each
     // other — run them concurrently rather than as 6 sequential round
@@ -209,6 +213,8 @@ movieRoutes.openapi(
       posterPath: movie.posterPath,
       genres: movie.genres,
       voteAverage: movie.voteAverage,
+      releaseDate: resolvedReleaseDate.date,
+      releaseRegion: resolvedReleaseDate.region,
       tmdbId: tmdbExternalId ?? null,
       tvdbId: tvdbExternalId ?? null,
       imdbId: imdbExternalId ?? null,

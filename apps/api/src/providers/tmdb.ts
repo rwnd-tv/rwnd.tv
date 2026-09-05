@@ -14,6 +14,10 @@ const POSTER_SIZE = 'w342'
 // player uses w300 for the season episode-list thumbnails this mirrors.
 const STILL_SIZE = 'w300'
 const MAX_RETRY_AFTER_SECONDS = 60
+// TMDB's release_dates 'type' values that count as a real theatrical
+// release, most-specific-first isn't relevant here (earliestRegionalDate
+// treats them as one pool) — 2 = Theatrical (limited), 3 = Theatrical.
+const THEATRICAL_RELEASE_TYPES = [2, 3]
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
@@ -61,6 +65,34 @@ interface TmdbMovie {
   // Movies expose this at the top level even without append_to_response —
   // unlike shows/episodes, which only get it via TmdbExternalIds below.
   imdb_id?: string | null
+  // Only present when requested via append_to_response=release_dates — see
+  // getMovie() below.
+  release_dates?: TmdbReleaseDates
+}
+// TMDB's per-region release dates, nested one level under the movie
+// response when append_to_response=release_dates is requested. Each
+// region can carry several typed entries (premiere, theatrical, digital,
+// physical, ...) — see earliestRegionalDate() below for how these reduce
+// to one date per region.
+interface TmdbReleaseDates {
+  results: TmdbRegionalRelease[]
+}
+interface TmdbRegionalRelease {
+  iso_3166_1: string
+  release_dates: TmdbTypedRelease[]
+}
+interface TmdbTypedRelease {
+  // 1 Premiere, 2 Theatrical (limited), 3 Theatrical, 4 Digital,
+  // 5 Physical, 6 TV — see THEATRICAL_RELEASE_TYPES below.
+  type: number
+  // Unlike the movie's own top-level release_date, this comes back as a
+  // full ISO 8601 timestamp (e.g. '2026-03-12T00:00:00.000Z') — sliced to
+  // its first 10 characters in earliestRegionalDate() rather than
+  // re-parsed with `new Date()`, since it's a *local* calendar date and
+  // re-parsing risks shifting it a day for anything not midnight UTC.
+  // Same "" (not null/absent) quirk as air_date/the top-level
+  // release_date — `||`, not `??`, wherever this is read.
+  release_date?: string
 }
 interface TmdbShow {
   id: number
@@ -175,6 +207,41 @@ export class TmdbProvider implements MetadataProvider {
     return Number.isNaN(year) ? null : year
   }
 
+  /** One region's several typed release dates reduced to the single date
+   * the Movies calendar feed shows: earliest theatrical release if this
+   * region has one, else the earliest date of any type. Returns null only
+   * when the region has no usable date at all (every entry empty/absent). */
+  private earliestRegionalDate(entries: TmdbTypedRelease[]): string | null {
+    const usable = entries
+      .map((e) => e.release_date || '') // '', not null — see TmdbTypedRelease's comment
+      .filter((date) => date.length >= 10)
+      .map((date) => date.slice(0, 10))
+    const theatrical = entries
+      .filter((e) => THEATRICAL_RELEASE_TYPES.includes(e.type))
+      .map((e) => e.release_date || '')
+      .filter((date) => date.length >= 10)
+      .map((date) => date.slice(0, 10))
+    const pool = theatrical.length > 0 ? theatrical : usable
+    // Lexicographic min on 'YYYY-MM-DD' is chronological min.
+    return pool.length > 0 ? pool.sort()[0]! : null
+  }
+
+  /** Every region TMDB has any date for, each already reduced to one date
+   * by earliestRegionalDate — see ProviderMovie.releaseDates' doc comment
+   * for why this reduction happens here rather than storing the raw
+   * per-region/per-type structure. */
+  private reduceReleaseDates(releaseDates: TmdbReleaseDates | undefined): Record<string, string> {
+    const result: Record<string, string> = {}
+    for (const region of releaseDates?.results ?? []) {
+      // Guards against a malformed/unexpected region code becoming a
+      // jsonb key — every real TMDB iso_3166_1 is two uppercase letters.
+      if (!/^[A-Z]{2}$/.test(region.iso_3166_1)) continue
+      const date = this.earliestRegionalDate(region.release_dates)
+      if (date !== null) result[region.iso_3166_1] = date
+    }
+    return result
+  }
+
   private async request<T>(
     path: string,
     locale: string,
@@ -241,11 +308,17 @@ export class TmdbProvider implements MetadataProvider {
   }
 
   async getMovie(externalId: string, locale: string): Promise<ProviderMovie> {
-    // No append_to_response here, deliberately unlike getShow() below:
-    // movies already carry imdb_id at the top level (verified live), so
-    // appending external_ids would only grow the payload of the
-    // highest-traffic provider call for a field it already has.
-    const m = await this.request<TmdbMovie>(`/movie/${externalId}`, locale)
+    // external_ids is still deliberately not appended: movies already
+    // carry imdb_id at the top level (verified live), so it would only
+    // grow the payload of the highest-traffic provider call for a field
+    // it already has. release_dates is different — it's genuinely absent
+    // from the base /movie/{id} response, and a second request just for
+    // it would double this endpoint's TMDB traffic and add a second
+    // partial-failure mode (base OK, dates 429) refreshOneMovie has no
+    // shape for; appending keeps one request, one retry path.
+    const m = await this.request<TmdbMovie>(`/movie/${externalId}`, locale, {
+      append_to_response: 'release_dates',
+    })
     return {
       externalId: String(m.id),
       title: m.title,
@@ -259,6 +332,9 @@ export class TmdbProvider implements MetadataProvider {
       // getShow() does for the same quirk.
       voteAverage: m.vote_count ? (m.vote_average ?? null) : null,
       imdbId: imdbIdOf(m.imdb_id),
+      // '', not null — same quirk imdb_id/air_date have.
+      releaseDate: m.release_date || null,
+      releaseDates: this.reduceReleaseDates(m.release_dates),
     }
   }
 

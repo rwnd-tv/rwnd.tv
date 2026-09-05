@@ -1413,6 +1413,56 @@ describe('metadata refresh', () => {
       expect(tvdbIds[0]?.externalId).toBe('906')
     })
 
+    // Regression, confirmed live 2026-09-05: TVDB attributed one real
+    // show's imdb id to a season of a broader series this instance had
+    // already imported separately, under a tvdb id already claimed by that
+    // other local show. upsertExternalId's correct:false path would
+    // silently no-op on that collision (untargeted onConflictDoNothing),
+    // so without an explicit check the same doomed lookup would repeat
+    // every pass — treated the same as "no match" instead.
+    it('treats a reverse-lookup id already claimed by a different local show as no match', async () => {
+      const otherShow = await insertShow({
+        tmdbId: 209,
+        status: null,
+        metadataRefreshedAt: new Date(),
+      })
+      await db.insert(externalIds).values({
+        entityType: 'show',
+        entityId: otherShow.id,
+        source: 'tvdb',
+        externalId: '909',
+      })
+
+      const { show } = await insertShowNeedingRuntimeBackfill({
+        tmdbId: 210,
+        imdbId: 'tt0000210',
+        episodeCount: 1,
+        episodes: [{ episodeNumber: 1, runtimeMinutes: null, firstAired: '2020-01-01' }],
+      })
+      const getSeason = vi.fn(async () =>
+        fakeSeason([{ episodeNumber: 1, runtimeMinutes: 24, firstAired: '2020-01-01' }]),
+      )
+      // Returns a real id, but one already claimed by otherShow above.
+      const findByExternalId = vi.fn(async () => '909')
+      const tvdb = fakeTvdbProvider(getSeason, findByExternalId)
+
+      const result = await runMetadataRefresh(db, [provider, tvdb])
+      expect(result.episodeRuntimeSeasonsFilled).toBe(0)
+      expect(getSeason).not.toHaveBeenCalled()
+
+      const [updated] = await db.select().from(episodes).where(eq(episodes.showId, show.id))
+      expect(updated?.runtimeMinutes).toBeNull()
+      expect(updated?.runtimeCheckedAt).not.toBeNull()
+
+      // otherShow's own tvdb link is untouched, and this show got no new one.
+      const tvdbIds = await db
+        .select()
+        .from(externalIds)
+        .where(and(eq(externalIds.entityType, 'show'), eq(externalIds.source, 'tvdb')))
+      expect(tvdbIds).toHaveLength(1)
+      expect(tvdbIds[0]?.entityId).toBe(otherShow.id)
+    })
+
     it('marks episodes checked when the reverse imdb lookup finds no match either', async () => {
       const { show } = await insertShowNeedingRuntimeBackfill({
         tmdbId: 207,

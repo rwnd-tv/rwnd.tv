@@ -522,6 +522,35 @@ describe('TvdbProvider.findByExternalId', () => {
     expect(await provider().findByExternalId('movie', 'imdb', 'tt0000000', 'en-GB')).toBeNull()
   })
 
+  // Regression, confirmed live 2026-09-05: the real API returns
+  // `{"status":"success","data":null}` for a genuine no-match, not
+  // `data: []` as the doc comment above assumed — a bare `for...of` over
+  // that would throw "matches is not iterable" instead of returning null.
+  it('returns null rather than throwing when the real API returns data: null for no match', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(loginOk())
+      .mockResolvedValueOnce(apiResponse(null))
+    vi.stubGlobal('fetch', fetchMock)
+
+    expect(await provider().findByExternalId('show', 'imdb', 'tt0314979', 'en-GB')).toBeNull()
+  })
+
+  // Regression, confirmed live 2026-09-05 against Ghost in the Shell:
+  // SAC_2045's real imdb id: some matches carry only a `season` field, no
+  // `series`/`episode` alongside it — falling through every check
+  // returned null despite a real, usable seriesId being right there.
+  it('resolves a show id from a season-only match, not just series/episode', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(loginOk())
+      .mockResolvedValueOnce(apiResponse([{ season: { id: 1837422, seriesId: 73749 } }]))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const id = await provider().findByExternalId('show', 'imdb', 'tt9466298', 'en-GB')
+    expect(id).toBe('73749')
+  })
+
   it('still surfaces a non-404 failure rather than swallowing it as "no match"', async () => {
     const fetchMock = vi
       .fn()

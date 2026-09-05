@@ -134,6 +134,14 @@ interface TvdbRemoteIdMatch {
   // `series` — `seriesId` recovers the show a naive series-only read
   // would miss entirely.
   episode?: { seriesId: number }
+  // Same idea as `episode` above, one level up: some ids (common for
+  // anime tracked per-season on IMDb) identify a *season*, with no
+  // `series`/`episode` field alongside it at all — confirmed live
+  // 2026-09-05 against Ghost in the Shell: SAC_2045's real imdb id, whose
+  // only match was `{ season: { seriesId: 73749, ... } }`. Without this,
+  // findByExternalId fell through every check and returned null despite a
+  // real, usable series id being right there in the response.
+  season?: { seriesId: number }
 }
 
 /** Maps this app's BCP 47 locale to TheTVDB's 3-letter ISO 639-2 language
@@ -533,14 +541,19 @@ export class TvdbProvider implements MetadataProvider {
   ): Promise<string | null> {
     let matches: TvdbRemoteIdMatch[]
     try {
-      matches = await this.request<TvdbRemoteIdMatch[]>(
-        `/search/remoteid/${encodeURIComponent(externalId)}`,
-      )
+      // The real API returns `data: null`, not `data: []`, for a genuine
+      // no-match — confirmed live 2026-09-05 against a real imdb id TVDB
+      // has no cross-reference for (`{"status":"success","data":null}`).
+      // `?? []` guards a bare `for...of` from throwing "matches is not
+      // iterable" on exactly that response.
+      matches =
+        (await this.request<TvdbRemoteIdMatch[] | null>(
+          `/search/remoteid/${encodeURIComponent(externalId)}`,
+        )) ?? []
     } catch (err) {
-      // Documented as returning an empty array for no match, but a
-      // malformed id may 404 rather than doing that — treated the same as
-      // TmdbProvider treats its own /find 404s: a per-item "no match", not
-      // a request failure worth surfacing.
+      // A malformed id may 404 rather than returning a null/empty result —
+      // treated the same as TmdbProvider treats its own /find 404s: a
+      // per-item "no match", not a request failure worth surfacing.
       if (err instanceof TvdbHttpError && err.status === 404) return null
       throw err
     }
@@ -548,6 +561,7 @@ export class TvdbProvider implements MetadataProvider {
       if (entityType === 'movie' && match.movie) return String(match.movie.id)
       if (entityType === 'show' && match.series) return String(match.series.id)
       if (entityType === 'show' && match.episode) return String(match.episode.seriesId)
+      if (entityType === 'show' && match.season) return String(match.season.seriesId)
     }
     return null
   }

@@ -212,10 +212,31 @@ async function reverseLookupFallbackTarget(
   for (const provider of remaining) {
     try {
       const found = await provider.findByExternalId('show', 'imdb', imdbId, locale)
-      if (found) {
-        await upsertExternalId(db, 'show', showId, provider.source, found, { correct: false })
-        return { provider, externalId: found }
-      }
+      if (!found) continue
+      // A found id can already belong to a *different* local show —
+      // confirmed live 2026-09-05: TVDB attributed one show's imdb id to a
+      // season of a separate, broader series this instance had already
+      // imported as its own entity. `upsertExternalId`'s `correct: false`
+      // path uses an untargeted `onConflictDoNothing()`, which silently
+      // no-ops on exactly this collision (the second unique index on
+      // (entityType, source, externalId)) — so persistence would silently
+      // fail here, and without this check the same doomed lookup would
+      // repeat every pass instead of costing once. Checked explicitly so
+      // that case is treated the same as "no match" and never retried.
+      const [claimedBy] = await db
+        .select({ entityId: externalIds.entityId })
+        .from(externalIds)
+        .where(
+          and(
+            eq(externalIds.entityType, 'show'),
+            eq(externalIds.source, provider.source),
+            eq(externalIds.externalId, found),
+          ),
+        )
+        .limit(1)
+      if (claimedBy && claimedBy.entityId !== showId) continue
+      await upsertExternalId(db, 'show', showId, provider.source, found, { correct: false })
+      return { provider, externalId: found }
     } catch (err) {
       console.error(`Reverse lookup failed for show ${showId} against ${provider.source}:`, err)
     }

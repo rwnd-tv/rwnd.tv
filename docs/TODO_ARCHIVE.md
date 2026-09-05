@@ -2190,15 +2190,55 @@ episodes.imdb_checked_at IS NOT NULL`, run against dev (0 rows — nothing
       reusing `apps/api/src/lib/external-match.ts`'s near-identical
       `findViaAlternateIds`, to avoid a circular import (that file already
       imports `pickRefreshTarget` from `refresh.ts`).\
-      5 new/updated tests in `metadata-refresh.test.ts`'s cross-provider
+      6 new/updated tests in `metadata-refresh.test.ts`'s cross-provider
       runtime backfill block: the existing "skips a show with no
       fallback-provider id" test renamed and its assertion flipped
       (`runtimeCheckedAt` now set, not null) now that it specifically
       covers "no imdb id to reverse-lookup by either"; new tests for a
       successful reverse lookup (asserts the runtime fills and the `tvdb`
-      id is persisted), a reverse lookup that finds no match, and the
-      manual-refresh-button path benefiting from the same lookup. Full
-      local suite green (846 tests, 61 files) before and after.
+      id is persisted), a reverse lookup that finds no match, a
+      reverse-lookup id already claimed by a different local show (below),
+      and the manual-refresh-button path benefiting from the same lookup.\
+      **Live verification against dev.rwnd.tv surfaced three real,
+      pre-existing bugs in `TvdbProvider.findByExternalId`
+      (`apps/api/src/providers/tvdb.ts`)** that this fix's own try/catch
+      contained (logged and skipped, never crashed a pass) but that
+      undermined it — none were introduced by this change, all three
+      predate it and were also reachable via the existing Trakt-import/
+      webhook matching path (`apps/api/src/lib/external-match.ts`), just
+      never hit until this fix made `findByExternalId` a live, frequently
+      -exercised call for the first time:\
+      (1) The real API returns `{"data": null}` for a genuine no-match,
+      not `data: []` as the code assumed — confirmed live against a real
+      show (Battlestar Galactica's imdb id, no TVDB cross-reference at
+      all) — a bare `for...of` over that threw "matches is not iterable"
+      instead of returning null. Fixed with `?? []`.\
+      (2) Some matches carry only a `season` field, with no `series`/
+      `episode` alongside it at all — confirmed live against Ghost in the
+      Shell: SAC_2045's real imdb id, TVDB's only match a season record
+      (`{ season: { seriesId: 73749 } }`). Falling through every existing
+      check returned null despite a real, usable `seriesId` being right
+      there in the response. Added a `season?: { seriesId: number }`
+      field and a matching check.\
+      (3) That same live case surfaced a third, subtler bug once (1) and
+      (2) were fixed: the discovered id (73749) turned out to already
+      belong to a *different* local show (TVDB treats SAC_2045 as a
+      season of a broader series this instance had separately imported
+      under its own entity) — `upsertExternalId`'s `correct: false` path
+      uses an untargeted `onConflictDoNothing()`, which silently no-ops on
+      exactly this second-unique-index collision rather than throwing, so
+      the persist step silently failed and the same doomed lookup would
+      have repeated every pass instead of costing once, the opposite of
+      this fix's own stated one-time-cost guarantee. Fixed with an
+      explicit pre-check: a discovered id already claimed by a different
+      `entityId` is now treated the same as "no match" (skip, don't
+      persist, don't retry) rather than attempted.\
+      All three confirmed fixed via the same live dev.rwnd.tv path they
+      were found on (Battlestar Galactica: no match, marked checked,
+      no crash; Ghost in the Shell: SAC_2045 vs. Stand Alone Complex: the
+      collision correctly treated as no match, neither show's `external_ids`
+      touched). Full local suite green (849 tests, 61 files) before and
+      after every round of fixes.
 
 ## Webhooks & scrobbling
 

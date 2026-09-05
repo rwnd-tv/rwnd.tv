@@ -12,7 +12,7 @@ rwnd.tv (rewind dot tv) is an open source, self-hosted app for tracking the TV s
 
 ## Status
 
-**v1.0.7: ready for real use, with M4 underway.** Milestones 1–3 are done: local accounts, search and manual logging, Trakt/CSV import, Plex webhook ingestion, watchlists and ratings, and a full OWASP ASVS 4.0.3 Level 1 security review. M4 has also shipped admin user-management, an owner role, IMDb deep links, and personal webcal/iCal calendar feeds; broader webhook ingestion (Tautulli/Jellyfin/Emby/Kodi) remains open. See [docs/ROADMAP.md](docs/ROADMAP.md) for the full history and what's next.
+**v1.0.9: ready for real use, with M4 underway.** Milestones 1–3 are done: local accounts, search and manual logging, Trakt/CSV import, Plex webhook ingestion, watchlists and ratings, and a full OWASP ASVS 4.0.3 Level 1 security review. M4 has also shipped admin user-management, an owner role, IMDb deep links, and personal webcal/iCal calendar feeds; broader webhook ingestion (Tautulli/Jellyfin/Emby/Kodi) remains open. See [docs/ROADMAP.md](docs/ROADMAP.md) for the full history and what's next.
 
 ## Screenshots
 

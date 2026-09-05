@@ -742,6 +742,20 @@ export const episodes = pgTable(
     episodeNumber: integer('episode_number').notNull(),
     title: text('title'),
     runtimeMinutes: integer('runtime_minutes'),
+    /**
+     * Corrected, not just filled, on every `resolveSeason` call
+     * (apps/api/src/lib/media.ts) — a real TMDB/TVDB reschedule takes over
+     * from whatever was recorded before, `coalesce`d against the provider's
+     * own response so a provider returning no date at all can't wipe a
+     * known one. Feeds the TV Shows calendar feed, `seasons.airedEpisodeCount`,
+     * and Up Next's sort order directly, with no live fetch, so a stale
+     * value here was invisible everywhere except a live season-page view.
+     * Also read by the cross-provider runtime backfill's Gate B
+     * (`fillSeasonRuntimesFromFallback`, apps/api/src/metadata/refresh.ts)
+     * to validate a fallback provider's episode match — see that function's
+     * own doc comment for the narrow edge case a correction here can cause
+     * there.
+     */
     firstAired: date('first_aired'),
     /**
      * Episode-level synopsis. Unlike movies/shows' own `overview` column,

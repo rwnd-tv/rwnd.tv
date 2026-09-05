@@ -124,6 +124,24 @@ id was considered and left out: those are skipped without being marked
 checked, same tradeoff `backfillEpisodeImdbIds` already makes for a show
 with no id on any configured provider.
 
+**Follow-up, 2026-09-05**: reversed. Two things changed since the original
+call above. First, the "skipped without being marked checked" tradeoff
+turned out to be a real bug, not just a missed optimization: nothing else
+ever marks those episodes checked either, so they're re-selected by
+`findSeasonsNeedingRuntimeBackfill`'s `ORDER BY show_id, season_number LIMIT
+50` every single pass, forever — with enough such shows (not the case
+today, but structurally possible) this would starve the drain for every
+other show, since stuck seasons always sort first and always refill the
+same candidate slots. Second, Blade Runner 2099 turned this from a
+hypothetical into a live, confirmed case on the reference instance.
+`reverseLookupFallbackTarget` (`apps/api/src/metadata/refresh.ts`) tries the
+show's stored `imdb` id against each remaining configured provider — the
+one id namespace every provider's `findByExternalId` can search by — and
+persists a hit immediately so the cost is one-time, not recurring. A show
+still found by neither its own id nor the reverse lookup now gets its
+episodes marked checked, closing the original bug regardless of whether the
+lookup itself ever helps.
+
 **Follow-up, same day**: deployed to dev.rwnd.tv and verified live against
 the real (production-mirrored) library — 13 seasons filled on the first
 pass, 0 errors. James separately confirmed the fallback matched the

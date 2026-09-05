@@ -163,6 +163,66 @@ export async function pickRefreshTargets(
   return result
 }
 
+/** A show's own stored `imdb` id, or null — same single-row read
+ * `getExternalId` (apps/api/src/routes/library/shared.ts) does, reimplemented
+ * locally rather than imported: that helper lives in `routes/`, and
+ * apps/api/src/lib/episode-imdb.ts already establishes the convention of not
+ * reaching into `routes/` from a non-route module. */
+async function showImdbId(db: Database, showId: string): Promise<string | null> {
+  const [row] = await db
+    .select({ externalId: externalIds.externalId })
+    .from(externalIds)
+    .where(
+      and(
+        eq(externalIds.entityType, 'show'),
+        eq(externalIds.entityId, showId),
+        eq(externalIds.source, 'imdb'),
+      ),
+    )
+    .limit(1)
+  return row?.externalId ?? null
+}
+
+/** Used by the runtime backfill below when `pickRefreshTarget` finds no
+ * provider with its own id for this show — tries a reverse lookup by the
+ * show's stored `imdb` id instead, the one id namespace every configured
+ * provider's `findByExternalId` can search by (apps/api/src/providers/
+ * types.ts only accepts 'imdb' | 'tvdb' as a source, and a show missing its
+ * `tvdb` id has nothing to reverse-lookup *from* on that side either).
+ *
+ * A hit is persisted immediately (`upsertExternalId` with `correct: false`,
+ * same non-throwing on-conflict-do-nothing semantics every other
+ * opportunistic id write in this file uses) so the *next* pass finds it
+ * through `pickRefreshTarget` directly, with no further provider call —
+ * this makes the fix's total cost one-time per show, not recurring.
+ *
+ * apps/api/src/lib/external-match.ts's `findViaAlternateIds` already does
+ * almost exactly this, but that file imports `pickRefreshTarget` *from*
+ * this one — importing the reverse direction here would create a circular
+ * module dependency, so this is a narrow, local reimplementation of just
+ * the imdb branch rather than a shared import. */
+async function reverseLookupFallbackTarget(
+  db: Database,
+  showId: string,
+  remaining: MetadataProvider[],
+  locale: string,
+): Promise<{ provider: MetadataProvider; externalId: string } | null> {
+  const imdbId = await showImdbId(db, showId)
+  if (!imdbId) return null
+  for (const provider of remaining) {
+    try {
+      const found = await provider.findByExternalId('show', 'imdb', imdbId, locale)
+      if (found) {
+        await upsertExternalId(db, 'show', showId, provider.source, found, { correct: false })
+        return { provider, externalId: found }
+      }
+    } catch (err) {
+      console.error(`Reverse lookup failed for show ${showId} against ${provider.source}:`, err)
+    }
+  }
+  return null
+}
+
 async function findStaleShows(db: Database): Promise<RefreshCandidate[]> {
   const airingCutoff = new Date(Date.now() - AIRING_REFRESH_INTERVAL_MS)
   const complianceCutoff = new Date(Date.now() - COMPLIANCE_MAX_AGE_MS)
@@ -703,6 +763,19 @@ async function findSeasonsNeedingRuntimeBackfill(
  * `overviewCheckedAt`/`imdbCheckedAt` — this is what makes a season drop
  * out of findSeasonsNeedingRuntimeBackfill's candidate set once checked,
  * whether or not anything was actually filled.
+ *
+ * Gate B compares the *local* `firstAired`, which `resolveSeason`
+ * (apps/api/src/lib/media.ts) now corrects on every resolve rather than
+ * freezing at first insert. Accepted, narrow edge case: an episode whose
+ * runtime is still null gets its local date corrected by the primary
+ * provider right as (or just before) this runs, the fallback provider
+ * hasn't caught up to the same correction yet, Gate B now sees a
+ * disagreement it wouldn't have against the old frozen date, and rejects
+ * the fill — permanently, since a checked episode never re-enters the
+ * candidate set. Not guarded against: it needs an unfilled runtime, a
+ * reschedule, and the two providers being out of sync at exactly the
+ * right moment, and an already-filled runtime is unaffected regardless
+ * (this function's own candidate set requires `runtimeMinutes IS NULL`).
  */
 async function fillSeasonRuntimesFromFallback(
   db: Database,
@@ -809,8 +882,26 @@ export async function backfillShowEpisodeRuntimes(
   // coalesce (apps/api/src/lib/media.ts).
   const primary = await pickRefreshTarget(db, 'show', showId, ordered)
   const remaining = primary ? ordered.filter((p) => p.source !== primary.provider.source) : ordered
-  const fallback = await pickRefreshTarget(db, 'show', showId, remaining)
-  if (!fallback) return 0
+  const fallback =
+    (await pickRefreshTarget(db, 'show', showId, remaining)) ??
+    (await reverseLookupFallbackTarget(db, showId, remaining, locale))
+  if (!fallback) {
+    // No fallback provider has this show under any id, even after a
+    // reverse lookup by its stored imdb id — mark every still-null episode
+    // checked so the background drain doesn't immediately re-attempt the
+    // same doomed lookup (findSeasonsNeedingRuntimeBackfill below).
+    await db
+      .update(episodes)
+      .set({ runtimeCheckedAt: new Date() })
+      .where(
+        and(
+          eq(episodes.showId, showId),
+          isNull(episodes.runtimeMinutes),
+          isNull(episodes.runtimeCheckedAt),
+        ),
+      )
+    return 0
+  }
 
   let seasonsFilled = 0
   for (const { seasonNumber } of seasonsNeeded) {
@@ -840,9 +931,11 @@ export async function backfillShowEpisodeRuntimes(
  * the cross-provider numbering guard. Same per-item try/catch-and-skip
  * shape as the backfills above, with the fallback provider resolved once
  * per show and cached across that show's other candidate seasons within
- * this pass. A show with no fallback provider id at all is skipped
- * without being marked checked — same "nothing an admin could act on, try
- * again next pass" tradeoff as backfillEpisodeImdbIds.
+ * this pass. A show with no fallback provider id on file gets one reverse-
+ * lookup attempt by its stored imdb id (reverseLookupFallbackTarget above);
+ * if even that finds nothing, its still-null episodes are marked checked so
+ * they stop consuming a candidate slot every pass forever (see
+ * findSeasonsNeedingRuntimeBackfill's `LIMIT 50`).
  */
 async function backfillEpisodeRuntimes(
   db: Database,
@@ -866,7 +959,11 @@ async function backfillEpisodeRuntimes(
     const remaining = primary
       ? ordered.filter((p) => p.source !== primary.provider.source)
       : ordered
-    const target = await pickRefreshTarget(db, 'show', showId, remaining)
+    let target = await pickRefreshTarget(db, 'show', showId, remaining)
+    if (!target) {
+      target = await reverseLookupFallbackTarget(db, showId, remaining, locale)
+      await sleep(REQUEST_STAGGER_MS)
+    }
     fallbackByShow.set(showId, target)
     return target
   }
@@ -874,7 +971,21 @@ async function backfillEpisodeRuntimes(
   let seasonsFilled = 0
   for (const candidate of candidates) {
     const fallback = await fallbackFor(candidate.showId)
-    if (!fallback) continue
+    if (!fallback) {
+      // Reverse lookup was already tried inside fallbackFor and found
+      // nothing — see this function's own doc comment.
+      await db
+        .update(episodes)
+        .set({ runtimeCheckedAt: new Date() })
+        .where(
+          and(
+            eq(episodes.showId, candidate.showId),
+            eq(episodes.seasonNumber, candidate.seasonNumber),
+            isNull(episodes.runtimeMinutes),
+          ),
+        )
+      continue
+    }
     try {
       const filled = await fillSeasonRuntimesFromFallback(
         db,

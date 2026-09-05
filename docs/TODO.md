@@ -106,52 +106,6 @@ Format:
       counts as personal use. Movies-only vs. Movies+TV Shows was never
       decided either, moot until this unblocks.
 
-- [ ] **Reverse-lookup fallback for shows with no stored TVDB id** (2026-09-05 02:37 added)
-
-      The cross-provider episode runtime backfill
-      (`fillSeasonRuntimesFromFallback`, `apps/api/src/metadata/refresh.ts`)
-      can only try a provider the show already has a stored external id
-      for. One show found with this gap on the reference instance: Blade
-      Runner 2099, `metadata_source: 'tmdb'`, no `tvdb` id on file — its
-      null-runtime episodes are skipped without being marked checked, so
-      they're retried (and skipped again) on every future pass.
-
-      Low priority, likely self-healing without this fix: Blade Runner
-      2099 is still "In Production", so its null runtimes are all unaired
-      future episodes, not anything currently watched. The ordinary
-      airing-show refresh sweep (every 7 days) already coalesces a
-      still-null runtime from TMDB itself once an episode actually airs
-      and TMDB fills it in (`resolveSeason`'s same-provider coalesce,
-      `apps/api/src/lib/media.ts`), independent of this gap entirely. This
-      would only matter if a show finishes airing with TMDB never having
-      populated a runtime for some episode, and never had a TVDB id to
-      fall back to either.
-
-      Fix, if pursued: a reverse `findByExternalId` lookup (TVDB's own
-      search, or via a stored `imdb`/`trakt` id) to discover a TVDB id for
-      a show that doesn't have one on file — same mechanism the Trakt
-      import matcher (`apps/api/src/import/match.ts`) already uses for
-      matching, just not wired into the runtime backfill path.
-
-- [ ] **`resolveSeason` never corrects an episode's `firstAired` once set** (2026-09-05 added)
-
-      `resolveSeason`'s (`apps/api/src/lib/media.ts`) `onConflictDoUpdate`
-      only touches `overview`, `overviewCheckedAt`, and a still-null
-      `runtimeMinutes` on a later resolve; `title` and `firstAired` are
-      write-once from the first insert. A rescheduled episode's air date
-      (a real, not-uncommon TMDB occurrence) is never corrected by any
-      current path, including the metadata refresher and the calendar
-      feed's underlying data. Found while fixing the between-seasons
-      calendar gap (see TODO_ARCHIVE.md), out of scope for that fix.
-
-      Needs care: adding `firstAired` to the update `set` clause would
-      also let a cross-provider-filled value get overwritten by the
-      primary provider's own later resolve, the exact hazard the
-      `runtimeMinutes` `coalesce` clause exists to avoid (see that
-      column's own handling, same function). Whatever the fix is, it
-      should preserve a value that a fallback provider supplied and the
-      primary provider doesn't have.
-
 ## Roadmap
 
 Every open item from [ROADMAP.md](ROADMAP.md) that doesn't already have a

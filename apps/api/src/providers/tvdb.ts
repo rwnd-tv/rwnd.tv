@@ -447,7 +447,11 @@ export class TvdbProvider implements MetadataProvider {
       seasonNumber: episode.seasonNumber,
       episodeNumber: episode.number,
       runtimeMinutes: episode.runtime ?? null,
-      firstAired: episode.aired ?? null,
+      // `||`, not `??` — TVDB can return an empty string for an unaired
+      // episode's aired date, which would otherwise pass through as
+      // `firstAired: ''` and fail the Postgres date cast when resolveSeason
+      // (apps/api/src/lib/media.ts) writes it.
+      firstAired: episode.aired || null,
       overview: episode.overview ?? null,
       stillPath: episode.image ?? null,
       voteAverage: null,
@@ -502,7 +506,8 @@ export class TvdbProvider implements MetadataProvider {
         seasonNumber: e.seasonNumber,
         episodeNumber: e.number,
         runtimeMinutes: e.runtime ?? null,
-        firstAired: e.aired ?? null,
+        // `||`, not `??` — see getEpisode's own comment above.
+        firstAired: e.aired || null,
         overview: e.overview ?? null,
         stillPath: e.image ?? null,
         voteAverage: null,

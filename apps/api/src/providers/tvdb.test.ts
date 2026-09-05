@@ -384,6 +384,23 @@ describe('TvdbProvider.getEpisode', () => {
     const episode = await provider().getEpisode('1399', 1, 1, 'en-GB')
     expect(episode.imdbId).toBeNull()
   })
+
+  // resolveSeason (apps/api/src/lib/media.ts) writes this straight into a
+  // Postgres date column — an empty string rather than null/undefined would
+  // fail that cast, so the provider boundary has to normalize it.
+  it('normalizes an empty aired date to null, not an empty string', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(loginOk())
+      .mockResolvedValueOnce(
+        apiResponse({ episodes: [{ id: 1, seasonNumber: 1, number: 1, aired: '' }] }),
+      )
+      .mockResolvedValueOnce(new Response(null, { status: 500 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const episode = await provider().getEpisode('1399', 1, 1, 'en-GB')
+    expect(episode.firstAired).toBeNull()
+  })
 })
 
 describe('TvdbProvider.getSeason', () => {
@@ -423,6 +440,23 @@ describe('TvdbProvider.getSeason', () => {
     const season = await provider().getSeason('1399', 1, 'en-GB')
     expect(season.overview).toBeNull()
     expect(fetchMock).toHaveBeenCalledTimes(3) // no 4th call for a translation lookup
+  })
+
+  // resolveSeason (apps/api/src/lib/media.ts) writes this straight into a
+  // Postgres date column — an empty string rather than null/undefined would
+  // fail that cast, so the provider boundary has to normalize it.
+  it('normalizes an empty aired date to null, not an empty string', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(loginOk())
+      .mockResolvedValueOnce(apiResponse({ id: 1399, name: 'Show', seasons: [] }))
+      .mockResolvedValueOnce(
+        apiResponse({ episodes: [{ seasonNumber: 1, number: 1, name: 'Pilot', aired: '' }] }),
+      )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const season = await provider().getSeason('1399', 1, 'en-GB')
+    expect(season.episodes[0]?.firstAired).toBeNull()
   })
 })
 

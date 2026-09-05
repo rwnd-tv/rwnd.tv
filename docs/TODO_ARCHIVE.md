@@ -2110,6 +2110,96 @@ episodes.imdb_checked_at IS NOT NULL`, run against dev (0 rows — nothing
       uses a hand-built fake satisfying `MetadataProvider` rather than the
       real class, so none needed updating. Full repo lint/typecheck clean.
 
+- [x] **`resolveSeason` never corrects an episode's `firstAired` once set** (2026-09-05 added, done 2026-09-05)\
+      `resolveSeason`'s (`apps/api/src/lib/media.ts`) `onConflictDoUpdate`
+      previously only touched `overview`, `overviewCheckedAt`, and a
+      still-null `runtimeMinutes`; `title` and `firstAired` were write-once
+      from the first insert, so a real TMDB/TVDB reschedule was never
+      corrected anywhere — invisible on a live season-page view (which
+      always fetches fresh), but wrong forever in the cached `episodes`
+      table the TV Shows calendar feed, `seasons.airedEpisodeCount`, and Up
+      Next's sort order all read directly with no live fetch. Found while
+      fixing the between-seasons calendar gap, out of scope for that fix.\
+      The hazard the TODO named — a cross-provider-filled `firstAired`
+      getting clobbered by the primary provider — turned out not to exist:
+      no path ever writes `firstAired` from a fallback provider, only
+      `resolveSeason` itself, always from whichever provider it was called
+      with. Fixed with `firstAired: coalesce(excluded.first_aired,
+      episodes.first_aired)` — newest-known-wins, the opposite direction
+      from `runtimeMinutes`' own coalesce, because a date can genuinely
+      change where a runtime never does; still refuses to let a provider
+      response with no date at all wipe one already on record.\
+      Real, narrower risk found instead: the cross-provider *runtime*
+      backfill's Gate B (`fillSeasonRuntimesFromFallback`,
+      `apps/api/src/metadata/refresh.ts`) compares the local `firstAired`
+      against a fallback provider's date to validate a match — a
+      correction can now shift that comparison's input between passes.
+      Accepted as a narrow edge case (documented in that function's own doc
+      comment) rather than guarded against: it needs an unfilled runtime, a
+      reschedule, and the two providers being out of sync at exactly the
+      right moment, and an already-filled runtime is unaffected regardless
+      (Gate B's own candidate set requires `runtimeMinutes IS NULL`).\
+      Companion hardening while touching this code: `ProviderEpisode.firstAired`
+      mapping (`apps/api/src/providers/tmdb.ts`, `tvdb.ts`) only guarded
+      `null`/`undefined`, not an empty string — which would otherwise pass
+      through as `firstAired: ''` and fail the Postgres date cast on
+      write, a risk made recurring rather than one-shot once the column
+      updates on every resolve. Changed `?? null` to `|| null` at all four
+      mapping sites. `title` and `resolveEpisode` (a different function
+      with no `onConflictDoUpdate` clause at all) left as explicit
+      non-goals — the TODO named `firstAired` specifically, and both are
+      separate, larger judgment calls.\
+      6 new/updated tests: two in `metadata-refresh.test.ts` resolving the
+      same season twice via `refreshOneShow` directly (a reschedule
+      corrects; a later response with no date doesn't wipe the existing
+      one), and one empty-string-normalizes-to-null test per provider per
+      method (`getEpisode`/`getSeason`) in `tmdb.test.ts`/`tvdb.test.ts`.
+      Full local suite green (843 tests, 61 files) before and after.
+
+- [x] **Reverse-lookup fallback for shows with no stored TVDB id** (2026-09-05 added, done 2026-09-05)\
+      The cross-provider episode-runtime backfill
+      (`fillSeasonRuntimesFromFallback`/`backfillEpisodeRuntimes`/
+      `backfillShowEpisodeRuntimes`, `apps/api/src/metadata/refresh.ts`)
+      could only try a fallback provider a show already had a stored
+      `external_ids` row for — Blade Runner 2099
+      (`metadata_source: 'tmdb'`, no `tvdb` id) was a live example on the
+      reference instance. Turned out to be a real infinite-retry bug, not
+      just a missed optimization: the no-fallback branch performed no
+      write at all, so the affected episodes stayed
+      `runtimeMinutes IS NULL AND runtimeCheckedAt IS NULL` and were
+      re-selected by `findSeasonsNeedingRuntimeBackfill`'s
+      `ORDER BY show_id, season_number LIMIT 50` every single pass,
+      forever — with enough such shows this would deterministically starve
+      the drain for every other show, since stuck seasons always sort
+      first and always refill the same candidate slots (not triggered
+      today, only 1 known affected show, but structural).\
+      This exact fix was already considered once and explicitly declined —
+      see [ADR 0006](adr/0006-multi-provider-metadata.md)'s own
+      "considered and left out" note and its 2026-09-05 follow-up
+      reversing that call, now that it's a live case rather than a
+      hypothetical and the starvation risk wasn't part of the original
+      analysis. New `reverseLookupFallbackTarget` tries the show's stored
+      `imdb` id against each remaining configured provider's
+      `findByExternalId` — the one id namespace every provider can search
+      by, since a show missing its `tvdb` id has nothing to reverse-lookup
+      *from* on that side either — and persists a hit immediately so the
+      cost is one-time per show, not recurring. A show found by neither
+      its own id nor the reverse lookup now gets its episodes marked
+      checked, closing the underlying bug regardless of whether the lookup
+      itself ever helps. Deliberately reimplemented locally rather than
+      reusing `apps/api/src/lib/external-match.ts`'s near-identical
+      `findViaAlternateIds`, to avoid a circular import (that file already
+      imports `pickRefreshTarget` from `refresh.ts`).\
+      5 new/updated tests in `metadata-refresh.test.ts`'s cross-provider
+      runtime backfill block: the existing "skips a show with no
+      fallback-provider id" test renamed and its assertion flipped
+      (`runtimeCheckedAt` now set, not null) now that it specifically
+      covers "no imdb id to reverse-lookup by either"; new tests for a
+      successful reverse lookup (asserts the runtime fills and the `tvdb`
+      id is persisted), a reverse lookup that finds no match, and the
+      manual-refresh-button path benefiting from the same lookup. Full
+      local suite green (846 tests, 61 files) before and after.
+
 ## Webhooks & scrobbling
 
 - [x] **Plex webhook ingestion** (2026-08-23 15:30 added, done 2026-08-24) — M2\

@@ -302,29 +302,44 @@ export async function resolveSeason(
           overviewCheckedAt: checkedAt,
         })),
       )
-      // Every other column here is still onConflictDoNothing in spirit —
-      // title/firstAired only ever get written once, on first insert —
-      // but `overview`/`overviewCheckedAt` update on every call, set
-      // regardless of whether the provider actually had a synopsis this
-      // time (same "we asked, not we found" convention as
-      // `imdbCheckedAt`). This is what makes an existing row's overview
-      // self-heal the next time its season is organically resolved (a
-      // page view, the airing-show sweep, or the one-off backfill below),
-      // without touching the other fields' established behaviour.
+      // `title` is still onConflictDoNothing in spirit — only ever written
+      // once, on first insert (a title can legitimately vary by locale, so
+      // "which one wins on a later resolve in a different locale" is a
+      // separate judgment call this function doesn't make). Every other
+      // column below updates on every call:
       //
-      // `runtimeMinutes` is the one exception to "write once": a
-      // `coalesce` fills a still-null value from this same provider on a
-      // later resolve (e.g. TMDB gains an episode's runtime after it
+      // `overview`/`overviewCheckedAt` are set regardless of whether the
+      // provider actually had a synopsis this time (same "we asked, not we
+      // found" convention as `imdbCheckedAt`). This is what makes an
+      // existing row's overview self-heal the next time its season is
+      // organically resolved (a page view, the airing-show sweep, or the
+      // one-off backfill below), without touching the other fields'
+      // established behaviour.
+      //
+      // `runtimeMinutes` fills a still-null value from this same provider
+      // on a later resolve (e.g. TMDB gains an episode's runtime after it
       // airs), but never overwrites a value already recorded — including
       // one filled by the cross-provider fallback backfill (see
       // apps/api/src/metadata/refresh.ts), which this path must not
       // clobber with a differently-numbered TMDB episode's value.
+      //
+      // `firstAired` takes the opposite direction from `runtimeMinutes`:
+      // newest-known-wins, not existing-wins, because a date can genuinely
+      // change (TMDB/TVDB both reschedule episodes) where a runtime never
+      // does. `coalesce(excluded, existing)` still refuses to let a
+      // provider response with no date at all wipe a date already on
+      // record. This does mean the local `firstAired` the cross-provider
+      // *runtime* backfill's Gate B compares against (refresh.ts's
+      // fillSeasonRuntimesFromFallback) can now shift between passes —
+      // see that function's own doc comment for why this is an accepted,
+      // narrow edge case rather than something guarded against here.
       .onConflictDoUpdate({
         target: [episodes.showId, episodes.seasonNumber, episodes.episodeNumber],
         set: {
           overview: sql`excluded.overview`,
           overviewCheckedAt: sql`excluded.overview_checked_at`,
           runtimeMinutes: sql`coalesce(${episodes.runtimeMinutes}, excluded.runtime_minutes)`,
+          firstAired: sql`coalesce(excluded.first_aired, ${episodes.firstAired})`,
         },
       })
   }

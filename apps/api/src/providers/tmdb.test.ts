@@ -319,3 +319,43 @@ describe('TmdbProvider imdbId', () => {
     expect(movie.imdbId).toBeNull()
   })
 })
+
+describe('TmdbProvider air dates', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  // resolveSeason (apps/api/src/lib/media.ts) writes this straight into a
+  // Postgres date column — an empty string rather than null/undefined would
+  // fail that cast, so the provider boundary has to normalize it.
+  it('getEpisode normalizes an empty air_date to null, not an empty string', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({ name: 'Pilot', season_number: 1, episode_number: 1, air_date: '' }),
+            { status: 200 },
+          ),
+        ),
+    )
+    const episode = await provider().getEpisode('1396', 1, 1, 'en-GB')
+    expect(episode.firstAired).toBeNull()
+  })
+
+  it('getSeason normalizes an empty air_date to null, not an empty string', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            overview: null,
+            episodes: [{ name: 'Pilot', season_number: 1, episode_number: 1, air_date: '' }],
+          }),
+          { status: 200 },
+        ),
+      ),
+    )
+    const season = await provider().getSeason('1396', 1, 'en-GB')
+    expect(season.episodes[0]?.firstAired).toBeNull()
+  })
+})

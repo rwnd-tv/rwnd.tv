@@ -307,7 +307,11 @@ export class TmdbProvider implements MetadataProvider {
       seasonNumber: e.season_number,
       episodeNumber: e.episode_number,
       runtimeMinutes: e.runtime ?? null,
-      firstAired: e.air_date ?? null,
+      // `||`, not `??` — TMDB can return an empty string for an unaired
+      // episode's air_date, which would otherwise pass through as
+      // `firstAired: ''` and fail the Postgres date cast when resolveSeason
+      // (apps/api/src/lib/media.ts) writes it.
+      firstAired: e.air_date || null,
       overview: e.overview ?? null,
       stillPath: this.stillUrl(e.still_path),
       voteAverage: e.vote_average ? e.vote_average : null,
@@ -335,7 +339,11 @@ export class TmdbProvider implements MetadataProvider {
         seasonNumber: e.season_number,
         episodeNumber: e.episode_number,
         runtimeMinutes: e.runtime ?? null,
-        firstAired: e.air_date ?? null,
+        // `||`, not `??` — TMDB can return an empty string for an unaired
+        // episode's air_date, which would otherwise pass through as
+        // `firstAired: ''` and fail the Postgres date cast when
+        // resolveSeason (apps/api/src/lib/media.ts) writes it.
+        firstAired: e.air_date || null,
         overview: e.overview ?? null,
         stillPath: this.stillUrl(e.still_path),
         voteAverage: e.vote_average ? e.vote_average : null,

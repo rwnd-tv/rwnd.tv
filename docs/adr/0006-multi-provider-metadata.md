@@ -74,3 +74,74 @@ _from_.
   _require_ their logos: IMDb's conditions of use forbid using their
   trademark as a link's clickable
   element without written permission.
+
+## Update (2026-09-05)
+
+This ADR's Decision above named `resolveSeason`/`resolveShowEpisodes`/
+`findNextUnwatchedEpisode` as "a deliberate, named seam" that would "need
+source-tagging before a second one can genuinely compete for these
+paths" — that seam is now partly crossed, for one specific field.
+
+Investigating `docs/TODO.md`'s History calendar feed timed-events item
+found that episode `runtimeMinutes` was missing for 38 real watched
+episodes (8 shows, always as whole-season gaps), and that the manual
+"refresh metadata" button silently failed to fix it: `resolveSeason`
+still calls only the primary provider, and its `onConflictDoUpdate` only
+ever wrote `overview`/`overviewCheckedAt`, treating `runtimeMinutes` as
+write-once. All 31 affected shows had `metadata_source = 'tmdb'`, and 29
+of them already carried a usable `tvdb` id.
+
+Rather than widening `resolveSeason` itself (it sits on hot paths — the
+Dashboard's Up Next scan, both "Watched" buttons, webhook ingest, CSV
+import — where asking a second provider on every call would double
+external traffic for the ~99% of seasons that don't need it), this added
+a **field-scoped fallback** instead of a general one:
+
+- `resolveSeason`'s conflict handling now coalesces a still-null
+  `runtimeMinutes` from the _same_ provider on a later resolve
+  (`apps/api/src/lib/media.ts`), monotone and same-provider so it carries
+  none of the risk below.
+- A new targeted backfill (`apps/api/src/metadata/refresh.ts`,
+  `fillSeasonRuntimesFromFallback`/`backfillEpisodeRuntimes`/
+  `backfillShowEpisodeRuntimes`) tries every _other_ configured provider,
+  in priority order, for episodes still missing a runtime — run both from
+  the background sweep and from the manual refresh button, guarded
+  against TMDB/TVDB episode-numbering disagreements (a season-episode-
+  count check, plus a per-episode air-date cross-check where both sides
+  have one) rather than trusting `(seasonNumber, episodeNumber)` alone.
+  New `episodes.runtime_checked_at` column, same "we asked, not we found"
+  convention as `overview_checked_at`/`imdb_checked_at`.
+
+This is deliberately narrow, not a general precedent for cross-provider
+merging of every field: `firstAired` is the very cross-check the guard
+above relies on, and `title` risks mixing a differently-localized name
+into an otherwise single-provider episode list. The general seam this
+ADR originally flagged — a second provider genuinely competing to be the
+_primary_ source for search/resolve/season fetches — is still open.
+
+A reverse `findByExternalId` lookup for the 2 shows with no stored `tvdb`
+id was considered and left out: those are skipped without being marked
+checked, same tradeoff `backfillEpisodeImdbIds` already makes for a show
+with no id on any configured provider.
+
+**Follow-up, same day**: deployed to dev.rwnd.tv and verified live against
+the real (production-mirrored) library — 13 seasons filled on the first
+pass, 0 errors. James separately confirmed the fallback matched the
+correct TVDB entry for one anime: TheTVDB lists two unrelated series
+under the same English title, `keep-your-hands-off-eizouken` (the 12-
+episode 2020 anime, Jan-Mar air dates, matches locally) and
+`379607-keep-your-hands-off-eizouken` (a 6-episode 2020 live-action drama
+adaptation, Apr-May air dates, different cast) — the fallback resolved to
+the former, and Gate A's episode-count check would have caught a
+wrong match to the latter regardless (6 vs. the locally cached 12).
+
+That same show did surface a genuine Gate B false-negative: TVDB and IMDb
+agree on 2020-01-06 for its episode 1, TMDB alone recorded 2020-01-05,
+most likely a JST-midnight rounding quirk in TMDB's own data, not a real
+per-episode disagreement. Confirmed live via TVDB's own API before
+concluding it was a data quirk rather than a code bug. Gate B now
+tolerates up to a 1-day difference (`AIR_DATE_TOLERANCE_DAYS`,
+`apps/api/src/metadata/refresh.ts`) rather than requiring an exact match —
+loose enough to absorb this class of rounding quirk, tight enough that a
+real mismatch (a different season, a different show) still reads as
+weeks or months apart, not one day.

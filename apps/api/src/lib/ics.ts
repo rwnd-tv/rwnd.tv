@@ -5,19 +5,22 @@
  * parse one. Shared by every calendar feed type (apps/api/src/calendar/
  * build.ts), so the format has one home.
  *
- * Every event this app produces is all-day (a TV episode's air date has
- * no time-of-day; a watched-item's timestamp is often imprecise — see
- * calendar/build.ts's own reasoning), so this file only ever emits
- * `DTSTART;VALUE=DATE`/`DTEND;VALUE=DATE` pairs, never a timed event.
+ * Two event shapes: all-day (`DTSTART;VALUE=DATE`/`DTEND;VALUE=DATE`,
+ * a bare calendar day) for the TV Shows feed, where `episodes.firstAired`
+ * has no time-of-day to build a real instant from; timed (`DTSTART`/
+ * `DTEND` as UTC instants) for the History feed, where `plays.watchedAt`
+ * is a precise timestamp. Emitted as plain UTC rather than with a `TZID`:
+ * `users.timezone` is never actually set by the app today (see
+ * calendar/build.ts), so a `VTIMEZONE` block would add DST-rule machinery
+ * for a value that's `'UTC'` on every account in practice — the
+ * subscribing client localises the instant on its own.
  */
 
-export interface IcsEvent {
+interface IcsEventBase {
   /** Fully-formed, including the `@rwnd.tv` domain part. Stable across
    * every refresh — that's what makes a subscribing client update an
    * event in place instead of creating a duplicate. */
   uid: string
-  /** Local calendar day, 'YYYY-MM-DD'. */
-  date: string
   summary: string
   /** Episode/movie synopsis. Omitted entirely (no empty `DESCRIPTION:`
    * line) rather than passed as `''` when there's nothing to show —
@@ -29,6 +32,18 @@ export interface IcsEvent {
    * file across repeated calls against unchanged data. */
   stamp: Date
 }
+
+export interface IcsAllDayEvent extends IcsEventBase {
+  /** Local calendar day, 'YYYY-MM-DD'. */
+  date: string
+}
+
+export interface IcsTimedEvent extends IcsEventBase {
+  start: Date
+  end: Date
+}
+
+export type IcsEvent = IcsAllDayEvent | IcsTimedEvent
 
 export interface IcsCalendar {
   /** X-WR-CALNAME, e.g. 'rwnd.tv — TV Shows'. Non-standard but
@@ -118,12 +133,19 @@ function formatStamp(stamp: Date): string {
 }
 
 function buildEvent(event: IcsEvent): string[] {
+  const dateLines =
+    'date' in event
+      ? [
+          `DTSTART;VALUE=DATE:${formatDate(event.date)}`,
+          `DTEND;VALUE=DATE:${formatDate(nextDay(event.date))}`,
+        ]
+      : [`DTSTART:${formatStamp(event.start)}`, `DTEND:${formatStamp(event.end)}`]
+
   return [
     'BEGIN:VEVENT',
     contentLine('UID', event.uid),
     contentLine('DTSTAMP', formatStamp(event.stamp)),
-    `DTSTART;VALUE=DATE:${formatDate(event.date)}`,
-    `DTEND;VALUE=DATE:${formatDate(nextDay(event.date))}`,
+    ...dateLines,
     contentLine('SUMMARY', escapeText(event.summary)),
     ...(event.description ? [contentLine('DESCRIPTION', escapeText(event.description))] : []),
     // Informational only — must not mark the subscriber busy in a
@@ -137,10 +159,12 @@ function buildEvent(event: IcsEvent): string[] {
  * Builds a complete VCALENDAR document. `METHOD:PUBLISH` and
  * `X-WR-CALNAME` are read-only-subscription conventions (the former in
  * particular is what makes Outlook treat this as a subscription rather
- * than an invitation). No `VTIMEZONE`/`X-WR-TIMEZONE` and no
- * `SEQUENCE`: all-day `VALUE=DATE` events are floating by definition,
- * and `SEQUENCE` only matters for iTIP REQUEST/CANCEL flows, not a
- * `METHOD:PUBLISH` feed a client re-reads in full on every poll.
+ * than an invitation). No `VTIMEZONE`/`X-WR-TIMEZONE`: an all-day
+ * `VALUE=DATE` event is floating by definition, and a timed event is
+ * always emitted as a UTC instant (see this file's top-of-file comment),
+ * which needs no timezone definition either. No `SEQUENCE`: it only
+ * matters for iTIP REQUEST/CANCEL flows, not a `METHOD:PUBLISH` feed a
+ * client re-reads in full on every poll.
  */
 export function buildIcs(calendar: IcsCalendar): string {
   const lines = [

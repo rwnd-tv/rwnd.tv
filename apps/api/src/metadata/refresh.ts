@@ -68,6 +68,12 @@ const EPISODE_IMDB_BACKFILL_PER_PASS = 250
 // cheaper than a per-episode drain would be.
 const EPISODE_OVERVIEW_BACKFILL_SEASONS_PER_PASS = 100
 
+// One-off drain of seasons with at least one episode still missing a
+// runtime after its primary provider's own chance to supply one (see
+// fillSeasonRuntimesFromFallback's doc comment below). Capped and keyed on
+// season like the overview backfill above, for the same reason.
+const EPISODE_RUNTIME_BACKFILL_SEASONS_PER_PASS = 50
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
@@ -578,6 +584,268 @@ async function backfillEpisodeOverviews(
   return seasonsFilled
 }
 
+// How far apart two providers' air dates for the same episode are allowed
+// to be and still count as agreeing (Gate B below) — confirmed live
+// against Keep Your Hands Off Eizouken!: TMDB recorded every episode one
+// calendar day earlier than TVDB *and* IMDb, who agree with each other,
+// most likely a JST-midnight rounding difference in how TMDB normalizes a
+// Japan broadcast date. A real disagreement (wrong season, wrong show)
+// shows up as a mismatch of weeks or months, not exactly one day, so this
+// stays tight enough to still catch that.
+const AIR_DATE_TOLERANCE_DAYS = 1
+
+/** Absolute difference between two 'YYYY-MM-DD' dates, in whole days. */
+function daysBetween(a: string, b: string): number {
+  const [ay, am, ad] = a.split('-').map(Number)
+  const [by, bm, bd] = b.split('-').map(Number)
+  const diffMs = Date.UTC(ay!, am! - 1, ad) - Date.UTC(by!, bm! - 1, bd)
+  return Math.abs(diffMs) / (24 * 60 * 60 * 1000)
+}
+
+/** Distinct (show, season) pairs with at least one episode missing a
+ * runtime that's never been checked against a fallback provider —
+ * `runtimeCheckedAt IS NULL`, not `runtimeMinutes IS NULL` alone, for the
+ * same "checked, provider genuinely has none" reasoning as
+ * findSeasonsNeedingOverviewBackfill above: without it, a season with an
+ * episode no configured provider has a runtime for would look like a
+ * candidate forever. */
+async function findSeasonsNeedingRuntimeBackfill(
+  db: Database,
+): Promise<{ showId: string; seasonNumber: number }[]> {
+  return db
+    .selectDistinct({ showId: episodes.showId, seasonNumber: episodes.seasonNumber })
+    .from(episodes)
+    .where(and(isNull(episodes.runtimeMinutes), isNull(episodes.runtimeCheckedAt)))
+    .orderBy(episodes.showId, episodes.seasonNumber)
+    .limit(EPISODE_RUNTIME_BACKFILL_SEASONS_PER_PASS)
+}
+
+/**
+ * Attempts to fill one season's still-null episode runtimes from a
+ * fallback provider — the primary provider (TMDB, on every show this was
+ * written for) already had its chance via resolveSeason's own
+ * same-provider coalesce (apps/api/src/lib/media.ts).
+ *
+ * Guarded against TMDB/TVDB's well-known episode-numbering disagreements
+ * (an OVA or recap one provider files inside a season that the other
+ * treats as a special, shifting every later episodeNumber): naively
+ * merging by (seasonNumber, episodeNumber) alone risks attaching the
+ * wrong runtime to the wrong episode — invisibly so for anime, where
+ * episode lengths are near-uniform and a swapped value looks fine on
+ * inspection.
+ *
+ * Gate A (season shape): the fallback's episode count for this season
+ * must match what the primary provider already cached locally
+ * (`seasons.episodeCount`) — catches a split/merged season with no extra
+ * provider call. A mismatch fills nothing for the whole season. Gate B
+ * (per-episode air date): an individual episode only fills when both
+ * sides have a `firstAired` and it agrees within AIR_DATE_TOLERANCE_DAYS
+ * (see that constant's own comment — a real per-provider quirk, not a
+ * loosening for its own sake); when either side lacks a date, Gate A's
+ * season-shape check is the only corroboration available, and is accepted
+ * as sufficient. Title similarity was considered and rejected: TVDB
+ * frequently carries a romaji/alternate title where TMDB carries a
+ * localized one for the very same episode, so a title gate would produce
+ * false rejections on exactly the anime-heavy shows this exists for.
+ *
+ * Every episode this function considers gets `runtimeCheckedAt` set
+ * regardless of outcome, same "we asked, not we found" convention as
+ * `overviewCheckedAt`/`imdbCheckedAt` — this is what makes a season drop
+ * out of findSeasonsNeedingRuntimeBackfill's candidate set once checked,
+ * whether or not anything was actually filled.
+ */
+async function fillSeasonRuntimesFromFallback(
+  db: Database,
+  showId: string,
+  seasonNumber: number,
+  fallbackProvider: MetadataProvider,
+  fallbackExternalId: string,
+  locale: string,
+): Promise<number> {
+  const [localSeason] = await db
+    .select({ episodeCount: seasons.episodeCount })
+    .from(seasons)
+    .where(and(eq(seasons.showId, showId), eq(seasons.seasonNumber, seasonNumber)))
+    .limit(1)
+
+  const localEpisodes = await db
+    .select({
+      id: episodes.id,
+      episodeNumber: episodes.episodeNumber,
+      firstAired: episodes.firstAired,
+      runtimeMinutes: episodes.runtimeMinutes,
+    })
+    .from(episodes)
+    .where(and(eq(episodes.showId, showId), eq(episodes.seasonNumber, seasonNumber)))
+
+  const needFilling = localEpisodes.filter((e) => e.runtimeMinutes === null)
+  if (needFilling.length === 0) return 0
+
+  const { episodes: fallbackEpisodes } = await fallbackProvider.getSeason(
+    fallbackExternalId,
+    seasonNumber,
+    locale,
+  )
+
+  const now = new Date()
+
+  // Gate A. A mismatch means the two providers disagree about how this
+  // season is split up, so no per-episode numbering from it can be
+  // trusted — mark every still-null episode checked without filling any.
+  if (!localSeason || fallbackEpisodes.length !== localSeason.episodeCount) {
+    await db
+      .update(episodes)
+      .set({ runtimeCheckedAt: now })
+      .where(
+        inArray(
+          episodes.id,
+          needFilling.map((e) => e.id),
+        ),
+      )
+    return 0
+  }
+
+  const fallbackByNumber = new Map(fallbackEpisodes.map((e) => [e.episodeNumber, e]))
+  let filled = 0
+  for (const local of needFilling) {
+    const fallback = fallbackByNumber.get(local.episodeNumber)
+    const airDatesDisagree =
+      fallback?.firstAired &&
+      local.firstAired &&
+      daysBetween(fallback.firstAired, local.firstAired) > AIR_DATE_TOLERANCE_DAYS
+    if (fallback && !airDatesDisagree && fallback.runtimeMinutes !== null) {
+      await db
+        .update(episodes)
+        .set({ runtimeMinutes: fallback.runtimeMinutes, runtimeCheckedAt: now })
+        .where(eq(episodes.id, local.id))
+      filled += 1
+    } else {
+      await db.update(episodes).set({ runtimeCheckedAt: now }).where(eq(episodes.id, local.id))
+    }
+  }
+  return filled
+}
+
+/**
+ * Every season of one show still missing an episode runtime, backfilled
+ * from a fallback provider right now — used by the manual "refresh
+ * metadata" button (apps/api/src/routes/library/shows.ts) so pressing it
+ * fixes this show's missing runtimes immediately, the same way it already
+ * fixes a stale poster or status, rather than waiting for the drain below
+ * to happen to reach it. Not staggered like the background sweep: bounded
+ * by one show's own season count, same "manual and user-initiated" shape
+ * as refreshOneShow itself.
+ */
+export async function backfillShowEpisodeRuntimes(
+  db: Database,
+  showId: string,
+  ordered: MetadataProvider[],
+  locale: string,
+): Promise<number> {
+  const seasonsNeeded = await db
+    .selectDistinct({ seasonNumber: episodes.seasonNumber })
+    .from(episodes)
+    .where(
+      and(
+        eq(episodes.showId, showId),
+        isNull(episodes.runtimeMinutes),
+        isNull(episodes.runtimeCheckedAt),
+      ),
+    )
+  if (seasonsNeeded.length === 0) return 0
+
+  // Exclude whichever provider this show's primary metadata comes from —
+  // it already had its chance via resolveSeason's own same-provider
+  // coalesce (apps/api/src/lib/media.ts).
+  const primary = await pickRefreshTarget(db, 'show', showId, ordered)
+  const remaining = primary ? ordered.filter((p) => p.source !== primary.provider.source) : ordered
+  const fallback = await pickRefreshTarget(db, 'show', showId, remaining)
+  if (!fallback) return 0
+
+  let seasonsFilled = 0
+  for (const { seasonNumber } of seasonsNeeded) {
+    try {
+      const filled = await fillSeasonRuntimesFromFallback(
+        db,
+        showId,
+        seasonNumber,
+        fallback.provider,
+        fallback.externalId,
+        locale,
+      )
+      if (filled > 0) seasonsFilled += 1
+    } catch (err) {
+      console.error(
+        `Episode runtime backfill failed for show ${showId} season ${seasonNumber}:`,
+        err,
+      )
+    }
+  }
+  return seasonsFilled
+}
+
+/**
+ * One-off drain of seasons with an episode runtime the primary provider
+ * doesn't have — see fillSeasonRuntimesFromFallback's own doc comment for
+ * the cross-provider numbering guard. Same per-item try/catch-and-skip
+ * shape as the backfills above, with the fallback provider resolved once
+ * per show and cached across that show's other candidate seasons within
+ * this pass. A show with no fallback provider id at all is skipped
+ * without being marked checked — same "nothing an admin could act on, try
+ * again next pass" tradeoff as backfillEpisodeImdbIds.
+ */
+async function backfillEpisodeRuntimes(
+  db: Database,
+  ordered: MetadataProvider[],
+  locale: string,
+): Promise<number> {
+  const candidates = await findSeasonsNeedingRuntimeBackfill(db)
+  if (candidates.length === 0) return 0
+
+  const showIds = [...new Set(candidates.map((c) => c.showId))]
+  const primaryTargets = await pickRefreshTargets(db, 'show', showIds, ordered)
+
+  const fallbackByShow = new Map<
+    string,
+    { provider: MetadataProvider; externalId: string } | null
+  >()
+  async function fallbackFor(showId: string) {
+    const cached = fallbackByShow.get(showId)
+    if (cached !== undefined) return cached
+    const primary = primaryTargets.get(showId)
+    const remaining = primary
+      ? ordered.filter((p) => p.source !== primary.provider.source)
+      : ordered
+    const target = await pickRefreshTarget(db, 'show', showId, remaining)
+    fallbackByShow.set(showId, target)
+    return target
+  }
+
+  let seasonsFilled = 0
+  for (const candidate of candidates) {
+    const fallback = await fallbackFor(candidate.showId)
+    if (!fallback) continue
+    try {
+      const filled = await fillSeasonRuntimesFromFallback(
+        db,
+        candidate.showId,
+        candidate.seasonNumber,
+        fallback.provider,
+        fallback.externalId,
+        locale,
+      )
+      if (filled > 0) seasonsFilled += 1
+    } catch (err) {
+      console.error(
+        `Episode runtime backfill failed for show ${candidate.showId} season ${candidate.seasonNumber}:`,
+        err,
+      )
+    }
+    await sleep(REQUEST_STAGGER_MS)
+  }
+  return seasonsFilled
+}
+
 /**
  * Runs one full pass: finds every stale show/movie and refetches it from
  * whichever configured provider has an id for it, in admin-configured
@@ -599,6 +867,7 @@ export async function runMetadataRefresh(
   moviesRefreshed: number
   episodeImdbIdsFilled: number
   episodeOverviewSeasonsFilled: number
+  episodeRuntimeSeasonsFilled: number
 }> {
   const [locale, ordered, staleShows, staleMovies] = await Promise.all([
     currentLocale(db),
@@ -660,8 +929,15 @@ export async function runMetadataRefresh(
 
   const episodeImdbIdsFilled = await backfillEpisodeImdbIds(db, ordered, locale)
   const episodeOverviewSeasonsFilled = await backfillEpisodeOverviews(db, ordered, locale)
+  const episodeRuntimeSeasonsFilled = await backfillEpisodeRuntimes(db, ordered, locale)
 
-  return { showsRefreshed, moviesRefreshed, episodeImdbIdsFilled, episodeOverviewSeasonsFilled }
+  return {
+    showsRefreshed,
+    moviesRefreshed,
+    episodeImdbIdsFilled,
+    episodeOverviewSeasonsFilled,
+    episodeRuntimeSeasonsFilled,
+  }
 }
 
 /**
@@ -682,17 +958,20 @@ export function scheduleMetadataRefresh(db: Database, providers: MetadataProvide
           moviesRefreshed,
           episodeImdbIdsFilled,
           episodeOverviewSeasonsFilled,
+          episodeRuntimeSeasonsFilled,
         }) => {
           if (
             showsRefreshed ||
             moviesRefreshed ||
             episodeImdbIdsFilled ||
-            episodeOverviewSeasonsFilled
+            episodeOverviewSeasonsFilled ||
+            episodeRuntimeSeasonsFilled
           ) {
             console.log(
               `Metadata refresh: ${showsRefreshed} show(s), ${moviesRefreshed} movie(s) updated, ` +
                 `${episodeImdbIdsFilled} episode IMDb id(s) filled, ` +
-                `${episodeOverviewSeasonsFilled} episode overview season(s) filled.`,
+                `${episodeOverviewSeasonsFilled} episode overview season(s) filled, ` +
+                `${episodeRuntimeSeasonsFilled} episode runtime season(s) filled.`,
             )
           }
         },

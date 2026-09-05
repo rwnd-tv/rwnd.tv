@@ -781,6 +781,18 @@ export const episodes = pgTable(
      * this column was added; that's expected, not a bug.
      */
     imdbCheckedAt: timestamp('imdb_checked_at', { withTimezone: true }),
+    /**
+     * When a cross-provider fallback last checked this episode for a
+     * runtime the primary provider didn't have — set on every episode the
+     * runtime backfill pass considers, including when its guard rejects
+     * the season (apps/api/src/metadata/refresh.ts), same "we asked, not
+     * we found" convention as `overviewCheckedAt`/`imdbCheckedAt` above.
+     * Only ever relevant while `runtimeMinutes` is still null; a
+     * same-provider re-resolve (`resolveSeason`) can fill `runtimeMinutes`
+     * directly without touching this column. Null forever for an episode
+     * whose runtime was already known, or that predates this column.
+     */
+    runtimeCheckedAt: timestamp('runtime_checked_at', { withTimezone: true }),
   },
   (table) => [
     uniqueIndex('episodes_show_season_episode_idx').on(

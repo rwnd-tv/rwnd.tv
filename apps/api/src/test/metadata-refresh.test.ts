@@ -3,7 +3,8 @@ import { and, eq } from 'drizzle-orm'
 import { episodes, externalIds, movies, seasons, shows } from '@rwnd/db'
 import { createMetadataProviders } from '../providers/index.js'
 import { loadEnv } from '../env.js'
-import { runMetadataRefresh } from '../metadata/refresh.js'
+import type { MetadataProvider, ProviderSeason } from '../providers/types.js'
+import { backfillShowEpisodeRuntimes, runMetadataRefresh } from '../metadata/refresh.js'
 import { resetDb, testDb } from './helpers.js'
 
 const db = testDb()
@@ -46,7 +47,7 @@ function tmdbShowResponse(overrides: {
 // query rather than just being an unused field.
 function tmdbSeasonResponse(
   seasonNumber: number,
-  episodes: Array<{ episode_number: number; air_date?: string }>,
+  episodes: Array<{ episode_number: number; air_date?: string; runtime?: number }>,
 ) {
   return JSON.stringify({
     overview: 'A season overview.',
@@ -55,6 +56,7 @@ function tmdbSeasonResponse(
       season_number: seasonNumber,
       episode_number: e.episode_number,
       air_date: e.air_date,
+      runtime: e.runtime,
     })),
   })
 }
@@ -345,6 +347,62 @@ describe('metadata refresh', () => {
     const byNumber = new Map(showEpisodes.map((e) => [e.episodeNumber, e]))
     expect(byNumber.get(1)?.firstAired).toBe('2020-01-01')
     expect(byNumber.get(2)?.firstAired).toBe('2099-01-01')
+  })
+
+  // A1 of the cross-provider runtime fallback (docs/adr/0006's 2026-09-05
+  // update): resolveSeason's onConflictDoUpdate coalesces a still-null
+  // runtimeMinutes from the same provider on a later resolve, but must
+  // never overwrite one already recorded — including one the runtime
+  // backfill below filled from a *different* provider, which this same-
+  // provider path has no way to judge against its own (possibly
+  // differently-numbered) episode list.
+  it('fills a previously-null episode runtime from the primary provider on a later resolve, without overwriting an existing one', async () => {
+    const show = await insertShow({
+      tmdbId: 12,
+      status: 'Returning Series',
+      metadataRefreshedAt: new Date(Date.now() - 10 * DAY_MS),
+      withSeasons: false,
+    })
+    await db.insert(episodes).values([
+      { showId: show.id, seasonNumber: 1, episodeNumber: 1, runtimeMinutes: 40 },
+      { showId: show.id, seasonNumber: 1, episodeNumber: 2, runtimeMinutes: null },
+    ])
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: string | URL) => {
+        const url = new URL(input)
+        if (url.pathname === '/3/tv/12/season/1') {
+          return new Response(
+            tmdbSeasonResponse(1, [
+              // TMDB now claims a different runtime for episode 1 — must
+              // not clobber the value already on record.
+              { episode_number: 1, air_date: '2020-01-01', runtime: 999 },
+              { episode_number: 2, air_date: '2020-01-08', runtime: 25 },
+            ]),
+            { status: 200 },
+          )
+        }
+        return new Response(
+          tmdbShowResponse({
+            id: 12,
+            status: 'Returning Series',
+            seasons: [{ season_number: 1, episode_count: 2 }],
+          }),
+          { status: 200 },
+        )
+      }),
+    )
+
+    const result = await runMetadataRefresh(db, [provider])
+    expect(result.showsRefreshed).toBe(1)
+
+    const showEpisodes = await db
+      .select()
+      .from(episodes)
+      .where(and(eq(episodes.showId, show.id), eq(episodes.seasonNumber, 1)))
+    const byNumber = new Map(showEpisodes.map((e) => [e.episodeNumber, e]))
+    expect(byNumber.get(1)?.runtimeMinutes).toBe(40)
+    expect(byNumber.get(2)?.runtimeMinutes).toBe(25)
   })
 
   it('sets airedEpisodeCount to the full episodeCount for a finished show, without an extra season fetch', async () => {
@@ -676,5 +734,289 @@ describe('metadata refresh', () => {
     const result = await runMetadataRefresh(db, [provider])
     expect(result.moviesRefreshed).toBe(0)
     expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  describe('cross-provider episode runtime backfill', () => {
+    /**
+     * A fake second provider whose `getSeason` is fully test-controlled —
+     * same "hand-construct rather than go through env" reasoning as
+     * imports.test.ts's own fakeTvdbProvider, but parameterized per test
+     * since each test here needs a different season shape to exercise the
+     * numbering guard (Gate A/B in fillSeasonRuntimesFromFallback,
+     * apps/api/src/metadata/refresh.ts).
+     */
+    function fakeTvdbProvider(getSeason: MetadataProvider['getSeason']): MetadataProvider {
+      return {
+        source: 'tvdb',
+        async searchMulti() {
+          return []
+        },
+        async getMovie() {
+          throw new Error('not used by these tests')
+        },
+        async getShow() {
+          throw new Error('not used by these tests')
+        },
+        async getEpisode() {
+          throw new Error('not used by these tests')
+        },
+        async findByExternalId() {
+          return null
+        },
+        getSeason,
+      }
+    }
+
+    /**
+     * A show set up to dodge every OTHER backfill/sweep clause
+     * (findStaleShows, the IMDb backfill, the overview backfill) so a test
+     * here exercises only the runtime backfill — same reasoning as
+     * insertShow's own "should NOT be refetched" options, extended with a
+     * real season+episodes fixture and an optional `tvdbId` external id.
+     */
+    async function insertShowNeedingRuntimeBackfill(opts: {
+      tmdbId: number
+      tvdbId?: string
+      seasonNumber?: number
+      episodeCount: number
+      episodes: Array<{ episodeNumber: number; runtimeMinutes: number | null; firstAired?: string }>
+    }) {
+      const seasonNumber = opts.seasonNumber ?? 1
+      const show = await insertShow({
+        tmdbId: opts.tmdbId,
+        status: null,
+        metadataRefreshedAt: new Date(),
+        genres: ['Drama'],
+        voteAverage: 5,
+      })
+      if (opts.tvdbId !== undefined) {
+        await db.insert(externalIds).values({
+          entityType: 'show',
+          entityId: show.id,
+          source: 'tvdb',
+          externalId: opts.tvdbId,
+        })
+      }
+      await db.insert(seasons).values({
+        showId: show.id,
+        seasonNumber,
+        episodeCount: opts.episodeCount,
+        airedEpisodeCount: opts.episodeCount,
+      })
+      const rows = await db
+        .insert(episodes)
+        .values(
+          opts.episodes.map((e) => ({
+            showId: show.id,
+            seasonNumber,
+            episodeNumber: e.episodeNumber,
+            runtimeMinutes: e.runtimeMinutes,
+            firstAired: e.firstAired ?? null,
+            // Already checked — keeps this show off the IMDb/overview
+            // backfills' own candidate lists, which are otherwise keyed
+            // on exactly the same "checked_at IS NULL" shape this test
+            // deliberately wants to isolate to runtime alone.
+            overviewCheckedAt: new Date(),
+            imdbCheckedAt: new Date(),
+          })),
+        )
+        .returning()
+      return { show, episodes: rows }
+    }
+
+    function fakeSeason(
+      episodes: Array<{
+        episodeNumber: number
+        runtimeMinutes: number | null
+        firstAired?: string
+      }>,
+    ): ProviderSeason {
+      return {
+        overview: null,
+        voteAverage: null,
+        externalId: null,
+        episodes: episodes.map((e) => ({
+          title: null,
+          seasonNumber: 1,
+          episodeNumber: e.episodeNumber,
+          runtimeMinutes: e.runtimeMinutes,
+          firstAired: e.firstAired ?? null,
+          overview: null,
+          stillPath: null,
+          voteAverage: null,
+          externalId: null,
+          imdbId: null,
+        })),
+      }
+    }
+
+    it('fills a null runtime from the fallback provider when both gates pass', async () => {
+      const { show, episodes: rows } = await insertShowNeedingRuntimeBackfill({
+        tmdbId: 200,
+        tvdbId: '900',
+        episodeCount: 2,
+        episodes: [
+          { episodeNumber: 1, runtimeMinutes: null, firstAired: '2020-01-01' },
+          { episodeNumber: 2, runtimeMinutes: 20, firstAired: '2020-01-08' },
+        ],
+      })
+      const tvdb = fakeTvdbProvider(async () =>
+        fakeSeason([
+          { episodeNumber: 1, runtimeMinutes: 24, firstAired: '2020-01-01' },
+          { episodeNumber: 2, runtimeMinutes: 99, firstAired: '2020-01-08' },
+        ]),
+      )
+
+      const result = await runMetadataRefresh(db, [provider, tvdb])
+      expect(result.episodeRuntimeSeasonsFilled).toBe(1)
+
+      const updated = await db.select().from(episodes).where(eq(episodes.showId, show.id))
+      const byNumber = new Map(updated.map((e) => [e.episodeNumber, e]))
+      expect(byNumber.get(1)?.runtimeMinutes).toBe(24)
+      expect(byNumber.get(1)?.runtimeCheckedAt).not.toBeNull()
+      // Episode 2 already had a runtime — never overwritten, even though
+      // the fallback provider returned a different value for it.
+      expect(byNumber.get(2)?.runtimeMinutes).toBe(20)
+      expect(rows.find((e) => e.episodeNumber === 2)?.runtimeMinutes).toBe(20)
+    })
+
+    it('Gate A rejects a season-count mismatch, leaving runtime null but marking it checked', async () => {
+      const { show } = await insertShowNeedingRuntimeBackfill({
+        tmdbId: 201,
+        tvdbId: '901',
+        episodeCount: 2, // cached locally as 2 episodes
+        episodes: [{ episodeNumber: 1, runtimeMinutes: null, firstAired: '2020-01-01' }],
+      })
+      const tvdb = fakeTvdbProvider(async () =>
+        fakeSeason([
+          // The fallback thinks this season has 3 episodes — a shape
+          // mismatch against the locally cached count of 2.
+          { episodeNumber: 1, runtimeMinutes: 24, firstAired: '2020-01-01' },
+          { episodeNumber: 2, runtimeMinutes: 20, firstAired: '2020-01-08' },
+          { episodeNumber: 3, runtimeMinutes: 18, firstAired: '2020-01-15' },
+        ]),
+      )
+
+      const result = await runMetadataRefresh(db, [provider, tvdb])
+      expect(result.episodeRuntimeSeasonsFilled).toBe(0)
+
+      const [updated] = await db.select().from(episodes).where(eq(episodes.showId, show.id))
+      expect(updated?.runtimeMinutes).toBeNull()
+      expect(updated?.runtimeCheckedAt).not.toBeNull()
+    })
+
+    it('Gate B rejects a genuine air-date mismatch while other episodes in the season still fill', async () => {
+      const { show } = await insertShowNeedingRuntimeBackfill({
+        tmdbId: 202,
+        tvdbId: '902',
+        episodeCount: 2,
+        episodes: [
+          { episodeNumber: 1, runtimeMinutes: null, firstAired: '2020-01-01' },
+          { episodeNumber: 2, runtimeMinutes: null, firstAired: '2020-01-08' },
+        ],
+      })
+      const tvdb = fakeTvdbProvider(async () =>
+        fakeSeason([
+          // A week off — well past AIR_DATE_TOLERANCE_DAYS, so this one
+          // episode must not fill even though the season shape (Gate A)
+          // matches.
+          { episodeNumber: 1, runtimeMinutes: 24, firstAired: '2020-01-08' },
+          { episodeNumber: 2, runtimeMinutes: 20, firstAired: '2020-01-08' },
+        ]),
+      )
+
+      const result = await runMetadataRefresh(db, [provider, tvdb])
+      expect(result.episodeRuntimeSeasonsFilled).toBe(1)
+
+      const updated = await db.select().from(episodes).where(eq(episodes.showId, show.id))
+      const byNumber = new Map(updated.map((e) => [e.episodeNumber, e]))
+      expect(byNumber.get(1)?.runtimeMinutes).toBeNull()
+      expect(byNumber.get(1)?.runtimeCheckedAt).not.toBeNull()
+      expect(byNumber.get(2)?.runtimeMinutes).toBe(20)
+    })
+
+    // Regression: confirmed live against Keep Your Hands Off Eizouken! —
+    // TVDB and IMDb agreed on 2020-01-06 for its episode 1, TMDB alone
+    // recorded 2020-01-05, most likely a JST-midnight rounding quirk in
+    // TMDB's own data. A same-day-give-or-take-one disagreement like this
+    // must still fill; only a real mismatch (Gate B's other test above)
+    // should block.
+    it('Gate B tolerates a one-day air-date difference between providers', async () => {
+      const { show } = await insertShowNeedingRuntimeBackfill({
+        tmdbId: 206,
+        tvdbId: '906',
+        episodeCount: 1,
+        episodes: [{ episodeNumber: 1, runtimeMinutes: null, firstAired: '2020-01-05' }],
+      })
+      const tvdb = fakeTvdbProvider(async () =>
+        fakeSeason([{ episodeNumber: 1, runtimeMinutes: 25, firstAired: '2020-01-06' }]),
+      )
+
+      const result = await runMetadataRefresh(db, [provider, tvdb])
+      expect(result.episodeRuntimeSeasonsFilled).toBe(1)
+
+      const [updated] = await db.select().from(episodes).where(eq(episodes.showId, show.id))
+      expect(updated?.runtimeMinutes).toBe(25)
+    })
+
+    it('the drain terminates — a second run makes zero further fallback-provider calls', async () => {
+      await insertShowNeedingRuntimeBackfill({
+        tmdbId: 203,
+        tvdbId: '903',
+        episodeCount: 1,
+        episodes: [{ episodeNumber: 1, runtimeMinutes: null, firstAired: '2020-01-01' }],
+      })
+      const getSeason = vi.fn(async () =>
+        fakeSeason([{ episodeNumber: 1, runtimeMinutes: 24, firstAired: '2020-01-01' }]),
+      )
+      const tvdb = fakeTvdbProvider(getSeason)
+
+      const first = await runMetadataRefresh(db, [provider, tvdb])
+      expect(first.episodeRuntimeSeasonsFilled).toBe(1)
+      expect(getSeason).toHaveBeenCalledTimes(1)
+
+      const second = await runMetadataRefresh(db, [provider, tvdb])
+      expect(second.episodeRuntimeSeasonsFilled).toBe(0)
+      expect(getSeason).toHaveBeenCalledTimes(1) // no further calls
+    })
+
+    it('skips a show with no fallback-provider id, without marking its episodes checked', async () => {
+      const { show } = await insertShowNeedingRuntimeBackfill({
+        tmdbId: 204,
+        // No tvdbId at all — nothing for the fallback to resolve to.
+        episodeCount: 1,
+        episodes: [{ episodeNumber: 1, runtimeMinutes: null, firstAired: '2020-01-01' }],
+      })
+      const getSeason = vi.fn(async () =>
+        fakeSeason([{ episodeNumber: 1, runtimeMinutes: 24, firstAired: '2020-01-01' }]),
+      )
+      const tvdb = fakeTvdbProvider(getSeason)
+
+      const result = await runMetadataRefresh(db, [provider, tvdb])
+      expect(result.episodeRuntimeSeasonsFilled).toBe(0)
+      expect(getSeason).not.toHaveBeenCalled()
+
+      const [updated] = await db.select().from(episodes).where(eq(episodes.showId, show.id))
+      expect(updated?.runtimeMinutes).toBeNull()
+      expect(updated?.runtimeCheckedAt).toBeNull()
+    })
+
+    it("backfillShowEpisodeRuntimes fixes one show's runtimes immediately, for the manual refresh button", async () => {
+      const { show } = await insertShowNeedingRuntimeBackfill({
+        tmdbId: 205,
+        tvdbId: '905',
+        episodeCount: 1,
+        episodes: [{ episodeNumber: 1, runtimeMinutes: null, firstAired: '2020-01-01' }],
+      })
+      const tvdb = fakeTvdbProvider(async () =>
+        fakeSeason([{ episodeNumber: 1, runtimeMinutes: 24, firstAired: '2020-01-01' }]),
+      )
+
+      const filled = await backfillShowEpisodeRuntimes(db, show.id, [provider, tvdb], 'en-US')
+      expect(filled).toBe(1)
+
+      const [updated] = await db.select().from(episodes).where(eq(episodes.showId, show.id))
+      expect(updated?.runtimeMinutes).toBe(24)
+    })
   })
 })

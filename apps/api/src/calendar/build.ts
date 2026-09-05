@@ -74,6 +74,34 @@ function episodeSummary(
   return title ? `${showTitle} — ${code} ${title}` : `${showTitle} — ${code}`
 }
 
+// Duration for a history event whose own runtime, and its show's sibling
+// median (see runtimeForRow below), are both unavailable — rare enough in
+// practice (38 of 10,701 real episode plays on the reference instance,
+// always a whole season TMDB never had a runtime for at all) that a fixed
+// guess isn't worth the complexity of a movie-shaped vs. episode-shaped
+// default. It only ever means "no better number was findable," never a
+// real duration.
+const DEFAULT_RUNTIME_MINUTES = 30
+
+/** A history row's own runtime, or (for an episode) the median runtime of
+ * other episodes of the same show, or the flat default above — in that
+ * order. `medianByShowId` covers only shows where at least one row in
+ * this feed actually needs it; see its own construction in
+ * buildHistoryEvents. */
+function runtimeForRow(
+  row: {
+    movieRuntimeMinutes: number | null
+    episodeRuntimeMinutes: number | null
+    showId: string | null
+  },
+  medianByShowId: Map<string, number>,
+): number {
+  const own = row.showId === null ? row.movieRuntimeMinutes : row.episodeRuntimeMinutes
+  if (own !== null) return own
+  const median = row.showId !== null ? medianByShowId.get(row.showId) : undefined
+  return median ?? DEFAULT_RUNTIME_MINUTES
+}
+
 /**
  * A fresh query against `plays` rather than reusing export/build.ts's
  * history-gathering — that one is tightly coupled to CSV column layout
@@ -104,6 +132,8 @@ async function buildHistoryEvents(
       movieSlug: movies.slug,
       movieOverview: movies.overview,
       movieMetadataRefreshedAt: movies.metadataRefreshedAt,
+      movieRuntimeMinutes: movies.runtimeMinutes,
+      showId: shows.id,
       showSlug: shows.slug,
       showTitle: shows.title,
       seasonNumber: episodes.seasonNumber,
@@ -111,6 +141,7 @@ async function buildHistoryEvents(
       episodeTitle: episodes.title,
       episodeOverview: episodes.overview,
       episodeOverviewCheckedAt: episodes.overviewCheckedAt,
+      episodeRuntimeMinutes: episodes.runtimeMinutes,
     })
     .from(plays)
     .leftJoin(movies, eq(movies.id, plays.movieId))
@@ -128,36 +159,103 @@ async function buildHistoryEvents(
         typeFilter,
       ),
     )
+    // Newest first — this is also what makes `rows[i + 1]` the
+    // chronologically *previous* play for the overlap clamp below,
+    // without a second pass or a re-sort.
     .orderBy(desc(plays.watchedAt))
     .limit(MAX_CALENDAR_EVENTS)
 
-  return rows.map((row) => ({
-    uid: `play-${row.playId}@rwnd.tv`,
-    date: localDay(row.watchedAt, user.timezone),
-    summary:
-      row.movieTitle !== null
-        ? row.movieYear !== null
-          ? `${row.movieTitle} (${row.movieYear})`
-          : row.movieTitle
-        : episodeSummary(row.showTitle!, row.seasonNumber!, row.episodeNumber!, row.episodeTitle),
-    // No spoiler check here, unlike buildShowsEvents below — every entry
-    // in History is, by construction, something the user has already
-    // watched, so there's nothing left to spoil.
-    description: withLink(
-      (row.movieTitle !== null ? row.movieOverview : row.episodeOverview) ?? undefined,
-      !baseUrl
-        ? undefined
-        : row.movieTitle !== null
-          ? `${baseUrl}/movies/${row.movieSlug!}`
-          : `${baseUrl}/shows/${row.showSlug!}/season/${row.seasonNumber!}/episode/${row.episodeNumber!}`,
+  // One extra query for the shows whose sibling-episode runtime median
+  // this feed actually needs — not a subquery nested inside the query
+  // above: docs/TODO_ARCHIVE.md records a live bug where a raw `sql`
+  // fragment nested inside a joinless Drizzle query silently lost its own
+  // column qualifiers, and a separate top-level query sidesteps that
+  // shape entirely. `percentile_cont` itself ignores NULL inputs, so this
+  // is correctly "the median of the episodes that do have a runtime."
+  const showIdsNeedingMedian = [
+    ...new Set(
+      rows
+        .filter((row) => row.showId !== null && row.episodeRuntimeMinutes === null)
+        .map((row) => row.showId!),
     ),
-    // See latestOf's own doc comment — the play's own createdAt alone
-    // would never reflect a description backfilled after the fact.
-    stamp: latestOf(
-      row.createdAt,
-      row.movieTitle !== null ? row.movieMetadataRefreshedAt : row.episodeOverviewCheckedAt,
-    ),
-  }))
+  ]
+  const medianByShowId = new Map<string, number>()
+  if (showIdsNeedingMedian.length > 0) {
+    const medianRows = await db
+      .select({
+        showId: episodes.showId,
+        median: sql<
+          number | null
+        >`percentile_cont(0.5) within group (order by ${episodes.runtimeMinutes})`,
+      })
+      .from(episodes)
+      .where(inArray(episodes.showId, showIdsNeedingMedian))
+      .groupBy(episodes.showId)
+    for (const row of medianRows) {
+      if (row.median !== null) medianByShowId.set(row.showId, Math.round(row.median))
+    }
+  }
+
+  return rows.map((row, i) => {
+    // `watchedAt` records when playback *finished*, not when it started —
+    // every producer of it agrees. Plex's `media.scrobble` webhook fires
+    // at its own "watched" threshold near the end of playback
+    // (apps/api/src/routes/webhooks.ts sets it to `new Date()` on
+    // receipt), and the manual watch-date dialog's default mode is
+    // literally "justFinished" — its "now watching" mode computes `now +
+    // runtime` as the *predicted finish* rather than logging a start
+    // (apps/web/src/components/library/WatchDateDialog.tsx). Confirmed
+    // live 2026-09-05 with a controlled watch: the recorded `watchedAt`
+    // landed 89% through the episode's real runtime, not at its start —
+    // consistent with Plex's own threshold, nowhere close to either end.
+    const end = row.watchedAt
+    const durationMs = runtimeForRow(row, medianByShowId) * 60_000
+    let start = new Date(end.getTime() - durationMs)
+
+    // Push the start later if it would overlap the *previous* play
+    // chronologically — rows are ordered newest-first, so that's
+    // rows[i + 1]. A tied timestamp (a bulk import commonly logs several
+    // plays at once) is not "preceding," so it isn't clamped: those plays
+    // keep their full runtime and stack, an honest picture of what
+    // actually happened, rather than collapsing to zero-length events.
+    const previous = rows[i + 1]
+    if (
+      previous &&
+      previous.watchedAt.getTime() < end.getTime() &&
+      previous.watchedAt.getTime() > start.getTime()
+    ) {
+      start = previous.watchedAt
+    }
+
+    return {
+      uid: `play-${row.playId}@rwnd.tv`,
+      start,
+      end,
+      summary:
+        row.movieTitle !== null
+          ? row.movieYear !== null
+            ? `${row.movieTitle} (${row.movieYear})`
+            : row.movieTitle
+          : episodeSummary(row.showTitle!, row.seasonNumber!, row.episodeNumber!, row.episodeTitle),
+      // No spoiler check here, unlike buildShowsEvents below — every entry
+      // in History is, by construction, something the user has already
+      // watched, so there's nothing left to spoil.
+      description: withLink(
+        (row.movieTitle !== null ? row.movieOverview : row.episodeOverview) ?? undefined,
+        !baseUrl
+          ? undefined
+          : row.movieTitle !== null
+            ? `${baseUrl}/movies/${row.movieSlug!}`
+            : `${baseUrl}/shows/${row.showSlug!}/season/${row.seasonNumber!}/episode/${row.episodeNumber!}`,
+      ),
+      // See latestOf's own doc comment — the play's own createdAt alone
+      // would never reflect a description backfilled after the fact.
+      stamp: latestOf(
+        row.createdAt,
+        row.movieTitle !== null ? row.movieMetadataRefreshedAt : row.episodeOverviewCheckedAt,
+      ),
+    }
+  })
 }
 
 /**

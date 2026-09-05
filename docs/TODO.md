@@ -106,6 +106,33 @@ Format:
       counts as personal use. Movies-only vs. Movies+TV Shows was never
       decided either, moot until this unblocks.
 
+- [ ] **Reverse-lookup fallback for shows with no stored TVDB id** (2026-09-05 02:37 added)
+
+      The cross-provider episode runtime backfill
+      (`fillSeasonRuntimesFromFallback`, `apps/api/src/metadata/refresh.ts`)
+      can only try a provider the show already has a stored external id
+      for. One show found with this gap on the reference instance: Blade
+      Runner 2099, `metadata_source: 'tmdb'`, no `tvdb` id on file — its
+      null-runtime episodes are skipped without being marked checked, so
+      they're retried (and skipped again) on every future pass.
+
+      Low priority, likely self-healing without this fix: Blade Runner
+      2099 is still "In Production", so its null runtimes are all unaired
+      future episodes, not anything currently watched. The ordinary
+      airing-show refresh sweep (every 7 days) already coalesces a
+      still-null runtime from TMDB itself once an episode actually airs
+      and TMDB fills it in (`resolveSeason`'s same-provider coalesce,
+      `apps/api/src/lib/media.ts`), independent of this gap entirely. This
+      would only matter if a show finishes airing with TMDB never having
+      populated a runtime for some episode, and never had a TVDB id to
+      fall back to either.
+
+      Fix, if pursued: a reverse `findByExternalId` lookup (TVDB's own
+      search, or via a stored `imdb`/`trakt` id) to discover a TVDB id for
+      a show that doesn't have one on file — same mechanism the Trakt
+      import matcher (`apps/api/src/import/match.ts`) already uses for
+      matching, just not wired into the runtime backfill path.
+
 ## Roadmap
 
 Every open item from [ROADMAP.md](ROADMAP.md) that doesn't already have a
@@ -187,26 +214,3 @@ source of truth for scope; this is just so a TODO listing is complete.
       (see TODO_ARCHIVE.md) — this item is now specifically about the
       between-seasons local-data gap, not the recency window.
 
-- [ ] **History calendar feed: timed events instead of all-day** (2026-09-04 added; Not yet scheduled)
-
-      History events are currently all-day (`buildHistoryEvents`,
-      `apps/api/src/calendar/build.ts`), even though `plays.watchedAt` is a
-      precise timestamp, not just a date. Give them a real DTSTART/DTEND
-      instead: start at `watchedAt`, end at `watchedAt` +
-      `episodes.runtimeMinutes` (or `movies.runtimeMinutes` for a movie
-      play) when that column is populated.
-
-      If the computed end would overlap the *next* play chronologically
-      (plays are already ordered by `watchedAt` in that function), cut it
-      short to that next play's start instead. Watch sessions commonly
-      skip opening/closing credits, so a naive start+runtime end would
-      routinely overlap the next thing watched back-to-back.
-
-      `apps/api/src/lib/ics.ts` only ever emits `VALUE=DATE` events today
-      (see its own top-of-file comment); needs a timed-event path
-      alongside the existing all-day one, since the TV Shows feed
-      (`buildShowsEvents`) stays all-day regardless (`episodes.firstAired`
-      is a bare date, no time-of-day to build a DTSTART from). Undecided:
-      what to fall back to when `runtimeMinutes` is null (no cached
-      runtime yet) — plausibly all-day for that one event, or a fixed
-      default duration; needs a decision before implementing.

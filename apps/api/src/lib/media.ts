@@ -303,19 +303,28 @@ export async function resolveSeason(
         })),
       )
       // Every other column here is still onConflictDoNothing in spirit —
-      // title/runtimeMinutes/firstAired only ever get written once, on
-      // first insert — but `overview`/`overviewCheckedAt` update on every
-      // call, set regardless of whether the provider actually had a
-      // synopsis this time (same "we asked, not we found" convention as
+      // title/firstAired only ever get written once, on first insert —
+      // but `overview`/`overviewCheckedAt` update on every call, set
+      // regardless of whether the provider actually had a synopsis this
+      // time (same "we asked, not we found" convention as
       // `imdbCheckedAt`). This is what makes an existing row's overview
       // self-heal the next time its season is organically resolved (a
       // page view, the airing-show sweep, or the one-off backfill below),
       // without touching the other fields' established behaviour.
+      //
+      // `runtimeMinutes` is the one exception to "write once": a
+      // `coalesce` fills a still-null value from this same provider on a
+      // later resolve (e.g. TMDB gains an episode's runtime after it
+      // airs), but never overwrites a value already recorded — including
+      // one filled by the cross-provider fallback backfill (see
+      // apps/api/src/metadata/refresh.ts), which this path must not
+      // clobber with a differently-numbered TMDB episode's value.
       .onConflictDoUpdate({
         target: [episodes.showId, episodes.seasonNumber, episodes.episodeNumber],
         set: {
           overview: sql`excluded.overview`,
           overviewCheckedAt: sql`excluded.overview_checked_at`,
+          runtimeMinutes: sql`coalesce(${episodes.runtimeMinutes}, excluded.runtime_minutes)`,
         },
       })
   }

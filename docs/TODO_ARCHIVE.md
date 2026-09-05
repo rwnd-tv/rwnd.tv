@@ -1448,6 +1448,109 @@ currently-dropped shows, since a row can have both
       appeared correctly in a freshly resubscribed Thunderbird calendar
       after the join fix shipped.
 
+- [x] **History calendar feed: timed events instead of all-day** (2026-09-04 added, done 2026-09-05)\
+      History events now carry a real `DTSTART`/`DTEND` (UTC instants) instead
+      of an all-day `VALUE=DATE`: end at `plays.watchedAt` (see the
+      watchedAt-direction correction below for why it's the end, not the
+      start), start at end minus the episode's/movie's runtime, pushed later
+      if that would overlap the *previous* play chronologically.
+      `apps/api/src/lib/ics.ts`'s `IcsEvent`
+      became a discriminated union (`IcsAllDayEvent` | `IcsTimedEvent`) rather
+      than growing optional fields; the TV Shows feed stays all-day
+      regardless, since `episodes.firstAired` has no time-of-day to build an
+      instant from. Emitted as plain UTC with no `VTIMEZONE`: `users.timezone`
+      turned out to never actually be set by the app in practice (no UI
+      writes it), so it's `'UTC'` on every real account and a `VTIMEZONE`
+      block would add DST-rule machinery for nothing. A tied timestamp (a
+      bulk-logged batch) isn't treated as "subsequent," so tied plays keep
+      full runtime and stack rather than collapsing to zero length.\
+      Runtime fallback, measured rather than guessed against production data
+      before deciding: own `runtimeMinutes`; else the median of the show's
+      other episodes (`percentile_cont`, a separate top-level query rather
+      than a nested subquery, following the join-qualifier lesson two entries
+      up); else a flat 30 minutes. Only 38 of 10,701 real episode plays (8
+      shows, always whole-season gaps) needed any fallback at all, and movie
+      runtime was 100% present.\
+      **A second, bigger defect surfaced investigating those 38**: pressing
+      "Refresh metadata" on an affected show updated its overview but never
+      its episode runtimes. Root cause was two-fold — `resolveSeason`
+      (`apps/api/src/lib/media.ts`) only ever asks the *primary* provider
+      (deliberate per [ADR 0006](adr/0006-multi-provider-metadata.md)'s own
+      "will need source-tagging" note), and its `onConflictDoUpdate` treated
+      `runtimeMinutes` as write-once. All 31 shows missing a runtime were
+      `metadata_source: 'tmdb'`; 29 already had a stored `tvdb` id. Fixed
+      with a **field-scoped** cross-provider fallback rather than widening
+      `resolveSeason` itself (which sits on hot paths — Up Next, both
+      "Watched" buttons, webhook ingest, CSV import — where a second provider
+      call on every hit would double traffic for the ~99% of seasons that
+      don't need it): `resolveSeason`'s own conflict handling now coalesces a
+      still-null runtime from the *same* provider on a later resolve; a new
+      targeted backfill (`apps/api/src/metadata/refresh.ts`,
+      `fillSeasonRuntimesFromFallback`/`backfillEpisodeRuntimes`/
+      `backfillShowEpisodeRuntimes`, run from both the nightly sweep and the
+      manual refresh button) tries every *other* configured provider. Guarded
+      against TMDB/TVDB episode-numbering disagreements — an OVA/recap one
+      provider files differently can shift every later `episodeNumber` — with
+      Gate A (the fallback's episode count for a season must match the
+      primary's own cached `seasons.episodeCount`) and Gate B (a per-episode
+      air-date cross-check). New `episodes.runtime_checked_at` column, same
+      "we asked, not we found" convention as `overview_checked_at`/
+      `imdb_checked_at`.\
+      **Gate B needed a live correction.** Verified live on dev.rwnd.tv
+      against the real (production-mirrored) library: 13 seasons filled on
+      the first sweep, 0 errors, but Keep Your Hands Off Eizouken! only
+      filled 1 of 12 episodes. James caught a real TVDB data wrinkle along
+      the way — TheTVDB lists two unrelated series under the same English
+      title, the 12-episode 2020 anime and a 6-episode 2020 live-action drama
+      adaptation with different cast — but confirmed via TVDB's own API that
+      the fallback had matched the correct one (Gate A's episode-count check
+      would have caught a wrong match to the other regardless, 6 vs. 12).
+      The real cause was narrower: TVDB and IMDb agree on 2020-01-06 for
+      episode 1, TMDB alone recorded 2020-01-05, a probable JST-midnight
+      rounding quirk in TMDB's own data, confirmed live rather than assumed.
+      Gate B now tolerates a 1-day difference (`AIR_DATE_TOLERANCE_DAYS`) —
+      loose enough to absorb that, tight enough that a real mismatch still
+      reads as weeks or months apart. Re-verified after the fix: Eizouken
+      12/12 and Isekai Quartet 23/23, matching TVDB's real values exactly;
+      every one of the original 8 affected shows fully resolved.\
+      Verified live end-to-end: dev sweep output, direct `psql` checks
+      against the real values, and James subscribed the History feed in
+      Thunderbird and confirmed real timed blocks (not all-day banners),
+      correct stacking for back-to-back anime episodes, and plausible
+      durations throughout.\
+      **A third defect, the most fundamental one, surfaced from that same
+      live Thunderbird check**: James noticed a Formula 1 practice session's
+      block sat well after the moment he actually stopped watching, and ran
+      a controlled test to confirm it precisely — start an episode, note the
+      wall-clock time, note it again on finish. Real window: 01:30:44 to
+      01:54:26 UTC (23m42s, matching the episode almost exactly). Logged
+      `watched_at`: 01:51:52 UTC — 89.2% through the episode, not at the
+      start. Root cause: `plays.watchedAt` records when playback *finished*
+      everywhere it's produced, not when it started — Plex's
+      `media.scrobble` webhook fires at its own "watched" threshold near the
+      end (`apps/api/src/routes/webhooks.ts` stamps `new Date()` on
+      receipt), and the manual watch-date dialog's own default mode is
+      literally "justFinished," with its "now watching" mode computing `now
+      + runtime` as the *predicted finish* rather than logging a start
+      (`apps/web/src/components/library/WatchDateDialog.tsx`). The feature
+      had been built and shipped with exactly the opposite assumption
+      (`DTSTART = watchedAt`, `DTEND = start + runtime`), so every event
+      depicted the viewing window shifted forward by roughly its own
+      runtime, mostly *after* the person had actually stopped watching —
+      confirmed as a live, visible symptom in James's own second
+      Thunderbird screenshot (a "A Certain Scientific Railgun" block sitting
+      well after Formula 1 ended, not overlapping when it was actually
+      watched at all). Fixed by flipping both the anchor (end at
+      `watchedAt`, start at end minus runtime) and the overlap clamp's
+      direction (push the start later against the *previous* play's own
+      end, rather than cutting the end short against the *next* play's
+      start) — `apps/api/src/calendar/build.ts`. Worth remembering
+      generally: a "when X happened" timestamp on a completed activity is
+      easy to silently assume means "when it started," and the assumption
+      can survive code review and a full test suite (this one did, twice)
+      because nothing about the shape of the bug looks wrong in isolation —
+      only comparing against a real, precisely-timed live event exposed it.
+
 ## Movies
 
 - [x] **Bring Movies up to parity with TV Shows, where appropriate — Phase 1** (2026-08-23 15:05 added, done 2026-08-23)\

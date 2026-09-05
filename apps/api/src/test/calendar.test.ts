@@ -339,12 +339,14 @@ describe('calendar feeds', () => {
       expect(body).not.toContain(`UID:play-${sentinelPlay.id}@rwnd.tv`)
     })
 
-    it("buckets a watch by the account's own timezone, not UTC", async () => {
+    it('emits the watchedAt instant as UTC regardless of the account timezone', async () => {
+      // History events are timed (DTSTART/DTEND as UTC instants), unlike
+      // the TV Shows feed's all-day events below — users.timezone is
+      // never actually set by the app in practice (see build.ts's own
+      // reasoning), so there's no local-day bucketing left to test here.
       const cookie = await createUserAndCookie()
       const userId = await meId(cookie)
       const movie = await seedMovie('a-movie', 'A Movie')
-      // Late evening UTC — a different calendar day once shifted forward
-      // into Sydney's timezone.
       await db.insert(plays).values({
         userId,
         movieId: movie.id,
@@ -352,29 +354,151 @@ describe('calendar feeds', () => {
       })
       const feed = await createFeed(cookie, 'history')
 
+      // DTEND is the raw watchedAt instant (watchedAt is when playback
+      // *finished* — see build.ts's own doc comment); DTSTART is derived
+      // from it minus a runtime, so DTEND is the more direct thing to
+      // assert against the account's timezone here.
       const utcBody = await (await app.request(`/api/v1/calendar/${feed.token}/feed.ics`)).text()
-      expect(utcBody).toContain('DTSTART;VALUE=DATE:20260904')
+      expect(utcBody).toContain('DTEND:20260904T233000Z')
 
       await db.update(users).set({ timezone: 'Australia/Sydney' }).where(eq(users.id, userId))
       const sydneyBody = await (await app.request(`/api/v1/calendar/${feed.token}/feed.ics`)).text()
-      expect(sydneyBody).toContain('DTSTART;VALUE=DATE:20260905')
+      expect(sydneyBody).toContain('DTEND:20260904T233000Z')
     })
 
-    it('falls back to UTC for an invalid stored timezone rather than 500ing', async () => {
+    it("uses the movie's/episode's own runtime for the event's duration, ending at watchedAt", async () => {
+      // watchedAt is when playback *finished* (see build.ts's own doc
+      // comment on this), so the event's DTEND is the raw watchedAt and
+      // DTSTART is watchedAt minus the runtime, not the other way round.
       const cookie = await createUserAndCookie()
       const userId = await meId(cookie)
-      const movie = await seedMovie('a-movie', 'A Movie')
+      const [movie] = await db
+        .insert(movies)
+        .values({ title: 'A Movie', slug: 'a-movie', runtimeMinutes: 90 })
+        .returning()
       await db.insert(plays).values({
         userId,
-        movieId: movie.id,
-        watchedAt: new Date('2026-09-04T10:00:00.000Z'),
+        movieId: movie!.id,
+        watchedAt: new Date('2026-09-04T19:00:00.000Z'),
       })
-      await db.update(users).set({ timezone: 'Not/AZone' }).where(eq(users.id, userId))
 
       const feed = await createFeed(cookie, 'history')
-      const res = await app.request(`/api/v1/calendar/${feed.token}/feed.ics`)
-      expect(res.status).toBe(200)
-      expect(await res.text()).toContain('DTSTART;VALUE=DATE:20260904')
+      const body = await (await app.request(`/api/v1/calendar/${feed.token}/feed.ics`)).text()
+      expect(body).toContain('DTSTART:20260904T173000Z')
+      expect(body).toContain('DTEND:20260904T190000Z')
+    })
+
+    it("falls back to the show's sibling-episode median runtime when the played episode has none", async () => {
+      const cookie = await createUserAndCookie()
+      const userId = await meId(cookie)
+      const show = await seedShow('a-show', 'A Show')
+      // Three unwatched siblings with known runtimes (median 24) plus the
+      // one actually played, which has none of its own.
+      await db.insert(episodes).values([
+        { showId: show.id, seasonNumber: 1, episodeNumber: 1, runtimeMinutes: 20 },
+        { showId: show.id, seasonNumber: 1, episodeNumber: 2, runtimeMinutes: 24 },
+        { showId: show.id, seasonNumber: 1, episodeNumber: 3, runtimeMinutes: 28 },
+      ])
+      const [ep] = await db
+        .insert(episodes)
+        .values({ showId: show.id, seasonNumber: 1, episodeNumber: 4, runtimeMinutes: null })
+        .returning()
+      await db.insert(plays).values({
+        userId,
+        episodeId: ep!.id,
+        watchedAt: new Date('2026-09-04T19:00:00.000Z'),
+      })
+
+      const feed = await createFeed(cookie, 'history')
+      const body = await (await app.request(`/api/v1/calendar/${feed.token}/feed.ics`)).text()
+      expect(body).toContain('DTSTART:20260904T183600Z')
+      expect(body).toContain('DTEND:20260904T190000Z')
+    })
+
+    it('falls back to a flat 30 minutes when the show has no runtime data at all', async () => {
+      const cookie = await createUserAndCookie()
+      const userId = await meId(cookie)
+      const show = await seedShow('a-show', 'A Show')
+      const [ep] = await db
+        .insert(episodes)
+        .values({ showId: show.id, seasonNumber: 1, episodeNumber: 1, runtimeMinutes: null })
+        .returning()
+      await db.insert(plays).values({
+        userId,
+        episodeId: ep!.id,
+        watchedAt: new Date('2026-09-04T19:00:00.000Z'),
+      })
+
+      const feed = await createFeed(cookie, 'history')
+      const body = await (await app.request(`/api/v1/calendar/${feed.token}/feed.ics`)).text()
+      expect(body).toContain('DTSTART:20260904T183000Z')
+      expect(body).toContain('DTEND:20260904T190000Z')
+    })
+
+    it('pushes the start later to avoid overlapping a strictly earlier previous play', async () => {
+      const cookie = await createUserAndCookie()
+      const userId = await meId(cookie)
+      const [movieA] = await db
+        .insert(movies)
+        .values({ title: 'Movie A', slug: 'movie-a', runtimeMinutes: 60 })
+        .returning()
+      const [movieB] = await db
+        .insert(movies)
+        .values({ title: 'Movie B', slug: 'movie-b', runtimeMinutes: 90 })
+        .returning()
+      // Movie A finished at 18:00. Movie B finished at 19:00 with a
+      // 90-minute runtime, which would naively start at 17:30 — before
+      // Movie A had even finished.
+      await db.insert(plays).values({
+        userId,
+        movieId: movieA!.id,
+        watchedAt: new Date('2026-09-04T18:00:00.000Z'),
+      })
+      await db.insert(plays).values({
+        userId,
+        movieId: movieB!.id,
+        watchedAt: new Date('2026-09-04T19:00:00.000Z'),
+      })
+
+      const feed = await createFeed(cookie, 'history')
+      const body = await (await app.request(`/api/v1/calendar/${feed.token}/feed.ics`)).text()
+      // Movie A's own block is unclamped (nothing precedes it).
+      expect(body).toContain('DTSTART:20260904T170000Z\r\nDTEND:20260904T180000Z')
+      // Movie B's start is pushed from the naive 17:30 to Movie A's own
+      // end (18:00), rather than overlapping it.
+      expect(body).toContain('DTSTART:20260904T180000Z\r\nDTEND:20260904T190000Z')
+    })
+
+    it('keeps full duration and stacks when two plays share the exact same timestamp', async () => {
+      const cookie = await createUserAndCookie()
+      const userId = await meId(cookie)
+      const [movieA] = await db
+        .insert(movies)
+        .values({ title: 'Movie A', slug: 'movie-a', runtimeMinutes: 45 })
+        .returning()
+      const [movieB] = await db
+        .insert(movies)
+        .values({ title: 'Movie B', slug: 'movie-b', runtimeMinutes: 45 })
+        .returning()
+      const tiedTimestamp = new Date('2026-09-04T19:00:00.000Z')
+      const [playA] = await db
+        .insert(plays)
+        .values({ userId, movieId: movieA!.id, watchedAt: tiedTimestamp })
+        .returning()
+      const [playB] = await db
+        .insert(plays)
+        .values({ userId, movieId: movieB!.id, watchedAt: tiedTimestamp })
+        .returning()
+
+      const feed = await createFeed(cookie, 'history')
+      const body = await (await app.request(`/api/v1/calendar/${feed.token}/feed.ics`)).text()
+      const unfolded = body.replace(/\r\n /g, '')
+      expect(unfolded).toContain(`UID:play-${playA!.id}@rwnd.tv`)
+      expect(unfolded).toContain(`UID:play-${playB!.id}@rwnd.tv`)
+      // Both plays keep the full 45-minute runtime rather than one
+      // clamping to zero-length against the other.
+      const dtstartCount = (unfolded.match(/DTSTART:20260904T181500Z/g) ?? []).length
+      expect(dtstartCount).toBe(2)
     })
   })
 

@@ -17,7 +17,11 @@ import {
 import { droppedShows, episodes, plays, ratings, seasons, shows } from '@rwnd/db'
 import type { AppEnv } from '../../types.js'
 import { resolveShow, resolveShowEpisodes } from '../../lib/media.js'
-import { pickRefreshTarget, refreshOneShow } from '../../metadata/refresh.js'
+import {
+  backfillShowEpisodeRuntimes,
+  pickRefreshTarget,
+  refreshOneShow,
+} from '../../metadata/refresh.js'
 import { orderedProviders } from '../../providers/priority.js'
 import { isProviderSource } from '../../lib/provider-source.js'
 import { getMyWatchlistIds, getOwnedWatchlist } from '../../lib/watchlists.js'
@@ -457,6 +461,15 @@ showRoutes.openapi(
       { id: show.id, externalId: target.externalId },
       user.locale,
     )
+    // Best-effort: a fallback-provider hiccup shouldn't fail a refresh
+    // that already succeeded against the primary. See
+    // backfillShowEpisodeRuntimes's own doc comment for why this runs
+    // here rather than waiting for the next scheduled sweep.
+    try {
+      await backfillShowEpisodeRuntimes(db, show.id, ordered, user.locale)
+    } catch (err) {
+      console.error(`Episode runtime backfill failed for show ${show.id}:`, err)
+    }
 
     return c.body(null, 204)
   },

@@ -760,7 +760,7 @@
       "deleteConfirmBody": "This stops the feed working everywhere it's subscribed to. You can create a new one at any time, with a new URL.",
       "history": {
         "title": "History",
-        "description": "One event per watched movie or episode, on the day you watched it (in your own timezone).",
+        "description": "One event per watched movie or episode, at the time you watched it.",
         "includeMovies": "Include movies",
         "includeMoviesDescription": "Movies you've logged as watched.",
         "includeShows": "Include TV episodes",

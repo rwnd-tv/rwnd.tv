@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildIcs, type IcsEvent } from './ics.js'
+import { buildIcs, type IcsEvent, type IcsTimedEvent } from './ics.js'
 
 const STAMP = new Date('2026-09-04T10:15:00.000Z')
 
@@ -144,5 +144,50 @@ describe('buildIcs', () => {
   it('produces byte-identical output across two calls with the same input', () => {
     const calendar = { name: 'History', events: [event(), event({ uid: 'play-2@rwnd.tv' })] }
     expect(buildIcs(calendar)).toBe(buildIcs(calendar))
+  })
+
+  describe('timed events', () => {
+    function timedEvent(overrides: Partial<IcsTimedEvent> = {}): IcsTimedEvent {
+      return {
+        uid: 'play-11111111-1111-1111-1111-111111111111@rwnd.tv',
+        summary: 'A Movie (2020)',
+        stamp: STAMP,
+        start: new Date('2026-09-04T19:00:00.000Z'),
+        end: new Date('2026-09-04T20:30:00.000Z'),
+        ...overrides,
+      }
+    }
+
+    it('emits DTSTART/DTEND as UTC instants rather than VALUE=DATE', () => {
+      const ics = unfold(buildIcs({ name: 'History', events: [timedEvent()] }))
+      expect(ics).toContain('DTSTART:20260904T190000Z\r\n')
+      expect(ics).toContain('DTEND:20260904T203000Z\r\n')
+      expect(ics).not.toContain('VALUE=DATE')
+    })
+
+    it('keeps TRANSP:TRANSPARENT on a timed event, same as an all-day one', () => {
+      const ics = buildIcs({ name: 'History', events: [timedEvent()] })
+      expect(ics).toContain('TRANSP:TRANSPARENT\r\n')
+    })
+
+    it('escapes and folds a timed event the same way as an all-day one', () => {
+      const longTitle = 'B'.repeat(120)
+      const ics = buildIcs({ name: 'History', events: [timedEvent({ summary: longTitle })] })
+      expect(ics).toMatch(/\r\n [B]/)
+      expect(unfold(ics)).toContain(`SUMMARY:${longTitle}\r\n`)
+    })
+
+    it('mixes all-day and timed events in the same calendar', () => {
+      const ics = unfold(
+        buildIcs({ name: 'History', events: [event({ date: '2026-09-04' }), timedEvent()] }),
+      )
+      expect(ics).toContain('DTSTART;VALUE=DATE:20260904\r\n')
+      expect(ics).toContain('DTSTART:20260904T190000Z\r\n')
+    })
+
+    it('produces byte-identical output across two calls with the same input', () => {
+      const calendar = { name: 'History', events: [timedEvent()] }
+      expect(buildIcs(calendar)).toBe(buildIcs(calendar))
+    })
   })
 })

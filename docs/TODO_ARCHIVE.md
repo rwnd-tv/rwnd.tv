@@ -1670,6 +1670,67 @@ currently-dropped shows, since a row can have both
       rating sort ordered highly-rated titles (The Godfather, Spirited
       Away, The Dark Knight) first.
 
+- [x] **Movies calendar feed, with region-aware release dates** (2026-09-04
+      added, done 2026-09-05)\
+      The Movies feed deferred when the History/TV Shows feeds shipped
+      (see "Calendar of upcoming episodes" above) — one event per movie
+      release date, for movies you're following (recently watched, or
+      on a watchlist), mirroring the TV Shows feed's own settings
+      (`futureOnly`/`includeAllWatched`) minus `includeDropped` (dropping
+      is a shows-only concept). Needed real new infrastructure first:
+      `movies.releaseDate` (TMDB's primary date, previously fetched only
+      to derive `year` and then discarded) and `movies.releaseDates`
+      (a per-region map, `{ "GB": "2026-03-12", ... }`, reduced at write
+      time to the earliest theatrical release per region, or the
+      earliest of any type if that region has no theatrical entry) —
+      `TmdbProvider.getMovie` now requests
+      `append_to_response=release_dates` on its existing call rather
+      than a second request; TVDB
+      reports neither field, the same way it already reports no
+      `voteAverage`.\
+      `apps/api/src/lib/release-date.ts` resolves which date a given
+      user should see — their own region (derived from `users.locale`
+      via `Intl.Locale`) where TMDB has one, else the primary date —
+      with a SQL form (`releaseDateExpr`, used by the feed query's
+      `WHERE`/`ORDER BY`/`SELECT` so `futureOnly` and the feed's event
+      cap both apply to the actually-resolved date) and a JS form (used
+      by the movie detail route), verified to agree against the same
+      fixtures. `findStaleMovies` gained a 7-day near-release refresh
+      tier (extending backwards from today too, not just forwards,
+      since a laggard region's date is often announced only after the
+      primary release already happened) plus an `isNull(releaseDates)`
+      backfill clause — capped per pass (`MOVIE_REFRESH_PER_PASS`) so
+      the one-time backfill wave doesn't try to refresh an entire
+      library in a single run, the same shape as the episode backfills
+      already used for this reason.\
+      The movie detail page now shows the resolved release date with a
+      country flag next to it — real SVGs from the `flag-icons` package
+      (MIT licensed, self-hosted, no CDN calls), not a Unicode flag-emoji
+      sequence: Windows ships no flag glyphs in its emoji font at all, a
+      deliberate Microsoft omission, so an emoji-based flag rendered as
+      bare letters there on first live check. The year moved from the
+      fact line up next to the title (matching size, muted colour) so
+      it isn't lost when the fact line's first slot is the release date
+      instead; the redundant "Watched YYYY" line was also dropped from
+      the page, since the movie's own History section already lists
+      every individual watch.\
+      Also fixed along the way: `en-GB`'s History feed settings said
+      "movie(s)" instead of "film(s)" (an existing wording drift, per
+      this project's "Films" convention for en-GB), and a latent bug in
+      the calendar-feed `PATCH` route — a body of only-inapplicable keys
+      would have hit Postgres with an empty `SET` clause (a genuine SQL
+      syntax error, confirmed against the installed `drizzle-orm`
+      version) instead of the no-op `updateCalendarFeedRequestSchema`'s
+      own doc comment already promised.\
+      Verified live on dev.rwnd.tv against real TMDB data: a UK-locale
+      account saw `Avengers: Doomsday`'s actual GB theatrical date with
+      a real flag rendered next to it (both on the movie page and in
+      the subscribed feed, `DTSTART` matching exactly), a throwaway
+      US-locale account resolved the same movie to its US date instead,
+      and the feed correctly picked up already-watchlisted movies,
+      respected spoiler protection, and responded to `futureOnly` being
+      toggled off.
+
 ## Landing page & branding
 
 - [x] **Link the header mark/wordmark to the site's base URL** (2026-08-23 14:40 added, done 2026-08-23)\

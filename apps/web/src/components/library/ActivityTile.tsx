@@ -74,20 +74,20 @@ const KIND_ICONS: Record<ActivityEntry['kind'], () => React.JSX.Element> = {
   dropped: DroppedIcon,
 }
 
-/** Where an entry links to. A watch entry for an episode still links to its
- * show's page, not a specific episode page, same as HistoryPage.tsx's
- * playHref did before this rewrite — but a *rating* entry for an episode
- * links straight to that episode's own page instead: a rating is naturally
- * about one specific thing, and an episode rating is about that episode,
- * not the show as a whole (matching RatingPicker.tsx's own display there).
- * `undefined` for an entry with no detail page to send the user to (a media
- * row that predates showSlug/movieSlug existing). */
+/** Where an entry links to. A *watch* or *rating* entry for an episode
+ * links straight to that episode's own page — both are naturally about one
+ * specific thing, matching the Dashboard's History row (HistoryRow.tsx) and
+ * RatingPicker.tsx's own display. A *watchlist* or *dropped* entry for an
+ * episode still links to the show's page instead: those are about following
+ * the show as a whole, not one episode. `undefined` for an entry with no
+ * detail page to send the user to (a media row that predates showSlug/
+ * movieSlug existing). */
 function activityHref(entry: ActivityEntry): string | undefined {
   const { media } = entry
   if (media.type === 'movie') return media.movieSlug ? `/movies/${media.movieSlug}` : undefined
   if (!media.showSlug) return undefined
   if (
-    entry.kind === 'rating' &&
+    (entry.kind === 'watch' || entry.kind === 'rating') &&
     media.type === 'episode' &&
     media.seasonNumber !== undefined &&
     media.episodeNumber !== undefined

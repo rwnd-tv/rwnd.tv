@@ -15,7 +15,11 @@ function tmdbShowResponse(overrides: {
   status: string
   genres?: string[]
   voteAverage?: number
-  seasons: Array<{ season_number: number; episode_count: number }>
+  // `air_date` defaults to a fixed past date so every existing test's
+  // seasons are "already started" unless a test explicitly overrides it —
+  // `null` opts a season out of having an air date at all (an announced
+  // stub TMDB hasn't scheduled yet).
+  seasons: Array<{ season_number: number; episode_count: number; air_date?: string | null }>
 }) {
   return JSON.stringify({
     id: overrides.id,
@@ -33,7 +37,7 @@ function tmdbShowResponse(overrides: {
       season_number: s.season_number,
       name: `Season ${s.season_number}`,
       episode_count: s.episode_count,
-      air_date: '2020-01-01',
+      air_date: s.air_date === undefined ? '2020-01-01' : s.air_date,
       poster_path: '/season.jpg',
     })),
   })
@@ -542,6 +546,246 @@ describe('metadata refresh', () => {
     // Only 1 of season 3's (eventual) 10 episodes has actually aired.
     expect(bySeason.get(3)?.airedEpisodeCount).toBe(1)
     expect(bySeason.get(4)?.airedEpisodeCount).toBe(0)
+  })
+
+  // Regression: unlike the empty-placeholder case above, TMDB can also list
+  // an announced next season that already has real episode rows
+  // (episodeCount > 0) but no air date yet, alongside the season that's
+  // genuinely mid-run — confirmed live against Professor T (season 5 stub,
+  // season 4 actually airing since 2026-08-19) and The Pitt (same shape).
+  // Picking "current" by season number alone would fetch the stub instead of
+  // the real airing season, leaving it with zero local episode rows —
+  // exactly the gap that made it silently absent from the TV Shows calendar
+  // feed (docs/TODO.md's "TV Shows calendar feed misses a show between
+  // seasons"). Both seasons should now be resolved.
+  it('resolves both a stub next season and the real current season, when the stub outranks it by season number alone', async () => {
+    const show = await insertShow({
+      tmdbId: 20,
+      status: 'Returning Series',
+      metadataRefreshedAt: new Date(Date.now() - 10 * DAY_MS),
+      withSeasons: false,
+    })
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: string | URL) => {
+        const url = new URL(input)
+        if (url.pathname === '/3/tv/20/season/4') {
+          return new Response(
+            tmdbSeasonResponse(4, [
+              { episode_number: 1, air_date: '2020-01-01' },
+              { episode_number: 2, air_date: '2099-01-01' },
+            ]),
+            { status: 200 },
+          )
+        }
+        if (url.pathname === '/3/tv/20/season/5') {
+          return new Response(
+            tmdbSeasonResponse(5, [{ episode_number: 1, air_date: '2099-06-01' }]),
+            { status: 200 },
+          )
+        }
+        return new Response(
+          tmdbShowResponse({
+            id: 20,
+            status: 'Returning Series',
+            seasons: [
+              { season_number: 4, episode_count: 6, air_date: '2020-01-01' },
+              { season_number: 5, episode_count: 6, air_date: null },
+            ],
+          }),
+          { status: 200 },
+        )
+      }),
+    )
+
+    const result = await runMetadataRefresh(db, [provider])
+    expect(result.showsRefreshed).toBe(1)
+
+    const showEpisodes = await db.select().from(episodes).where(eq(episodes.showId, show.id))
+    const countBySeason = new Map<number, number>()
+    for (const ep of showEpisodes) {
+      countBySeason.set(ep.seasonNumber, (countBySeason.get(ep.seasonNumber) ?? 0) + 1)
+    }
+    expect(countBySeason.get(4)).toBe(2)
+    expect(countBySeason.get(5)).toBe(1)
+
+    const showSeasons = await db.select().from(seasons).where(eq(seasons.showId, show.id))
+    const bySeason = new Map(showSeasons.map((s) => [s.seasonNumber, s]))
+    expect(bySeason.get(4)?.airedEpisodeCount).toBe(1)
+    expect(bySeason.get(5)?.airedEpisodeCount).toBe(0)
+  })
+
+  // Regression: a show TMDB still calls 'Ended' at the moment its renewal is
+  // announced (status hasn't caught up to the new season yet) previously
+  // never had that season's episodes fetched at all, because the fetch was
+  // gated on `isAiring`. The season should be resolved regardless of status
+  // once it's announced with real episodes.
+  it('resolves an announced future season even when the show status is still Ended', async () => {
+    const show = await insertShow({
+      tmdbId: 21,
+      status: 'Ended',
+      metadataRefreshedAt: new Date(Date.now() - 10 * DAY_MS),
+      withSeasons: false,
+    })
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: string | URL) => {
+        const url = new URL(input)
+        if (url.pathname === '/3/tv/21/season/2') {
+          return new Response(
+            tmdbSeasonResponse(2, [{ episode_number: 1, air_date: '2099-01-01' }]),
+            { status: 200 },
+          )
+        }
+        if (url.pathname === '/3/tv/21/season/1') {
+          throw new Error('season 1 already aired in full — should not be refetched')
+        }
+        return new Response(
+          tmdbShowResponse({
+            id: 21,
+            status: 'Ended',
+            seasons: [
+              { season_number: 1, episode_count: 8, air_date: '2020-01-01' },
+              { season_number: 2, episode_count: 6, air_date: '2099-01-01' },
+            ],
+          }),
+          { status: 200 },
+        )
+      }),
+    )
+
+    const result = await runMetadataRefresh(db, [provider])
+    expect(result.showsRefreshed).toBe(1)
+
+    const showEpisodes = await db.select().from(episodes).where(eq(episodes.showId, show.id))
+    expect(showEpisodes.filter((e) => e.seasonNumber === 2)).toHaveLength(1)
+
+    const showSeasons = await db.select().from(seasons).where(eq(seasons.showId, show.id))
+    const bySeason = new Map(showSeasons.map((s) => [s.seasonNumber, s]))
+    // Past season, not the one resolved — assumed fully aired, as before.
+    expect(bySeason.get(1)?.airedEpisodeCount).toBe(8)
+    // Announced but not yet aired.
+    expect(bySeason.get(2)?.airedEpisodeCount).toBe(0)
+  })
+
+  // findStaleShows' new clause: an announced future season is worth a
+  // check-in on the same 7-day cadence as an airing show, regardless of
+  // `shows.status` — otherwise a show whose status hasn't caught up to its
+  // renewal only gets rechecked on the ~5-month compliance clock (see
+  // 'refetches an ended show once it crosses the TMDB compliance age' above
+  // for that clock's own test). genres/voteAverage/airedEpisodeCount are all
+  // populated here specifically so none of the other backfill clauses fire —
+  // this test isolates the new one.
+  it('refreshes a show whose status still reads Ended once it has an announced future season, before the compliance age is reached', async () => {
+    const show = await insertShow({
+      tmdbId: 22,
+      status: 'Ended',
+      metadataRefreshedAt: new Date(Date.now() - 10 * DAY_MS), // stale for the 7-day clause, nowhere near the ~5 month one
+      withSeasons: false,
+      genres: ['Drama'],
+      voteAverage: 7.4,
+    })
+    await db.insert(seasons).values([
+      {
+        showId: show.id,
+        seasonNumber: 1,
+        episodeCount: 8,
+        airedEpisodeCount: 8,
+        airDate: '2020-01-01',
+      },
+      {
+        showId: show.id,
+        seasonNumber: 2,
+        episodeCount: 6,
+        airedEpisodeCount: 0,
+        airDate: new Date(Date.now() + 30 * DAY_MS).toISOString().slice(0, 10),
+      },
+    ])
+
+    const fetchMock = vi.fn(async (input: string | URL) => {
+      const url = new URL(input)
+      if (url.pathname === '/3/tv/22/season/2') {
+        return new Response(
+          tmdbSeasonResponse(2, [{ episode_number: 1, air_date: '2099-01-01' }]),
+          { status: 200 },
+        )
+      }
+      return new Response(
+        tmdbShowResponse({
+          id: 22,
+          status: 'Ended',
+          seasons: [
+            { season_number: 1, episode_count: 8, air_date: '2020-01-01' },
+            { season_number: 2, episode_count: 6, air_date: '2099-01-01' },
+          ],
+        }),
+        { status: 200 },
+      )
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await runMetadataRefresh(db, [provider])
+    expect(result.showsRefreshed).toBe(1)
+    expect(fetchMock).toHaveBeenCalled()
+  })
+
+  // Same clause, the no-air-date-yet variant: an announced season with real
+  // episodes but no air date at all (a stub TMDB hasn't scheduled) should be
+  // just as eligible on the 7-day cadence as one with a future date — this
+  // is what closes the gap for a show like The Pitt (found live on the
+  // reference instance), which has this exact shape.
+  it('refreshes a show whose status still reads Ended once it has an announced season with no air date yet', async () => {
+    const show = await insertShow({
+      tmdbId: 23,
+      status: 'Ended',
+      metadataRefreshedAt: new Date(Date.now() - 10 * DAY_MS),
+      withSeasons: false,
+      genres: ['Drama'],
+      voteAverage: 7.4,
+    })
+    await db.insert(seasons).values([
+      {
+        showId: show.id,
+        seasonNumber: 1,
+        episodeCount: 8,
+        airedEpisodeCount: 8,
+        airDate: '2020-01-01',
+      },
+      {
+        showId: show.id,
+        seasonNumber: 2,
+        episodeCount: 6,
+        airedEpisodeCount: 0,
+        airDate: null,
+      },
+    ])
+
+    const fetchMock = vi.fn(async (input: string | URL) => {
+      const url = new URL(input)
+      if (url.pathname === '/3/tv/23/season/2') {
+        return new Response(tmdbSeasonResponse(2, [{ episode_number: 1, air_date: undefined }]), {
+          status: 200,
+        })
+      }
+      return new Response(
+        tmdbShowResponse({
+          id: 23,
+          status: 'Ended',
+          seasons: [
+            { season_number: 1, episode_count: 8, air_date: '2020-01-01' },
+            { season_number: 2, episode_count: 6, air_date: null },
+          ],
+        }),
+        { status: 200 },
+      )
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await runMetadataRefresh(db, [provider])
+    expect(result.showsRefreshed).toBe(1)
+    expect(fetchMock).toHaveBeenCalled()
   })
 
   it('does not refetch an airing show that is not yet stale', async () => {

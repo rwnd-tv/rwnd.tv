@@ -1551,6 +1551,56 @@ currently-dropped shows, since a row can have both
       because nothing about the shape of the bug looks wrong in isolation —
       only comparing against a real, precisely-timed live event exposed it.
 
+- [x] **TV Shows calendar feed misses a show between seasons** (2026-09-04
+      added, done 2026-09-05)\
+      Root cause was narrower than first suspected: `refreshOneShow`
+      (`apps/api/src/metadata/refresh.ts`) picked "current season" as the
+      highest season number with any episodes at all, but TMDB routinely
+      lists a still-empty *or* already-populated next-season stub with a
+      higher number than the season genuinely mid-run — confirmed live on
+      the reference instance against Professor T (season 5 stub, 6
+      episodes, no air date, while season 4 had been airing since
+      2026-08-19 with zero local `episodes` rows) and The Pitt (same
+      shape). The stub outranked the real season, so the real one's
+      episodes were never resolved into the local `episodes` table, and
+      the calendar feed (deliberately read-only over cached tables, per
+      that file's own doc comment) had nothing to emit for it. Up Next
+      never showed this gap because its live `scanSeasonsForEpisode`
+      (`apps/api/src/lib/media.ts`) walks every local `seasons` row and
+      resolves each on the spot, materializing episodes as a side effect;
+      the `seasons` row for the missing season did exist, only its
+      `episodes` rows didn't.\
+      Fix: "current season" is now the highest season with an air date on
+      or before today (started airing), not the highest season number with
+      episodes; every season with an air date null or in the future
+      (announced but not yet aired) is resolved unconditionally,
+      regardless of `shows.status` — closing the related case of a show
+      TMDB still calls 'Ended'/'Canceled' at the moment its renewal is
+      announced, which previously never got the new season's episodes
+      fetched at all because the fetch was gated on `isAiring`. A new
+      `findStaleShows` clause makes such a show eligible on the same 7-day
+      cadence as an airing show (keyed on the already-cached
+      `seasons.airDate`, so it costs no extra provider calls to evaluate),
+      instead of waiting out the ~5-month TMDB-compliance clock — caught a
+      real gap verifying this on dev.rwnd.tv's own data: the first version
+      of that clause only matched a season with a future air date, missing
+      The Pitt's actual shape (a stub season with episodes but no air date
+      at all yet), so the clause now matches null-or-future the same way
+      `refreshOneShow`'s own "upcoming" definition does. Also fixed
+      a related defect surfaced by the same code path: `airedEpisodeCount`
+      was previously stamped as the full `episodeCount` for any season
+      that wasn't the one resolved, so an announced future season
+      (Professor T season 4 itself, before this fix) could read as fully
+      aired on the show page; it's now computed per resolved season from
+      real episode air dates, falling back to the full count only for a
+      season that's genuinely in the past and wasn't resolved.\
+      Blast radius measured against the reference instance (488 shows)
+      before implementing: only 8 shows had a stub season outranking a
+      real one, 3 seasons library-wide had episodes with no air date, and
+      7 had a future air date, so this adds roughly one extra `getSeason`
+      call per affected show per daily pass, not a sweep over the whole
+      library.
+
 ## Movies
 
 - [x] **Bring Movies up to parity with TV Shows, where appropriate — Phase 1** (2026-08-23 15:05 added, done 2026-08-23)\

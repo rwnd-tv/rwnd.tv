@@ -1,4 +1,4 @@
-import { and, eq, exists, gt, inArray, isNull, lt, notExists, or, sql } from 'drizzle-orm'
+import { and, eq, exists, gt, gte, inArray, isNull, lt, notExists, or, sql } from 'drizzle-orm'
 import type { Database } from '@rwnd/db'
 import { episodes, externalIds, instanceSettings, movies, seasons, shows } from '@rwnd/db'
 import type { MetadataProvider } from '../providers/types.js'
@@ -166,6 +166,7 @@ export async function pickRefreshTargets(
 async function findStaleShows(db: Database): Promise<RefreshCandidate[]> {
   const airingCutoff = new Date(Date.now() - AIRING_REFRESH_INTERVAL_MS)
   const complianceCutoff = new Date(Date.now() - COMPLIANCE_MAX_AGE_MS)
+  const today = new Date().toISOString().slice(0, 10)
 
   const rows = await db
     .select({ id: shows.id })
@@ -219,6 +220,32 @@ async function findStaleShows(db: Database): Promise<RefreshCandidate[]> {
         // With inArray a NULL status just never matches, which is what we
         // want — it still gets picked up by the compliance clause below.
         and(inArray(shows.status, AIRING_STATUSES), lt(shows.metadataRefreshedAt, airingCutoff)),
+        // Has an announced season that hasn't aired yet (no air date at all
+        // yet, or one in the future — the same "upcoming" definition
+        // refreshOneShow uses below), on the same 7-day cadence as an
+        // airing show — regardless of `shows.status`. Without this, a show
+        // TMDB still calls 'Ended'/'Canceled' at the time its renewal was
+        // announced only gets re-checked on the ~5-month compliance clock
+        // below, so a real airing season can sit unresolved (no `episodes`
+        // rows, silently missing from the TV Shows calendar feed —
+        // docs/TODO_ARCHIVE.md) for months after it started airing. Keyed
+        // on the already-cached `seasons.airDate`, so evaluating this costs
+        // no extra provider calls; only actually refreshing a match does.
+        and(
+          lt(shows.metadataRefreshedAt, airingCutoff),
+          exists(
+            db
+              .select({ one: sql`1` })
+              .from(seasons)
+              .where(
+                and(
+                  eq(seasons.showId, shows.id),
+                  gt(seasons.seasonNumber, 0),
+                  or(isNull(seasons.airDate), gte(seasons.airDate, today)),
+                ),
+              ),
+          ),
+        ),
         // Everyone else, on the compliance clock regardless of status.
         lt(shows.metadataRefreshedAt, complianceCutoff),
       ),
@@ -318,41 +345,66 @@ export async function refreshOneShow(
     // (episodeCount 0, no air date) alongside the season that's actually
     // still airing — confirmed live against Silo, which had such a season
     // 4 placeholder while season 3 was the one airing. Excluding
-    // episodeCount-0 seasons here means the highest *real* season number
-    // is treated as "latest", not whichever placeholder TMDB happens to
-    // have added next.
+    // episodeCount-0 seasons here means a genuinely empty placeholder is
+    // never mistaken for "current" or "upcoming" below.
     const seasonsWithEpisodes = regularSeasons.filter((s) => s.episodeCount > 0)
-    const latestSeasonNumber =
-      seasonsWithEpisodes.length > 0
-        ? Math.max(...seasonsWithEpisodes.map((s) => s.seasonNumber))
-        : null
     const isAiring = fetched.status !== null && AIRING_STATUSES.includes(fetched.status)
+    const today = new Date().toISOString().slice(0, 10)
+
+    // The highest-numbered season that's actually started airing —
+    // "latest by season number" isn't good enough on its own, because TMDB
+    // can list a still-empty next-season stub with a higher number and no
+    // (or future) air date alongside the season that's genuinely mid-run.
+    // Confirmed live against Professor T and The Pitt, both of which had a
+    // placeholder next season outranking their real current one.
+    const startedSeasonNumbers = seasonsWithEpisodes
+      .filter((s) => s.airDate !== null && s.airDate <= today)
+      .map((s) => s.seasonNumber)
+    const currentSeasonNumber =
+      startedSeasonNumbers.length > 0 ? Math.max(...startedSeasonNumbers) : null
+
+    // Every season TMDB has announced episodes for but that hasn't started
+    // airing yet (null or future air date) — resolved regardless of
+    // `isAiring`, unlike the current season below. This is what closes the
+    // gap for a show TMDB still calls 'Ended'/'Canceled' at the moment its
+    // renewal is announced: the current-season check alone would never
+    // fetch a season TMDB hasn't marked the show as airing for yet.
+    const upcomingSeasonNumbers = seasonsWithEpisodes
+      .filter((s) => s.airDate === null || s.airDate >= today)
+      .map((s) => s.seasonNumber)
 
     // A past season, or any season once the show itself has finished, has
-    // necessarily aired in full — only the current season of a still-
-    // airing show might have unaired episodes left, so that's the one case
-    // worth an extra per-episode fetch for (see showDetailSchema's
-    // `airedEpisodes` doc comment for why this number exists at all).
-    // Goes through resolveSeason (apps/api/src/lib/media.ts) rather than
-    // calling provider.getSeason() directly so this data actually lands in
-    // the local `episodes` table instead of being fetched and discarded —
+    // necessarily aired in full — only a still-airing show's current season,
+    // plus any season announced but not yet aired, might have episodes this
+    // instance doesn't know about yet (see showDetailSchema's
+    // `airedEpisodes` doc comment for why this number exists at all). Goes
+    // through resolveSeason (apps/api/src/lib/media.ts) rather than calling
+    // provider.getSeason() directly so this data actually lands in the
+    // local `episodes` table instead of being fetched and discarded —
     // otherwise a show nobody's opened a season/episode page for recently
     // never gets per-episode rows at all, no matter how long it airs for
-    // (see docs/TODO_ARCHIVE.md).
-    let latestSeasonAiredCount: number | null = null
-    if (isAiring && latestSeasonNumber !== null) {
-      const latestEpisodes = await resolveSeason(
+    // (see docs/TODO_ARCHIVE.md). A Set dedupes the case where the current
+    // season and an upcoming one are the same (an air date of exactly
+    // today).
+    const seasonNumbersToResolve = new Set(upcomingSeasonNumbers)
+    if (isAiring && currentSeasonNumber !== null) seasonNumbersToResolve.add(currentSeasonNumber)
+
+    const airedCountBySeason = new Map<number, number>()
+    for (const seasonNumber of [...seasonNumbersToResolve].sort((a, b) => a - b)) {
+      const resolvedEpisodes = await resolveSeason(
         db,
         provider,
         candidate.id,
         candidate.externalId,
-        latestSeasonNumber,
+        seasonNumber,
         locale,
       )
       const now = new Date()
-      latestSeasonAiredCount = latestEpisodes.filter(
-        (e) => e.firstAired !== null && new Date(e.firstAired) <= now,
-      ).length
+      airedCountBySeason.set(
+        seasonNumber,
+        resolvedEpisodes.filter((e) => e.firstAired !== null && new Date(e.firstAired) <= now)
+          .length,
+      )
       await sleep(REQUEST_STAGGER_MS)
     }
 
@@ -367,9 +419,7 @@ export async function refreshOneShow(
           airedEpisodeCount:
             season.seasonNumber === 0
               ? null
-              : isAiring && season.seasonNumber === latestSeasonNumber
-                ? latestSeasonAiredCount
-                : season.episodeCount,
+              : (airedCountBySeason.get(season.seasonNumber) ?? season.episodeCount),
           airDate: season.airDate,
           posterPath: season.posterPath,
         })),

@@ -133,6 +133,25 @@ Format:
       import matcher (`apps/api/src/import/match.ts`) already uses for
       matching, just not wired into the runtime backfill path.
 
+- [ ] **`resolveSeason` never corrects an episode's `firstAired` once set** (2026-09-05 added)
+
+      `resolveSeason`'s (`apps/api/src/lib/media.ts`) `onConflictDoUpdate`
+      only touches `overview`, `overviewCheckedAt`, and a still-null
+      `runtimeMinutes` on a later resolve; `title` and `firstAired` are
+      write-once from the first insert. A rescheduled episode's air date
+      (a real, not-uncommon TMDB occurrence) is never corrected by any
+      current path, including the metadata refresher and the calendar
+      feed's underlying data. Found while fixing the between-seasons
+      calendar gap (see TODO_ARCHIVE.md), out of scope for that fix.
+
+      Needs care: adding `firstAired` to the update `set` clause would
+      also let a cross-provider-filled value get overwritten by the
+      primary provider's own later resolve, the exact hazard the
+      `runtimeMinutes` `coalesce` clause exists to avoid (see that
+      column's own handling, same function). Whatever the fix is, it
+      should preserve a value that a fallback provider supplied and the
+      primary provider doesn't have.
+
 ## Roadmap
 
 Every open item from [ROADMAP.md](ROADMAP.md) that doesn't already have a
@@ -198,19 +217,4 @@ source of truth for scope; this is just so a TODO listing is complete.
       doesn't model it at all), and a real refresh cadence for
       unreleased/near-release movies (today's ~5-month compliance-only
       cadence is far too coarse for anything releasing soon).
-
-- [ ] **TV Shows calendar feed misses a show between seasons** (2026-09-04 added; Not yet scheduled)
-
-      `refresh.ts` only resolves a show's *current* season, so a show
-      that's finished airing with its next season announced but not yet
-      in TMDB's season list has no local episode rows, and is silently
-      absent from the TV Shows calendar feed
-      (`apps/api/src/calendar/build.ts`) even though it'd still appear in
-      the live-fetched Dashboard Up Next row. The calendar feed
-      deliberately never does a live per-request provider fetch, so this
-      needs a refresh-cadence improvement rather than a feed-side fix.
-
-      The related 30-day "recently watched" window gap is already fixed
-      (see TODO_ARCHIVE.md) — this item is now specifically about the
-      between-seasons local-data gap, not the recency window.
 

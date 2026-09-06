@@ -30,6 +30,13 @@ HTMLDialogElement.prototype.close = function (this: HTMLDialogElement) {
   this.dispatchEvent(new Event('close'))
 }
 
+// jsdom does no layout at all, so Element.prototype.scrollIntoView doesn't
+// exist — CalendarAgenda.tsx calls it directly to bring "Today" into view
+// on first load, which throws "scrollIntoView is not a function" without
+// this. A no-op is all a component test needs; there's no real scroll
+// position to assert against in jsdom anyway.
+Element.prototype.scrollIntoView = function () {}
+
 afterEach(() => {
   cleanup()
 })

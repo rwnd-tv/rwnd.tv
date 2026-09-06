@@ -34,6 +34,7 @@ import {
   type InstanceAbout,
   type InstanceSettings,
   type ListBackupsResponse,
+  type ListCalendarEventsResponse,
   type ListCalendarFeedsResponse,
   type ListActivityResponse,
   type ListAdminUsersResponse,
@@ -252,6 +253,15 @@ export const api = {
     regenerate: (feedType: CalendarFeedType) =>
       post<CalendarFeed>(`/calendar-feeds/${feedType}/regenerate`),
     delete: (feedType: CalendarFeedType) => del<void>(`/calendar-feeds/${feedType}`),
+  },
+  calendar: {
+    /** `after`/`before` are browser-local day boundaries as ISO instants —
+     * see date.ts's localDayStartISO/localDayEndISO, same convention as
+     * activity.list below. */
+    events: (params: { after: string; before: string }) => {
+      const qs = new URLSearchParams({ after: params.after, before: params.before })
+      return get<ListCalendarEventsResponse>(`/calendar-events?${qs.toString()}`)
+    },
   },
   webhookLinks: {
     redeem: (body: RedeemWebhookLinkRequest) =>

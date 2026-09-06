@@ -33,7 +33,7 @@ interface IcsEventBase {
   stamp: Date
 }
 
-interface IcsAllDayEvent extends IcsEventBase {
+export interface IcsAllDayEvent extends IcsEventBase {
   /** Local calendar day, 'YYYY-MM-DD'. */
   date: string
 }

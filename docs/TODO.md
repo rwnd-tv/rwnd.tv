@@ -60,6 +60,40 @@ Format:
       an empty circle. Confirm with James whether that one should change
       too, or only the four labeled buttons above.
 
+- [ ] **Explore text size/wrapping and grid sizing on the calendar's Month view** (2026-09-06 13:36 added)
+
+      `CalendarMonthGrid.tsx`'s per-day entries (`CalendarMonthCellEntry`)
+      are a fixed 10px, single line, `truncate`-clipped (a combined "Show ·
+      Episode" title routinely gets cut off), inside a flat `h-28` cell
+      regardless of viewport size, with `MAX_CELL_ENTRIES` fixed at 3
+      before a day overflows into a "+N more" control.
+
+      No decided direction yet; James wants to explore options rather than
+      lock one in up front. Worth looking at: wrapping cell-entry text onto
+      multiple lines instead of truncating it, and whether cell/grid sizing
+      (cell height, `MAX_CELL_ENTRIES`, text size) should flex, possibly
+      dynamically, based on viewport width or how many events a given day
+      actually has, rather than staying fixed. May overlap with the phone-
+      width pass below, since a fixed-size grid is likely tightest at small
+      viewports.
+
+- [ ] **Clear the calendar's selected-day panel when that day scrolls out of view** (2026-09-06 13:37 added)
+
+      `CalendarPage.tsx`'s `selectedDay` (set by clicking a day number or a
+      cell's "+N more" overflow control in `CalendarMonthGrid.tsx`) isn't
+      reset when `monthAnchor` changes. Navigating months (prev/next/
+      Today) leaves the old `selectedDay` in place even though it's no
+      longer one of the currently rendered grid cells (none of which show
+      as selected any more, since `isSelected` compares against the new
+      month's days), so the panel below the grid keeps showing a day that
+      isn't visible above it, and its event list, freshly looked up against
+      the new query window, comes back empty even when that day actually
+      has events.
+
+      Clear `selectedDay` (or re-derive it against the currently visible
+      day range) whenever `monthAnchor` changes, so the panel never
+      outlives the day it belongs to.
+
 ## Mobile / responsive
 
 - [ ] **Quality pass on the whole interface at phone width** (2026-09-06 added)
@@ -300,6 +334,57 @@ Format:
       clear enough in the UI once real entries (not just counts) are on
       screen.
 
+- [ ] **Automatic, scheduled backup of the entire database** (2026-09-06 added; M4)
+
+      Distinct from the existing Settings > Database backup feature
+      (`apps/api/src/backup/`), which is per-user, manually triggered, and
+      covers only one user's watch history/ratings/watchlist/dropped
+      shows, not accounts, instance settings, or anything another user has
+      done (`docs/self-hosting.md`'s "Per-user backup/restore" section is
+      explicit about this distinction). This item is about the *other*
+      backup already documented there, the whole-Postgres
+      `pg_dump`/`psql` restore under "## Backups", which today is entirely
+      manual: a self-hoster has to remember to run it themselves. The ask
+      is to make that happen automatically, on a schedule, without a self-
+      hoster having to set up their own host-level cron job.
+
+      Precedent already exists in this codebase for an in-process
+      recurring job, no external scheduler needed:
+      `apps/api/src/metadata/refresh.ts`'s `scheduleMetadataRefresh` and
+      `apps/api/src/lib/webhook-retention.ts`'s `scheduleWebhookRetention`
+      both run one pass immediately, then every 24h via a plain
+      `setInterval`, started from `index.ts` rather than inside
+      `createApp()` specifically so `testApp()` (called by every API test)
+      never fires them. A new `scheduleAutomaticDatabaseBackup`-shaped job
+      should follow the same pattern.
+
+      Real open questions, not yet decided:
+
+      - **How to actually produce the dump.** The runtime image
+        (`Dockerfile`, `node:26-alpine`) has no Postgres client tools
+        today; a real `pg_dump` needs one bundled in (`apk add
+        postgresqlNN-client`, version-pinned to match whichever major
+        version `docker-compose.yml`'s `db` service runs, kept in sync if
+        that version ever moves) and shelled out to via `child_process`.
+        The alternative, a bespoke Drizzle/JS export of every table across
+        every user, would be a much bigger effort, non-standard, and
+        wouldn't produce something directly restorable with `psql`/
+        `pg_restore` the way a real `pg_dump` is — probably not worth it
+        next to just bundling the client tool.
+      - **Where dumps get written.** Reuse `BACKUP_DIR` (gated on it being
+        configured, same as the per-user feature) or a separate always-
+        available directory/env var, since this is an instance-level ops
+        concern rather than a per-user opt-in.
+      - **Retention/rotation.** Keep how many, delete how old — needs a
+        policy, or dumps accumulate forever the same way
+        `pending_webhook_events` did before `webhook-retention.ts` existed.
+      - **Configurability.** Interval and retention as env vars (matching
+        this app's usual self-hosting-config convention) versus an admin-
+        facing Settings toggle.
+      - **Restore stays manual.** No reason to also automate restoring
+        from one of these dumps — that's a destructive, rare, deliberate
+        action a self-hoster should trigger by hand, same as today.
+
 ## Ratings
 
 - [ ] **Don't allow rating anything that hasn't aired/released yet** (2026-09-06 added)
@@ -376,13 +461,4 @@ source of truth for scope; this is just so a TODO listing is complete.
 - [ ] **Public/shareable profile pages** (2026-08-23 15:38 added; Not yet scheduled)
 
       A public view of a user's watch history/stats.
-
-- [ ] **In-app calendar UI consuming the webcal feeds** (2026-09-04 added; Not yet scheduled)
-
-      The History/TV Shows webcal feeds (see TODO_ARCHIVE.md) were
-      deliberately scoped as URL feeds only, meant to be pasted into an
-      external calendar app. Building a page in rwnd.tv itself that
-      renders that same event data was explicitly called out as a
-      second, later task when the feeds were designed, not part of this
-      pass.
 

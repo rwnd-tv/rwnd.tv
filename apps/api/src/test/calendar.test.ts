@@ -1,7 +1,12 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { eq } from 'drizzle-orm'
 import { episodes, movies, plays, shows, users } from '@rwnd/db'
-import type { CalendarFeed, ListCalendarFeedsResponse, ListWatchlistsResponse } from '@rwnd/shared'
+import type {
+  CalendarFeed,
+  ListCalendarEventsResponse,
+  ListCalendarFeedsResponse,
+  ListWatchlistsResponse,
+} from '@rwnd/shared'
 import { createLocalUser, extractCookie, json, resetDb, testApp, testDb } from './helpers.js'
 
 const db = testDb()
@@ -37,6 +42,18 @@ async function createFeed(cookie: string, feedType: 'history' | 'shows' | 'movie
   return json<CalendarFeed>(res)
 }
 
+// The in-app calendar's own window cap (MAX_CALENDAR_WINDOW_DAYS,
+// routes/calendar.ts) rejects a query spanning more than ~3 years — unlike
+// the .ics feed tests above (no date range at all), these tests need
+// fixtures reachable by a realistic window, so "the future" is a handful
+// of days from the real clock, not a fixed 2099 literal.
+function daysFromNow(days: number): Date {
+  return new Date(Date.now() + days * 24 * 60 * 60 * 1000)
+}
+function dayString(date: Date): string {
+  return date.toISOString().slice(0, 10)
+}
+
 async function seedShow(slug: string, title: string) {
   const [show] = await db.insert(shows).values({ title, slug }).returning()
   if (!show) throw new Error('failed to insert show')
@@ -47,6 +64,15 @@ async function seedMovie(slug: string, title: string) {
   const [movie] = await db.insert(movies).values({ title, slug }).returning()
   if (!movie) throw new Error('failed to insert movie')
   return movie
+}
+
+async function fetchEvents(cookie: string, after: Date, before: Date) {
+  const qs = new URLSearchParams({ after: after.toISOString(), before: before.toISOString() })
+  const res = await app.request(`/api/v1/calendar-events?${qs.toString()}`, { headers: { cookie } })
+  return {
+    status: res.status,
+    body: await json<ListCalendarEventsResponse | { error: string }>(res),
+  }
 }
 
 async function addToDefaultWatchlist(cookie: string, slug: string, kind: 'shows' | 'movies') {
@@ -932,6 +958,254 @@ describe('calendar feeds', () => {
       expect(res.status).toBe(200)
       const updated = await json<CalendarFeed>(res)
       expect(updated.settings).toEqual({ futureOnly: false, includeAllWatched: false })
+    })
+  })
+
+  // The in-app calendar page's own JSON endpoint (apps/web/src/routes/
+  // CalendarPage.tsx) — a merged, date-windowed timeline reusing the same
+  // three builders the feed tests above already exercise, NOT a fork of
+  // them. `ENCRYPTION_KEY` is deliberately not exercised here as an
+  // "absent" case: apps/api/vitest.config.ts always sets it at the
+  // process-env level for every test in this package (so Trakt-import
+  // tests have it too), and there's no per-test way to unset it. The
+  // route's own source (routes/calendar.ts) never reads
+  // `loadEnv().ENCRYPTION_KEY` at all, which is the real assurance here.
+  describe('in-app calendar events (GET /calendar-events)', () => {
+    it('requires authentication', async () => {
+      const now = new Date()
+      const qs = new URLSearchParams({ after: now.toISOString(), before: now.toISOString() })
+      expect((await app.request(`/api/v1/calendar-events?${qs.toString()}`)).status).toBe(401)
+    })
+
+    it('rejects before earlier than after, and a span past the cap', async () => {
+      const cookie = await createUserAndCookie()
+      const now = new Date()
+
+      const backwards = await fetchEvents(cookie, now, new Date(now.getTime() - 1000))
+      expect(backwards.status).toBe(400)
+
+      const tooWide = await fetchEvents(
+        cookie,
+        new Date(now.getTime() - 2000 * 24 * 60 * 60 * 1000),
+        now,
+      )
+      expect(tooWide.status).toBe(400)
+    })
+
+    it('merges a past watch, an upcoming episode, and an upcoming release into one ascending timeline', async () => {
+      const cookie = await createUserAndCookie()
+      const userId = await meId(cookie)
+      const show = await seedShow('a-show', 'A Show')
+      const upcomingEpisodeDay = dayString(daysFromNow(20))
+      const [watchedEpisode, upcomingEpisode] = await db
+        .insert(episodes)
+        .values([
+          { showId: show.id, seasonNumber: 1, episodeNumber: 1, firstAired: '2020-01-01' },
+          { showId: show.id, seasonNumber: 1, episodeNumber: 2, firstAired: upcomingEpisodeDay },
+        ])
+        .returning()
+      const watchedAt = daysFromNow(-3)
+      await db.insert(plays).values({ userId, episodeId: watchedEpisode!.id, watchedAt })
+      const movie = await seedMovie('a-movie', 'A Movie')
+      const releaseDay = dayString(daysFromNow(40))
+      await db.update(movies).set({ releaseDate: releaseDay }).where(eq(movies.id, movie.id))
+      await addToDefaultWatchlist(cookie, 'a-movie', 'movies')
+
+      const { status, body } = await fetchEvents(cookie, daysFromNow(-30), daysFromNow(60))
+      expect(status).toBe(200)
+      const events = (body as ListCalendarEventsResponse).events
+      const kinds = events.map((e) => e.kind)
+      expect(kinds).toEqual(['watch', 'episode', 'release'])
+      expect(events[0]).toMatchObject({ kind: 'watch', watched: true })
+      expect(events[1]).toMatchObject({
+        kind: 'episode',
+        uid: `episode-${upcomingEpisode!.id}@rwnd.tv`,
+        date: upcomingEpisodeDay,
+        media: { showSlug: 'a-show', seasonNumber: 1, episodeNumber: 2 },
+      })
+      expect(events[2]).toMatchObject({
+        kind: 'release',
+        date: releaseDay,
+        media: { movieSlug: 'a-movie' },
+      })
+    })
+
+    it('excludes rows outside the requested window in both directions', async () => {
+      const cookie = await createUserAndCookie()
+      const userId = await meId(cookie)
+      const show = await seedShow('a-show', 'A Show')
+      const farFutureDay = dayString(daysFromNow(200))
+      const [oldEpisode, farFutureEpisode] = await db
+        .insert(episodes)
+        .values([
+          { showId: show.id, seasonNumber: 1, episodeNumber: 1, firstAired: '2020-01-01' },
+          { showId: show.id, seasonNumber: 1, episodeNumber: 2, firstAired: farFutureDay },
+        ])
+        .returning()
+      const farPastWatch = daysFromNow(-200)
+      await db.insert(plays).values({ userId, episodeId: oldEpisode!.id, watchedAt: farPastWatch })
+      await addToDefaultWatchlist(cookie, 'a-show', 'shows')
+
+      const narrow = await fetchEvents(cookie, daysFromNow(-10), daysFromNow(10))
+      const narrowEvents = (narrow.body as ListCalendarEventsResponse).events
+      expect(narrowEvents.some((e) => e.uid === `episode-${farFutureEpisode!.id}@rwnd.tv`)).toBe(
+        false,
+      )
+      expect(narrowEvents.some((e) => e.kind === 'watch')).toBe(false)
+
+      const wide = await fetchEvents(cookie, daysFromNow(-250), daysFromNow(250))
+      const wideEvents = (wide.body as ListCalendarEventsResponse).events
+      expect(wideEvents.some((e) => e.uid === `episode-${farFutureEpisode!.id}@rwnd.tv`)).toBe(true)
+      expect(wideEvents.some((e) => e.kind === 'watch')).toBe(true)
+    })
+
+    it('an already-aired, watched episode of a followed show appears as a watch event, not an episode event', async () => {
+      const cookie = await createUserAndCookie()
+      const userId = await meId(cookie)
+      const show = await seedShow('a-show', 'A Show')
+      const [ep] = await db
+        .insert(episodes)
+        .values({ showId: show.id, seasonNumber: 1, episodeNumber: 1, firstAired: '2020-01-01' })
+        .returning()
+      const watchedAt = daysFromNow(-3)
+      await db.insert(plays).values({ userId, episodeId: ep!.id, watchedAt })
+      await addToDefaultWatchlist(cookie, 'a-show', 'shows')
+
+      const { body } = await fetchEvents(cookie, daysFromNow(-10), daysFromNow(1))
+      const events = (body as ListCalendarEventsResponse).events
+      expect(
+        events.some((e) => e.kind === 'episode' && e.uid === `episode-${ep!.id}@rwnd.tv`),
+      ).toBe(false)
+      expect(events.some((e) => e.kind === 'watch')).toBe(true)
+    })
+
+    it("includes a followed show's upcoming episode even when it was last watched well over 30 days ago", async () => {
+      // Pins the includeAllWatched-equivalent default (windowDays: null) —
+      // see buildCalendarTimeline's own doc comment: a real calendar of
+      // everything followed, not just recently watched.
+      const cookie = await createUserAndCookie()
+      const userId = await meId(cookie)
+      const show = await seedShow('a-show', 'A Show')
+      const upcomingDay = dayString(daysFromNow(60))
+      const [oldEpisode, upcomingEpisode] = await db
+        .insert(episodes)
+        .values([
+          { showId: show.id, seasonNumber: 1, episodeNumber: 1, firstAired: '2020-01-01' },
+          { showId: show.id, seasonNumber: 1, episodeNumber: 2, firstAired: upcomingDay },
+        ])
+        .returning()
+      const oldWatch = daysFromNow(-90)
+      await db.insert(plays).values({ userId, episodeId: oldEpisode!.id, watchedAt: oldWatch })
+
+      const { body } = await fetchEvents(cookie, daysFromNow(-100), daysFromNow(90))
+      const ids = (body as ListCalendarEventsResponse).events.map((e) => e.uid)
+      expect(ids).toContain(`episode-${upcomingEpisode!.id}@rwnd.tv`)
+    })
+
+    it('excludes a dropped show by default', async () => {
+      const cookie = await createUserAndCookie()
+      const show = await seedShow('a-show', 'A Show')
+      const [ep] = await db
+        .insert(episodes)
+        .values({
+          showId: show.id,
+          seasonNumber: 1,
+          episodeNumber: 1,
+          firstAired: dayString(daysFromNow(30)),
+        })
+        .returning()
+      await addToDefaultWatchlist(cookie, 'a-show', 'shows')
+      const dropRes = await app.request('/api/v1/library/shows/a-show/dropped', {
+        method: 'POST',
+        headers: { cookie },
+      })
+      expect(dropRes.status).toBe(200)
+
+      const { body } = await fetchEvents(cookie, new Date(), daysFromNow(60))
+      const ids = (body as ListCalendarEventsResponse).events.map((e) => e.uid)
+      expect(ids).not.toContain(`episode-${ep!.id}@rwnd.tv`)
+    })
+
+    it('sends the real overview and media even for a spoiler-hidden upcoming episode, flagging it via spoilerHidden rather than omitting it', async () => {
+      const cookie = await createUserAndCookie()
+      const show = await seedShow('a-show', 'A Show')
+      const [unwatched, watched] = await db
+        .insert(episodes)
+        .values([
+          {
+            showId: show.id,
+            seasonNumber: 1,
+            episodeNumber: 1,
+            firstAired: dayString(daysFromNow(45)),
+            overview: 'An unwatched synopsis.',
+            title: 'The Unwatched One',
+          },
+          {
+            showId: show.id,
+            seasonNumber: 1,
+            episodeNumber: 2,
+            firstAired: '2020-01-01',
+            overview: 'A watched synopsis.',
+            title: 'The Watched One',
+          },
+        ])
+        .returning()
+      const userId = await meId(cookie)
+      await db.insert(plays).values({ userId, episodeId: watched!.id, watchedAt: new Date() })
+      await addToDefaultWatchlist(cookie, 'a-show', 'shows')
+
+      const { body } = await fetchEvents(cookie, daysFromNow(-10), daysFromNow(60))
+      const events = (body as ListCalendarEventsResponse).events
+      const unwatchedEvent = events.find((e) => e.uid === `episode-${unwatched!.id}@rwnd.tv`)
+      expect(unwatchedEvent).toMatchObject({
+        spoilerHidden: true,
+        watched: false,
+        overview: 'An unwatched synopsis.',
+        media: { title: 'The Unwatched One' },
+      })
+
+      const watchedEvent = events.find((e) => e.kind === 'watch')
+      expect(watchedEvent).toMatchObject({ spoilerHidden: false })
+    })
+
+    it("shows the account's own region-resolved release date for an upcoming movie", async () => {
+      const cookie = await createUserAndCookie()
+      const userId = await meId(cookie)
+      const movie = await seedMovie('a-movie', 'A Movie')
+      const primaryDay = dayString(daysFromNow(40))
+      const gbDay = dayString(daysFromNow(45))
+      await db
+        .update(movies)
+        .set({ releaseDate: primaryDay, releaseDates: { GB: gbDay } })
+        .where(eq(movies.id, movie.id))
+      await db.update(users).set({ locale: 'en-GB' }).where(eq(users.id, userId))
+      await addToDefaultWatchlist(cookie, 'a-movie', 'movies')
+
+      const { body } = await fetchEvents(cookie, new Date(), daysFromNow(60))
+      const events = (body as ListCalendarEventsResponse).events
+      expect(events).toContainEqual(expect.objectContaining({ kind: 'release', date: gbDay }))
+    })
+
+    it("isolates one user's events from another's", async () => {
+      const cookieA = await createUserAndCookie('a@example.com')
+      const userIdA = await meId(cookieA)
+      const movie = await seedMovie('a-movie', 'A Movie')
+      await db.insert(plays).values({ userId: userIdA, movieId: movie.id, watchedAt: new Date() })
+
+      await createLocalUser(db, 'b@example.com', 'correct-horse-battery-staple')
+      const loginB = await app.request('/api/v1/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: 'b@example.com', password: 'correct-horse-battery-staple' }),
+      })
+      const cookieB = extractCookie(loginB)!
+
+      const { body } = await fetchEvents(
+        cookieB,
+        new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
+        new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      )
+      expect((body as ListCalendarEventsResponse).events).toHaveLength(0)
     })
   })
 })

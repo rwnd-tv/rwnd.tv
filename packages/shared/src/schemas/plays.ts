@@ -62,6 +62,7 @@ export const playMediaSummarySchema = z.object({
   seasonNumber: z.number().int().optional(),
   episodeNumber: z.number().int().optional(),
 })
+export type PlayMediaSummary = z.infer<typeof playMediaSummarySchema>
 
 export const playSchema = z.object({
   id: uuidSchema,

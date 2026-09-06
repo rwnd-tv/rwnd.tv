@@ -197,6 +197,7 @@
     "movies": "Movies",
     "watchlists": "Watchlists",
     "history": "History",
+    "calendar": "Calendar",
     "import": "Import",
     "admin": "Admin",
     "settings": "Settings",
@@ -624,6 +625,32 @@
       "title": "When did you watch \"{{title}}\"?",
       "confirm": "Save"
     }
+  },
+  "calendar": {
+    "title": "Calendar",
+    "empty": "Nothing to show yet. Watch something, or follow a show or watchlist a movie, and it'll appear here.",
+    "loadEarlier": "Load earlier",
+    "loadLater": "Load later",
+    "view": {
+      "label": "Calendar view",
+      "agenda": "Agenda",
+      "agendaDisabled": "Agenda view is temporarily unavailable while it's being reworked",
+      "month": "Month"
+    },
+    "filter": {
+      "label": "Filter calendar events",
+      "history": "History",
+      "shows": "TV Shows",
+      "movies": "Movies"
+    },
+    "today": "Today",
+    "previousMonth": "Previous month",
+    "nextMonth": "Next month",
+    "episodeCode": "S{{season}} E{{episode}}",
+    "release": "Releases",
+    "episodeFallbackLabel": "Episode {{number}}",
+    "moreCount_one": "+{{count}} more",
+    "moreCount_other": "+{{count}} more"
   },
   "import": {
     "title": "Import",

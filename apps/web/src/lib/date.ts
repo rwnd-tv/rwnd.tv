@@ -171,6 +171,28 @@ export function formatHistoryDate(date: Date, locale: string, t: (key: string) =
   return date.toLocaleDateString(locale, { dateStyle: 'medium' })
 }
 
+/**
+ * Day heading for the in-app calendar's Agenda view (CalendarAgenda.tsx) —
+ * delegates to formatDashboardDate for anything within a week either side
+ * of today (Today/Yesterday/Tomorrow always; a weekday name only for a
+ * *future* day beyond tomorrow, `weekdayWithinDays`'s own asymmetry,
+ * inherited rather than reimplemented as symmetric — UpNextRow.tsx already
+ * uses the same 7-day window for "upcoming" content; a *past* day in that
+ * range falls through to formatDashboardDate's plain day/month instead).
+ * Beyond that window, a full date (not formatDashboardDate's day/month
+ * fallback) is needed here specifically because a calendar window can
+ * cross a year boundary, where day/month alone is ambiguous about which
+ * year.
+ */
+export function formatCalendarDayHeading(
+  date: Date,
+  locale: string,
+  t: (key: string) => string,
+): string {
+  if (Math.abs(daysFromToday(date)) <= 7) return formatDashboardDate(date, locale, t, 7)
+  return date.toLocaleDateString(locale, { dateStyle: 'full' })
+}
+
 /** `YYYY-MM-DD` in local time, for a native `<input type="date">` value. */
 export function toDateInputValue(date: Date): string {
   const year = String(date.getFullYear()).padStart(4, '0')

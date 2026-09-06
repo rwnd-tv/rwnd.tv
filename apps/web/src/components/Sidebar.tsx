@@ -5,6 +5,7 @@ import { isAdminRole } from '@rwnd/shared'
 import { useAuth } from '../lib/use-auth.js'
 import { Avatar } from './Avatar.js'
 import {
+  CalendarIcon,
   DashboardIcon,
   HistoryIcon,
   ImportIcon,
@@ -137,6 +138,13 @@ export function Sidebar({ collapsed, onNavigate }: { collapsed: boolean; onNavig
           to="/history"
           label={t('nav.history')}
           icon={<HistoryIcon />}
+          collapsed={collapsed}
+          onNavigate={onNavigate}
+        />
+        <SidebarLink
+          to="/calendar"
+          label={t('nav.calendar')}
+          icon={<CalendarIcon />}
           collapsed={collapsed}
           onNavigate={onNavigate}
         />

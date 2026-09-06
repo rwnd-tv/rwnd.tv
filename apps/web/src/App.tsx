@@ -12,6 +12,7 @@ import { VerifyEmailPage } from './routes/VerifyEmailPage.js'
 import { ConfirmEmailChangePage } from './routes/ConfirmEmailChangePage.js'
 import { DashboardPage } from './routes/DashboardPage.js'
 import { HistoryPage } from './routes/HistoryPage.js'
+import { CalendarPage } from './routes/CalendarPage.js'
 import { ShowsPage } from './routes/ShowsPage.js'
 import { ShowDetailPage } from './routes/ShowDetailPage.js'
 import { SeasonDetailPage } from './routes/SeasonDetailPage.js'
@@ -72,6 +73,7 @@ const router = createBrowserRouter([
             handle: fullWidthHandle,
           },
           { path: '/history', element: <HistoryPage />, handle: fullWidthHandle },
+          { path: '/calendar', element: <CalendarPage />, handle: fullWidthHandle },
           { path: '/import', element: <ImportPage /> },
           { path: '/settings', element: <SettingsPage /> },
           { path: '/account', element: <AccountPage /> },

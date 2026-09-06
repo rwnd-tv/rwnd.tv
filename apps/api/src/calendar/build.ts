@@ -1,11 +1,39 @@
-import { and, desc, eq, gte, inArray, isNotNull, ne, sql } from 'drizzle-orm'
-import { UNKNOWN_WATCHED_AT } from '@rwnd/shared'
+import { and, desc, eq, gte, inArray, isNotNull, lt, lte, ne, sql } from 'drizzle-orm'
+import { UNKNOWN_WATCHED_AT, type CalendarEventKind, type PlayMediaSummary } from '@rwnd/shared'
 import type { Database } from '@rwnd/db'
 import { episodes, movies, plays, shows, users, type calendarFeeds } from '@rwnd/db'
-import type { IcsEvent } from '../lib/ics.js'
+import type { IcsAllDayEvent, IcsEvent, IcsTimedEvent } from '../lib/ics.js'
 import { getFollowedShows } from '../lib/followed-shows.js'
 import { getFollowedMovies } from '../lib/followed-movies.js'
 import { localeRegion, releaseDateExpr } from '../lib/release-date.js'
+import { episodeDisplayTitle } from '../lib/media.js'
+
+/**
+ * Superset of `IcsEvent` carrying the extra fields the in-app calendar's
+ * JSON endpoint needs (`buildCalendarTimeline` below) that the `.ics` feed
+ * has no use for — poster art, a slug/season/episode to link to, and
+ * watched/spoiler flags. TypeScript's structural typing means this stays
+ * assignable wherever `IcsEvent` is expected (buildEvent in lib/ics.ts only
+ * ever reads the narrower fields), so `buildCalendarEvents` below and its
+ * `.ics` route caller need no changes — the three builders just construct
+ * a few extra fields on the same object they already build today.
+ */
+interface CalendarEventExtras {
+  kind: CalendarEventKind
+  media: PlayMediaSummary
+  watched: boolean
+  /** `user.spoilerProtectionEnabled && !watched` — see buildShowsEvents'/
+   * buildMoviesEvents' existing `description` omission for the .ics
+   * equivalent of this same check. Always false for a history event
+   * (already watched by construction, same reasoning as that event's own
+   * "no spoiler check here" comment). */
+  spoilerHidden: boolean
+  /** The raw synopsis, no link appended, no spoiler omission — distinct
+   * from `description` above, which is the .ics-shaped value. */
+  overview: string | null
+}
+
+export type CalendarSourceEvent = (IcsAllDayEvent | IcsTimedEvent) & CalendarEventExtras
 
 /**
  * Hard ceiling on VEVENTs in one feed. A user with tens of thousands of
@@ -110,16 +138,26 @@ function runtimeForRow(
  * and pulls ratings/watchlist/dropped this feed doesn't want. Uses
  * `plays_user_watched_at_idx` directly (packages/db/src/schema.ts).
  */
+interface HistoryEventOptions {
+  includeMovies: boolean
+  includeShows: boolean
+  /** Inclusive bounds on `plays.watchedAt` — both omitted on the `.ics`
+   * feed path, which has no date range at all (just `ORDER BY` + `LIMIT`).
+   * Only `buildCalendarTimeline` below sets these. */
+  after?: Date
+  before?: Date
+  baseUrl: string | undefined
+}
+
 async function buildHistoryEvents(
   db: Database,
   user: typeof users.$inferSelect,
-  feed: typeof calendarFeeds.$inferSelect,
-  baseUrl: string | undefined,
-): Promise<IcsEvent[]> {
-  if (!feed.includeMovies && !feed.includeShows) return []
+  opts: HistoryEventOptions,
+): Promise<CalendarSourceEvent[]> {
+  if (!opts.includeMovies && !opts.includeShows) return []
 
-  const typeFilter = feed.includeMovies
-    ? feed.includeShows
+  const typeFilter = opts.includeMovies
+    ? opts.includeShows
       ? undefined
       : isNotNull(plays.movieId)
     : isNotNull(plays.episodeId)
@@ -132,12 +170,14 @@ async function buildHistoryEvents(
       movieTitle: movies.title,
       movieYear: movies.year,
       movieSlug: movies.slug,
+      moviePosterPath: movies.posterPath,
       movieOverview: movies.overview,
       movieMetadataRefreshedAt: movies.metadataRefreshedAt,
       movieRuntimeMinutes: movies.runtimeMinutes,
       showId: shows.id,
       showSlug: shows.slug,
       showTitle: shows.title,
+      showPosterPath: shows.posterPath,
       seasonNumber: episodes.seasonNumber,
       episodeNumber: episodes.episodeNumber,
       episodeTitle: episodes.title,
@@ -159,6 +199,8 @@ async function buildHistoryEvents(
         // watchedRangeFragments).
         ne(plays.watchedAt, new Date(UNKNOWN_WATCHED_AT)),
         typeFilter,
+        opts.after ? gte(plays.watchedAt, opts.after) : undefined,
+        opts.before ? lte(plays.watchedAt, opts.before) : undefined,
       ),
     )
     // Newest first — this is also what makes `rows[i + 1]` the
@@ -166,6 +208,32 @@ async function buildHistoryEvents(
     // without a second pass or a re-sort.
     .orderBy(desc(plays.watchedAt))
     .limit(MAX_CALENDAR_EVENTS)
+
+  // The oldest row in a *windowed* query (opts.after set) has its true
+  // chronologically-previous play sitting just outside the window, so
+  // `rows[i + 1]` alone would silently disagree with the unwindowed
+  // overlap clamp at that one boundary row. A single extra lookup for
+  // "the closest play before the window" fixes it — same "separate
+  // top-level query rather than a nested fragment" shape as the median
+  // query below, for an analogous reason (keeping this simple rather than
+  // risking another joinless-subquery qualifier bug).
+  let previousBeforeWindow: { watchedAt: Date } | undefined
+  if (opts.after) {
+    const [row] = await db
+      .select({ watchedAt: plays.watchedAt })
+      .from(plays)
+      .where(
+        and(
+          eq(plays.userId, user.id),
+          ne(plays.watchedAt, new Date(UNKNOWN_WATCHED_AT)),
+          typeFilter,
+          lt(plays.watchedAt, opts.after),
+        ),
+      )
+      .orderBy(desc(plays.watchedAt))
+      .limit(1)
+    previousBeforeWindow = row
+  }
 
   // One extra query for the shows whose sibling-episode runtime median
   // this feed actually needs — not a subquery nested inside the query
@@ -216,11 +284,13 @@ async function buildHistoryEvents(
 
     // Push the start later if it would overlap the *previous* play
     // chronologically — rows are ordered newest-first, so that's
-    // rows[i + 1]. A tied timestamp (a bulk import commonly logs several
-    // plays at once) is not "preceding," so it isn't clamped: those plays
-    // keep their full runtime and stack, an honest picture of what
-    // actually happened, rather than collapsing to zero-length events.
-    const previous = rows[i + 1]
+    // rows[i + 1], or (only for the oldest row in a windowed query)
+    // previousBeforeWindow, fetched above. A tied timestamp (a bulk import
+    // commonly logs several plays at once) is not "preceding," so it isn't
+    // clamped: those plays keep their full runtime and stack, an honest
+    // picture of what actually happened, rather than collapsing to
+    // zero-length events.
+    const previous = rows[i + 1] ?? (i === rows.length - 1 ? previousBeforeWindow : undefined)
     if (
       previous &&
       previous.watchedAt.getTime() < end.getTime() &&
@@ -244,11 +314,11 @@ async function buildHistoryEvents(
       // watched, so there's nothing left to spoil.
       description: withLink(
         (row.movieTitle !== null ? row.movieOverview : row.episodeOverview) ?? undefined,
-        !baseUrl
+        !opts.baseUrl
           ? undefined
           : row.movieTitle !== null
-            ? `${baseUrl}/movies/${row.movieSlug!}`
-            : `${baseUrl}/shows/${row.showSlug!}/season/${row.seasonNumber!}/episode/${row.episodeNumber!}`,
+            ? `${opts.baseUrl}/movies/${row.movieSlug!}`
+            : `${opts.baseUrl}/shows/${row.showSlug!}/season/${row.seasonNumber!}/episode/${row.episodeNumber!}`,
       ),
       // See latestOf's own doc comment — the play's own createdAt alone
       // would never reflect a description backfilled after the fact.
@@ -256,6 +326,33 @@ async function buildHistoryEvents(
         row.createdAt,
         row.movieTitle !== null ? row.movieMetadataRefreshedAt : row.episodeOverviewCheckedAt,
       ),
+      kind: 'watch',
+      media:
+        row.movieTitle !== null
+          ? {
+              type: 'movie',
+              title: row.movieTitle,
+              posterPath: row.moviePosterPath,
+              movieSlug: row.movieSlug ?? undefined,
+            }
+          : {
+              type: 'episode',
+              title: episodeDisplayTitle(
+                row.episodeTitle,
+                row.seasonNumber ?? undefined,
+                row.episodeNumber ?? undefined,
+              ),
+              posterPath: row.showPosterPath,
+              showTitle: row.showTitle ?? undefined,
+              showSlug: row.showSlug ?? undefined,
+              seasonNumber: row.seasonNumber ?? undefined,
+              episodeNumber: row.episodeNumber ?? undefined,
+            },
+      // A history entry is watched by construction — nothing left to
+      // spoil, same reasoning as the `description` comment above.
+      watched: true,
+      spoilerHidden: false,
+      overview: row.movieTitle !== null ? row.movieOverview : row.episodeOverview,
     }
   })
 }
@@ -267,15 +364,26 @@ async function buildHistoryEvents(
  * string mode ('YYYY-MM-DD'), so the range comparison below is a plain
  * string comparison with no timezone round-trip risk.
  */
+interface ShowsEventOptions {
+  includeDropped: boolean
+  futureOnly: boolean
+  includeAllWatched: boolean
+  /** Inclusive bounds on `episodes.firstAired` ('YYYY-MM-DD'), plain
+   * string comparisons like `futureOnly`'s own gate — both AND together
+   * fine. Only `buildCalendarTimeline` below sets these. */
+  fromDay?: string
+  toDay?: string
+  baseUrl: string | undefined
+}
+
 async function buildShowsEvents(
   db: Database,
   user: typeof users.$inferSelect,
-  feed: typeof calendarFeeds.$inferSelect,
-  baseUrl: string | undefined,
-): Promise<IcsEvent[]> {
+  opts: ShowsEventOptions,
+): Promise<CalendarSourceEvent[]> {
   const followed = await getFollowedShows(db, user.id, {
-    includeDropped: feed.includeDropped,
-    windowDays: feed.includeAllWatched ? null : undefined,
+    includeDropped: opts.includeDropped,
+    windowDays: opts.includeAllWatched ? null : undefined,
   })
   if (followed.length === 0) return []
 
@@ -320,7 +428,9 @@ async function buildShowsEvents(
           followed.map((show) => show.id),
         ),
         isNotNull(episodes.firstAired),
-        feed.futureOnly ? gte(episodes.firstAired, today) : undefined,
+        opts.futureOnly ? gte(episodes.firstAired, today) : undefined,
+        opts.fromDay ? gte(episodes.firstAired, opts.fromDay) : undefined,
+        opts.toDay ? lte(episodes.firstAired, opts.toDay) : undefined,
       ),
     )
     .groupBy(episodes.id)
@@ -348,12 +458,25 @@ async function buildShowsEvents(
     // spoiler rule again client-side.
     description: withLink(
       user.spoilerProtectionEnabled && !row.watched ? undefined : (row.overview ?? undefined),
-      baseUrl
-        ? `${baseUrl}/shows/${showsById.get(row.showId)!.slug}/season/${row.seasonNumber}/episode/${row.episodeNumber}`
+      opts.baseUrl
+        ? `${opts.baseUrl}/shows/${showsById.get(row.showId)!.slug}/season/${row.seasonNumber}/episode/${row.episodeNumber}`
         : undefined,
     ),
     // See latestOf's own doc comment.
     stamp: latestOf(row.createdAt, row.overviewCheckedAt),
+    kind: 'episode',
+    media: {
+      type: 'episode',
+      title: episodeDisplayTitle(row.title, row.seasonNumber, row.episodeNumber),
+      posterPath: showsById.get(row.showId)!.posterPath,
+      showTitle: showsById.get(row.showId)!.title,
+      showSlug: showsById.get(row.showId)!.slug,
+      seasonNumber: row.seasonNumber,
+      episodeNumber: row.episodeNumber,
+    },
+    watched: row.watched,
+    spoilerHidden: user.spoilerProtectionEnabled && !row.watched,
+    overview: row.overview,
   }))
 }
 
@@ -375,14 +498,24 @@ async function buildShowsEvents(
  * far smaller than "every episode of every followed show", so
  * MAX_CALENDAR_EVENTS is a ceiling in this feed, not expected to bind.
  */
+interface MoviesEventOptions {
+  futureOnly: boolean
+  includeAllWatched: boolean
+  /** Inclusive bounds on the region-resolved release date ('YYYY-MM-DD'),
+   * same convention as ShowsEventOptions' fromDay/toDay. Only
+   * `buildCalendarTimeline` below sets these. */
+  fromDay?: string
+  toDay?: string
+  baseUrl: string | undefined
+}
+
 async function buildMoviesEvents(
   db: Database,
   user: typeof users.$inferSelect,
-  feed: typeof calendarFeeds.$inferSelect,
-  baseUrl: string | undefined,
-): Promise<IcsEvent[]> {
+  opts: MoviesEventOptions,
+): Promise<CalendarSourceEvent[]> {
   const followed = await getFollowedMovies(db, user.id, {
-    windowDays: feed.includeAllWatched ? null : undefined,
+    windowDays: opts.includeAllWatched ? null : undefined,
   })
   if (followed.length === 0) return []
 
@@ -408,7 +541,9 @@ async function buildMoviesEvents(
           followed.map((movie) => movie.id),
         ),
         isNotNull(releaseDateExpr(region)),
-        feed.futureOnly ? gte(releaseDateExpr(region), today) : undefined,
+        opts.futureOnly ? gte(releaseDateExpr(region), today) : undefined,
+        opts.fromDay ? gte(releaseDateExpr(region), opts.fromDay) : undefined,
+        opts.toDay ? lte(releaseDateExpr(region), opts.toDay) : undefined,
       ),
     )
     .groupBy(movies.id)
@@ -432,9 +567,19 @@ async function buildMoviesEvents(
       // comment.
       description: withLink(
         user.spoilerProtectionEnabled && !row.watched ? undefined : (row.overview ?? undefined),
-        baseUrl ? `${baseUrl}/movies/${movie.slug}` : undefined,
+        opts.baseUrl ? `${opts.baseUrl}/movies/${movie.slug}` : undefined,
       ),
       stamp: latestOf(row.createdAt, row.metadataRefreshedAt),
+      kind: 'release',
+      media: {
+        type: 'movie',
+        title: movie.title,
+        posterPath: movie.posterPath,
+        movieSlug: movie.slug,
+      },
+      watched: row.watched,
+      spoilerHidden: user.spoilerProtectionEnabled && !row.watched,
+      overview: row.overview,
     }
   })
 }
@@ -455,10 +600,111 @@ export async function buildCalendarEvents(
   // types now.
   switch (feed.feedType) {
     case 'history':
-      return buildHistoryEvents(db, user, feed, baseUrl)
+      return buildHistoryEvents(db, user, {
+        includeMovies: feed.includeMovies,
+        includeShows: feed.includeShows,
+        baseUrl,
+      })
     case 'shows':
-      return buildShowsEvents(db, user, feed, baseUrl)
+      return buildShowsEvents(db, user, {
+        includeDropped: feed.includeDropped,
+        futureOnly: feed.futureOnly,
+        includeAllWatched: feed.includeAllWatched,
+        baseUrl,
+      })
     case 'movies':
-      return buildMoviesEvents(db, user, feed, baseUrl)
+      return buildMoviesEvents(db, user, {
+        futureOnly: feed.futureOnly,
+        includeAllWatched: feed.includeAllWatched,
+        baseUrl,
+      })
   }
+}
+
+/**
+ * The in-app calendar page's merged timeline (`GET /calendar-events`,
+ * apps/web/src/routes/CalendarPage.tsx) — a single, date-windowed,
+ * ascending list combining what's already been watched with what's
+ * coming next, unlike `buildCalendarEvents` above (one feed type at a
+ * time, no date range, capped only by MAX_CALENDAR_EVENTS). Reuses the
+ * same three builders rather than a parallel implementation, so the
+ * runtime-fallback/overlap-clamp/region-resolution/spoiler logic they
+ * already get right has exactly one home.
+ *
+ * The "watched" half (history) is unconditionally bounded by `window`;
+ * the "upcoming" half (shows/movies) is unconditionally `futureOnly:
+ * true` — that split, not a symmetric window, is what makes the merged
+ * timeline read as "watched so far, then what's coming" rather than an
+ * arbitrary date range. `includeAllWatched: true` (`windowDays: null`
+ * inside getFollowedShows/getFollowedMovies) is the followed-candidate-set
+ * default: a real calendar of everything you're following, not just the
+ * last 30 days. `includeDropped: false` matches the existing feed
+ * default; no UI toggle for either in v1. `baseUrl` is left unset on all
+ * three — this JSON path builds its own hrefs from `media`, never an
+ * embedded description link.
+ *
+ * Timezone note: `futureOnly`'s "today" inside the builders is resolved
+ * via `user.timezone` (effectively always UTC — nothing in the app ever
+ * sets that column), while `window` itself comes from the browser's local
+ * time (every other frontend date path does the same, see
+ * apps/web/src/lib/date.ts's `localDayStartISO` doc comment). This means
+ * the in-app calendar and the subscribed `.ics` feed can disagree by up
+ * to a day about "today" for a user outside UTC — an accepted,
+ * pre-existing divergence, not something this function attempts to fix.
+ *
+ * Known, accepted overlap: an episode aired and watched today appears as
+ * both an `episode` and a `watch` event — honest (it aired, and you
+ * watched it), and `watched` distinguishes the two on the wire.
+ */
+export async function buildCalendarTimeline(
+  db: Database,
+  user: typeof users.$inferSelect,
+  window: { after: Date; before: Date },
+): Promise<CalendarSourceEvent[]> {
+  // All-day bounds derived by UTC-day truncation of the instant window —
+  // `after` is always a browser-local *start* of day and `before` a
+  // browser-local *end* of day, so this truncation is never narrower than
+  // the requested span and at most one day wider at each edge, whichever
+  // side of UTC the browser is on. Widening is the safe direction: a
+  // month grid only ever reads the cells it has, and an agenda view
+  // showing one genuine extra edge day is harmless.
+  const fromDay = window.after.toISOString().slice(0, 10)
+  const toDay = window.before.toISOString().slice(0, 10)
+
+  const [historyEvents, showsEvents, moviesEvents] = await Promise.all([
+    buildHistoryEvents(db, user, {
+      includeMovies: true,
+      includeShows: true,
+      after: window.after,
+      before: window.before,
+      baseUrl: undefined,
+    }),
+    buildShowsEvents(db, user, {
+      includeDropped: false,
+      futureOnly: true,
+      includeAllWatched: true,
+      fromDay,
+      toDay,
+      baseUrl: undefined,
+    }),
+    buildMoviesEvents(db, user, {
+      futureOnly: true,
+      includeAllWatched: true,
+      fromDay,
+      toDay,
+      baseUrl: undefined,
+    }),
+  ])
+
+  // Ascending by normalized date key, tie-broken by uid for a stable sort
+  // — a convenience for the client, which regroups by *browser-local* day
+  // regardless of this ordering.
+  function sortKey(event: CalendarSourceEvent): string {
+    return 'date' in event ? `${event.date}T00:00:00.000Z` : event.start.toISOString()
+  }
+
+  return [...historyEvents, ...showsEvents, ...moviesEvents].sort((a, b) => {
+    const byDate = sortKey(a).localeCompare(sortKey(b))
+    return byDate !== 0 ? byDate : a.uid.localeCompare(b.uid)
+  })
 }

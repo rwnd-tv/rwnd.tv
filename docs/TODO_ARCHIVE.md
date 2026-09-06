@@ -1731,6 +1731,56 @@ currently-dropped shows, since a row can have both
       respected spoiler protection, and responded to `futureOnly` being
       toggled off.
 
+- [x] **In-app calendar UI consuming the webcal feeds** (2026-09-04 added,
+      done 2026-09-06)\
+      The deferred second half of "Calendar of upcoming episodes" above —
+      a `/calendar` page rendering the same event data the History/TV
+      Shows/Movies webcal feeds produce, natively in the app rather than
+      requiring an external calendar client. Scoped with James beforehand
+      as one merged timeline (past watches above today, upcoming
+      episodes/releases below — not three tabs mirroring the three feed
+      types), with two togglable layouts, Agenda (a day-grouped list,
+      default) and Month (a real `<table>` grid, genuinely new UI
+      territory in this codebase).\
+      Backend: `apps/api/src/calendar/build.ts`'s three existing
+      `.ics`-feed builders were widened (a superset return type,
+      structurally still assignable to `IcsEvent`) rather than forked, so
+      the runtime-fallback/overlap-clamp/region-resolution/spoiler logic
+      they already got right has exactly one home; a new
+      `buildCalendarTimeline` reuses them with real date-range filtering
+      (previously absent — the `.ics` path only ever had `ORDER BY` +
+      `LIMIT`) behind a new session-authenticated `GET /calendar-events`
+      route, deliberately not gated on `ENCRYPTION_KEY`/
+      `calendarFeedsAvailable` (that flag exists only for the feeds'
+      re-copyable token, which this JSON endpoint never issues). The
+      36-test `.ics` regression suite in `calendar.test.ts` needed zero
+      edits through the whole refactor — the actual proof the widening was
+      behaviour-preserving — and 10 new tests were added alongside it for
+      the new endpoint.\
+      Spoiler handling deliberately diverges from the `.ics` feed's
+      omit-outright approach (iCalendar has no reveal mechanism): the API
+      always sends the real episode title/overview plus a `spoilerHidden`
+      flag, and the frontend substitutes a generic "Episode N" label with
+      a click-to-reveal control, following `EpisodeCard.tsx`'s existing
+      compact-tile precedent rather than `SpoilerGuard.tsx`'s blur (a
+      design correction mid-build: blur was initially assumed to have an
+      accessibility problem `SpoilerGuard` doesn't actually have — the
+      real reason to match `EpisodeCard` instead is the same
+      layout-space constraint it already solved).\
+      Frontend: `CalendarPage.tsx` (routing, sidebar entry, one
+      `useQuery` per visible window with `keepPreviousData` rather than
+      `useInfiniteQuery`, since each window's payload is small and bounded
+      by construction), `CalendarAgenda.tsx`, `CalendarMonthGrid.tsx`
+      (a fixed 6×7 grid regardless of week count, a locale-aware
+      Monday/Sunday first-day-of-week split for `en-GB`/`en-US`), and
+      `CalendarEventTile.tsx`, all new. Full local integration/component
+      suite green (888 tests across the whole workspace), deployed to
+      dev.rwnd.tv; James doing his own live click-through as a follow-up
+      rather than a Claude-driven one this time (dev.rwnd.tv's
+      registration is invite-only and the Demo/Test account credentials
+      aren't held by the assistant, so a throwaway-account live pass
+      wasn't practical this session).
+
 ## Landing page & branding
 
 - [x] **Link the header mark/wordmark to the site's base URL** (2026-08-23 14:40 added, done 2026-08-23)\

@@ -4,6 +4,8 @@ import {
   calendarFeedSchema,
   calendarFeedTypeSchema,
   createCalendarFeedRequestSchema,
+  listCalendarEventsQuerySchema,
+  listCalendarEventsResponseSchema,
   listCalendarFeedsResponseSchema,
   updateCalendarFeedRequestSchema,
 } from '@rwnd/shared'
@@ -16,7 +18,7 @@ import {
   resolveCalendarFeed,
   serializeCalendarFeed,
 } from '../lib/calendar-feeds.js'
-import { buildCalendarEvents } from '../calendar/build.js'
+import { buildCalendarEvents, buildCalendarTimeline } from '../calendar/build.js'
 import { buildIcs } from '../lib/ics.js'
 import { logSecurityEvent } from '../lib/security-log.js'
 
@@ -85,6 +87,73 @@ calendarRoutes.get('/calendar/:token/feed.ics', calendarFeedRateLimit, async (c)
   )
   return c.body(body)
 })
+
+// Comfortably more than any realistic agenda scroll or month-grid jump
+// (three years), while the per-source MAX_CALENDAR_EVENTS ceiling inside
+// buildCalendarTimeline's builders still bounds actual query cost.
+const MAX_CALENDAR_WINDOW_DAYS = 1095
+
+/**
+ * The in-app calendar page's own JSON endpoint (apps/web/src/routes/
+ * CalendarPage.tsx) — a `.openapi()` route, unlike the token-based `.ics`
+ * feed above, so it's part of the normal session-authenticated JSON API
+ * contract: `requireSession` (middleware/auth.ts) gates it automatically,
+ * since this path doesn't match `CALENDAR_FEED_PATH`'s regex.
+ *
+ * Deliberately not gated on `ENCRYPTION_KEY`/`calendarFeedsAvailable` the
+ * way the feed management routes below are — that flag exists only
+ * because a subscription URL needs a durably re-copyable encrypted token,
+ * and `buildCalendarTimeline` issues no token at all. This page works on
+ * every instance regardless of `ENCRYPTION_KEY`, a real, intentional
+ * divergence from Settings > Calendar feeds.
+ */
+calendarRoutes.openapi(
+  createRoute({
+    method: 'get',
+    path: '/calendar-events',
+    summary:
+      "List the current user's calendar timeline (past watches and upcoming episodes/releases)",
+    request: { query: listCalendarEventsQuerySchema },
+    responses: {
+      200: {
+        description: 'Calendar events',
+        content: { 'application/json': { schema: listCalendarEventsResponseSchema } },
+      },
+      400: { description: 'Invalid or excessive date range' },
+    },
+  }),
+  async (c) => {
+    const { after, before } = c.req.valid('query')
+    const afterDate = new Date(after)
+    const beforeDate = new Date(before)
+    if (beforeDate < afterDate) {
+      return c.json({ error: '`before` must not be earlier than `after`' }, 400)
+    }
+    const spanDays = (beforeDate.getTime() - afterDate.getTime()) / (24 * 60 * 60 * 1000)
+    if (spanDays > MAX_CALENDAR_WINDOW_DAYS) {
+      return c.json({ error: `Date range too large (max ${MAX_CALENDAR_WINDOW_DAYS} days)` }, 400)
+    }
+
+    const events = await buildCalendarTimeline(c.get('db'), c.get('user')!, {
+      after: afterDate,
+      before: beforeDate,
+    })
+
+    return c.json({
+      events: events.map((event) => ({
+        kind: event.kind,
+        uid: event.uid,
+        media: event.media,
+        overview: event.overview,
+        watched: event.watched,
+        spoilerHidden: event.spoilerHidden,
+        ...('date' in event
+          ? { date: event.date }
+          : { startsAt: event.start.toISOString(), endsAt: event.end.toISOString() }),
+      })),
+    })
+  },
+)
 
 const feedTypeParamSchema = z.object({ feedType: calendarFeedTypeSchema })
 

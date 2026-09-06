@@ -24,7 +24,98 @@ Format:
       `.github/dependabot.yml` so Dependabot stops proposing it; remove
       that ignore once `typescript-eslint` supports TS 7.
 
+## UI polish
+
+- [ ] **Inset the dropdown arrow on `<select>` controls** (2026-09-06 added)
+
+      The native browser dropdown arrow on every `<select>` sits flush
+      against the right edge, tighter than the horizontal margin other
+      controls use (the shared `Select.tsx`'s own `px-3` text padding, for
+      instance). Move it slightly left/inward so its margin matches.
+
+      Native `<select>` styling can't reposition the built-in arrow
+      directly; this needs `appearance-none` plus a custom
+      background-image arrow (or an inline SVG) with its own
+      `background-position` offset, on both call sites: the shared
+      `Select.tsx` (used throughout the site, e.g. `LibraryControls.tsx`'s
+      Sort dropdown) and the one-off `<select>` in
+      `PreferencesCard.tsx` (locale picker), which doesn't go through
+      `Select.tsx`. Worth folding the latter into `Select.tsx` while
+      touching this, unless there's a reason it was kept separate.
+
+- [ ] **Only show the tick on "Watched" buttons once the item is watched** (2026-09-06 added)
+
+      The labeled Watched buttons all render their `CheckIcon` unconditionally,
+      next to the label, regardless of watched state; only the button's
+      variant (primary vs. secondary) currently reflects whether the item
+      is watched. Four separate copies of this pattern (each with its own
+      duplicated `CheckIcon`, per this codebase's existing one-icon-per-file
+      precedent): `MovieDetailPage.tsx`, `ShowDetailPage.tsx`,
+      `SeasonDetailPage.tsx`, `EpisodeDetailPage.tsx`.
+
+      `EpisodeCard.tsx`'s circular per-episode toggle button also renders a
+      `CheckIcon` (or the watch count, if watched more than once)
+      unconditionally, but there it's the button's only content when
+      unwatched, not an icon next to a label; hiding it there would leave
+      an empty circle. Confirm with James whether that one should change
+      too, or only the four labeled buttons above.
+
+## Mobile / responsive
+
+- [ ] **Quality pass on the whole interface at phone width** (2026-09-06 added)
+
+      James, 2026-09-06: most users interact with this through their
+      phones, and it's had very little real testing at that scaling so
+      far. Needs a proper pass across the whole app: every route, at
+      actual phone viewport widths (both real devices and browser
+      devtools emulation), looking for cramped/overflowing layouts, touch
+      targets too small or too close together, dialogs/panels that don't
+      fit, and anything that only works because it was built and tested
+      at desktop width.
+
+      Current state going in: only 8 `.tsx` files in `apps/web/src` use
+      any Tailwind responsive breakpoint (`sm:`/`md:`/`lg:`/`xl:`) at all
+      (`Sidebar.tsx`, `UserRow.tsx`, `DatabasePanel.tsx`,
+      `EpisodeDetailPage.tsx`, `LandingPage.tsx`, `MovieDetailPage.tsx`,
+      `SeasonDetailPage.tsx`, `ShowDetailPage.tsx`) out of the whole
+      route/component tree, so most of the app has had no explicit mobile
+      treatment at all rather than a few rough edges to touch up.
+
+      Broad and open-ended by nature: expect this to surface a long tail
+      of individual, page-specific fixes rather than one shared root
+      cause, so treat it as its own audit/planning pass (probably worth
+      going page by page and logging findings) rather than something to
+      fix inline in one sitting. Distinct from the already-tracked
+      "Mobile-friendly PWA installability" roadmap item below, which is
+      about add-to-home-screen support, not layout quality.
+
 ## TV Shows / Movies gallery follow-ups
+
+- [ ] **Sticky filter/sort bar on TV Shows** (2026-09-06 added)
+
+      "Filter by title", "Filters", and "Sort" (`LibraryControls.tsx`,
+      shared with MoviesPage) should stay pinned at the top of the TV Shows
+      page while the gallery grid scrolls beneath it, instead of scrolling
+      out of view with the rest of the page.
+
+      Requested for `ShowsPage.tsx` specifically; worth considering for
+      `MoviesPage.tsx` too since it uses the same control bar, but confirm
+      with James before extending scope there.
+
+- [ ] **Sticky filter/sort bar on History** (2026-09-06 added)
+
+      Same as the TV Shows item above: `HistoryPage.tsx`'s "Filter by
+      title", "Filters" (`FiltersPanel.tsx`, holding
+      `ActivityKindFilterPanel`/`DateRangeFilterPanel`), and "Sort" row,
+      built from the same shared `LibraryControls.tsx`, should stay pinned
+      at the top while the history list scrolls beneath it.
+
+- [ ] **Sticky filter/sort bar on a Watchlist's detail page** (2026-09-06 added)
+
+      Same as the two items above: `WatchlistDetailPage.tsx`'s "Filter by
+      title" and "Sort" row (`LibraryControls.tsx`; no `FiltersPanel` here,
+      unlike History/TV Shows) should stay pinned at the top while the
+      watchlist's items scroll beneath it.
 
 - [ ] **Virtualize the gallery grid if libraries grow** (2026-08-19 15:25)
 
@@ -105,6 +196,139 @@ Format:
       turns up, or IMDb gives a direct answer on whether self-hosted OSS
       counts as personal use. Movies-only vs. Movies+TV Shows was never
       decided either, moot until this unblocks.
+
+## Sensible defaults
+
+- [ ] **Default History's Filters > Type to "Watched" only** (2026-09-06 added)
+
+      `HistoryPage.tsx`'s Filters panel currently defaults to all four
+      activity kinds shown (`ACTIVITY_KINDS`: watch/rating/watchlist/
+      dropped) when no filter cookie is set yet, via
+      `useActivityKindFilterCookie`'s `new Set(ACTIVITY_KINDS)` fallback
+      (`use-activity-kind-filter-cookie.ts`). Change that fallback to just
+      `watch` so a first-time (or cookie-cleared) visit to History shows
+      watched activity only, matching what most people actually want from
+      a watch history page; the other three kinds stay one click away in
+      the Filters panel same as today.
+
+- [ ] **Default the Admin page's Users panel to expanded** (2026-09-06 added)
+
+      `UsersPanel.tsx` (`AdminPage.tsx`'s only panel) is a `<details>` +
+      `usePanelOpen('panelAdminUsers')`, which defaults to collapsed
+      (`defaultOpen` unset, so `use-panel-open.ts`'s `false`). Change the
+      call to `usePanelOpen('panelAdminUsers', true)` so a first-time (or
+      cookie-cleared) visit shows the user list immediately rather than
+      needing a click to reveal it.
+
+      Note this reverses an explicit prior decision, not an oversight:
+      `UsersPanel.tsx`'s own doc comment records James asking on
+      2026-09-03 for this panel to match the rest of the app's collapsed-
+      by-default panels rather than always rendering open. Worth a quick
+      "still want this changed?" gut-check given that history, though the
+      Admin page's own panel (nothing else on the page competing for
+      space, unlike Account/Settings/Import's several stacked panels) is
+      a reasonable place for a "sensible defaults" pass to land
+      differently.
+
+- [ ] **Default the TV Shows calendar feed to "Include every show I've ever watched" only** (2026-09-06 added)
+
+      `ShowsSettingsForm` (`CalendarFeedsPanel.tsx`) has three checkboxes
+      for a newly-created 'shows' feed, all sourced from the
+      `calendar_feeds` row's column defaults (`packages/db/src/schema.ts`;
+      the create route omits these fields on insert and relies on the
+      column defaults, in `apps/api/src/routes/calendar.ts`'s POST
+      handler): `includeDropped` false (already unticked, matches),
+      `futureOnly` true ("Only upcoming episodes", needs to become
+      unticked), `includeAllWatched` false ("Include every show I've ever
+      watched", needs to become ticked).
+
+      `futureOnly` and `includeAllWatched` are shared columns on the same
+      `calendar_feeds` table, reused by the Movies feed
+      (`MoviesSettingsForm`); see the matching Movies/Films item below,
+      which wants the same two values changed the same way. With both
+      requested, the column-level defaults in `schema.ts` can just be
+      flipped directly (`futureOnly` to `false`, `includeAllWatched` to
+      `true`) rather than branching per `feedType` in the POST handler;
+      only revisit that if the two items end up diverging before either
+      ships. `includeDropped` has no Movies equivalent (dropping is a
+      shows-only concept), so it's untouched either way.
+
+- [ ] **Default the Films calendar feed to "Include every film I've ever watched" only** (2026-09-06 added)
+
+      Same as the TV Shows item above, for `MoviesSettingsForm`
+      (`CalendarFeedsPanel.tsx`, Settings > Calendar feeds > Films): its
+      two checkboxes, `futureOnly` ("Only upcoming films", currently true/
+      ticked) and `includeAllWatched` ("Include every film I've ever
+      watched", currently false/unticked), should default the other way
+      round, so only the "ever watched" checkbox starts ticked.
+
+      Same shared `calendar_feeds` columns as the Shows item above; with
+      both wanted, flip the two column defaults in `schema.ts` once
+      rather than doing it twice.
+
+## Backups
+
+- [ ] **Show what actually changed in the backup Diff dialog** (2026-09-06 added)
+
+      Settings > Database panel > Backups > the Diff button
+      (`DatabasePanel.tsx`, the `diffTarget` dialog around line 417)
+      currently only shows a per-category added/removed count (e.g.
+      "3 added, 1 removed") via `settings.database.backup.diffLine`. Add
+      an expandable section below the category list and above the Close
+      button, shown only when at least one category actually has a
+      nonzero added/removed count, that lists the specific items added
+      and/or removed.
+
+      This needs API work first, not just a UI change: `computeBackupDiff`
+      (`apps/api/src/backup/diff.ts`) currently reduces each category to a
+      `{ added, removed }` count via `multisetDiff`, comparing entries as
+      opaque `JSON.stringify`'d strings and discarding which specific
+      entries they were. Its own doc comment notes this was a deliberate
+      choice ("not a third 'changed' bucket the UI doesn't ask for") back
+      when the UI only needed counts; showing the actual list of
+      added/removed items means `BackupDiff`
+      (`packages/shared/src/schemas/backups.ts`) needs to carry enough
+      per-entry identifying detail (title, and whatever disambiguates
+      duplicates, e.g. watched date for `watchHistory`) alongside the
+      counts, and `computeBackupDiff` needs to keep the unmatched entries
+      themselves rather than only tallying them.
+
+      A changed rating/note still reads as "old entry removed, new one
+      added" under this model, same as today, not a separate "changed"
+      case, so both entries would show up in their respective added/
+      removed lists rather than paired together; worth confirming that's
+      clear enough in the UI once real entries (not just counts) are on
+      screen.
+
+## Ratings
+
+- [ ] **Don't allow rating anything that hasn't aired/released yet** (2026-09-06 added)
+
+      The 5-star `RatingPicker` currently renders and works regardless of
+      air/release date. Hide it on the frontend for an episode
+      (`EpisodeDetailPage.tsx`, `EpisodeCard.tsx`) with no `firstAired`
+      date, or one in the future, and for a movie
+      (`MovieDetailPage.tsx`) with no `releaseDate`, or one in the future.
+
+      Also enforce it server-side, not just hide the widget client-side:
+      the three PUT rating routes in `apps/api/src/routes/library/ratings.ts`
+      (episode, show, movie) currently accept a rating unconditionally.
+      Reject a PUT for an unaired episode or unreleased movie (a 4xx, not a
+      silent no-op).
+
+      `useEpisodeRatingActions` (`apps/web/src/lib/use-episode-rating-actions.ts`)
+      currently has a comment noting ratings are deliberately independent
+      of watched status with "no aired-date guard"; that was about
+      decoupling rating from the watched toggle, not a decision that
+      unaired content should be ratable; this TODO doesn't reverse that,
+      it adds the missing aired-date check on top.
+
+      The show-level rating (`ShowDetailPage.tsx`) rates the whole show,
+      not a single air date, so this doesn't cleanly apply the same way:
+      an ongoing show has aired episodes even if unaired ones remain.
+      Confirm with James whether a show with zero aired episodes yet
+      (announced/upcoming) should also be blocked, or whether show-level
+      rating is out of scope for this one.
 
 ## Roadmap
 

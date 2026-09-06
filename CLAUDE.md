@@ -86,6 +86,31 @@ ghcr.io/rwnd-tv/rwnd.tv:X.Y.Z`, replace the old digest in that one
 Deploy to dev the same way afterward (see above) so both instances track
 the same released version, not just prod.
 
+## Closing out a milestone
+
+Before marking a milestone `✅ done` in `docs/ROADMAP.md`, run both a code
+review and a security review over everything that shipped for it, not just
+whatever the last individual commit happened to be. M3 already did this
+(see its "Code review & tidy-up pass" and "Full security review" bullets
+in `docs/ROADMAP.md`, and [ADR 0007](docs/adr/0007-security-posture.md));
+this makes it a standing rule for every milestone after M3 too, not a
+one-off M3 thing.
+
+Use `/code-review` and `/security-review`. Scope the review to the diff
+since the milestone actually started (the previous milestone's closing
+commit, or the last version tag, whichever is the better base), not just
+"the current diff," since a milestone almost always spans many commits.
+`/code-review ultra` is billed and multi-agent, so ask before running that
+variant rather than defaulting to it.
+
+Log whatever the reviews turn up: fix it inline before closing the
+milestone, or record it as a follow-up in `docs/TODO.md` /
+`docs/ROADMAP.md`, same as M3's own pass did. Don't let a review with open
+findings block marking the milestone done if the findings themselves are
+better tracked as follow-up work; the point is that the review happened
+and its output was captured, not that everything it finds gets fixed
+before the checkbox flips.
+
 ## Prose style in docs
 
 Don't use em-dashes (—) in `docs/`, root-level markdown (README.md,

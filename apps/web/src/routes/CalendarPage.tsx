@@ -16,14 +16,17 @@ import { CALENDAR_KIND_DOT_CLASS } from '../components/calendar/calendar-shared.
 const CALENDAR_VIEWS = ['agenda', 'month'] as const
 type CalendarView = (typeof CALENDAR_VIEWS)[number]
 
-// Back on (2026-09-09), after being temporarily off from 2026-09-06 while
-// Agenda had a list of known issues James wanted fixed before it was
-// user-facing again.
+// Back on (2026-09-09). Agenda was switched off on 2026-09-06 over a list
+// of known issues; rather than work through them, the view was rebuilt
+// from scratch as a forward-looking list (see CalendarAgenda.tsx), which
+// retired the surface those issues lived on. They were never written down
+// and are deliberately not worth recovering: nothing they described still
+// exists.
 //
-// The switch is kept rather than deleted: it's a one-line flip either way,
-// and Agenda is being actively worked on. While off, the toggle button
-// stays visible but disabled/greyed-out with a tooltip explaining why
-// (`calendar.view.agendaDisabled`), rather than disappearing outright, and
+// The switch is kept rather than deleted, since it's a one-line flip
+// either way. While off, the toggle button stays visible but
+// disabled/greyed-out with a tooltip explaining why
+// (`calendar.view.agendaDisabled`) rather than disappearing outright, and
 // `effectiveView` below overrides a cookie that still says 'agenda' so a
 // returning user doesn't land on a disabled view.
 const AGENDA_VIEW_ENABLED = true

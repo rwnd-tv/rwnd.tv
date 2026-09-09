@@ -50,9 +50,12 @@ arm64, plus a few things not worth running on every save locally: a
 Trivy filesystem scan of the dependency tree for HIGH/CRITICAL
 vulnerabilities (blocking), a real `pnpm db:migrate` against a Postgres
 service container, a Docker build, and a separate Trivy HIGH/CRITICAL
-scan of the built image. `pnpm knip` in particular has no config
-(`knip.json` is empty) and is easy to trip with an unused export or
-file; run it locally rather than finding out from CI.
+scan of the built image. `pnpm knip` in particular is configured to
+almost nothing (`knip.jsonc` ignores `tools/**` and two Postgres
+binaries, and that is all) and is easy to trip with an unused export or
+file; run it locally rather than finding out from CI. Note it is a
+separate gate from lint, typecheck and format, so running those three
+is not enough.
 
 The test suite needs a live Postgres: it truncates tables between tests
 (`vitest.config.ts`), and these env vars set (see `ci.yml` for the exact

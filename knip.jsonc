@@ -1,0 +1,10 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "ignore": ["tools/**"],
+  // pg_dump and psql come from the runtime image (see Dockerfile's
+  // postgresql*-client line) and from CI's own install step, never from a
+  // package in this workspace, so knip has nothing to resolve them to.
+  // apps/api/src/lib/database-backup.ts spawns pg_dump; its round-trip test
+  // shells out to both. See docs/adr/0008-database-backups.md.
+  "ignoreBinaries": ["pg_dump", "psql"],
+}

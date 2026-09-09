@@ -5,8 +5,15 @@ updates:
     schedule:
       interval: weekly
     groups:
+      # Majors are excluded so they arrive as their own PRs instead of
+      # riding along with routine patches: PR #38 bundled a vitest 4 -> 5
+      # major in with seven patch bumps, which makes the whole group only
+      # as mergeable as its riskiest member and forces an all-or-nothing
+      # call on it. Same problem the `typescript` ignore below works around,
+      # generalised to every major rather than one named package.
       dev-dependencies:
         dependency-type: development
+        update-types: ['minor', 'patch']
     ignore:
       # typescript-eslint doesn't support TS 7 yet — see docs/TODO.md's
       # "Hold TS 7 bump" item. Without this, Dependabot's dev-dependencies

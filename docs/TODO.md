@@ -15,7 +15,7 @@ Format:
 
 ## Repo hygiene
 
-- [ ] **Hold TS 7 bump** (2026-08-09 20:40 added, ignore rule added 2026-08-30)
+- [ ] **Hold TS 7 bump** (2026-08-09 20:40 added, ignore rule added 2026-08-30, rationale revised 2026-09-09)
 
       `typescript-eslint` doesn't support TS 7 yet. A Dependabot PR
       (`dev-dependencies` group) bundled a `typescript` 5.9.3→7.0.2 bump in
@@ -23,6 +23,18 @@ Format:
       group. Added a `typescript` major-version `ignore` rule to
       `.github/dependabot.yml` so Dependabot stops proposing it; remove
       that ignore once `typescript-eslint` supports TS 7.
+
+      The bundling half of that reasoning no longer applies. Since
+      2026-09-09 the `dev-dependencies` group carries
+      `update-types: ['minor', 'patch']`, so a major never joins the
+      group at all: a TS 7 bump would now arrive as its own PR and fail on
+      its own, taking nothing else down with it.
+
+      The ignore rule is still worth keeping, on the narrower grounds that
+      it stops Dependabot reopening a PR that can only be closed again
+      until `typescript-eslint` catches up. Both mechanisms now guard the
+      same thing from different angles; removing the ignore once TS 7 is
+      supported stays the exit condition either way.
 
 ## UI polish
 
@@ -369,20 +381,20 @@ Format:
         The alternative, a bespoke Drizzle/JS export of every table across
         every user, would be a much bigger effort, non-standard, and
         wouldn't produce something directly restorable with `psql`/
-        `pg_restore` the way a real `pg_dump` is — probably not worth it
+        `pg_restore` the way a real `pg_dump` is, so probably not worth it
         next to just bundling the client tool.
       - **Where dumps get written.** Reuse `BACKUP_DIR` (gated on it being
         configured, same as the per-user feature) or a separate always-
         available directory/env var, since this is an instance-level ops
         concern rather than a per-user opt-in.
-      - **Retention/rotation.** Keep how many, delete how old — needs a
+      - **Retention/rotation.** Keep how many, delete how old; needs a
         policy, or dumps accumulate forever the same way
         `pending_webhook_events` did before `webhook-retention.ts` existed.
       - **Configurability.** Interval and retention as env vars (matching
         this app's usual self-hosting-config convention) versus an admin-
         facing Settings toggle.
       - **Restore stays manual.** No reason to also automate restoring
-        from one of these dumps — that's a destructive, rare, deliberate
+        from one of these dumps: that's a destructive, rare, deliberate
         action a self-hoster should trigger by hand, same as today.
 
 ## Ratings

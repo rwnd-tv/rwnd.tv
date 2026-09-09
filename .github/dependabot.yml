@@ -1,7 +1,16 @@
 version: 2
 updates:
   - package-ecosystem: 'npm'
-    directory: '/'
+    # tools/screenshots and tools/seed-demo-account sit outside the pnpm
+    # workspace (pnpm-workspace.yaml covers only apps/* and packages/*) and
+    # carry their own lockfiles, so a bare directory: '/' never reached
+    # them and both quietly rotted: sharp sat on 0.33.5 against a 0.35.4
+    # current, with two high-severity libvips/libheif advisories open,
+    # until the Dependency graph was enabled on 2026-09-09 and surfaced
+    # them. The glob covers any future tool without another edit here.
+    directories:
+      - '/'
+      - '/tools/*'
     schedule:
       interval: weekly
     groups:

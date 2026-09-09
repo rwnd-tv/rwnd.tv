@@ -122,23 +122,23 @@ function watchEvent(overrides: Partial<Extract<CalendarEvent, { kind: 'watch' }>
 }
 
 describe('CalendarPage', () => {
-  it('defaults to Month view, with the Agenda toggle visible but disabled', async () => {
+  it('defaults to Agenda view, with Month one click away', async () => {
     renderPage([episodeEvent({ spoilerHidden: false })])
 
-    expect(await screen.findByText('A Show · The Reveal')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Month', pressed: true })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Agenda' })).toBeDisabled()
+    expect(await screen.findByRole('button', { name: 'Agenda', pressed: true })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Month', pressed: false })).toBeInTheDocument()
   })
 
-  it('a stale "agenda" cookie from before Agenda was disabled is overridden to Month', async () => {
-    document.cookie = 'rwnd_calendar_view=agenda; path=/'
+  it('honours a "month" cookie over the Agenda default', async () => {
+    document.cookie = 'rwnd_calendar_view=month; path=/'
     renderPage([])
     expect(await screen.findByRole('button', { name: 'Month', pressed: true })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Agenda' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Agenda', pressed: false })).toBeInTheDocument()
   })
 
   it('selecting a day with no events shows the empty state in its panel', async () => {
     const user = userEvent.setup()
+    document.cookie = 'rwnd_calendar_view=month; path=/'
     renderPage([])
     await user.click(await screen.findByRole('button', { current: 'date' }))
     // Not the exact locale-specific string (film/movie) — the rendered
@@ -167,6 +167,7 @@ describe('CalendarPage', () => {
 
   it('hides an unwatched, spoiler-protected episode title until revealed', async () => {
     const user = userEvent.setup()
+    document.cookie = 'rwnd_calendar_view=month; path=/'
     renderPage([episodeEvent()])
 
     // The compact month-grid cell substitutes the fallback outright (no
@@ -183,6 +184,7 @@ describe('CalendarPage', () => {
   })
 
   it('never hides an already-watched episode title', async () => {
+    document.cookie = 'rwnd_calendar_view=month; path=/'
     renderPage([episodeEvent({ watched: true, spoilerHidden: false })])
     expect(await screen.findByText('A Show · The Reveal')).toBeInTheDocument()
   })
@@ -200,6 +202,7 @@ describe('CalendarPage', () => {
   })
 
   it('all three event-kind filters are on by default', async () => {
+    document.cookie = 'rwnd_calendar_view=month; path=/'
     renderPage([])
     await screen.findByText('Mon')
     for (const name of ['History', 'TV Shows', 'Movies']) {

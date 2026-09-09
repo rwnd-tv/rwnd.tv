@@ -16,15 +16,17 @@ import { CALENDAR_KIND_DOT_CLASS } from '../components/calendar/calendar-shared.
 const CALENDAR_VIEWS = ['agenda', 'month'] as const
 type CalendarView = (typeof CALENDAR_VIEWS)[number]
 
-// Temporarily off (2026-09-06) — Agenda has a list of known issues James
-// wants to fix before it's user-facing again. The toggle button stays
-// visible but disabled/greyed-out (with a tooltip explaining why) rather
-// than disappearing outright. Flip back to `true` to restore it; nothing
-// else about Agenda was removed, so that's the only change re-enabling it
-// needs. A cookie from before this flip that still says 'agenda' is
-// overridden below (`effectiveView`) rather than trusted, so a returning
-// user doesn't land back on it.
-const AGENDA_VIEW_ENABLED = false
+// Back on (2026-09-09), after being temporarily off from 2026-09-06 while
+// Agenda had a list of known issues James wanted fixed before it was
+// user-facing again.
+//
+// The switch is kept rather than deleted: it's a one-line flip either way,
+// and Agenda is being actively worked on. While off, the toggle button
+// stays visible but disabled/greyed-out with a tooltip explaining why
+// (`calendar.view.agendaDisabled`), rather than disappearing outright, and
+// `effectiveView` below overrides a cookie that still says 'agenda' so a
+// returning user doesn't land on a disabled view.
+const AGENDA_VIEW_ENABLED = true
 
 /** Which i18n key labels each event kind's filter toggle — 'watch' reads as
  * "History" here (the merged timeline's only past-facing kind), not its
@@ -35,11 +37,11 @@ const CALENDAR_FILTER_LABEL_KEYS: Record<CalendarEventKind, string> = {
   release: 'calendar.filter.movies',
 }
 
-// Asymmetric on purpose: History already fully covers the past on its own
-// page, so the backward window here is a shorter "recent context," while
-// the forward window is what this page uniquely offers — comfortably
-// covers a season's remaining run and most announced release dates.
-const AGENDA_DEFAULT_DAYS_BACK = 30
+// Agenda starts at today and only looks forward (2026-09-09): History
+// already fully covers the past on its own page, and what's still to come
+// is what this view uniquely offers. 90 days comfortably covers a season's
+// remaining run and most announced release dates, extended in the same
+// step by the "Load later" button.
 const AGENDA_DEFAULT_DAYS_FORWARD = 90
 const AGENDA_EXTEND_DAYS = 90
 // Matches the API's own MAX_CALENDAR_WINDOW_DAYS (routes/calendar.ts) —
@@ -76,12 +78,17 @@ export function CalendarPage() {
   const { user } = useAuth()
   const locale = user?.locale ?? 'en-GB'
 
-  const [view, setView] = useSortCookie<CalendarView>('rwnd_calendar_view', CALENDAR_VIEWS, 'month')
+  // Agenda is the default (2026-09-09): forward-looking is what this page
+  // uniquely offers over History, and its dense list surfaces far more of
+  // what's coming than a month grid's capped cells do. Month stays one
+  // click away, and the cookie remembers whichever the user picks.
+  const [view, setView] = useSortCookie<CalendarView>(
+    'rwnd_calendar_view',
+    CALENDAR_VIEWS,
+    'agenda',
+  )
   const effectiveView: CalendarView = AGENDA_VIEW_ENABLED ? view : 'month'
-  const [agendaRange, setAgendaRange] = useState({
-    back: AGENDA_DEFAULT_DAYS_BACK,
-    forward: AGENDA_DEFAULT_DAYS_FORWARD,
-  })
+  const [agendaForwardDays, setAgendaForwardDays] = useState(AGENDA_DEFAULT_DAYS_FORWARD)
   const [monthAnchor, setMonthAnchor] = useState(() => startOfMonth(new Date()))
   const [selectedDay, setSelectedDay] = useState<string | null>(null)
   const [shownKinds, setShownKinds] = useKindFilterCookie<CalendarEventKind>(
@@ -98,9 +105,11 @@ export function CalendarPage() {
 
   const { afterDay, beforeDay } = useMemo(() => {
     if (effectiveView === 'agenda') {
+      // Agenda is forward-looking: today is its first day, so nothing
+      // earlier is fetched at all rather than fetched and filtered out.
       return {
-        afterDay: toDateInputValue(addDays(new Date(), -agendaRange.back)),
-        beforeDay: toDateInputValue(addDays(new Date(), agendaRange.forward)),
+        afterDay: toDateInputValue(new Date()),
+        beforeDay: toDateInputValue(addDays(new Date(), agendaForwardDays)),
       }
     }
     // Padding days from adjacent months that fill the 6x7 grid are
@@ -117,7 +126,7 @@ export function CalendarPage() {
       afterDay: toDateInputValue(addDays(firstOfMonth, -6)),
       beforeDay: toDateInputValue(addDays(firstOfMonth, daysInView + 6)),
     }
-  }, [effectiveView, agendaRange, monthAnchor])
+  }, [effectiveView, agendaForwardDays, monthAnchor])
 
   const afterISO = localDayStartISO(afterDay)
   const beforeISO = localDayEndISO(beforeDay)
@@ -128,8 +137,7 @@ export function CalendarPage() {
     placeholderData: keepPreviousData,
   })
 
-  const nearWindowCap =
-    agendaRange.back + agendaRange.forward + AGENDA_EXTEND_DAYS > MAX_WINDOW_DAYS
+  const nearWindowCap = agendaForwardDays + AGENDA_EXTEND_DAYS > MAX_WINDOW_DAYS
   const events = useMemo(
     () => (data?.events ?? []).filter((event) => shownKinds.has(event.kind)),
     [data, shownKinds],
@@ -241,13 +249,7 @@ export function CalendarPage() {
           <CalendarAgenda
             events={events}
             locale={locale}
-            onLoadEarlier={() =>
-              setAgendaRange((range) => ({ ...range, back: range.back + AGENDA_EXTEND_DAYS }))
-            }
-            onLoadLater={() =>
-              setAgendaRange((range) => ({ ...range, forward: range.forward + AGENDA_EXTEND_DAYS }))
-            }
-            canLoadEarlier={!nearWindowCap}
+            onLoadLater={() => setAgendaForwardDays((days) => days + AGENDA_EXTEND_DAYS)}
             canLoadLater={!nearWindowCap}
           />
         ) : (

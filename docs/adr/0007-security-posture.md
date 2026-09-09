@@ -232,3 +232,52 @@ controls that server already has unmediated access to every row in the
 database regardless of what any in-app role says. A software-level
 recovery flow would only ever add convenience for that same
 already-trusted operator, not a new protection, so it isn't planned.
+
+## Update (2026-09-09): dependency graph enabled, security updates reversed
+
+The "Left to the repository owner, not this ADR" section above records
+Dependabot security updates as "declined deliberately, to keep dependency
+bumps reviewed rather than auto-merged." That rationale was mistaken, and
+the decision has been reversed.
+
+Dependabot security updates raise pull requests; they never auto-merge.
+Auto-merging is a separate feature that has to be turned on by itself.
+Declining them therefore bought none of the review discipline the original
+line claims it was protecting: it meant no pull request got opened at all,
+not that bumps were reviewed more carefully.
+
+Two repository settings changed on 2026-09-09, both verified enabled
+afterwards:
+
+- **Dependency graph**: was off, leaving GitHub with zero parsed manifests
+  for this repository. Now on, resolving 730 packages across
+  `pnpm-lock.yaml` and the workspace `package.json` files.
+- **Dependabot security updates**: now enabled, so a newly disclosed
+  advisory matching the lockfile opens a PR to review, the same as any
+  other bump.
+
+The gap this closes is timing, not coverage. CI's Trivy scan
+(`.github/workflows/ci.yml`) already checks the lockfile against the same
+underlying GHSA advisory data, but it only runs when CI runs, which means
+on a push or a pull request. An advisory disclosed during a quiet
+fortnight went unnoticed until the next unrelated push, which it would
+then block. The dependency graph makes that notification event-driven
+instead. Trivy stays exactly as it is: it gates CI and scans the container
+image's OS packages, neither of which the dependency graph does. The two
+are complementary, not redundant.
+
+Enabling the graph also fixed the `dependency-review` job, which had been
+failing on every pull request (all five Dependabot PRs opened 2026-09-06)
+because the action's API call needs the graph to exist. That job's comment
+in `ci.yml` was corrected in the same change.
+
+**Automatic dependency submission** was considered and deliberately left
+disabled. It runs a build to resolve transitive dependencies for
+ecosystems whose manifests do not fully describe the tree (Maven, Gradle,
+.NET). `pnpm-lock.yaml` is already fully resolved, as the 730-package SBOM
+confirms, so it would add nothing while running an unpinned action on
+every push.
+
+Recorded as an update rather than an edit to the section above, following
+the same convention as the 2026-08-30 update: that section records what
+was decided on 2026-08-29, and this one records what is true now.

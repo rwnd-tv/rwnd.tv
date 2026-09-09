@@ -206,13 +206,21 @@ jobs:
           fi
 
   dependency-review:
-    # Catches a vulnerable dependency a PR *introduces* — pnpm audit above
-    # only ever looks at main's current lockfile, not what a PR is about
-    # to change it to (M3 security review, F-19). Currently inert in
-    # practice: this project pushes directly to main rather than merging
-    # PRs against itself, so this job has never actually run. Left in
-    # place rather than removed — it starts working the moment an outside
-    # contributor opens a PR, with no further setup needed.
+    # Catches a vulnerable dependency a PR *introduces* — the Trivy scan
+    # above only ever looks at the lockfile as it already stands, not what
+    # a PR is about to change it to (M3 security review, F-19). Every PR
+    # this repo has had so far is a Dependabot bump, since the normal
+    # workflow here is a direct push to main; an outside contributor's PR
+    # is the other case this covers.
+    #
+    # Requires the repository's Dependency graph to be enabled: the action
+    # calls the dependency-graph compare API, which 403s without it, and
+    # the action reports that as a generic "Dependency graph is not
+    # enabled" message. It was off until 2026-09-09, so this job went red
+    # on all five Dependabot PRs opened 2026-09-06. An earlier version of
+    # this comment claimed the job would start working with "no further
+    # setup needed" — that was wrong. See the 2026-09-09 update in
+    # docs/adr/0007-security-posture.md.
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     permissions:

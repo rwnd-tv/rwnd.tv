@@ -297,6 +297,42 @@ Format:
 
 ## Backups
 
+- [ ] **Admin interface for the instance's automatic database backups** (2026-09-09 added)
+
+      The scheduled whole-database backup shipped with no user-facing surface
+      at all: no route, no settings flag, no UI. Its entire surface is the
+      `DATABASE_BACKUP_DIR` env var and one call in `apps/api/src/index.ts`.
+      Everything else is hardcoded in `apps/api/src/lib/database-backup.ts`:
+      a 24-hour interval, one immediate pass at startup, and retention of the
+      newest 7. The only way to observe it is `docker compose logs app`, which
+      prints one line per run.
+
+      That means an admin with no shell access cannot tell whether backups are
+      running at all, when the last one succeeded, or how big they are, and
+      cannot trigger one before doing something risky. For a self-hoster that
+      is the difference between trusting the feature and hoping.
+
+      James, 2026-09-09: no new version gets cut until this exists.
+
+      Smallest useful version is read-only, following the existing
+      `*Configured` pattern (`backupsConfigured` in
+      `apps/api/src/routes/settings.ts`, consumed by the Database panel):
+      a `databaseBackupsConfigured` flag plus last-run timestamp, file size
+      and count, surfaced on the Admin page. Deliberately not mirrored when
+      the feature was built, on the grounds that it is an instance-level ops
+      concern rather than a per-user one; see `env.ts`'s comment on the
+      variable and [ADR 0008](adr/0008-database-backups.md).
+
+      A manual "back up now" button is a bigger step and worth deciding
+      separately: it needs a route that spawns a process on request rather
+      than on a timer, which is a different security shape from a scheduled
+      job and would want its own rate limiting.
+
+      Whether the interval and retention should become editable (they are
+      module constants today, matching how every other interval in this
+      codebase works) is also open, and probably wants deciding alongside
+      the read-only view rather than before it.
+
 - [ ] **Show what actually changed in the backup Diff dialog** (2026-09-06 added)
 
       Settings > Database panel > Backups > the Diff button

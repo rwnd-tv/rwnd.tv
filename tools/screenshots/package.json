@@ -3,6 +3,7 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "packageManager": "pnpm@11.20.0",
   "description": "Captures documentation screenshots against a running rwnd.tv instance. Deliberately outside the pnpm workspace (see README.md) so root lint/format/CI never touch it.",
   "scripts": {
     "install-browser": "playwright install --with-deps chromium",

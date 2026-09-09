@@ -329,57 +329,6 @@ Format:
       clear enough in the UI once real entries (not just counts) are on
       screen.
 
-- [ ] **Automatic, scheduled backup of the entire database** (2026-09-06 added; M4)
-
-      Distinct from the existing Settings > Database backup feature
-      (`apps/api/src/backup/`), which is per-user, manually triggered, and
-      covers only one user's watch history/ratings/watchlist/dropped
-      shows, not accounts, instance settings, or anything another user has
-      done (`docs/self-hosting.md`'s "Per-user backup/restore" section is
-      explicit about this distinction). This item is about the *other*
-      backup already documented there, the whole-Postgres
-      `pg_dump`/`psql` restore under "## Backups", which today is entirely
-      manual: a self-hoster has to remember to run it themselves. The ask
-      is to make that happen automatically, on a schedule, without a self-
-      hoster having to set up their own host-level cron job.
-
-      Precedent already exists in this codebase for an in-process
-      recurring job, no external scheduler needed:
-      `apps/api/src/metadata/refresh.ts`'s `scheduleMetadataRefresh` and
-      `apps/api/src/lib/webhook-retention.ts`'s `scheduleWebhookRetention`
-      both run one pass immediately, then every 24h via a plain
-      `setInterval`, started from `index.ts` rather than inside
-      `createApp()` specifically so `testApp()` (called by every API test)
-      never fires them. A new `scheduleAutomaticDatabaseBackup`-shaped job
-      should follow the same pattern.
-
-      Real open questions, not yet decided:
-
-      - **How to actually produce the dump.** The runtime image
-        (`Dockerfile`, `node:26-alpine`) has no Postgres client tools
-        today; a real `pg_dump` needs one bundled in (`apk add
-        postgresqlNN-client`, version-pinned to match whichever major
-        version `docker-compose.yml`'s `db` service runs, kept in sync if
-        that version ever moves) and shelled out to via `child_process`.
-        The alternative, a bespoke Drizzle/JS export of every table across
-        every user, would be a much bigger effort, non-standard, and
-        wouldn't produce something directly restorable with `psql`/
-        `pg_restore` the way a real `pg_dump` is, so probably not worth it
-        next to just bundling the client tool.
-      - **Where dumps get written.** Reuse `BACKUP_DIR` (gated on it being
-        configured, same as the per-user feature) or a separate always-
-        available directory/env var, since this is an instance-level ops
-        concern rather than a per-user opt-in.
-      - **Retention/rotation.** Keep how many, delete how old; needs a
-        policy, or dumps accumulate forever the same way
-        `pending_webhook_events` did before `webhook-retention.ts` existed.
-      - **Configurability.** Interval and retention as env vars (matching
-        this app's usual self-hosting-config convention) versus an admin-
-        facing Settings toggle.
-      - **Restore stays manual.** No reason to also automate restoring
-        from one of these dumps: that's a destructive, rare, deliberate
-        action a self-hoster should trigger by hand, same as today.
-
 ## Ratings
 
 - [ ] **Don't allow rating anything that hasn't aired/released yet** (2026-09-06 added)

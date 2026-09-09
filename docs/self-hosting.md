@@ -44,6 +44,7 @@ All configuration is environment variables, set in `.env`. `.env.example` covers
 | `TRAKT_CLIENT_SECRET` | Only if `TRAKT_CLIENT_ID` is set | Paired with the client id above                                                                                                                                                      |
 | `ENCRYPTION_KEY`      | Only if `TRAKT_CLIENT_ID` is set | 32 bytes, base64 (`openssl rand -base64 32`); encrypts stored Trakt tokens, and is also required for anyone to enable two-factor authentication or subscribe to a calendar feed      |
 | `BACKUP_DIR`          | No                               | Enables per-user backup/restore (Settings > Database); see Backups below                                                                                                             |
+| `DATABASE_BACKUP_DIR` | No                               | Enables automatic daily whole-database backups, keeping the newest 7; see Backups below. A different directory from `BACKUP_DIR`                                                     |
 | `SMTP_HOST`           | No                               | Enables account verification and "Forgot password?" emails; see Email below                                                                                                          |
 | `SMTP_PORT`           | Only if `SMTP_HOST` is set       | Defaults to `587`                                                                                                                                                                    |
 | `SMTP_USER`           | Only if `SMTP_HOST` is set       | Mail relay username                                                                                                                                                                  |
@@ -143,13 +144,48 @@ If something looks wrong after upgrading: `docker compose logs app` for the appl
 
 ## Backups
 
-Everything that matters lives in the `db-data` volume (the Postgres data directory). Back it up like any other Postgres instance, e.g.:
+Everything that matters lives in the `db-data` volume (the Postgres data directory).
+
+### Automatic (recommended)
+
+Set `DATABASE_BACKUP_DIR` and the app takes a full `pg_dump` once a day, gzipped, keeping the newest 7 and deleting older ones. Off by default. Uncomment the environment variable and the matching `volumes:` line under the `app` service in `docker-compose.yml`:
+
+```yaml
+environment:
+  - DATABASE_BACKUP_DIR=/data/db-backups
+volumes:
+  - ./db-backups:/data/db-backups
+```
+
+Then `docker compose up -d`. The container runs as an unprivileged user, so `./db-backups` needs to be writable by it. A backup runs immediately on start (so a misconfiguration shows up right away rather than a day later) and every 24 hours after; `docker compose logs app` will show a line per dump.
+
+Files are named `rwnd-<timestamp>.sql.gz`, so they sort chronologically. Only files matching that exact pattern are ever deleted, so anything else you keep in that directory is left alone.
+
+Three things worth knowing:
+
+- **Copying these somewhere else is still your job.** A backup on the same disk as the database is not a backup. Sync the directory to another machine or an object store on whatever schedule suits you.
+- **Do not point two instances at the same directory.** Each one's retention sweep only counts files, not which instance wrote them, so they will delete each other's backups. Give a staging or dev instance its own directory.
+- **Retention is 7 dumps and is not configurable.** If you need longer history, copy dumps out of the directory as they appear.
+
+### Manual
+
+Nothing stops you doing it by hand instead, or as well:
 
 ```sh
 docker compose exec db pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB" > backup.sql
 ```
 
-Restoring is the reverse, with the `app` service stopped so nothing writes mid-restore:
+### Restoring
+
+Restoring is manual either way, deliberately: it is destructive and rare. Stop the `app` service first so nothing writes mid-restore. For an automatic backup, gunzip it on the way in:
+
+```sh
+docker compose stop app
+gunzip -c ./db-backups/rwnd-20260909T031500Z.sql.gz | docker compose exec -T db psql -U "$POSTGRES_USER" "$POSTGRES_DB"
+docker compose start app
+```
+
+or, for a manual dump:
 
 ```sh
 docker compose stop app
@@ -157,9 +193,15 @@ docker compose exec -T db psql -U "$POSTGRES_USER" "$POSTGRES_DB" < backup.sql
 docker compose start app
 ```
 
+**An older backup restores onto a newer version.** The dump carries the schema as it was, and the app runs its migrations on every start, so restoring a months-old backup and starting the current image brings the schema forward with your data intact. You do not need to match the app version to the backup.
+
+### If backups stop appearing
+
+The dump has to be taken by a `pg_dump` matching your Postgres server's major version, because its output targets a server of that version or newer. The image bundles clients for Postgres 16, 17 and 18 and picks the right one automatically, so this only bites if you run a Postgres newer than any of those. You will see a line in `docker compose logs app` saying so, and no backups will be written until the image gains that version. Downgrading Postgres is not necessary; opening an issue is the fastest fix.
+
 ### Per-user backup/restore
 
-Settings > Database also lets each user back up (and restore) their own watch history, ratings, watchlist, and dropped shows as a single portable file, independent of the Postgres dump above, and not a substitute for it: it covers one user's tracked activity, not accounts, instance settings, or anything another user has done. It's off by default. To enable it, uncomment the `BACKUP_DIR` environment variable and the matching `volumes:` line under the `app` service in `docker-compose.yml`, pointing the host side of that mount at a real directory:
+Settings > Database also lets each user back up (and restore) their own watch history, ratings, watchlist, and dropped shows as a single portable file, independent of the Postgres dumps above, and not a substitute for them: it covers one user's tracked activity, not accounts, instance settings, or anything another user has done. It's off by default. To enable it, uncomment the `BACKUP_DIR` environment variable and the matching `volumes:` line under the `app` service in `docker-compose.yml`, pointing the host side of that mount at a real directory:
 
 ```yaml
 environment:

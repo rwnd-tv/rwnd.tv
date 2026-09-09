@@ -3502,6 +3502,38 @@ DATABASE` ×2) — zero residue.\
       left as a documented limitation rather than something to work
       around.
 
+## Backups
+
+- [x] **Automatic, scheduled backup of the entire database** (2026-09-06
+      added; M4, done 2026-09-09)      A daily in-process `pg_dump`, gzipped, keeping the newest 7, gated on a
+      new `DATABASE_BACKUP_DIR`. Follows the `scheduleWebhookRetention` shape
+      exactly: pure worker plus a scheduler called only from `index.ts`, never
+      `createApp()`. Full reasoning in
+      [ADR 0008](adr/0008-database-backups.md).
+
+      The item left five questions open; all five are now answered there. The
+      deciding one was James's requirement that a backup from an older
+      container restore onto a newer one, which killed the data-only
+      `COPY ... TO STDOUT` route the item leaned towards. That route was
+      checked seriously rather than dismissed (it is genuinely reachable via
+      `db.$client`, and this schema has no sequences at all, removing the
+      classic footgun), but a data-only dump carries no schema to restore
+      first, the `watchlists`/`watchlist_items` FK cycle has no topological
+      restore order over non-deferrable constraints, and the restore runbook
+      would have got worse rather than better. `pg_dump` composes with the
+      migration system instead: restore the old schema, start the new image,
+      migrations carry it forward. Recorded so it is not re-litigated.
+
+      One real bug was caught during implementation, by the round-trip test
+      rather than by review: `pg_dump` 17+ emits `SET transaction_timeout`,
+      which a Postgres 16 server rejects, so a newer client silently produces
+      dumps that fail to restore into an older server. The first draft
+      bundled only the newest client and would have shipped exactly that. The
+      image now bundles clients for 16, 17 and 18 and probes
+      `server_version_num` to pick the matching one. CI's client is pinned to
+      16 to match its own `postgres:16-alpine` service, since an unpinned one
+      would break the same way whenever the runner image moves.
+
 ## Self-hosting & deployment
 
 - [x] **`docker-compose.yml` never passes through `TVDB_API_KEY`/`TVDB_PIN`/`ENVIRONMENT_LABEL`** (2026-08-26 added, done 2026-08-26) — M3\

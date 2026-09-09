@@ -114,7 +114,15 @@ function CalendarAgendaRow({ event, locale }: { event: CalendarEvent; locale: st
       <span className="min-w-0 flex-1 truncate text-sm">
         <span className="font-medium">{primary}</span>
         {secondary !== undefined && (
-          <span className="text-[var(--color-fg-muted)]"> · {secondary}</span>
+          <>
+            {/* Separator kept in its own node so the episode title is a
+                text node of its own, rather than " · Title" glued
+                together. */}
+            <span className="text-[var(--color-fg-muted)]" aria-hidden="true">
+              {' · '}
+            </span>
+            <span className="text-[var(--color-fg-muted)]">{secondary}</span>
+          </>
         )}
       </span>
       {meta !== '' && <span className="shrink-0 text-xs text-[var(--color-fg-muted)]">{meta}</span>}

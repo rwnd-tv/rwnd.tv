@@ -63,6 +63,20 @@ function dayString(date: Date): string {
 }
 const todayDay = dayString(new Date())
 
+/** A day N days from now, formatted the way the component's own
+ * `toDateInputValue` does (local parts, not `toISOString`), so an offset
+ * day can't land on the wrong side of the today comparison in a non-UTC
+ * timezone. Offsets are deliberately a week wide, well clear of any such
+ * skew. */
+function localDayOffset(days: number): string {
+  const date = new Date()
+  date.setDate(date.getDate() + days)
+  const year = String(date.getFullYear()).padStart(4, '0')
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
 function episodeEvent(overrides: Partial<Extract<CalendarEvent, { kind: 'episode' }>> = {}) {
   return {
     kind: 'episode' as const,
@@ -234,5 +248,86 @@ describe('CalendarPage', () => {
     await vi.waitFor(() => expect(api.calendar.events).toHaveBeenCalledTimes(2))
     const secondCall = vi.mocked(api.calendar.events).mock.calls[1]![0]
     expect(secondCall.after).not.toBe(firstCall.after)
+  })
+
+  it('Agenda drops days before today and keeps what is still to come', async () => {
+    renderPage([
+      episodeEvent({
+        uid: 'past@rwnd.tv',
+        spoilerHidden: false,
+        date: localDayOffset(-7),
+        media: {
+          type: 'episode',
+          title: 'Already Aired',
+          showTitle: 'A Show',
+          showSlug: 'a-show',
+          posterPath: null,
+          seasonNumber: 1,
+          episodeNumber: 1,
+        },
+      }),
+      episodeEvent({
+        uid: 'future@rwnd.tv',
+        spoilerHidden: false,
+        date: localDayOffset(7),
+        media: {
+          type: 'episode',
+          title: 'Still To Come',
+          showTitle: 'A Show',
+          showSlug: 'a-show',
+          posterPath: null,
+          seasonNumber: 1,
+          episodeNumber: 2,
+        },
+      }),
+    ])
+
+    expect(await screen.findByText('Still To Come')).toBeInTheDocument()
+    expect(screen.queryByText('Already Aired')).not.toBeInTheDocument()
+  })
+
+  it('Agenda still shows an event dated today', async () => {
+    renderPage([
+      episodeEvent({
+        uid: 'today@rwnd.tv',
+        spoilerHidden: false,
+        date: localDayOffset(0),
+        media: {
+          type: 'episode',
+          title: 'Airing Today',
+          showTitle: 'A Show',
+          showSlug: 'a-show',
+          posterPath: null,
+          seasonNumber: 1,
+          episodeNumber: 3,
+        },
+      }),
+    ])
+
+    expect(await screen.findByText('Airing Today')).toBeInTheDocument()
+  })
+
+  it('Month view still shows a past day that Agenda hides', async () => {
+    document.cookie = 'rwnd_calendar_view=month; path=/'
+    renderPage([
+      episodeEvent({
+        uid: 'past@rwnd.tv',
+        spoilerHidden: false,
+        date: localDayOffset(-7),
+        media: {
+          type: 'episode',
+          title: 'Already Aired',
+          showTitle: 'A Show',
+          showSlug: 'a-show',
+          posterPath: null,
+          seasonNumber: 1,
+          episodeNumber: 1,
+        },
+      }),
+    ])
+
+    // The month grid composes its own cell label, so this asserts on the
+    // combined string rather than the episode title alone.
+    expect(await screen.findByText('A Show · Already Aired')).toBeInTheDocument()
   })
 })

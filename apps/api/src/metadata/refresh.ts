@@ -94,6 +94,16 @@ const EPISODE_IMDB_BACKFILL_PER_PASS = 250
 // cheaper than a per-episode drain would be.
 const EPISODE_OVERVIEW_BACKFILL_SEASONS_PER_PASS = 100
 
+// Seasons re-fetched per pass looking for episode titles still left as the
+// provider's own "Episode N" placeholder. Same order of magnitude as the
+// overview backfill above and the same self-terminating shape, with one
+// difference worth knowing: there is no `titleCheckedAt` column, so a
+// season whose provider still has no real title stays a candidate and gets
+// re-fetched next pass. That is bounded (only genuinely unnamed, usually
+// unaired, episodes qualify) and self-clearing (they get named once they
+// air), so it does not need a column of its own to converge.
+const EPISODE_TITLE_BACKFILL_SEASONS_PER_PASS = 100
+
 // One-off drain of seasons with at least one episode still missing a
 // runtime after its primary provider's own chance to supply one (see
 // fillSeasonRuntimesFromFallback's doc comment below). Capped and keyed on
@@ -782,6 +792,101 @@ async function backfillEpisodeOverviews(
   return seasonsFilled
 }
 
+/** Seasons holding at least one episode whose stored title is still a
+ * bare "Episode N" placeholder matching its own episode number.
+ *
+ * TMDB (and TVDB) name an unnamed episode exactly that, and `resolveSeason`
+ * (apps/api/src/lib/media.ts) writes `title` once on first insert and never
+ * again, deliberately: a title can legitimately differ by locale, and
+ * picking a winner on a later resolve is a judgment call that function does
+ * not make. The side effect is that an episode first seen before the
+ * provider named it keeps the placeholder forever, while the season detail
+ * route fetches titles live and shows the real one, so the calendar (which
+ * reads the stored title) and the episode page disagree about the same
+ * episode.
+ *
+ * Matching the exact string 'Episode ' || episode_number, rather than any
+ * "Episode" followed by digits, keeps a real episode genuinely called
+ * "Episode 3" sitting at some other position from ever qualifying. One
+ * truly called "Episode 3" at position 3 is indistinguishable from a
+ * placeholder, and is simply rewritten to the same string. */
+async function findSeasonsNeedingTitleBackfill(
+  db: Database,
+): Promise<{ showId: string; seasonNumber: number }[]> {
+  return db
+    .selectDistinct({ showId: episodes.showId, seasonNumber: episodes.seasonNumber })
+    .from(episodes)
+    .where(sql`${episodes.title} = 'Episode ' || ${episodes.episodeNumber}`)
+    .orderBy(episodes.showId, episodes.seasonNumber)
+    .limit(EPISODE_TITLE_BACKFILL_SEASONS_PER_PASS)
+}
+
+/**
+ * One-off drain of episodes still carrying a provider placeholder title
+ * (see findSeasonsNeedingTitleBackfill above for why they get stuck).
+ *
+ * Calls `provider.getSeason` directly rather than going through
+ * `resolveSeason` the way the overview backfill does: `resolveSeason`
+ * returns only ids and air dates, and its upsert deliberately excludes
+ * `title`, so it can neither supply the new title nor write it. The write
+ * here is scoped by the same placeholder predicate used to find the
+ * candidate, so a title corrected by some other path in the meantime is
+ * never clobbered.
+ */
+async function backfillEpisodeTitles(
+  db: Database,
+  ordered: MetadataProvider[],
+  locale: string,
+): Promise<number> {
+  const candidates = await findSeasonsNeedingTitleBackfill(db)
+  if (candidates.length === 0) return 0
+
+  const targets = await pickRefreshTargets(
+    db,
+    'show',
+    [...new Set(candidates.map((c) => c.showId))],
+    ordered,
+  )
+
+  let filled = 0
+  for (const candidate of candidates) {
+    const target = targets.get(candidate.showId)
+    if (!target) continue
+    try {
+      const fetched = await target.provider.getSeason(
+        target.externalId,
+        candidate.seasonNumber,
+        locale,
+      )
+      for (const episode of fetched.episodes) {
+        // The provider still has no real name for it, so leave the
+        // placeholder alone rather than rewriting it to itself.
+        if (!episode.title || episode.title === `Episode ${episode.episodeNumber}`) continue
+        const updated = await db
+          .update(episodes)
+          .set({ title: episode.title })
+          .where(
+            and(
+              eq(episodes.showId, candidate.showId),
+              eq(episodes.seasonNumber, candidate.seasonNumber),
+              eq(episodes.episodeNumber, episode.episodeNumber),
+              sql`${episodes.title} = 'Episode ' || ${episodes.episodeNumber}`,
+            ),
+          )
+          .returning({ id: episodes.id })
+        filled += updated.length
+      }
+    } catch (err) {
+      console.error(
+        `Episode title backfill failed for show ${candidate.showId} season ${candidate.seasonNumber}:`,
+        err,
+      )
+    }
+    await sleep(REQUEST_STAGGER_MS)
+  }
+  return filled
+}
+
 // How far apart two providers' air dates for the same episode are allowed
 // to be and still count as agreeing (Gate B below) — confirmed live
 // against Keep Your Hands Off Eizouken!: TMDB recorded every episode one
@@ -1117,6 +1222,7 @@ export async function runMetadataRefresh(
   episodeImdbIdsFilled: number
   episodeOverviewSeasonsFilled: number
   episodeRuntimeSeasonsFilled: number
+  episodeTitlesFilled: number
 }> {
   const [locale, ordered, staleShows, staleMovies] = await Promise.all([
     currentLocale(db),
@@ -1187,6 +1293,7 @@ export async function runMetadataRefresh(
   const episodeImdbIdsFilled = await backfillEpisodeImdbIds(db, ordered, locale)
   const episodeOverviewSeasonsFilled = await backfillEpisodeOverviews(db, ordered, locale)
   const episodeRuntimeSeasonsFilled = await backfillEpisodeRuntimes(db, ordered, locale)
+  const episodeTitlesFilled = await backfillEpisodeTitles(db, ordered, locale)
 
   return {
     showsRefreshed,
@@ -1194,6 +1301,7 @@ export async function runMetadataRefresh(
     episodeImdbIdsFilled,
     episodeOverviewSeasonsFilled,
     episodeRuntimeSeasonsFilled,
+    episodeTitlesFilled,
   }
 }
 
@@ -1216,19 +1324,22 @@ export function scheduleMetadataRefresh(db: Database, providers: MetadataProvide
           episodeImdbIdsFilled,
           episodeOverviewSeasonsFilled,
           episodeRuntimeSeasonsFilled,
+          episodeTitlesFilled,
         }) => {
           if (
             showsRefreshed ||
             moviesRefreshed ||
             episodeImdbIdsFilled ||
             episodeOverviewSeasonsFilled ||
-            episodeRuntimeSeasonsFilled
+            episodeRuntimeSeasonsFilled ||
+            episodeTitlesFilled
           ) {
             console.log(
               `Metadata refresh: ${showsRefreshed} show(s), ${moviesRefreshed} movie(s) updated, ` +
                 `${episodeImdbIdsFilled} episode IMDb id(s) filled, ` +
                 `${episodeOverviewSeasonsFilled} episode overview season(s) filled, ` +
-                `${episodeRuntimeSeasonsFilled} episode runtime season(s) filled.`,
+                `${episodeRuntimeSeasonsFilled} episode runtime season(s) filled, ` +
+                `${episodeTitlesFilled} episode title(s) filled.`,
             )
           }
         },

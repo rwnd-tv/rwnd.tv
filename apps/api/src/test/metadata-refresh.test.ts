@@ -1607,4 +1607,133 @@ describe('metadata refresh', () => {
       expect(updated?.runtimeMinutes).toBe(24)
     })
   })
+
+  describe('episode title backfill', () => {
+    /** Same shape as the runtime backfill's own fake above, kept local to
+     * this describe for the same reason: each test needs its own season
+     * payload, and nothing here exercises the other provider methods. */
+    function fakeProvider(getSeason: MetadataProvider['getSeason']): MetadataProvider {
+      return {
+        source: 'tvdb',
+        async searchMulti() {
+          return []
+        },
+        async getMovie() {
+          throw new Error('not used by these tests')
+        },
+        async getShow() {
+          throw new Error('not used by these tests')
+        },
+        async getEpisode() {
+          throw new Error('not used by these tests')
+        },
+        async findByExternalId() {
+          return null
+        },
+        getSeason,
+      }
+    }
+
+    function fakeSeason(titles: Array<{ episodeNumber: number; title: string | null }>) {
+      return {
+        overview: null,
+        voteAverage: null,
+        externalId: null,
+        episodes: titles.map((e) => ({
+          title: e.title,
+          seasonNumber: 1,
+          episodeNumber: e.episodeNumber,
+          runtimeMinutes: 24,
+          firstAired: '2020-01-01',
+          overview: null,
+          stillPath: null,
+          voteAverage: null,
+          externalId: null,
+          imdbId: null,
+        })),
+      } satisfies ProviderSeason
+    }
+
+    /** A show kept clear of every other sweep (findStaleShows, the IMDb /
+     * overview / runtime backfills) so only the title backfill can fire. */
+    async function insertShowWithTitles(titles: Array<{ episodeNumber: number; title: string }>) {
+      const show = await insertShow({
+        tmdbId: 300,
+        status: null,
+        metadataRefreshedAt: new Date(),
+        genres: ['Drama'],
+        voteAverage: 5,
+      })
+      await db
+        .insert(externalIds)
+        .values({ entityType: 'show', entityId: show.id, source: 'tvdb', externalId: '950' })
+      await db.insert(seasons).values({
+        showId: show.id,
+        seasonNumber: 1,
+        episodeCount: titles.length,
+        airedEpisodeCount: titles.length,
+      })
+      await db.insert(episodes).values(
+        titles.map((e) => ({
+          showId: show.id,
+          seasonNumber: 1,
+          episodeNumber: e.episodeNumber,
+          title: e.title,
+          runtimeMinutes: 24,
+          firstAired: '2020-01-01',
+          overviewCheckedAt: new Date(),
+          imdbCheckedAt: new Date(),
+          runtimeCheckedAt: new Date(),
+        })),
+      )
+      return show
+    }
+
+    it('replaces a placeholder title with the real one from the provider, leaving named episodes alone', async () => {
+      const show = await insertShowWithTitles([
+        { episodeNumber: 1, title: 'A Real Title' },
+        { episodeNumber: 2, title: 'Episode 2' },
+      ])
+      const provider2 = fakeProvider(async () =>
+        fakeSeason([
+          { episodeNumber: 1, title: 'Renamed Upstream' },
+          { episodeNumber: 2, title: 'Torpedo Strike' },
+        ]),
+      )
+
+      const result = await runMetadataRefresh(db, [provider2])
+      expect(result.episodeTitlesFilled).toBe(1)
+
+      const rows = await db.select().from(episodes).where(eq(episodes.showId, show.id))
+      const byNumber = new Map(rows.map((e) => [e.episodeNumber, e]))
+      expect(byNumber.get(2)?.title).toBe('Torpedo Strike')
+      // Episode 1 was never a placeholder, so the write predicate excluded
+      // it even though the provider now carries a different title.
+      expect(byNumber.get(1)?.title).toBe('A Real Title')
+    })
+
+    it('leaves the placeholder alone when the provider still has no real title', async () => {
+      const show = await insertShowWithTitles([{ episodeNumber: 1, title: 'Episode 1' }])
+      const provider2 = fakeProvider(async () =>
+        fakeSeason([{ episodeNumber: 1, title: 'Episode 1' }]),
+      )
+
+      const result = await runMetadataRefresh(db, [provider2])
+      expect(result.episodeTitlesFilled).toBe(0)
+
+      const [row] = await db.select().from(episodes).where(eq(episodes.showId, show.id))
+      expect(row?.title).toBe('Episode 1')
+    })
+
+    it('ignores a real episode called "Episode N" that sits at another position', async () => {
+      const show = await insertShowWithTitles([{ episodeNumber: 1, title: 'Episode 7' }])
+      const provider2 = fakeProvider(async () => fakeSeason([{ episodeNumber: 1, title: 'Real' }]))
+
+      const result = await runMetadataRefresh(db, [provider2])
+      expect(result.episodeTitlesFilled).toBe(0)
+
+      const [row] = await db.select().from(episodes).where(eq(episodes.showId, show.id))
+      expect(row?.title).toBe('Episode 7')
+    })
+  })
 })

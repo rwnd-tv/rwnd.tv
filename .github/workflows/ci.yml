@@ -147,6 +147,25 @@ jobs:
         env:
           TRIVY_INCLUDE_DEV_DEPS: true
 
+      # apps/api/src/test/database-backup.test.ts skips itself when pg_dump
+      # isn't on PATH, so that a contributor without a Postgres client can
+      # still run the suite. Installing it here is what stops that skip from
+      # quietly becoming permanent: an untested disaster-recovery feature is
+      # worse than an obviously untested one. `psql` comes with the same
+      # package and is what the restore test loads the dump back through.
+      # Pinned to 16 to match the `postgres:16-alpine` service above, not the
+      # unpinned `postgresql-client` meta-package: pg_dump's output targets a
+      # server of its own version or newer, so a 17+ client here would emit
+      # `SET transaction_timeout` and the round-trip test's restore into a 16
+      # server would fail. The runtime image solves this by bundling every
+      # major and picking at runtime (see Dockerfile); CI only needs the one
+      # its own service actually runs.
+      - name: Install Postgres client (for the backup round-trip test)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends postgresql-client-16
+          pg_dump --version
+
       - name: Run database migrations
         run: pnpm db:migrate
 

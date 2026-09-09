@@ -31,6 +31,19 @@ FROM node:26-alpine AS runtime
 # so npm is unused dead weight here that otherwise carries its own CVEs.
 RUN apk upgrade --no-cache && \
     rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
+# pg_dump, for the scheduled whole-database backup
+# (apps/api/src/lib/database-backup.ts, docs/adr/0008-database-backups.md).
+#
+# All three majors, not one, because pg_dump's compatibility is directional
+# BOTH ways and a single client gets one of them wrong:
+#   - it refuses to read a server NEWER than itself, and
+#   - its output targets a server of its own version or newer, so a dump
+#     from a newer client fails to restore into an older server (pg_dump 17+
+#     emits `SET transaction_timeout`, which pre-17 servers reject).
+# So the job probes the server's major version at runtime and execs the
+# matching binary from /usr/libexec/postgresqlNN/pg_dump. ~9.4MB for all
+# three. Add the next major here when alpine gains it.
+RUN apk add --no-cache postgresql16-client postgresql17-client postgresql18-client
 RUN addgroup -S rwnd && adduser -S rwnd -G rwnd
 WORKDIR /app
 

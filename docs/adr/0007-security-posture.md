@@ -281,3 +281,21 @@ every push.
 Recorded as an update rather than an edit to the section above, following
 the same convention as the 2026-08-30 update: that section records what
 was decided on 2026-08-29, and this one records what is true now.
+
+## Update (2026-09-09): `child_process` enters the codebase
+
+Nothing in `apps/`, `packages/` or `tools/` spawned a process when this ADR
+was written, and the runtime image carried no tooling beyond Node itself
+(`npm` and `npx` are deliberately deleted from it). "This container never
+executes anything" was therefore a free invariant, and worth naming as one.
+
+It no longer holds. [ADR 0008](0008-database-backups.md) adds a scheduled
+whole-database backup that shells out to `pg_dump`, which means a Postgres
+client binary in the runtime image and a `spawn` call in the API. That ADR
+records the full reasoning: why `pg_dump` rather than a bespoke in-process
+dump, how the spawn is contained (fixed argv, `shell: false`, no user input,
+password via the child's environment rather than argv), and what it costs.
+
+Noted here so a future review of this file does not treat the spawn sink, or
+the new package's CVE surface in the Trivy scan, as an unexplained finding.
+The decision is recorded, not incidental.

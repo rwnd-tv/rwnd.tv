@@ -7,6 +7,7 @@ import { createMetadataProviders } from './providers/index.js'
 import { runTraktImport } from './import/trakt.js'
 import { scheduleMetadataRefresh } from './metadata/refresh.js'
 import { scheduleWebhookRetention } from './lib/webhook-retention.js'
+import { scheduleDatabaseBackup } from './lib/database-backup.js'
 
 const env = loadEnv()
 const db = createDatabase(env.DATABASE_URL, { ssl: env.DATABASE_SSL })
@@ -60,6 +61,13 @@ scheduleMetadataRefresh(db, metadataProviders)
 
 // Same reasoning as the two schedule*/resume* calls above.
 scheduleWebhookRetention(db)
+
+// Same reasoning again. `db` is used only to probe the server's major
+// version so the matching pg_dump is picked (see the module for why that
+// matters in both directions); the dump itself connects on its own. No-ops
+// unless DATABASE_BACKUP_DIR is set, gated inside the function so this stays
+// a flat list of unconditional calls. See docs/adr/0008-database-backups.md.
+scheduleDatabaseBackup(db)
 
 serve({ fetch: app.fetch, port: env.PORT }, (info) => {
   console.log(`rwnd.tv API listening on http://localhost:${info.port}`)

@@ -59,6 +59,13 @@ services:
       # appear (see instanceSettingsSchema's backupsConfigured). See
       # docs/self-hosting.md's Backups section.
       # - BACKUP_DIR=/data/backups
+      # Uncomment to enable automatic whole-database backups on a daily
+      # schedule (docs/adr/0008-database-backups.md). Separate from
+      # BACKUP_DIR above on purpose: that one is per-user JSON exports a user
+      # triggers, this one is instance-level pg_dump output. Needs its own
+      # volume line below. Retention keeps the newest 7 dumps; copying them
+      # somewhere off this host is still your job.
+      # - DATABASE_BACKUP_DIR=/data/db-backups
     ports:
       # Bound to all interfaces by default, same as before — set
       # BIND_ADDRESS=127.0.0.1 in .env to restrict this to the host only
@@ -71,6 +78,7 @@ services:
     # host, relative to wherever you run `docker compose` from.
     # volumes:
     #   - ./backups:/data/backups
+    #   - ./db-backups:/data/db-backups
     restart: unless-stopped
     # M3 security review — the app needs no elevated privileges at all
     # (already runs as the unprivileged `rwnd` user, Dockerfile) and no
@@ -83,8 +91,9 @@ services:
       - ALL
     # M3 security review follow-up (docs/TODO.md): audited every write the
     # app makes (2026-08-29) — the only filesystem writes anywhere in
-    # apps/api are backups.ts's mkdir/writeFile under BACKUP_DIR (optional,
-    # already a bind mount below, unaffected by read_only) and the
+    # apps/api are backups.ts's mkdir/writeFile under BACKUP_DIR and
+    # database-backup.ts's pg_dump output under DATABASE_BACKUP_DIR (both
+    # optional, both bind mounts below, unaffected by read_only) and the
     # migrate.ts/seed.ts entrypoint steps, which only talk to Postgres.
     # Avatars and imported ZIPs go straight to the database, never to disk.
     # tmpfs covers /tmp as cheap insurance for anything in the Node/Postgres

@@ -136,6 +136,38 @@ grouping, sorted oldest to newest.
       compose file itself is kept local at `~/rwnd-tv-dev/` inside WSL,
       not in the repo). Confirmed working end to end with a real login.
 
+## UI polish
+
+- [x] **Explore text size/wrapping and grid sizing on the calendar's Month
+      view** (2026-09-06 13:36 added, done 2026-09-09)      `CalendarMonthGrid.tsx`'s per-day entries were a fixed 10px, single
+      line, `truncate`-clipped, inside a flat `h-28` cell with
+      `MAX_CELL_ENTRIES` capped at 3 before spilling into a "+N more"
+      control. Explored live on dev.rwnd.tv rather than decided up front,
+      as this item asked for.
+
+      Landed in two steps. First a general size bump: weekday headers and
+      day numbers 12px -> 14px, cell entries and the overflow control 10px
+      -> 12px. That looked wrong, and James caught why — the two-step gap
+      had always been there (12 vs 10) but only became visible once both
+      sides were in legible ranges. Unified everything to `text-sm` (14px),
+      which forced `h-28` -> `h-32` since three entries plus "+N more" no
+      longer fit.
+
+      Then dynamic row heights: `MAX_CELL_ENTRIES` and the "+N more"
+      control removed entirely, so every event for a day renders. Needed no
+      layout change beyond that, because a table cell's specified height is
+      already a minimum in CSS, so `h-32` became a floor rather than a fixed
+      height and busy rows grow on their own. Two consequences accepted
+      deliberately: row heights now vary with the busiest day in that week,
+      and total page height shifts between months, which the component's
+      original doc comment had specifically avoided with its fixed 6x7 grid.
+
+      The wrapping half of this item was left undone: entries still
+      `truncate` on one line rather than wrapping. Not re-logged as its own
+      item — at 14px in a grown cell the clipping is much less pronounced,
+      and the phone-width pass (still open in TODO.md) is where narrow
+      viewports get looked at properly.
+
 ## TV Shows / Movies gallery follow-ups
 
 - [x] **Gallery nav overflow on narrow viewports** (2026-08-19 15:25)\

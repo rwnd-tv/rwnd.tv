@@ -72,23 +72,6 @@ Format:
       an empty circle. Confirm with James whether that one should change
       too, or only the four labeled buttons above.
 
-- [ ] **Explore text size/wrapping and grid sizing on the calendar's Month view** (2026-09-06 13:36 added)
-
-      `CalendarMonthGrid.tsx`'s per-day entries (`CalendarMonthCellEntry`)
-      are a fixed 10px, single line, `truncate`-clipped (a combined "Show ·
-      Episode" title routinely gets cut off), inside a flat `h-28` cell
-      regardless of viewport size, with `MAX_CELL_ENTRIES` fixed at 3
-      before a day overflows into a "+N more" control.
-
-      No decided direction yet; James wants to explore options rather than
-      lock one in up front. Worth looking at: wrapping cell-entry text onto
-      multiple lines instead of truncating it, and whether cell/grid sizing
-      (cell height, `MAX_CELL_ENTRIES`, text size) should flex, possibly
-      dynamically, based on viewport width or how many events a given day
-      actually has, rather than staying fixed. May overlap with the phone-
-      width pass below, since a fixed-size grid is likely tightest at small
-      viewports.
-
 - [ ] **Clear the calendar's selected-day panel when that day scrolls out of view** (2026-09-06 13:37 added)
 
       `CalendarPage.tsx`'s `selectedDay` (set by clicking a day number or a

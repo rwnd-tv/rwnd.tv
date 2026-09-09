@@ -13,7 +13,6 @@ import {
 import { toDateInputValue, formatCalendarDayHeading } from '../../lib/date.js'
 
 const GRID_CELLS = 42
-const MAX_CELL_ENTRIES = 3
 
 /**
  * First day of the week for a locale, as Intl's own 1=Monday..7=Sunday
@@ -72,11 +71,11 @@ function CalendarMonthCellEntry({ event }: { event: CalendarEvent }) {
     </span>
   )
   return href ? (
-    <Link to={href} className="block truncate text-[10px]" title={title}>
+    <Link to={href} className="block truncate text-sm" title={title}>
       {content}
     </Link>
   ) : (
-    <span className="block truncate text-[10px]" title={title}>
+    <span className="block truncate text-sm" title={title}>
       {content}
     </span>
   )
@@ -91,8 +90,13 @@ function CalendarMonthCellEntry({ event }: { event: CalendarEvent }) {
  * of how many weeks the month actually spans (avoids a page-height jump
  * between 5- and 6-week months on navigation), and a selected-day panel
  * below reusing the same day-section shape CalendarAgenda.tsx uses so the
- * overflow ("+N more") and spoiler-reveal affordances don't need to be
- * crammed into a ~7rem cell.
+ * spoiler-reveal affordance doesn't need to be crammed into a cell.
+ *
+ * Cells show every event for their day rather than capping at a few and
+ * offering a "+N more" control. `h-32` is therefore a floor, not a fixed
+ * height: a table cell's specified height is a minimum, so a busy day
+ * grows its whole row. Row heights consequently vary with the busiest day
+ * in that week.
  */
 export function CalendarMonthGrid({
   monthAnchor,
@@ -150,7 +154,7 @@ export function CalendarMonthGrid({
                 <th
                   key={i}
                   scope="col"
-                  className="p-2 text-xs font-medium text-[var(--color-fg-muted)]"
+                  className="p-2 text-sm font-medium text-[var(--color-fg-muted)]"
                 >
                   {label}
                 </th>
@@ -166,12 +170,11 @@ export function CalendarMonthGrid({
                   const inMonth = day.getMonth() === monthNumber
                   const isToday = dayKey === todayKey
                   const isSelected = dayKey === selectedDay
-                  const overflow = dayEvents.length - MAX_CELL_ENTRIES
 
                   return (
                     <td
                       key={dayKey}
-                      className={`h-28 max-w-0 border border-[var(--color-border)] p-1 align-top ${
+                      className={`h-32 max-w-0 border border-[var(--color-border)] p-1 align-top ${
                         inMonth ? '' : 'bg-[var(--color-surface)]'
                       } ${isSelected ? 'bg-[var(--color-surface)]' : ''}`}
                     >
@@ -179,25 +182,16 @@ export function CalendarMonthGrid({
                         type="button"
                         onClick={() => onSelectDay(dayKey)}
                         aria-current={isToday ? 'date' : undefined}
-                        className={`mb-1 flex h-6 w-6 items-center justify-center rounded-full text-xs ${
+                        className={`mb-1 flex h-6 w-6 items-center justify-center rounded-full text-sm ${
                           inMonth ? '' : 'text-[var(--color-fg-muted)]'
                         } ${isToday ? 'font-semibold ring-1 ring-[var(--color-primary)]' : ''}`}
                       >
                         {day.getDate()}
                       </button>
                       <div className="flex flex-col gap-0.5">
-                        {dayEvents.slice(0, MAX_CELL_ENTRIES).map((event) => (
+                        {dayEvents.map((event) => (
                           <CalendarMonthCellEntry key={event.uid} event={event} />
                         ))}
-                        {overflow > 0 && (
-                          <button
-                            type="button"
-                            onClick={() => onSelectDay(dayKey)}
-                            className="truncate text-left text-[10px] text-[var(--color-fg-muted)] hover:underline"
-                          >
-                            {t('calendar.moreCount', { count: overflow })}
-                          </button>
-                        )}
                       </div>
                     </td>
                   )

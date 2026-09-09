@@ -87,7 +87,7 @@ describe('CalendarMonthGrid', () => {
     expect(screen.getByText('A Show · Episode 1')).toBeInTheDocument()
   })
 
-  it('shows a "+N more" control when a day has more entries than fit', () => {
+  it('shows every entry for a day, with no "+N more" control', () => {
     const events = [
       episodeEvent('e1@rwnd.tv', '2026-09-10'),
       episodeEvent('e2@rwnd.tv', '2026-09-10'),
@@ -96,6 +96,7 @@ describe('CalendarMonthGrid', () => {
       episodeEvent('e5@rwnd.tv', '2026-09-10'),
     ]
     renderGrid(new Date(2026, 8, 1), events)
-    expect(screen.getByText('+2 more')).toBeInTheDocument()
+    expect(screen.getAllByText('A Show · An Episode')).toHaveLength(5)
+    expect(screen.queryByText(/more$/)).not.toBeInTheDocument()
   })
 })

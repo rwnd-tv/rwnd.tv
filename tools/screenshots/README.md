@@ -27,6 +27,17 @@ pnpm install
 pnpm install-browser   # downloads Chromium once
 ```
 
+Re-run `pnpm install-browser` (or `pnpm exec playwright install chromium`)
+after any `playwright` version bump, not just on first setup. Playwright
+pins a browser build per release, so a bumped package with the old browser
+still on disk fails the whole capture with "Executable doesn't exist at
+...chrome-headless-shell.exe" before a single shot is taken.
+
+This is newly relevant: until 2026-09-09 this directory sat outside the
+pnpm workspace with no Dependabot coverage, so `playwright` never moved and
+the browser never went stale. It is covered now (see `.github/dependabot.yml`),
+so the bumps will arrive regularly.
+
 ## Running
 
 Seed the account's watch history first. `../seed-demo-account` populates

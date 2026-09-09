@@ -39,6 +39,7 @@ const GALLERY_SHOTS = {
   films: 'movies',
   show: 'show-detail',
   season: 'season',
+  calendar: 'calendar',
 } as const
 const FAQ_KEYS = ['selfHost', 'dropIn', 'metadata', 'requirements', 'players'] as const
 const MILESTONES = [
@@ -396,7 +397,7 @@ export function LandingPage() {
               {t('landing.gallery.films')}
             </figcaption>
           </figure>
-          {(['show', 'season'] as const).map((key) => (
+          {(['show', 'season', 'calendar'] as const).map((key) => (
             <figure key={key} className="m-0">
               <div
                 className="overflow-hidden rounded-[10px] bg-[var(--color-surface)] shadow-[0_1px_3px_rgba(0,0,0,0.1),0_14px_30px_-16px_rgba(0,0,0,0.35)]"

@@ -68,8 +68,8 @@
         "body": "Export a CSV file per category (history, ratings, watchlist, dropped shows), zipped and downloadable from Settings. Open formats, no lock-in, by design."
       },
       "calendar": {
-        "title": "Subscribe to your calendar",
-        "body": "Personal History, TV Shows, and Movies feeds, each a webcal:// URL to paste into Google Calendar, Apple Calendar, or any other app that supports it. Descriptions link back to the episode or movie, and respect your spoiler-protection setting."
+        "title": "Your calendar, in the app and out of it",
+        "body": "An in-app Calendar page with a forward-looking Agenda of what's still to come and a Month grid at a glance. The same data is also served as personal History, TV Shows, and Movies webcal:// feeds to paste into Google Calendar, Apple Calendar, or any other app that supports it. Both link back to the episode or movie, and respect your spoiler-protection setting."
       }
     },
     "selfHost": {
@@ -99,6 +99,7 @@
       "films": "Movies: the same wall, with repeat watches counted.",
       "show": "A show page: seasons, progress, ratings, watchlist and spoiler-safe synopsis.",
       "season": "A season page: tick off episodes, rate them, count rewatches.",
+      "calendar": "The Calendar: an Agenda of what's still to come, or a whole month at a glance.",
       "import": "Import: connect Trakt or upload its ZIP export, pick what to bring in, and watch it run. Re-running an import never creates duplicates."
     },
     "shots": {
@@ -107,7 +108,8 @@
       "films": "The Movies gallery: posters with release years and repeat-watch counts",
       "show": "A show page: poster, TMDB rating, episode progress, watched and watchlist controls, star rating and season cards",
       "season": "A season page: episode stills with watched ticks and repeat-watch counts",
-      "import": "The Import page: connect a Trakt account and choose what to bring in, upload a Trakt ZIP or an rwnd.tv export, and watch import progress"
+      "import": "The Import page: connect a Trakt account and choose what to bring in, upload a Trakt ZIP or an rwnd.tv export, and watch import progress",
+      "calendar": "The Calendar page: a forward-looking agenda of upcoming episodes and movie releases, grouped by day"
     },
     "status": {
       "title": "Where the project actually is",
@@ -157,7 +159,7 @@
       },
       "dropIn": {
         "q": "Is it a drop-in Trakt replacement yet?",
-        "a": "Not entirely. Import, logging, galleries, watchlists, ratings, Plex scrobbling and calendar feeds all work. Stats and insights and shareable profiles aren't scheduled yet."
+        "a": "Not entirely. Import, logging, galleries, watchlists, ratings, Plex scrobbling, the Calendar page, and calendar feeds all work. Stats and insights and shareable profiles aren't scheduled yet."
       },
       "metadata": {
         "q": "Where does the metadata come from?",

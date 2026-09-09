@@ -168,6 +168,10 @@ function buildDocsShots({ showSlug }: ShotContext): Shot[] {
     { name: 'shows', path: '/shows', viewport: DOCS_VIEWPORT, settleMs: 500 },
     { name: 'movies', path: '/movies', viewport: DOCS_VIEWPORT, settleMs: 500 },
     { name: 'history', path: '/history', viewport: DOCS_VIEWPORT, settleMs: 500 },
+    // Lands on whichever view the account's own `rwnd_calendar_view`
+    // session cookie last selected, and a fresh capture context has
+    // none, so this is always the default (Agenda since 2026-09-09).
+    { name: 'calendar', path: '/calendar', viewport: DOCS_VIEWPORT, settleMs: 700 },
     { name: 'import', path: '/import', viewport: DOCS_VIEWPORT, settleMs: 300 },
     // Whole /settings page — includes the Tokens panel the "Connecting
     // Plex" doc section needs. Deliberately never creates a token here: a
@@ -205,6 +209,7 @@ function buildLandingShots({ showSlug }: ShotContext): Shot[] {
     { name: 'dashboard', path: '/dashboard', viewport: LANDING_GALLERY_VIEWPORT, settleMs: 500 },
     { name: 'tv-shows', path: '/shows', viewport: LANDING_GALLERY_VIEWPORT, settleMs: 500 },
     { name: 'movies', path: '/movies', viewport: LANDING_GALLERY_VIEWPORT, settleMs: 500 },
+    { name: 'calendar', path: '/calendar', viewport: LANDING_GALLERY_VIEWPORT, settleMs: 700 },
     { name: 'import', path: '/import', viewport: LANDING_GALLERY_VIEWPORT, settleMs: 300 },
   ]
   if (showSlug) {

@@ -20,7 +20,7 @@
     "react-dom": "^19.0.0",
     "react-i18next": "^17.0.12",
     "react-qr-code": "^2.2.0",
-    "react-router": "^8.3.0"
+    "react-router": "^8.3.1"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.0.0",

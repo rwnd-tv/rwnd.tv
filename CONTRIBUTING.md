@@ -123,6 +123,13 @@ Day-to-day work lives in [docs/TODO.md](docs/TODO.md) (small items) and
 in TODO.md. A significant design decision gets an ADR under
 [docs/adr/](docs/adr/); see any existing one for the shape.
 
+Version numbers follow those milestones rather than the size of any one
+change: a **minor** bump (1.0.x to 1.1.0) marks a ROADMAP milestone being
+closed out, and a **patch** bump covers everything shipped between them,
+however substantial. So a release can add a whole new page and still be a
+patch, which is deliberate: it keeps a minor version meaning "a milestone
+finished" rather than "somebody judged this one big enough."
+
 ## Testing components
 
 `apps/web` has component-testing infrastructure (Vitest + Testing Library)

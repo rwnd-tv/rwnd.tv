@@ -40,6 +40,20 @@ function databaseUrl(): string {
   return url
 }
 
+// Same filename shape as timestampName() in database-backup.ts, for a dump
+// aged `days` old as of "now" — lets retention tests construct fakes at a
+// known age rather than a fixed calendar date, so they don't drift relative
+// to whatever DEFAULT_RETENTION_TIERS' boundaries land on by the time this
+// runs.
+function dumpNameAgedDays(days: number): string {
+  const ts = new Date(Date.now() - days * 24 * 60 * 60 * 1000)
+  const compact = ts
+    .toISOString()
+    .replace(/[-:]/g, '')
+    .replace(/\.\d{3}Z$/, 'Z')
+  return `rwnd-${compact}.sql.gz`
+}
+
 describe.skipIf(!hasPgDump())('database backup', () => {
   beforeEach(async () => {
     await Promise.all([resetDb(db), rm(DIR, { recursive: true, force: true })])
@@ -164,11 +178,21 @@ describe.skipIf(!hasPgDump())('database backup', () => {
     }
   })
 
-  it('keeps the newest 7 dumps and never touches anything else', async () => {
+  it('prunes under the default retention policy and never touches anything else', async () => {
     await mkdir(DIR, { recursive: true })
-    for (let i = 1; i <= 10; i += 1) {
-      await writeFile(join(DIR, `rwnd-2026090${i % 10}T120000Z.sql.gz`), 'old')
+    // Well within the default policy's 7-day daily window
+    // (DEFAULT_RETENTION_TIERS, database-backup.ts) — must all survive
+    // regardless of count, since that tier keeps every dump by age, not a
+    // fixed count the way the old flat "keep newest 7" did.
+    const recentAgeDays = [1, 2, 3, 4, 5]
+    for (const days of recentAgeDays) {
+      await writeFile(join(DIR, dumpNameAgedDays(days)), 'old')
     }
+    // Past every tier's boundary (7 daily + 4*7 weekly + 12*30 monthly =
+    // 395 days) — must be pruned.
+    await writeFile(join(DIR, dumpNameAgedDays(500)), 'ancient')
+    await writeFile(join(DIR, dumpNameAgedDays(600)), 'ancient')
+
     // Files this job did not write must survive, however similar they look.
     await writeFile(join(DIR, 'notes.txt'), 'mine')
     await writeFile(join(DIR, 'rwnd-backup.sql.gz'), 'wrong shape')
@@ -180,7 +204,10 @@ describe.skipIf(!hasPgDump())('database backup', () => {
     await runDatabaseBackup({ db, dir: DIR, databaseUrl: databaseUrl() })
 
     const left = await readdir(DIR)
-    expect(left.filter((n) => /^rwnd-\d{8}T\d{6}Z\.sql\.gz$/.test(n))).toHaveLength(7)
+    // The recent fakes, plus the one runDatabaseBackup itself just wrote.
+    expect(left.filter((n) => /^rwnd-\d{8}T\d{6}Z\.sql\.gz$/.test(n))).toHaveLength(
+      recentAgeDays.length + 1,
+    )
     expect(left).toContain('notes.txt')
     expect(left).toContain('rwnd-backup.sql.gz')
     expect(left).not.toContain('rwnd-20260101T000000Z.sql.gz.partial')

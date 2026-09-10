@@ -34,7 +34,7 @@ This is a living document whose aim is to capture the intent of the rwnd.tv proj
 
 ## Implementation
 
-I am not a web developer. I plan to implement this project by using Claude Code and I will be open about that. My hope is that I can generate the skeleton of a project which will grow beyond me and be adopted by the community. However even if that fails to happen, I hope I can build something that will solve my own needs and maybe other.
+I am not a web developer. I plan to implement this project by using Claude Code and I will be open about that. My hope is that I can generate the skeleton of a project which will grow beyond me and be adopted by the community. However even if that fails to happen, I hope I can build something that will solve my own needs and maybe others.
 
 ## Metadata
 

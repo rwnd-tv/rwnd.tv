@@ -1011,6 +1011,25 @@
         "demote_one": "{{succeeded}} of {{count}} account demoted.",
         "demote_other": "{{succeeded}} of {{count}} accounts demoted."
       }
+    },
+    "databaseBackups": {
+      "title": "Database backups",
+      "notConfigured": "Automatic whole-database backups are off. Set the DATABASE_BACKUP_DIR environment variable to enable a daily pg_dump. See the Backups section of the self-hosting guide.",
+      "lastBackup": "Last backup",
+      "lastBackupValue": "{{date}} ({{size}})",
+      "lastBackupNone": "No backup written yet since this instance last started.",
+      "schedule": "Schedule",
+      "scheduleValue": "Every {{hours}}h",
+      "restorePrompt": "Restoring from one of these is a manual step, on purpose. See",
+      "restoreLinkText": "the self-hosting guide's Restoring instructions",
+      "lastRunFailed": "The backup run at {{date}} failed: {{message}}",
+      "directoryError": "The backup directory couldn't be read: {{message}}",
+      "retentionTitle": "Retention policy",
+      "retentionDescription": "Backups are taken once a day. Set how long each of the three fields below keeps them before it hands off to the next, or the backup is deleted. Set a field to 0 to skip that stage entirely.",
+      "dailyRetentionDays": "Keep every backup for (days)",
+      "weeklyRetentionWeeks": "Then keep one per week for (weeks)",
+      "monthlyRetentionMonths": "Then keep one per month for (months)",
+      "retentionSave": "Save"
     }
   },
   "account": {

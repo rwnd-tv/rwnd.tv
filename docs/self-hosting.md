@@ -148,7 +148,7 @@ Everything that matters lives in the `db-data` volume (the Postgres data directo
 
 ### Automatic (recommended)
 
-Set `DATABASE_BACKUP_DIR` and the app takes a full `pg_dump` once a day, gzipped, keeping the newest 7 and deleting older ones. Off by default. Uncomment the environment variable and the matching `volumes:` line under the `app` service in `docker-compose.yml`:
+Set `DATABASE_BACKUP_DIR` and the app takes a full `pg_dump` once a day, gzipped, under a tiered retention policy: recent dumps are kept every day, then thinned to one a week, then one a month, then deleted. Off by default. Uncomment the environment variable and the matching `volumes:` line under the `app` service in `docker-compose.yml`:
 
 ```yaml
 environment:
@@ -159,13 +159,15 @@ volumes:
 
 Then `docker compose up -d`. The container runs as an unprivileged user, so `./db-backups` needs to be writable by it. A backup runs immediately on start (so a misconfiguration shows up right away rather than a day later) and every 24 hours after; `docker compose logs app` will show a line per dump.
 
+An admin account can also check this without shell access: the Admin page shows the last backup's time and size, the currently retained dumps, and the outcome of the last run (so a failure is visible even before the next dump would have been due). The same page lets an admin edit the retention policy: how many days of daily backups, weeks of weekly, and months of monthly to keep, each independently, down to 0 to skip a tier entirely (for example, daily backups kept for a year with nothing thinned in between).
+
 Files are named `rwnd-<timestamp>.sql.gz`, so they sort chronologically. Only files matching that exact pattern are ever deleted, so anything else you keep in that directory is left alone.
 
 Three things worth knowing:
 
 - **Copying these somewhere else is still your job.** A backup on the same disk as the database is not a backup. Sync the directory to another machine or an object store on whatever schedule suits you.
 - **Do not point two instances at the same directory.** Each one's retention sweep only counts files, not which instance wrote them, so they will delete each other's backups. Give a staging or dev instance its own directory.
-- **Retention is 7 dumps and is not configurable.** If you need longer history, copy dumps out of the directory as they appear.
+- **Retention defaults to daily for a week, weekly for a month, monthly for a year, and is configurable from the Admin page.** If you need longer history than any tier keeps, copy dumps out of the directory as they appear rather than only relying on retention.
 
 ### Manual
 
@@ -198,6 +200,8 @@ docker compose start app
 ### If backups stop appearing
 
 The dump has to be taken by a `pg_dump` matching your Postgres server's major version, because its output targets a server of that version or newer. The image bundles clients for Postgres 16, 17 and 18 and picks the right one automatically, so this only bites if you run a Postgres newer than any of those. You will see a line in `docker compose logs app` saying so, and no backups will be written until the image gains that version. Downgrading Postgres is not necessary; opening an issue is the fastest fix.
+
+The Admin page's backup status shows the same failure (an admin account without shell access does not need `docker compose logs app` to notice), so check there first.
 
 ### Per-user backup/restore
 

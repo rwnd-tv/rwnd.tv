@@ -27,6 +27,12 @@ export default defineConfig({
       // src/test/backups.test.ts wipes this directory itself in
       // beforeEach rather than relying on it staying clean across runs.
       BACKUP_DIR: join(tmpdir(), 'rwnd-tv-test-backups'),
+      // Automatic whole-database backup status (GET /admin/database-backups).
+      // A separate directory from BACKUP_DIR above, same reasoning as the
+      // env var itself (env.ts's DATABASE_BACKUP_DIR comment) — a fixed
+      // literal per test, wiped in src/test/admin-database-backups.test.ts's
+      // own beforeEach.
+      DATABASE_BACKUP_DIR: join(tmpdir(), 'rwnd-tv-test-database-backups'),
     },
   },
 })

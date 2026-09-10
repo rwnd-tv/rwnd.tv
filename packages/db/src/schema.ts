@@ -498,6 +498,23 @@ export const instanceSettings = pgTable(
     // runs it" email sentences (apps/api/src/lib/email.ts) that had no
     // actual address to offer before this existed.
     adminEmail: text('admin_email'),
+    // Retention policy for the automatic whole-database backup job
+    // (apps/api/src/lib/database-backup.ts's RetentionTiers, ADR 0008).
+    // Admin-editable via PATCH /admin/database-backups, not the public
+    // GET /settings this table also backs — see that route's own doc
+    // comment for why these three stay off the public schema. Defaults
+    // match the values RetentionTiers used as a flat constant before this:
+    // a week of daily dumps, four more weeks thinned to one-per-week, a
+    // year beyond that thinned to one-per-month.
+    databaseBackupDailyRetentionDays: integer('database_backup_daily_retention_days')
+      .notNull()
+      .default(7),
+    databaseBackupWeeklyRetentionWeeks: integer('database_backup_weekly_retention_weeks')
+      .notNull()
+      .default(4),
+    databaseBackupMonthlyRetentionMonths: integer('database_backup_monthly_retention_months')
+      .notNull()
+      .default(12),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [check('instance_settings_singleton', sql`${table.id} = 1`)],

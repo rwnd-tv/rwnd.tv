@@ -3534,6 +3534,72 @@ DATABASE` ×2) — zero residue.\
       16 to match its own `postgres:16-alpine` service, since an unpinned one
       would break the same way whenever the runner image moves.
 
+- [x] **Admin interface for the instance's automatic database backups**
+      (2026-09-09 added, done 2026-09-10)
+
+      Read-only status for the scheduled `pg_dump` job (see the entry above):
+      `GET /admin/database-backups` (`apps/api/src/routes/
+      admin-database-backups.ts`), surfaced as a panel on `/admin`
+      (`DatabaseBackupsPanel.tsx`) showing the last backup's time and size,
+      how many dumps are currently retained against the module's keep-count
+      constant, the schedule, and the last run's outcome (so a failure is
+      visible even when no file was written).
+
+      Reads the backup directory directly rather than a database table, the
+      same way `GET /backups`'s per-user feature already does, so this
+      needed no migration. The last run's outcome lives in memory only,
+      populated by `scheduleDatabaseBackup`'s existing `.then`/`.catch`, and
+      resets on restart (accepted: a pass runs immediately on boot). No
+      `databaseBackupsConfigured` flag was added to the public
+      `instanceSettingsSchema`, unlike the `*Configured` pattern this item
+      originally proposed: the panel stays visible and explains itself when
+      `DATABASE_BACKUP_DIR` is unset instead of hiding, following the same
+      "explain, don't disappear" convention already used on
+      `AdminUserPage.tsx`'s Role/Delete-account panels, so nothing needed
+      deciding before the admin-only route is even reachable.
+
+      A manual "back up now" button, and whether the interval/retention
+      should become editable, were both left open on purpose; see the
+      follow-up logged under Backups in `docs/TODO.md`.
+
+- [x] **Tiered, admin-editable retention for the automatic database backup,
+      plus a restore-instructions link** (2026-09-10 added, done 2026-09-10)
+
+      Follow-up to the read-only status panel above, same day. James asked
+      to make the job's schedule editable, then refined that into a real
+      GFS-style (grandfather-father-son) policy: daily backups kept at daily
+      granularity for a while, thinning to weekly then monthly as they age,
+      each window's length independently admin-editable down to 0 (which
+      skips that tier) so "just daily backups, kept for a year" is
+      expressible alongside the 7-day/4-week/12-month default.
+
+      `selectDumpsToKeep` (`apps/api/src/lib/database-backup.ts`) replaced
+      the flat `KEEP_COUNT = 7`: a pure function, unit-tested directly with
+      fabricated dump lists and a fixed clock
+      (`database-backup-retention.test.ts`), independent of the
+      `pg_dump`-dependent tests that skip on Windows. The three tier values
+      live on `instance_settings` (migration
+      `0041_add_database_backup_retention_tiers.sql`), read fresh by
+      `runDatabaseBackup` on every run, so a change takes effect on the next
+      scheduled run with no scheduler-rescheduling machinery needed. New
+      `PATCH /admin/database-backups` persists them via an upsert (same
+      reasoning as `PATCH /settings`: the singleton row isn't guaranteed to
+      exist, including inside the test suite's own `resetDb()` truncation,
+      which caught a first draft that used a plain `update` and silently
+      dropped every write in tests).
+
+      The backup cadence itself (24h) stayed a fixed, non-editable constant:
+      the tiers only make sense against a steady daily cadence.
+
+      Also added, from the same conversation: James pushed back on ADR
+      0008's "restore stays manual... automating it would add risk without
+      adding value" line, reading it as a decision attributed to him it
+      wasn't. Clarified it's the ADR's own unattributed reasoning, not a
+      quote, and recorded his disagreement in the ADR rather than silently
+      acting on or ignoring it. Landed a small compromise: the panel links
+      out to the Restoring section of `docs/self-hosting.md` rather than
+      building restore automation, which stays open as its own follow-up.
+
 ## Self-hosting & deployment
 
 - [x] **`docker-compose.yml` never passes through `TVDB_API_KEY`/`TVDB_PIN`/`ENVIRONMENT_LABEL`** (2026-08-26 added, done 2026-08-26) — M3\

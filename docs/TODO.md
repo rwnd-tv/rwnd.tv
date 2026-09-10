@@ -72,22 +72,28 @@ Format:
       an empty circle. Confirm with James whether that one should change
       too, or only the four labeled buttons above.
 
-- [ ] **Clear the calendar's selected-day panel when that day scrolls out of view** (2026-09-06 13:37 added)
+- [ ] **Remove the calendar month grid's selected-day panel** (2026-09-06 13:37 added, redirected to removal 2026-09-10)
 
-      `CalendarPage.tsx`'s `selectedDay` (set by clicking a day number or a
-      cell's "+N more" overflow control in `CalendarMonthGrid.tsx`) isn't
-      reset when `monthAnchor` changes. Navigating months (prev/next/
-      Today) leaves the old `selectedDay` in place even though it's no
-      longer one of the currently rendered grid cells (none of which show
-      as selected any more, since `isSelected` compares against the new
-      month's days), so the panel below the grid keeps showing a day that
-      isn't visible above it, and its event list, freshly looked up against
-      the new query window, comes back empty even when that day actually
-      has events.
+      James, 2026-09-10: doesn't serve a purpose any more, remove it
+      rather than fix it. Originally tracked a bug where `selectedDay`
+      (set by clicking a day number, or the old "+N more" overflow control
+      that no longer exists now row height is dynamic) went stale after
+      navigating months via prev/next/Today, showing a panel for a day no
+      longer in the visible grid with an event list that came back empty.
 
-      Clear `selectedDay` (or re-derive it against the currently visible
-      day range) whenever `monthAnchor` changes, so the panel never
-      outlives the day it belongs to.
+      A calendar doesn't need spoiler-reveal or poster art inline: that's
+      one click away via the episode/movie page already, so the panel
+      isn't replacing lost functionality, just a redundant extra stop on
+      the way there.
+
+      Remove `selectedDay`/`onSelectDay` and the day-number button's click
+      handler from `CalendarMonthGrid.tsx`, plus the `<section>` panel
+      below the grid (the `CalendarEventTile`/`PosterGrid` usage). Remove
+      the matching `selectedDay` state and prop wiring from
+      `CalendarPage.tsx`. `CalendarMonthCellEntry`'s own comment currently
+      points to "the selected-day panel below" for the full reveal and
+      will need updating too, along with whatever `CalendarMonthGrid.test.tsx`
+      coverage exercises the removed behaviour.
 
 ## Mobile / responsive
 
@@ -297,41 +303,36 @@ Format:
 
 ## Backups
 
-- [ ] **Admin interface for the instance's automatic database backups** (2026-09-09 added)
+- [ ] **Manual "back up now" button, and restore automation, for the automatic database backup** (2026-09-09 added, narrowed 2026-09-10, narrowed again 2026-09-10)
 
-      The scheduled whole-database backup shipped with no user-facing surface
-      at all: no route, no settings flag, no UI. Its entire surface is the
-      `DATABASE_BACKUP_DIR` env var and one call in `apps/api/src/index.ts`.
-      Everything else is hardcoded in `apps/api/src/lib/database-backup.ts`:
-      a 24-hour interval, one immediate pass at startup, and retention of the
-      newest 7. The only way to observe it is `docker compose logs app`, which
-      prints one line per run.
+      The admin status/retention view for the automatic whole-database backup
+      job shipped 2026-09-10 (`docs/TODO_ARCHIVE.md`, `DatabaseBackupsPanel.tsx`,
+      `GET`/`PATCH /admin/database-backups`): last backup time and size, the
+      currently retained dumps, an editable daily/weekly/monthly retention
+      policy (James asked for this to be genuinely configurable, including a
+      tier set to 0 to skip it entirely, e.g. "daily backups kept for a year,
+      nothing else"), last-run outcome, and a link to the Restoring section
+      of `docs/self-hosting.md`.
 
-      That means an admin with no shell access cannot tell whether backups are
-      running at all, when the last one succeeded, or how big they are, and
-      cannot trigger one before doing something risky. For a self-hoster that
-      is the difference between trusting the feature and hoping.
+      Two things stay deliberately out of scope:
 
-      James, 2026-09-09: no new version gets cut until this exists.
+      A manual "back up now" button is a bigger step: it needs a route that
+      spawns a process on request rather than on a timer, which is a
+      different security shape from a scheduled job (a concurrent-run guard,
+      its own rate limiting) and wants its own decision.
 
-      Smallest useful version is read-only, following the existing
-      `*Configured` pattern (`backupsConfigured` in
-      `apps/api/src/routes/settings.ts`, consumed by the Database panel):
-      a `databaseBackupsConfigured` flag plus last-run timestamp, file size
-      and count, surfaced on the Admin page. Deliberately not mirrored when
-      the feature was built, on the grounds that it is an instance-level ops
-      concern rather than a per-user one; see `env.ts`'s comment on the
-      variable and [ADR 0008](adr/0008-database-backups.md).
+      Restore automation. [ADR 0008](adr/0008-database-backups.md) decided
+      restore stays a manual shell procedure, on the grounds that it's
+      destructive, rare, and deliberate enough that automating it adds risk
+      without adding value. James, 2026-09-10: doesn't fully agree with that
+      call (recorded in the ADR rather than overridden). The panel links out
+      to the documented procedure for now; whether to build an actual
+      in-app restore path is still open and wants its own decision, not a
+      quick follow-on to the button above.
 
-      A manual "back up now" button is a bigger step and worth deciding
-      separately: it needs a route that spawns a process on request rather
-      than on a timer, which is a different security shape from a scheduled
-      job and would want its own rate limiting.
-
-      Whether the interval and retention should become editable (they are
-      module constants today, matching how every other interval in this
-      codebase works) is also open, and probably wants deciding alongside
-      the read-only view rather than before it.
+      The backup cadence itself (24h) stayed a fixed constant, not editable,
+      even once retention became admin-editable: the tiers only make sense
+      against a steady daily cadence, so there was nothing to open up there.
 
 - [ ] **Show what actually changed in the backup Diff dialog** (2026-09-06 added)
 

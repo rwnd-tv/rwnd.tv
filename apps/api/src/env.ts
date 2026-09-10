@@ -81,14 +81,17 @@ const rawEnvSchema = z.object({
   BACKUP_DIR: z.string().optional(),
   // Automatic whole-database backups (apps/api/src/lib/database-backup.ts,
   // see docs/adr/0008-database-backups.md). Optional, same "unset means the
-  // feature is off" pattern as BACKUP_DIR above, but with only that pattern's
-  // first leg: there is no *Configured settings flag and no route guard,
-  // because this job has no UI and no routes. Deliberately its own variable
-  // rather than a subdirectory of BACKUP_DIR, which is load-bearing for
-  // `backupsConfigured` and `requireBackupsConfigured` and would silently
-  // light up the per-user Settings panel if reused. Same writability
-  // requirement as BACKUP_DIR (the unprivileged `rwnd` user, see Dockerfile);
-  // the job creates files inside it but never the mount root itself.
+  // feature is off" pattern as BACKUP_DIR above. Unlike BACKUP_DIR there's no
+  // *Configured settings flag: the admin-only status route
+  // (GET /admin/database-backups, routes/admin-database-backups.ts) reports
+  // `configured` itself rather than gating on a public pre-login field, since
+  // its panel stays visible and explains itself either way rather than
+  // hiding. Deliberately its own variable rather than a subdirectory of
+  // BACKUP_DIR, which is load-bearing for `backupsConfigured` and
+  // `requireBackupsConfigured` and would silently light up the per-user
+  // Settings panel if reused. Same writability requirement as BACKUP_DIR (the
+  // unprivileged `rwnd` user, see Dockerfile); the job creates files inside
+  // it but never the mount root itself.
   DATABASE_BACKUP_DIR: z.string().optional(),
   // Outbound email (account verification, password reset —
   // apps/api/src/lib/email.ts). Optional as a group, same "unset means the

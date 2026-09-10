@@ -18,6 +18,7 @@ export * from './schemas/sessions.js'
 export * from './schemas/invites.js'
 export * from './schemas/mfa.js'
 export * from './schemas/admin-users.js'
+export * from './schemas/admin-database-backups.js'
 // Only the top-level file schema/type of each frozen format is a real public
 // export — every sub-schema (backupShowSchemaV1, backupWatchlistItemSchemaV2,
 // etc.) exists solely to compose these and has no consumer outside its own

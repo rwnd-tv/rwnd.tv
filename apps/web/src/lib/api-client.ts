@@ -23,6 +23,7 @@ import {
   type CreateWebhookLinkCodeRequest,
   type CreateWebhookLinkCodeResponse,
   type ConfirmTotpResponse,
+  type DatabaseBackupStatus,
   type DeleteAccountRequest,
   type DiffBackupResponse,
   type DisableTotpRequest,
@@ -78,6 +79,7 @@ import {
   type TraktDevicePairing,
   type TransferOwnershipRequest,
   type UpdateCalendarFeedRequest,
+  type UpdateDatabaseBackupRetentionRequest,
   type UpdateInstanceSettingsRequest,
   type UpdatePlayRequest,
   type UpdateProfileRequest,
@@ -190,6 +192,9 @@ export const api = {
      * `auth.avatarUrl` below: used directly as an <img> src. */
     avatarUrl: (id: string, avatarUpdatedAt: string) =>
       `/api/v1/admin/users/${encodeURIComponent(id)}/avatar?v=${encodeURIComponent(avatarUpdatedAt)}`,
+    databaseBackupStatus: () => get<DatabaseBackupStatus>('/admin/database-backups'),
+    updateDatabaseBackupRetention: (body: UpdateDatabaseBackupRetentionRequest) =>
+      patch<DatabaseBackupStatus>('/admin/database-backups', body),
   },
   auth: {
     login: (body: LoginRequest) => post<User | MfaRequiredResponse>('/auth/login', body),

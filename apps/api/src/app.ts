@@ -122,34 +122,38 @@ export function createApp(services?: { db: Database; metadataProviders: Metadata
   // that JSON's preflight requirement + SameSite=Lax don't otherwise
   // cover. Origin is widened to CORS_ORIGINS for dev's cross-port setup;
   // default (same-origin only) is correct for production's single-origin
-  // serving. The Plex webhook is deliberately exempt: it's bearer-token
-  // authenticated in the URL, not cookie-authenticated, and Plex itself
-  // (a server, not a browser) never sends Origin/Sec-Fetch-Site — CSRF
-  // exists to protect ambient browser credentials, which this route has
-  // none of, so applying it here would only ever break the real feature.
+  // serving. The media-server webhooks (Plex/Jellyfin/Emby) are
+  // deliberately exempt: they're bearer-token authenticated in the URL,
+  // not cookie-authenticated, and a media server (not a browser) never
+  // sends Origin/Sec-Fetch-Site — CSRF exists to protect ambient browser
+  // credentials, which these routes have none of, so applying it here
+  // would only ever break the real feature. Every route under this
+  // prefix is token-authenticated by construction
+  // (`apps/api/src/routes/webhooks.ts`), so exempting the whole prefix
+  // rather than one literal path is safe.
   const csrfMiddleware: MiddlewareHandler<AppEnv> = csrf({
     origin: env.CORS_ORIGINS.length > 0 ? env.CORS_ORIGINS : undefined,
   })
   app.use(
     '/api/*',
     createMiddleware<AppEnv>(async (c, next) => {
-      if (c.req.path.startsWith('/api/v1/webhooks/plex/')) return next()
+      if (c.req.path.startsWith('/api/v1/webhooks/')) return next()
       return csrfMiddleware(c, next)
     }),
   )
 
   // A default cap for the ordinary JSON API — nothing bounded request
-  // bodies before this. The four routes that legitimately need more
-  // (avatar upload, the two ZIP imports, the Plex webhook) carry their own
-  // wider bodyLimit directly on the route instead of being caught by this
-  // one; a single global limit can't be "overridden" wider downstream,
-  // since whichever bodyLimit runs first and rejects wins.
+  // bodies before this. The routes that legitimately need more (avatar
+  // upload, the two ZIP imports, the media-server webhooks) carry their
+  // own wider bodyLimit directly on the route instead of being caught by
+  // this one; a single global limit can't be "overridden" wider
+  // downstream, since whichever bodyLimit runs first and rejects wins.
   const DEFAULT_BODY_LIMIT_BYTES = 1024 * 1024 // 1MB
   const bodyLimitExempt = (path: string) =>
     path === '/api/v1/auth/me/avatar' ||
     path === '/api/v1/import/trakt/zip' ||
     path === '/api/v1/import/csv' ||
-    path.startsWith('/api/v1/webhooks/plex/')
+    path.startsWith('/api/v1/webhooks/')
   const defaultBodyLimit: MiddlewareHandler<AppEnv> = jsonBodyLimit(DEFAULT_BODY_LIMIT_BYTES)
   app.use(
     '/api/*',

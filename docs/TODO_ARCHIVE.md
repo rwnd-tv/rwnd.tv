@@ -2797,6 +2797,106 @@ query.queryKey[0] !== 'auth' })` — drops every _other_ cached query
       `docs/adr/0007-security-posture.md` carries a dated addendum
       superseding the two relevant Accepted-risk rows.
 
+- [x] **Jellyfin and Emby webhook ingestion, on a newly source-agnostic core** (2026-09-11 added, done 2026-09-11)\
+      The scoped-down half of "Tautulli/Jellyfin/Emby/Kodi webhook
+      ingestion" (Roadmap M4; Tautulli and Kodi stay open, see the
+      retitled TODO.md item). Verified against real payloads first,
+      not built on guesswork: ephemeral Jellyfin and Emby containers
+      were stood up on the home-server, pointed read-only at the real
+      Plex media library, and driven through actual playback via
+      browser automation to capture genuine webhook deliveries with a
+      throwaway echo-server listener, all torn down afterward with no
+      lasting infrastructure. That capture caught two real surprises
+      before any parser code shipped: Emby's "Webhooks" notification
+      always posts `multipart/form-data` with a `data` field
+      regardless of its own "Request content type" setting (same
+      mechanism as Plex, not the flat JSON originally assumed), and
+      its `Item.ProviderIds` key casing is genuinely inconsistent
+      between content types (a movie used `Tmdb`/`Imdb`/`Tvdb`, an
+      episode used `Tvdb`/`EIDR`/`IMDB`/`Official Website` with no
+      `Tmdb` key at all), so the parser lowercases every key before
+      matching.\
+      Before writing either parser, the previously Plex-specific core
+      was widened for real: `play_source`/`webhook_source` enums
+      gained `jellyfin`/`emby`; `WatchEvent`/`IncomingWatchEvent`
+      moved to a shared `apps/api/src/webhooks/types.ts`;
+      `AUTOMATED_SOURCES` (cross-source same-day dedup) widened to
+      cover all three (superseded later the same day, see the
+      "Play deduplication reworked" entry below); and the three
+      separate Plex-only routes
+      collapsed into one `POST /webhooks/:source/:token`, dispatching
+      on a per-source `{bodyFormat, parse}` registry
+      (`apps/api/src/webhooks/index.ts`) rather than tripling the
+      security-reviewed surface. The rate limiter's bucket key
+      deliberately stayed source-agnostic (one 120/min budget per
+      token, shared across all three sources it's used with), guarded
+      by a new regression test in `hardening.test.ts`.\
+      UI: `TokensPanel.tsx` now shows one webhook URL and instructions
+      block per source; `LinkedAccountsPanel.tsx` and the link-code
+      email both use a shared `WEBHOOK_SOURCE_LABELS` map instead of a
+      Plex-only local one. `docs/self-hosting.md` gained `## Connecting
+      Jellyfin`/`## Connecting Emby` sections alongside the existing
+      Plex one, with the multi-user-linking explanation lifted into
+      one shared section covering all three. The landing page FAQ's
+      "Jellyfin, Emby or Kodi?" answer now says so, rather than "not
+      yet."
+
+- [x] **Play deduplication reworked: source priority + advisory-lock concurrency, plus a "now watching" bound fix** (2026-09-11 added, done 2026-09-11)\
+      Found live testing the Jellyfin/Emby entry above: watching the
+      same Severance episode on Jellyfin then Emby about an hour apart
+      collapsed into a single play, because `hasCrossSourceDuplicate`
+      (`apps/api/src/lib/plays.ts`) treated "same UTC calendar day" as
+      "the same real watch" across any two automated sources, plex/
+      jellyfin/emby included. Replaced with `reconcilePlayDuplicates`:
+      a source priority (origin — plex/jellyfin/emby — beats manual,
+      manual beats import) evaluated within a 15-minute sliding window
+      instead of a day-wide bucket, so two origin sources never
+      suppress each other regardless of timing, manual only ever
+      defers to an origin, and import defers to everything including
+      another import (tie-broken by keeping the *newer* contained
+      `watchedAt`, since `plays.watchedAt` records when playback
+      finished, not started — a completion signal can only fire at or
+      before the true finish, so the later of two candidates is closer
+      to reality).\
+      This is no longer "skip inserting the newcomer": a higher-
+      priority event now deletes an existing lower-priority row it
+      conflicts with, so a manual log or an import can be superseded
+      later by a live webhook reporting the same watch. The whole
+      reconciliation (conflict read, any deletes, the insert) runs
+      inside one transaction behind a Postgres
+      `pg_advisory_xact_lock(hashtext(userId), hashtext(entityId))` —
+      needed because two requests for the same user/entity (a webhook
+      and a retry of that exact delivery, most plausibly, since a
+      media server only retries because the first attempt is *still
+      being processed*) can otherwise interleave their conflict checks
+      and both decide to insert, a real check-then-act race, not a
+      hypothetical one. This also replaced the old `dailySourceRef`
+      day-bucket that collapsed same-source webhook retries
+      (`webhook-plays.ts`): its bucket-edge problem is exactly what
+      caused the cross-source bug above, so it's gone too, replaced by
+      a tighter 5-minute same-origin-source window inside the same
+      advisory-lock-guarded check.\
+      Separately, live-testing this surfaced a real, unrelated bug:
+      `WatchDateDialog.tsx`'s "now watching" mode deliberately logs a
+      *predicted finish time* (`now + runtime`) for a watch still in
+      progress, but `POST /plays`/`PATCH /plays/{id}` rejected any
+      `watchedAt` later than the literal current time, with no
+      allowance for that — silently, since the mutation had no error
+      handler. Fixed by widening `resolveMovie`/`resolveEpisode`
+      (`apps/api/src/lib/media.ts`) to also return `runtimeMinutes`
+      (already fetched, just not exposed) and validating against
+      `now + runtime` instead of a flat "now", mirroring the
+      frontend's own bound exactly; added `console.error` logging on
+      rejection for future diagnosability. Verified against three real
+      failure/success live tests on dev.rwnd.tv (not just written
+      tests) before and after each fix, including one that briefly
+      looked like a client/server clock-skew issue (ruled out via
+      time.is and a direct container-vs-host clock comparison) before
+      the real cause — a stale locally-cached episode runtime
+      diverging from the provider's live value shown on the page — was
+      found and logged separately (`docs/TODO.md`, "Season/episode
+      pages can drift from the runtime...").
+
 ## Auth & accounts
 
 - [x] **"Forgot password" / account recovery, and email verification** (2026-08-23 15:46 added, done 2026-08-25) — M2\

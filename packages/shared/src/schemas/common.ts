@@ -48,7 +48,7 @@ export function isAdminRole(role: UserRole): boolean {
 /** How a play was logged — matches `playSourceEnum` in packages/db/src/schema.ts.
  * Shared by plays.ts, library.ts, activity.ts, and backups.ts, all of which
  * report a play's source. */
-export const playSourceSchema = z.enum(['manual', 'plex', 'import'])
+export const playSourceSchema = z.enum(['manual', 'plex', 'import', 'jellyfin', 'emby'])
 export type PlaySource = z.infer<typeof playSourceSchema>
 
 /** Which metadata provider fetched a title's cached fields, or is being

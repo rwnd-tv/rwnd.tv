@@ -1,40 +1,5 @@
 import type { ExternalIdBundle } from '../lib/external-match.js'
-
-/** Everything needed to resolve and log a play, once it's known *who*
- * it belongs to — deliberately without `account` (split out onto
- * `IncomingWatchEvent` below), since this is also the shape stored in
- * `pending_webhook_events` for later replay (`packages/db/src/schema.ts`)
- * and `apps/api/src/lib/webhook-plays.ts`'s `logWebhookPlay` — neither
- * of those needs or has an opinion about which rwnd.tv user it is. */
-// A flat object with a union-typed `media` (rather than an intersection
-// of the shared fields with a media-shape union) deliberately — the two
-// forms are semantically equivalent, but only this one structurally
-// matches `pending_webhook_events.event`'s own `.$type<...>()` in
-// `packages/db/src/schema.ts` closely enough for TypeScript to accept a
-// stored/replayed event back through `logWebhookPlay` without a cast.
-export type WatchEvent = {
-  ids: ExternalIdBundle
-  /** Plex's own per-media-item id on this server — stable for a given
-   * item, but Plex-local (not a cross-server/cross-instance identifier,
-   * unlike `ids`). Only used to build a best-effort idempotency key for
-   * the play this event logs — see `apps/api/src/lib/webhook-plays.ts`. */
-  ratingKey: string
-  media:
-    | { type: 'movie' }
-    | { type: 'episode'; showTitle: string; seasonNumber: number; episodeNumber: number }
-}
-
-export type IncomingWatchEvent = WatchEvent & {
-  /** Which Plex user actually watched this — a webhook is server-wide
-   * (fires for every user's playback, not just whoever registered it),
-   * so this is what tells apart a multi-user server's watches. `id` is
-   * Plex's real global account id — *not* reliably `1` for the server
-   * owner despite Plex's own docs claiming so (live-verified
-   * 2026-08-24 against a real payload) — so every account, owner
-   * included, needs an explicit claim. See
-   * `apps/api/src/lib/webhook-accounts.ts`. */
-  account: { externalId: string; name: string }
-}
+import type { IncomingWatchEvent } from './types.js'
 
 /** One entry of Plex's `Metadata.Guid` array — `{ id: "tmdb://603" }`,
  * `{ id: "tvdb://81189" }`, `{ id: "imdb://tt0468569" }`. Only present on

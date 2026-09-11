@@ -1,214 +1,25 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { eq } from 'drizzle-orm'
 import { episodes, movies, pendingWebhookEvents, plays, shows, webhookAccountLinks } from '@rwnd/db'
-import type { CreateApiTokenResponse } from '@rwnd/shared'
-import { createLocalUser, extractCookie, json, resetDb, testDb } from './helpers.js'
+import { createLocalUser, json, resetDb, testDb } from './helpers.js'
+import {
+  createLinkedTokenAndCookie,
+  createTokenAndCookie,
+  fakeTmdb,
+  fakeTvdbWithEpisodeRedirect,
+  postMultipartWebhook,
+} from './webhook-fixtures.js'
 import { createApp } from '../app.js'
-import type { MetadataProvider } from '../providers/types.js'
 
 const db = testDb()
-
-async function createUserAndCookie(
-  app: ReturnType<typeof createApp>,
-  email = 'watcher@example.com',
-) {
-  const res = await app.request('/api/v1/setup', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password: 'correct-horse-battery-staple', displayName: 'W' }),
-  })
-  return extractCookie(res)!
-}
-
-function fakeTmdb(): MetadataProvider {
-  return {
-    source: 'tmdb',
-    async searchMulti() {
-      return []
-    },
-    async getMovie(externalId) {
-      if (externalId !== '603') throw new Error(`Unexpected movie lookup: ${externalId}`)
-      return {
-        externalId,
-        title: 'The Matrix',
-        year: 1999,
-        runtimeMinutes: 136,
-        overview: null,
-        posterPath: null,
-        genres: [],
-        voteAverage: null,
-        imdbId: null,
-        releaseDate: null,
-        releaseDates: null,
-      }
-    },
-    async getShow(externalId) {
-      if (externalId !== '1396') throw new Error(`Unexpected show lookup: ${externalId}`)
-      return {
-        externalId,
-        title: 'Breaking Bad',
-        year: 2008,
-        overview: null,
-        posterPath: null,
-        status: null,
-        genres: [],
-        voteAverage: null,
-        seasons: [],
-        imdbId: null,
-      }
-    },
-    async getEpisode() {
-      throw new Error('Not used — webhook episode resolution goes through getSeason')
-    },
-    async getSeason(externalId, seasonNumber) {
-      if (externalId !== '1396' || seasonNumber !== 1) {
-        throw new Error(`Unexpected season lookup: ${externalId} season ${seasonNumber}`)
-      }
-      return {
-        overview: null,
-        voteAverage: null,
-        externalId: null,
-        episodes: [
-          {
-            title: 'Pilot',
-            seasonNumber: 1,
-            episodeNumber: 1,
-            runtimeMinutes: 58,
-            firstAired: '2008-01-20',
-            overview: null,
-            stillPath: null,
-            voteAverage: null,
-            externalId: null,
-            imdbId: null,
-          },
-        ],
-      }
-    },
-    async findByExternalId() {
-      return null
-    },
-  }
-}
-
-/** Simulates TvdbProvider.getShow's own episode-id fallback (see tvdb.ts):
- * externalId '11569546' actually identifies an episode, not the show
- * itself, so getShow redirects and returns the real show under a
- * *different* externalId ('387219') — live-verified 2026-08-24 via a real
- * Plex webhook for an F1 qualifying session. getSeason asserts it's called
- * with the corrected id, not the original one the webhook carried — the
- * regression this guards against (resolveShow forwarding the wrong id to
- * every downstream episode/season lookup). */
-function fakeTvdbWithEpisodeRedirect(): MetadataProvider {
-  return {
-    source: 'tvdb',
-    async searchMulti() {
-      return []
-    },
-    async getMovie() {
-      throw new Error('Not used')
-    },
-    async getShow(externalId) {
-      // '387219' is the show's own real id (no redirect needed) — accepted
-      // too so a test can first resolve the show normally, then separately
-      // exercise the episode-id-redirect path against an *already-known*
-      // show (see the "does not create a duplicate show" test below).
-      if (externalId !== '11569546' && externalId !== '387219') {
-        throw new Error(`Unexpected show lookup: ${externalId}`)
-      }
-      return {
-        externalId: '387219',
-        title: 'Formula 1',
-        year: 2018,
-        overview: null,
-        posterPath: null,
-        status: null,
-        genres: [],
-        voteAverage: null,
-        seasons: [],
-        imdbId: null,
-      }
-    },
-    async getEpisode() {
-      throw new Error('Not used — webhook episode resolution goes through getSeason')
-    },
-    async getSeason(externalId, seasonNumber) {
-      if (externalId !== '387219' || seasonNumber !== 2026) {
-        throw new Error(`Unexpected season lookup: ${externalId} season ${seasonNumber}`)
-      }
-      return {
-        overview: null,
-        voteAverage: null,
-        externalId: null,
-        episodes: [
-          {
-            title: 'Netherlands (Qualifying)',
-            seasonNumber: 2026,
-            episodeNumber: 66,
-            runtimeMinutes: 60,
-            firstAired: '2026-08-22',
-            overview: null,
-            stillPath: null,
-            voteAverage: null,
-            externalId: null,
-            imdbId: null,
-          },
-          {
-            title: 'Netherlands (Practice)',
-            seasonNumber: 2026,
-            episodeNumber: 65,
-            runtimeMinutes: 60,
-            firstAired: '2026-08-21',
-            overview: null,
-            stillPath: null,
-            voteAverage: null,
-            externalId: null,
-            imdbId: null,
-          },
-        ],
-      }
-    },
-    async findByExternalId() {
-      return null
-    },
-  }
-}
 
 /** Account id "1" carries no special meaning any more — Plex's own docs
  * claim it's always the server owner, but that doesn't hold for real
  * payloads (see `resolveWebhookAccount`'s doc comment), so every
  * account, including this one, starts unlinked like any other. Tests
  * that aren't specifically exercising the unlinked/link flow use
- * `createLinkedTokenAndCookie` below instead, which pre-links it. */
+ * `createLinkedTokenAndCookie` instead, which pre-links it. */
 const DEFAULT_ACCOUNT = { id: 1, title: 'james' }
-
-async function createTokenAndCookie(app: ReturnType<typeof createApp>) {
-  const cookie = await createUserAndCookie(app)
-  const res = await app.request('/api/v1/tokens', {
-    method: 'POST',
-    headers: { cookie, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name: 'Plex' }),
-  })
-  const { id: tokenId, token } = await json<CreateApiTokenResponse>(res)
-  return { cookie, token, tokenId }
-}
-
-/** For tests about what happens *after* an account is already linked —
- * pre-seeds the link directly (bypassing the link route itself, which
- * has its own dedicated tests in tokens.test.ts) so these tests can
- * focus purely on webhook behavior. */
-async function createLinkedTokenAndCookie(app: ReturnType<typeof createApp>) {
-  const { cookie, token, tokenId } = await createTokenAndCookie(app)
-  const meRes = await app.request('/api/v1/auth/me', { headers: { cookie } })
-  const { id: userId } = await json<{ id: string }>(meRes)
-  await db.insert(webhookAccountLinks).values({
-    tokenId,
-    source: 'plex',
-    externalAccountId: DEFAULT_ACCOUNT.id.toString(),
-    externalAccountName: DEFAULT_ACCOUNT.title,
-    userId,
-  })
-  return { cookie, token, tokenId }
-}
 
 function plexMoviePayload(account: Record<string, unknown> = DEFAULT_ACCOUNT) {
   return {
@@ -233,10 +44,8 @@ function plexEpisodePayload(account: Record<string, unknown> = DEFAULT_ACCOUNT) 
   }
 }
 
-async function postWebhook(app: ReturnType<typeof createApp>, token: string, payload: unknown) {
-  const form = new FormData()
-  form.append('payload', JSON.stringify(payload))
-  return app.request(`/api/v1/webhooks/plex/${token}`, { method: 'POST', body: form })
+function postWebhook(app: ReturnType<typeof createApp>, token: string, payload: unknown) {
+  return postMultipartWebhook(app, 'plex', token, 'payload', payload)
 }
 
 describe('POST /webhooks/plex/:token', () => {
@@ -276,7 +85,7 @@ describe('POST /webhooks/plex/:token', () => {
     expect(show).toBeDefined()
   })
 
-  it("skips logging a movie watch that already has an 'import' play for the same movie on the same day (cross-source dedup)", async () => {
+  it("replaces an existing 'import' play for the same movie with a live Plex webhook (origin outranks import)", async () => {
     const app = createApp({ db, metadataProviders: [fakeTmdb()] })
     const { cookie, token } = await createLinkedTokenAndCookie(app)
     const meRes = await app.request('/api/v1/auth/me', { headers: { cookie } })
@@ -302,10 +111,14 @@ describe('POST /webhooks/plex/:token', () => {
     const res = await postWebhook(app, token, plexMoviePayload())
     expect(res.status).toBe(200)
 
+    // Origin sources always win over import (apps/api/src/lib/plays.ts's
+    // reconcilePlayDuplicates) — the live webhook is direct evidence of
+    // the watch, so it replaces the relayed import row rather than
+    // deferring to it.
     const historyRes = await app.request('/api/v1/plays', { headers: { cookie } })
     const { plays: history } = await json<{ plays: Array<{ source: string }> }>(historyRes)
     expect(history).toHaveLength(1)
-    expect(history[0]?.source).toBe('import')
+    expect(history[0]?.source).toBe('plex')
   })
 
   it('resolves a show whose own native id actually identifies one of its episodes (TVDB id-space collision regression)', async () => {

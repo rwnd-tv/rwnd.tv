@@ -1,7 +1,8 @@
 import { useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import type { WebhookAccountLink, WebhookSource } from '@rwnd/shared'
+import type { WebhookAccountLink } from '@rwnd/shared'
+import { WEBHOOK_SOURCE_LABELS } from '@rwnd/shared'
 import { api, ApiError } from '../../lib/api-client.js'
 import { Card } from '../ui/Card.js'
 import { Field } from '../ui/Field.js'
@@ -9,13 +10,6 @@ import { Button } from '../ui/Button.js'
 import { Spinner } from '../ui/Spinner.js'
 import { ChevronDownIcon } from '../icons.js'
 import { usePanelOpen } from '../../lib/use-panel-open.js'
-
-// Not translated — a proper noun, same convention as PROVIDER_LABELS
-// (apps/web/src/lib/provider-labels.ts). Only 'plex' exists today; M4
-// adds Tautulli/Jellyfin/Emby/Kodi to this same enum.
-const SOURCE_LABELS: Record<WebhookSource, string> = {
-  plex: 'Plex',
-}
 
 /** Found missing 2026-09-02 (James, after running the link flow for
  * real): linking a webhook account only ever showed a one-time success
@@ -171,7 +165,7 @@ function LinkedAccountRow({
       <span className="truncate text-sm">
         {link.externalAccountName}
         <span className="ml-2 text-xs text-[var(--color-fg-muted)]">
-          {SOURCE_LABELS[link.source]}
+          {WEBHOOK_SOURCE_LABELS[link.source]}
         </span>
       </span>
       <Button

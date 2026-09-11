@@ -1,31 +1,16 @@
 import { and, eq } from 'drizzle-orm'
-import { pendingWebhookEvents, plays } from '@rwnd/db'
+import { pendingWebhookEvents } from '@rwnd/db'
 import type { Database, webhookAccountLinks } from '@rwnd/db'
+import type { WebhookSource } from '@rwnd/shared'
 import type { MetadataProvider } from '../providers/types.js'
 import type { UserRecord } from '../types.js'
-import type { WatchEvent } from '../webhooks/plex.js'
+import type { WatchEvent } from '../webhooks/types.js'
 import {
   resolveEpisodeSoft,
   resolveMovieFromExternalIds,
   resolveShowFromExternalIds,
 } from './external-match.js'
-import { hasCrossSourceDuplicate } from './plays.js'
-
-/** `${ratingKey}:${date}` — Plex hands over no stable per-delivery event
- * id, so this is a deliberate, imperfect compromise: it collapses
- * same-day webhook retries (the real risk — Plex re-sending because the
- * first attempt didn't get a fast 2xx) while still letting a genuine
- * rewatch the next day log again. A true same-day rewatch would be
- * missed by this, a low-stakes edge case next to the alternative of
- * unbounded duplicate plays from retries. `date` is the event's own
- * `watchedAt`, not necessarily "today" — a retroactively-replayed event
- * (`apps/api/src/routes/tokens.ts`'s webhook-link link route) needs the
- * same key it would have gotten had the account already been linked
- * when it first arrived, not one keyed off whenever the link happens
- * to occur. */
-function dailySourceRef(ratingKey: string, date: Date): string {
-  return `${ratingKey}:${date.toISOString().slice(0, 10)}`
-}
+import { reconcilePlayDuplicates } from './plays.js'
 
 /**
  * Resolves one webhook event's movie/episode and logs it as a play for
@@ -37,7 +22,10 @@ function dailySourceRef(ratingKey: string, date: Date): string {
  * configured providers recognize is logged server-side only
  * (`console.error`, matching the metadata refresher's own per-item
  * failure convention) and otherwise silently skipped — no persisted
- * activity log for that case.
+ * activity log for that case. Retry-of-the-same-delivery collapsing (none
+ * of these sources hand over a stable per-delivery event id) is handled
+ * inside `reconcilePlayDuplicates` itself, not by a `sourceRef` here — see
+ * its own doc comment.
  */
 export async function logWebhookPlay(
   db: Database,
@@ -45,29 +33,22 @@ export async function logWebhookPlay(
   user: UserRecord,
   event: WatchEvent,
   watchedAt: Date,
+  source: WebhookSource,
 ): Promise<void> {
-  const sourceRef = dailySourceRef(event.ratingKey, watchedAt)
-
   if (event.media.type === 'movie') {
     const movie = await resolveMovieFromExternalIds(db, providers, event.ids, user.locale)
     if (!movie) {
-      console.error(`Plex webhook: no configured provider matched a movie`, event.ids)
+      console.error(`${source} webhook: no configured provider matched a movie`, event.ids)
       return
     }
-    if (await hasCrossSourceDuplicate(db, user.id, { movieId: movie.id }, watchedAt, 'plex')) {
-      return
-    }
-    await db
-      .insert(plays)
-      .values({ userId: user.id, movieId: movie.id, watchedAt, source: 'plex', sourceRef })
-      .onConflictDoNothing()
+    await reconcilePlayDuplicates(db, user.id, { movieId: movie.id }, watchedAt, source)
     return
   }
 
   const show = await resolveShowFromExternalIds(db, providers, event.ids, user.locale)
   if (!show) {
     console.error(
-      `Plex webhook: no configured provider matched show "${event.media.showTitle}"`,
+      `${source} webhook: no configured provider matched show "${event.media.showTitle}"`,
       event.ids,
     )
     return
@@ -81,17 +62,11 @@ export async function logWebhookPlay(
   )
   if (!episode) {
     console.error(
-      `Plex webhook: "${show.title}" S${event.media.seasonNumber}E${event.media.episodeNumber} not found via ${show.provider.source.toUpperCase()}`,
+      `${source} webhook: "${show.title}" S${event.media.seasonNumber}E${event.media.episodeNumber} not found via ${show.provider.source.toUpperCase()}`,
     )
     return
   }
-  if (await hasCrossSourceDuplicate(db, user.id, { episodeId: episode.id }, watchedAt, 'plex')) {
-    return
-  }
-  await db
-    .insert(plays)
-    .values({ userId: user.id, episodeId: episode.id, watchedAt, source: 'plex', sourceRef })
-    .onConflictDoNothing()
+  await reconcilePlayDuplicates(db, user.id, { episodeId: episode.id }, watchedAt, source)
 }
 
 /**
@@ -124,7 +99,7 @@ export async function replayPendingWebhookEvents(
 
   for (const p of pending) {
     try {
-      await logWebhookPlay(db, providers, user, p.event, p.watchedAt)
+      await logWebhookPlay(db, providers, user, p.event, p.watchedAt, p.source)
     } catch (err) {
       console.error(`Failed to replay pending webhook event ${p.id} on link:`, err)
     }

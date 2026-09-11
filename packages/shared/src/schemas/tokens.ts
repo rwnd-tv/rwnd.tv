@@ -20,8 +20,19 @@ export const createApiTokenResponseSchema = apiTokenSchema.extend({
 })
 export type CreateApiTokenResponse = z.infer<typeof createApiTokenResponseSchema>
 
-export const webhookSourceSchema = z.enum(['plex'])
+export const webhookSourceSchema = z.enum(['plex', 'jellyfin', 'emby'])
 export type WebhookSource = z.infer<typeof webhookSourceSchema>
+
+/** Untranslated proper nouns, one source of truth shared by the API (email
+ * copy) and web (settings UI) — same convention as
+ * `apps/web/src/lib/provider-labels.ts`. Typed as a `Record` over the full
+ * enum so a source added to `webhookSourceSchema` without a label here is
+ * a compile error. */
+export const WEBHOOK_SOURCE_LABELS: Record<WebhookSource, string> = {
+  plex: 'Plex',
+  jellyfin: 'Jellyfin',
+  emby: 'Emby',
+}
 
 /** One external account (e.g. a Plex user) seen on this token's webhook,
  * and which rwnd.tv user — if any — its plays should log against. See

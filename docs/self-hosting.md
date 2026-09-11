@@ -96,7 +96,25 @@ Plex webhooks (Plex Pass required) let rwnd.tv log a watch automatically as you 
 2. Copy the webhook URL shown next to it: it's `https://<your-instance>/api/v1/webhooks/plex/<token>`. The token lives in the URL path rather than a header because Plex's webhook feature can't send custom headers.
 3. In Plex, go to **Settings → Webhooks** and add that URL.
 
-**Multi-user Plex servers are a first-class case.** rwnd.tv doesn't guess which Plex account is "the owner": the first webhook event from each distinct Plex account shows up in Settings → API tokens as unlinked, next to a "This is me" button. If it's someone else on this instance, generate a one-time link code for their account instead: email it to them (if this instance has SMTP configured) and they just click the link, or show the code on screen and hand it to them to enter themselves on their own Settings page. Either way, it's never attributed to them without their own action. Any watch that arrived before an account was linked is logged retroactively the moment it's linked, so nobody loses history by linking an account a little late.
+## Connecting Jellyfin
+
+Jellyfin's Webhook plugin lets rwnd.tv log a watch automatically as you watch it, instead of logging manually:
+
+1. Sign in, go to **Settings → API tokens**, and create a token.
+2. Copy the webhook URL shown next to it: it's `https://<your-instance>/api/v1/webhooks/jellyfin/<token>`.
+3. In Jellyfin, install the Webhook plugin (**Dashboard → Plugins → Catalog**, search for "Webhook"), then add a Generic destination pointed at that URL. Enable **Send All Properties** on the destination: this bypasses its templating entirely, which is both the simplest option and the one rwnd.tv's parser expects.
+
+## Connecting Emby
+
+Emby's built-in Webhooks notification lets rwnd.tv log a watch automatically as you watch it, instead of logging manually:
+
+1. Sign in, go to **Settings → API tokens**, and create a token.
+2. Copy the webhook URL shown next to it: it's `https://<your-instance>/api/v1/webhooks/emby/<token>`.
+3. In Emby, go to **Settings → Notifications → Add Notification**, choose **Webhooks**, and paste that URL.
+
+## Multi-user servers
+
+This applies the same way to Plex, Jellyfin and Emby: rwnd.tv doesn't guess which account on the media server is "the owner." The first webhook event from each distinct account shows up in Settings → API tokens as unlinked, next to a "This is me" button. If it's someone else on this instance, generate a one-time link code for their account instead: email it to them (if this instance has SMTP configured) and they just click the link, or show the code on screen and hand it to them to enter themselves on their own Settings page. Either way, it's never attributed to them without their own action. Any watch that arrived before an account was linked is logged retroactively the moment it's linked, so nobody loses history by linking an account a little late.
 
 ## Importing from Trakt
 

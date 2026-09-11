@@ -3,7 +3,6 @@ import type { Database } from '@rwnd/db'
 import {
   droppedShows,
   importJobs,
-  plays,
   ratings,
   traktConnections,
   users,
@@ -14,7 +13,7 @@ import type { Env } from '../env.js'
 import type { MetadataProvider } from '../providers/types.js'
 import { orderedProviders } from '../providers/priority.js'
 import { decryptSecret, encryptSecret } from '../lib/crypto.js'
-import { hasCrossSourceDuplicate } from '../lib/plays.js'
+import { reconcilePlayDuplicates } from '../lib/plays.js'
 import { ensureDefaultWatchlist } from '../lib/watchlists.js'
 import { TraktClient, type PagedResult } from '../trakt/client.js'
 import { refreshAccessToken } from '../trakt/auth.js'
@@ -260,21 +259,15 @@ async function runImportJob(
     const watchedAt = new Date(item.watched_at)
     const entityRef =
       match.entityType === 'movie' ? { movieId: match.entityId } : { episodeId: match.entityId }
-    if (await hasCrossSourceDuplicate(db, userId, entityRef, watchedAt, 'import')) {
-      return 'skipped'
-    }
-    const inserted = await db
-      .insert(plays)
-      .values({
-        userId,
-        watchedAt,
-        source: 'import',
-        sourceRef: String(item.id),
-        ...entityRef,
-      })
-      .onConflictDoNothing()
-      .returning({ id: plays.id })
-    return inserted.length > 0 ? 'imported' : 'skipped'
+    const { inserted } = await reconcilePlayDuplicates(
+      db,
+      userId,
+      entityRef,
+      watchedAt,
+      'import',
+      String(item.id),
+    )
+    return inserted ? 'imported' : 'skipped'
   }
 
   async function processRatingItem(item: TraktRatingItem): Promise<'imported' | 'skipped'> {

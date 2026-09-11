@@ -232,6 +232,43 @@ Format:
       counts as personal use. Movies-only vs. Movies+TV Shows was never
       decided either, moot until this unblocks.
 
+- [ ] **Season/episode pages can drift from the runtime (and other fields) a play was actually logged against** (2026-09-11 23:50 added)
+
+      `routes/library/seasons.ts` fetches episode metadata (title, overview,
+      still image, runtime, air date) live from the provider on every
+      request rather than from the local `episodes` table, by design: there
+      is no local row for an episode until a user actually logs a play
+      against it (`apps/api/src/lib/media.ts`'s `resolveEpisode`), so for an
+      unwatched episode there is nothing local to serve instead. But for an
+      episode that has already been watched, a local row does exist, and
+      this route never reconciles it against the live value it just
+      fetched, so the two can silently drift apart over time as a provider
+      corrects its own data.
+
+      Found live 2026-09-11: TMDB's runtime for Severance S1E1 had changed
+      to 59 minutes, correctly reflected on the season/episode pages, while
+      the local `episodes.runtime_minutes` row still held 57 (set once on
+      2026-08-11, `runtime_checked_at` never populated since). This
+      surfaced through the new "now watching" runtime-aware `watchedAt`
+      bound (`apps/api/src/routes/plays.ts`'s `maxWatchedAt`, added the
+      same day): the dialog computed its preview from the live 59-minute
+      value shown on the page, but the backend validated it against
+      `resolveEpisode`'s locally stored 57-minute value, rejecting an
+      otherwise-legitimate submission by about two minutes. The
+      runtime-aware bound itself is correct; this is a separate, pre-
+      existing data-freshness gap it happened to expose.
+
+      James, 2026-09-11: the app shouldn't shortcut by pulling live
+      provider data into a page and leaving the server's own stored copy
+      stale, don't be strict on "server-driven" while letting a display
+      request quietly diverge from what a stored row still says elsewhere
+      in the app. If the stored data needs updating, update it properly,
+      rather than bypassing it. Likely direction: when this route fetches
+      live data for an episode that already has a local row, write the
+      fresh values back into that row (using `runtime_checked_at`, which
+      looks like it was meant for exactly this) instead of only using them
+      for display, so every code path reading that episode's data agrees.
+
 ## Sensible defaults
 
 - [ ] **Default History's Filters > Type to "Watched" only** (2026-09-06 added)
@@ -383,16 +420,18 @@ Every open item from [ROADMAP.md](ROADMAP.md) that doesn't already have a
 more specific TODO elsewhere in this file. Kept brief: ROADMAP.md is the
 source of truth for scope; this is just so a TODO listing is complete.
 
-- [ ] **Tautulli/Jellyfin/Emby/Kodi webhook ingestion** (2026-08-24 16:25 added, un-M2'd 2026-08-24, M4'd 2026-08-28; M4)
+- [ ] **Tautulli/Kodi webhook ingestion** (2026-08-24 16:25 added, un-M2'd 2026-08-24, M4'd 2026-08-28, scoped down 2026-09-11; M4)
 
-      Plex's own webhook shipped 2026-08-24 (see `docs/TODO_ARCHIVE.md`):
-      the entity-resolution/auth core it's built on
-      (`apps/api/src/lib/external-match.ts`,
-      `apps/api/src/lib/api-tokens.ts`) is deliberately source-agnostic,
-      so each of these is "write one payload parser + one route," not a
-      rework. Tautulli's webhook body is fully user-templated (no fixed
-      shape, needs its own JSON template + setup docs, unlike Plex's
-      fixed format), which is why it wasn't bundled into the same pass.
+      Jellyfin and Emby shipped 2026-09-11 (see `docs/TODO_ARCHIVE.md`),
+      on a webhook core that's now actually source-agnostic (one
+      `{bodyFormat, parse}` registry entry per source, dispatched from a
+      single `POST /webhooks/:source/:token` route), not just Plex's own
+      entity-resolution/auth layer. Tautulli and Kodi remain: Tautulli's
+      webhook body is fully user-templated (no fixed shape, needs its
+      own JSON template + setup docs, unlike the fixed shapes the three
+      shipped sources send), and Kodi has no native webhook support at
+      all, so it would need an addon-based approach rather than a plain
+      payload parser.
 
       James, 2026-08-24: not needed to close out M2. ROADMAP.md's own M2
       "Plex webhook ingestion" bullet only ever mentioned these in

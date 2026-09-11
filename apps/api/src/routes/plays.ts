@@ -13,6 +13,7 @@ import type { Database } from '@rwnd/db'
 import { episodes, movies, plays, shows } from '@rwnd/db'
 import type { AppEnv } from '../types.js'
 import { episodeDisplayTitle, resolveEpisode, resolveMovie } from '../lib/media.js'
+import { type ConflictingPlay, isOrigin, reconcilePlayDuplicates } from '../lib/plays.js'
 
 export const playRoutes = new OpenAPIHono<AppEnv>()
 
@@ -82,6 +83,40 @@ async function hasExistingUnknownDateWatch(
   return Boolean(existing)
 }
 
+/** When `reconcilePlayDuplicates` declines to insert a manual watch
+ * because an origin webhook already covers it (see plays.ts's own doc
+ * comment), the origin play that "won" is what actually gets shown back
+ * to the user instead of a newly-created row — logging a watch that
+ * turns out to already be recorded automatically is still success from
+ * the user's point of view, not an error. Picks the most recently
+ * watched origin conflict if more than one somehow exists. */
+async function findSurvivingOriginPlay(
+  db: Database,
+  conflicts: ConflictingPlay[],
+): Promise<typeof plays.$inferSelect | null> {
+  const [winner] = conflicts
+    .filter((c) => isOrigin(c.source))
+    .sort((a, b) => b.watchedAt.getTime() - a.watchedAt.getTime())
+  if (!winner) return null
+  const [row] = await db.select().from(plays).where(eq(plays.id, winner.id)).limit(1)
+  return row ?? null
+}
+
+/**
+ * The latest `watchedAt` a movie/episode watch can legitimately claim
+ * right now — mirrors the frontend's own bound exactly
+ * (`WatchDateDialog.tsx`'s `maxDate`, `now + runtime`). "Now watching"
+ * logs a *predicted finish time* up front, before the watch has actually
+ * finished, not a start time (see plays_watchedat_semantics memory) — a
+ * flat "no later than now" cutoff rejected every legitimate use of that
+ * mode for anything with a known runtime (live-confirmed 2026-09-11: a
+ * 57-minute episode's "now watching" submission was flatly 400'd).
+ * Unknown runtime falls back to 0, same as the frontend's own `?? 0`.
+ */
+function maxWatchedAt(runtimeMinutes: number | null): Date {
+  return new Date(Date.now() + (runtimeMinutes ?? 0) * 60_000)
+}
+
 playRoutes.openapi(
   createRoute({
     method: 'get',
@@ -143,17 +178,22 @@ playRoutes.openapi(
     const user = c.get('user')!
     const watchedAt = body.watchedAt ? new Date(body.watchedAt) : new Date()
 
-    // Never guess a watch into the future — the client already clamps its
-    // own date pickers to "now" (WatchDateDialog.tsx), but this is the
-    // real backstop: nothing here trusts that a client did its job. The
-    // 1900-01-01 "unknown date" sentinel (UNKNOWN_WATCHED_AT) is always
-    // safely in the past, so it's unaffected.
-    if (watchedAt.getTime() > Date.now()) {
-      return c.json({ error: 'watchedAt cannot be in the future' }, 400)
-    }
-
     if (body.movie) {
       const movie = await resolveMovie(db, provider, body.movie.externalId, user.locale)
+
+      // Never guess a watch into the future — the client already clamps
+      // its own date pickers to maxWatchedAt (WatchDateDialog.tsx), but
+      // this is the real backstop: nothing here trusts that a client did
+      // its job. The 1900-01-01 "unknown date" sentinel
+      // (UNKNOWN_WATCHED_AT) is always safely in the past, so it's
+      // unaffected. See maxWatchedAt's own doc comment for why the bound
+      // isn't just "now".
+      if (watchedAt.getTime() > maxWatchedAt(movie.runtimeMinutes).getTime()) {
+        console.error(
+          `POST /plays: rejected watchedAt ${watchedAt.toISOString()} for movie "${movie.title}" (runtime ${movie.runtimeMinutes ?? 'unknown'}min, now ${new Date().toISOString()})`,
+        )
+        return c.json({ error: 'watchedAt cannot be in the future' }, 400)
+      }
 
       // Same duplicate-unknown-date guard the episode branch below enforces
       // — see hasExistingUnknownDateWatch's doc comment. The movie page's
@@ -167,10 +207,14 @@ playRoutes.openapi(
         return c.json({ error: 'This movie already has an unknown-date watch logged' }, 400)
       }
 
-      const [play] = await db
-        .insert(plays)
-        .values({ userId: user.id, movieId: movie.id, watchedAt, source: 'manual' })
-        .returning()
+      const { inserted, conflicts } = await reconcilePlayDuplicates(
+        db,
+        user.id,
+        { movieId: movie.id },
+        watchedAt,
+        'manual',
+      )
+      const play = inserted ?? (await findSurvivingOriginPlay(db, conflicts))
       if (!play) throw new Error('Failed to log play')
       return c.json(
         {
@@ -207,6 +251,15 @@ playRoutes.openapi(
       return c.json({ error: 'This episode has not aired yet' }, 400)
     }
 
+    // See the movie branch's identical check above, and maxWatchedAt's
+    // own doc comment for why the bound isn't just "now".
+    if (watchedAt.getTime() > maxWatchedAt(episode.runtimeMinutes).getTime()) {
+      console.error(
+        `POST /plays: rejected watchedAt ${watchedAt.toISOString()} for episode "${episode.title}" S${episode.seasonNumber}E${episode.episodeNumber} (runtime ${episode.runtimeMinutes ?? 'unknown'}min, now ${new Date().toISOString()})`,
+      )
+      return c.json({ error: 'watchedAt cannot be in the future' }, 400)
+    }
+
     // See hasExistingUnknownDateWatch's doc comment above.
     if (
       watchedAt.toISOString() === UNKNOWN_WATCHED_AT &&
@@ -215,10 +268,14 @@ playRoutes.openapi(
       return c.json({ error: 'This episode already has an unknown-date watch logged' }, 400)
     }
 
-    const [play] = await db
-      .insert(plays)
-      .values({ userId: user.id, episodeId: episode.id, watchedAt, source: 'manual' })
-      .returning()
+    const { inserted, conflicts } = await reconcilePlayDuplicates(
+      db,
+      user.id,
+      { episodeId: episode.id },
+      watchedAt,
+      'manual',
+    )
+    const play = inserted ?? (await findSurvivingOriginPlay(db, conflicts))
     if (!play) throw new Error('Failed to log play')
     return c.json(
       {
@@ -286,8 +343,28 @@ playRoutes.openapi(
     const db = c.get('db')
     const watchedAt = new Date(watchedAtRaw)
 
-    // Same "never guess a watch into the future" backstop as POST /plays.
-    if (watchedAt.getTime() > Date.now()) {
+    // Same "never guess a watch into the future" backstop as POST /plays,
+    // and the same runtime-aware bound (maxWatchedAt's doc comment) — an
+    // "Other date" edit is clamped client-side to the same now+runtime
+    // ceiling "now watching" itself computes, so the server has to know
+    // this play's own movie/episode runtime before it can validate it.
+    const [existing] = await db
+      .select({
+        movieRuntimeMinutes: movies.runtimeMinutes,
+        episodeRuntimeMinutes: episodes.runtimeMinutes,
+      })
+      .from(plays)
+      .leftJoin(movies, eq(plays.movieId, movies.id))
+      .leftJoin(episodes, eq(plays.episodeId, episodes.id))
+      .where(and(eq(plays.id, id), eq(plays.userId, userId)))
+      .limit(1)
+    if (!existing) return c.json({ error: 'Play not found' }, 404)
+
+    const runtimeMinutes = existing.movieRuntimeMinutes ?? existing.episodeRuntimeMinutes
+    if (watchedAt.getTime() > maxWatchedAt(runtimeMinutes).getTime()) {
+      console.error(
+        `PATCH /plays/${id}: rejected watchedAt ${watchedAt.toISOString()} (runtime ${runtimeMinutes ?? 'unknown'}min, now ${new Date().toISOString()})`,
+      )
       return c.json({ error: 'watchedAt cannot be in the future' }, 400)
     }
 

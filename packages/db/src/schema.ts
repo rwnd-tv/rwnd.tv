@@ -48,8 +48,14 @@ export const credentialTypeEnum = pgEnum('credential_type', ['local', 'oidc'])
 export const registrationModeEnum = pgEnum('registration_mode', ['open', 'invite', 'closed'])
 export const metadataEntityTypeEnum = pgEnum('metadata_entity_type', ['movie', 'show', 'episode'])
 export const externalIdSourceEnum = pgEnum('external_id_source', ['tmdb', 'imdb', 'tvdb', 'trakt'])
-export const playSourceEnum = pgEnum('play_source', ['manual', 'plex', 'import'])
-export const webhookSourceEnum = pgEnum('webhook_source', ['plex'])
+export const playSourceEnum = pgEnum('play_source', [
+  'manual',
+  'plex',
+  'import',
+  'jellyfin',
+  'emby',
+])
+export const webhookSourceEnum = pgEnum('webhook_source', ['plex', 'jellyfin', 'emby'])
 export const importSourceEnum = pgEnum('import_source', ['trakt', 'trakt_zip', 'csv'])
 export const importJobStatusEnum = pgEnum('import_job_status', [
   'pending',
@@ -431,10 +437,16 @@ export const webhookLinkCodes = pgTable('webhook_link_codes', {
  * rwnd.tv user (see `webhookAccountLinks` above) — stored in full so it
  * can become a real `plays` row retroactively the moment that account
  * gets linked, instead of being lost. `event` is the parsed,
- * source-agnostic shape (`apps/api/src/webhooks/plex.ts`'s
- * `IncomingWatchEvent`, or any future source's own equivalent) —
- * defined structurally here rather than imported, since this package
- * has no dependency on the app layer. `watchedAt` is when the event
+ * source-agnostic shape (`apps/api/src/webhooks/types.ts`'s
+ * `IncomingWatchEvent`, shared by every source's parser) — defined
+ * structurally here rather than imported, since this package has no
+ * dependency on the app layer. Note `ratingKey` below is a *stored-data*
+ * contract, not just a compile-time one: real rows already persist that
+ * literal key name (it's each source's own per-item id — Plex's
+ * `ratingKey`, Jellyfin's `ItemId`, Emby's `Item.Id` — kept as one
+ * cross-source field name rather than renamed per source), so changing it
+ * would need a data migration over existing rows, not just a type edit.
+ * `watchedAt` is when the event
  * actually happened, not when it's eventually replayed — see
  * `apps/api/src/lib/webhook-plays.ts`. Retention: a daily sweep
  * (apps/api/src/lib/webhook-retention.ts) deletes rows older than 90
@@ -921,10 +933,16 @@ export const plays = pgTable(
     episodeId: uuid('episode_id').references(() => episodes.id, { onDelete: 'cascade' }),
     watchedAt: timestamp('watched_at', { withTimezone: true }).notNull(),
     source: playSourceEnum('source').notNull().default('manual'),
-    // Opaque identifier for the play in its originating system (a Trakt
-    // history item id today, a Plex/Tautulli event id later). Only
-    // populated for non-manual sources — it's what makes re-running an
-    // import, or a webhook retry, idempotent instead of double-logging.
+    // Opaque identifier for the play in its originating system — a Trakt
+    // history item id today, a stable per-delivery id for a future import
+    // source that has one. Only populated when that source actually hands
+    // over a real natural key: it's what makes re-running an import
+    // idempotent instead of double-logging (plays_user_source_ref_idx,
+    // below). A live webhook (plex/jellyfin/emby) never sets this — none
+    // of those sources hand over a per-delivery id, so retry-of-the-same-
+    // delivery collapsing for them is handled by reconcilePlayDuplicates'
+    // advisory-lock-guarded time window instead (apps/api/src/lib/
+    // plays.ts), not by a derived key here.
     sourceRef: text('source_ref'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },

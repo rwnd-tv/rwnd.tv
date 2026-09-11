@@ -123,13 +123,26 @@ describe('route coverage — every /api/v1 route is either public or requires a 
   })
 
   it('POST /webhooks/plex/:token is reached without a session — rejected by its own token check, not requireSession', async () => {
-    // Deliberately public (see middleware/auth.ts's WEBHOOK_TOKEN_PREFIX).
+    // Deliberately public (see middleware/auth.ts's WEBHOOK_PATH).
     // An invalid token also 401s (webhooks.ts's own check), so the useful
     // assertion isn't the status code — it's that the *reason* is the
     // route's own "Invalid token", not requireSession's generic
     // "unauthenticated", proving the request wasn't blocked by the global
     // session gate before reaching the handler.
     const res = await app.request('/api/v1/webhooks/plex/not-a-real-token', { method: 'POST' })
+    expect(res.status).toBe(401)
+    const body = (await res.json()) as { error: string }
+    expect(body.error).toBe('Invalid token')
+  })
+
+  it('POST /webhooks/:source/:token still 401s generically for an unknown source with a bad token', async () => {
+    // The token check runs before the source check (webhooks.ts), so an
+    // unauthenticated caller can't use a 404-vs-401 difference to enumerate
+    // valid sources — only a caller who already holds a valid token would
+    // ever see the 404.
+    const res = await app.request('/api/v1/webhooks/not-a-real-source/not-a-real-token', {
+      method: 'POST',
+    })
     expect(res.status).toBe(401)
     const body = (await res.json()) as { error: string }
     expect(body.error).toBe('Invalid token')

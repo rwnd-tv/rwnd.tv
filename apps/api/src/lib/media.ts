@@ -72,7 +72,13 @@ export async function resolveMovie(
   provider: MetadataProvider,
   externalId: string,
   locale: string,
-): Promise<{ id: string; slug: string; title: string; posterPath: string | null }> {
+): Promise<{
+  id: string
+  slug: string
+  title: string
+  posterPath: string | null
+  runtimeMinutes: number | null
+}> {
   const [existing] = await db
     .select({ id: externalIds.entityId })
     .from(externalIds)
@@ -88,7 +94,13 @@ export async function resolveMovie(
   if (existing) {
     const [movie] = await db.select().from(movies).where(eq(movies.id, existing.id)).limit(1)
     if (movie)
-      return { id: movie.id, slug: movie.slug, title: movie.title, posterPath: movie.posterPath }
+      return {
+        id: movie.id,
+        slug: movie.slug,
+        title: movie.title,
+        posterPath: movie.posterPath,
+        runtimeMinutes: movie.runtimeMinutes,
+      }
   }
 
   const fetched = await provider.getMovie(externalId, locale)
@@ -130,7 +142,13 @@ export async function resolveMovie(
     await upsertExternalId(db, 'movie', movie.id, 'imdb', fetched.imdbId, { correct: false })
   }
 
-  return { id: movie.id, slug: movie.slug, title: movie.title, posterPath: movie.posterPath }
+  return {
+    id: movie.id,
+    slug: movie.slug,
+    title: movie.title,
+    posterPath: movie.posterPath,
+    runtimeMinutes: movie.runtimeMinutes,
+  }
 }
 
 /**
@@ -579,6 +597,7 @@ export async function resolveEpisode(
   seasonNumber: number
   episodeNumber: number
   firstAired: string | null
+  runtimeMinutes: number | null
 }> {
   const show = await resolveShow(db, provider, showExternalId, locale)
 
@@ -605,6 +624,7 @@ export async function resolveEpisode(
       seasonNumber: existing.seasonNumber,
       episodeNumber: existing.episodeNumber,
       firstAired: existing.firstAired,
+      runtimeMinutes: existing.runtimeMinutes,
     }
   }
 
@@ -655,5 +675,6 @@ export async function resolveEpisode(
     seasonNumber: episode.seasonNumber,
     episodeNumber: episode.episodeNumber,
     firstAired: episode.firstAired,
+    runtimeMinutes: episode.runtimeMinutes,
   }
 }

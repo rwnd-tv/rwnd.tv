@@ -422,5 +422,28 @@ describe('hardening', () => {
       })
       expect(otherToken.status).toBe(401)
     })
+
+    it('shares one 120/min budget across sources for the same token (the limiter name is deliberately source-agnostic)', async () => {
+      const form = (field: string) => {
+        const f = new FormData()
+        f.set(field, JSON.stringify({}))
+        return f
+      }
+      // Exhaust the budget via the Plex path.
+      for (let i = 0; i < 120; i++) {
+        await app.request('/api/v1/webhooks/plex/shared-budget-token', {
+          method: 'POST',
+          body: form('payload'),
+        })
+      }
+      // The same token's Jellyfin path is already out of budget: proves
+      // the bucket key doesn't include the source segment (rate-limit.ts).
+      const jellyfin = await app.request('/api/v1/webhooks/jellyfin/shared-budget-token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: '{}',
+      })
+      expect(jellyfin.status).toBe(429)
+    })
   })
 })

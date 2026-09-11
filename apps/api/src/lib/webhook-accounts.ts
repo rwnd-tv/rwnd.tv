@@ -1,11 +1,13 @@
 import { and, eq } from 'drizzle-orm'
 import type { Database, Tx } from '@rwnd/db'
 import { users, webhookAccountLinks } from '@rwnd/db'
+import type { WebhookSource } from '@rwnd/shared'
 import type { UserRecord } from '../types.js'
 
 /**
  * Resolves which rwnd.tv user one webhook event's external account (e.g.
- * a Plex `Account.id`) belongs to — a webhook token doesn't necessarily
+ * a Plex `Account.id`, Jellyfin `UserId`, Emby `User.Id`) belongs to — a
+ * webhook token doesn't necessarily
  * map to one rwnd.tv user 1:1, since the media server it's registered
  * against can have multiple users of its own (see
  * `packages/db/src/schema.ts`'s `webhookAccountLinks` doc comment).
@@ -32,7 +34,7 @@ import type { UserRecord } from '../types.js'
 export async function resolveWebhookAccount(
   db: Database,
   tokenId: string,
-  source: 'plex',
+  source: WebhookSource,
   externalAccountId: string,
   externalAccountName: string,
 ): Promise<UserRecord | null> {
@@ -91,7 +93,7 @@ export async function resolveWebhookAccount(
 export async function hasLinkedSource(
   db: Database | Tx,
   userId: string,
-  source: 'plex',
+  source: WebhookSource,
 ): Promise<boolean> {
   const [existing] = await db
     .select({ id: webhookAccountLinks.id })

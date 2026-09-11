@@ -34,24 +34,24 @@ export const PUBLIC_ROUTES: ReadonlyArray<{ method: string; path: string }> = [
   { method: 'GET', path: '/settings' }, // deliberately public instance metadata
 ]
 
-// Plex offers no way to set a custom header on its webhook, so the bearer
-// token travels as a URL path segment instead of the usual Authorization
-// header — see routes/webhooks.ts's doc comment. Matched by prefix since
-// the token itself is the variable part of the path.
-const WEBHOOK_TOKEN_PREFIX = '/webhooks/plex/'
+// None of Plex/Jellyfin/Emby offer a way to set a custom header on their
+// webhook, so the bearer token travels as a URL path segment instead of
+// the usual Authorization header — see routes/webhooks.ts's doc comment.
+// Matched by full pattern rather than a bare prefix, same reasoning as
+// CALENDAR_FEED_PATH below: a bare `/webhooks/` prefix would publish
+// everything under it by construction, not just this one route shape.
+const WEBHOOK_PATH = /^\/webhooks\/[^/]+\/[^/]+$/
 
 // A calendar app subscribing to a webcal/iCal URL can't set an
-// Authorization header either — same problem, same solution as the Plex
-// webhook above (see routes/calendar.ts). Matched by full pattern rather
-// than by bare prefix, unlike WEBHOOK_TOKEN_PREFIX: nothing else is or
-// will be mounted under POST /webhooks/plex/, but `/calendar/` is a
-// namespace `/calendar-feeds` (the session-gated management routes)
-// already lives right next to, and a bare prefix exemption would
+// Authorization header either — same problem, same solution as the
+// webhooks above. Matched by full pattern rather than by bare prefix: the
+// `/calendar-feeds` namespace (the session-gated management routes)
+// lives right next to `/calendar/`, and a bare prefix exemption would
 // silently publish more than intended.
 const CALENDAR_FEED_PATH = /^\/calendar\/[^/]+\/feed\.ics$/
 
 function isPublicRoute(method: string, path: string): boolean {
-  if (method === 'POST' && path.startsWith(WEBHOOK_TOKEN_PREFIX)) return true
+  if (method === 'POST' && WEBHOOK_PATH.test(path)) return true
   if (method === 'GET' && CALENDAR_FEED_PATH.test(path)) return true
   return PUBLIC_ROUTES.some((route) => route.method === method && route.path === path)
 }

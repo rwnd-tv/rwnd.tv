@@ -20,7 +20,9 @@ import { getClientIp } from '../lib/client-ip.js'
  * - forgot-password: 5/hour per IP, plus 5/hour per submitted email
  *   (tryConsume, called directly from the route handler — see auth.ts)
  * - register / setup: 5/hour per IP
- * - Plex webhook: 120/min per token
+ * - media-server webhooks (Plex/Jellyfin/Emby): 120/min per token, shared
+ *   across sources — a token used with more than one source doesn't get
+ *   a bigger budget just by varying the URL's source segment
  * - webhook link redeem: 10/15min per IP (the code itself is a 9-byte
  *   CSPRNG value, so this bounds automation rather than defending
  *   meaningful entropy)
@@ -63,9 +65,9 @@ export interface RateLimitOptions {
    * all share one Map. */
   name: string
   /** Defaults to the client IP (client-ip.ts, honouring TRUST_PROXY).
-   * Override for a dimension other than IP — e.g. the Plex webhook keys
-   * on the URL token instead, since IP isn't meaningful for a
-   * server-to-server integration. */
+   * Override for a dimension other than IP — e.g. the media-server
+   * webhooks key on the URL token instead, since IP isn't meaningful for
+   * a server-to-server integration. */
   key?: (c: Context<AppEnv>) => string
 }
 

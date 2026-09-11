@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { webhookSourceSchema, WEBHOOK_SOURCE_LABELS, type WebhookSource } from '@rwnd/shared'
 import { api } from '../../lib/api-client.js'
 import { Card } from '../ui/Card.js'
 import { Field } from '../ui/Field.js'
@@ -10,12 +11,12 @@ import { ChevronDownIcon } from '../icons.js'
 import { usePanelOpen } from '../../lib/use-panel-open.js'
 import { TokenWebhookLinks } from './TokenWebhookLinks.js'
 
-// Written out once rather than inline at both the display and clipboard
-// call sites below (previously duplicated verbatim). M4's other webhook
-// sources will each need their own version of this, at which point this
-// becomes the one place that grows a per-source list.
-function plexWebhookUrl(token: string): string {
-  return `${window.location.origin}/api/v1/webhooks/plex/${token}`
+// One row per source, always — there's no server-side signal for "which
+// sources this self-hoster actually uses" until a webhook first arrives
+// (see webhook-accounts.ts), so filtering to "configured" sources isn't
+// possible, and three short rows is not a lot of UI.
+function webhookUrl(source: WebhookSource, token: string): string {
+  return `${window.location.origin}/api/v1/webhooks/${source}/${token}`
 }
 
 /** Collapsed by default like every other panel on this page except
@@ -27,7 +28,7 @@ export function TokensPanel() {
   const [open, setOpen] = usePanelOpen('panelSettingsTokens')
   const [name, setName] = useState('')
   const [justCreated, setJustCreated] = useState<string>()
-  const [copied, setCopied] = useState(false)
+  const [copiedSource, setCopiedSource] = useState<WebhookSource>()
 
   const { data, isLoading } = useQuery({
     queryKey: ['tokens'],
@@ -74,28 +75,34 @@ export function TokensPanel() {
             <p className="mb-1 text-sm">{t('settings.tokens.createdOnce')}</p>
             <code className="block truncate text-sm">{justCreated}</code>
 
-            <div className="mt-3 border-t border-[var(--color-border)] pt-3">
-              <p className="mb-1 text-sm font-medium">{t('settings.tokens.plex.title')}</p>
-              <p className="mb-2 text-xs text-[var(--color-fg-muted)]">
-                {t('settings.tokens.plex.description')}
-              </p>
-              <div className="flex items-center gap-2">
-                <code className="block flex-1 truncate rounded-md bg-[var(--color-surface)] px-2 py-1 text-xs">
-                  {plexWebhookUrl(justCreated)}
-                </code>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  onClick={() => {
-                    void navigator.clipboard.writeText(plexWebhookUrl(justCreated))
-                    setCopied(true)
-                    setTimeout(() => setCopied(false), 2000)
-                  }}
-                >
-                  {copied ? t('settings.tokens.plex.copied') : t('settings.tokens.plex.copy')}
-                </Button>
+            {webhookSourceSchema.options.map((source) => (
+              <div key={source} className="mt-3 border-t border-[var(--color-border)] pt-3">
+                <p className="mb-1 text-sm font-medium">
+                  {t('settings.tokens.webhook.title', { source: WEBHOOK_SOURCE_LABELS[source] })}
+                </p>
+                <p className="mb-2 text-xs text-[var(--color-fg-muted)]">
+                  {t(`settings.tokens.webhook.instructions.${source}`)}
+                </p>
+                <div className="flex items-center gap-2">
+                  <code className="block flex-1 truncate rounded-md bg-[var(--color-surface)] px-2 py-1 text-xs">
+                    {webhookUrl(source, justCreated)}
+                  </code>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => {
+                      void navigator.clipboard.writeText(webhookUrl(source, justCreated))
+                      setCopiedSource(source)
+                      setTimeout(() => setCopiedSource(undefined), 2000)
+                    }}
+                  >
+                    {copiedSource === source
+                      ? t('settings.tokens.webhook.copied')
+                      : t('settings.tokens.webhook.copy')}
+                  </Button>
+                </div>
               </div>
-            </div>
+            ))}
           </div>
         )}
 

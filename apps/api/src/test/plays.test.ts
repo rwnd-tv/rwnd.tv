@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { eq } from 'drizzle-orm'
 import { plays } from '@rwnd/db'
 import type { ListPlaysResponse, Play, User } from '@rwnd/shared'
 import { createLocalUser, extractCookie, json, resetDb, testApp, testDb } from './helpers.js'
@@ -169,6 +170,29 @@ describe('plays', () => {
       expect(history[0]?.media).toMatchObject({ showSlug: 'breaking-bad-2008' })
     })
 
+    it('allows a "now watching" watchedAt for an episode (now + the episode\'s own runtime)', async () => {
+      const cookie = await createUserAndCookie()
+
+      // Pilot's runtime is 58 min (stubbed above) — same "now watching"
+      // shape as the movie test above, exercising resolveEpisode's own
+      // runtimeMinutes plumbing rather than resolveMovie's.
+      const watchedAt = new Date(Date.now() + 58 * 60_000).toISOString()
+      const res = await app.request('/api/v1/plays', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', cookie },
+        body: JSON.stringify({
+          episode: {
+            source: 'tmdb',
+            showExternalId: String(BREAKING_BAD_SHOW_TMDB_ID),
+            seasonNumber: 1,
+            episodeNumber: 1,
+          },
+          watchedAt,
+        }),
+      })
+      expect(res.status).toBe(201)
+    })
+
     it('rejects a watchedAt in the future', async () => {
       const cookie = await createUserAndCookie()
 
@@ -184,6 +208,42 @@ describe('plays', () => {
 
       const list = await app.request('/api/v1/plays', { headers: { cookie } })
       expect((await json<ListPlaysResponse>(list)).plays).toHaveLength(0)
+    })
+
+    it('allows a "now watching" watchedAt (now + the movie\'s own runtime)', async () => {
+      const cookie = await createUserAndCookie()
+
+      // Exactly what WatchDateDialog.tsx's "now watching" mode computes
+      // and submits for The Matrix (runtime 136 min, stubbed above) — a
+      // predicted *finish* time logged up front, not a start time (see
+      // plays_watchedat_semantics memory). Live-confirmed 2026-09-11 that
+      // this was being rejected outright by a flat "no future" check that
+      // didn't know about the episode/movie's own runtime.
+      const watchedAt = new Date(Date.now() + 136 * 60_000).toISOString()
+      const res = await app.request('/api/v1/plays', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', cookie },
+        body: JSON.stringify({ movie: { source: 'tmdb', externalId: '603' }, watchedAt }),
+      })
+      expect(res.status).toBe(201)
+
+      const list = await app.request('/api/v1/plays', { headers: { cookie } })
+      expect((await json<ListPlaysResponse>(list)).plays).toHaveLength(1)
+    })
+
+    it("still rejects a watchedAt beyond even the movie's own runtime", async () => {
+      const cookie = await createUserAndCookie()
+
+      // 10 minutes past what "now watching" would ever compute for a
+      // 136-minute movie — the runtime-aware bound must still have a real
+      // ceiling, not accept anything.
+      const watchedAt = new Date(Date.now() + (136 + 10) * 60_000).toISOString()
+      const res = await app.request('/api/v1/plays', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', cookie },
+        body: JSON.stringify({ movie: { source: 'tmdb', externalId: '603' }, watchedAt }),
+      })
+      expect(res.status).toBe(400)
     })
 
     it('rejects logging a watch for an episode with no known air date', async () => {
@@ -328,6 +388,83 @@ describe('plays', () => {
       })
       expect(deleteAsOwner.status).toBe(204)
     })
+
+    it('returns the existing play instead of creating a duplicate when an origin webhook already covers this watch', async () => {
+      const cookie = await createUserAndCookie()
+
+      // Establish the movie locally via a throwaway manual watch, then
+      // replace it with a fake pre-existing origin play — simulates a
+      // Plex webhook having already captured this exact watch a moment
+      // ago (apps/api/src/lib/plays.ts's reconcilePlayDuplicates: manual
+      // always defers to an origin source).
+      const seedRes = await app.request('/api/v1/plays', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', cookie },
+        body: JSON.stringify({ movie: { source: 'tmdb', externalId: '603' } }),
+      })
+      const seedPlay = await json<Play>(seedRes)
+      const [seedRow] = await db.select().from(plays).where(eq(plays.id, seedPlay.id))
+      await db.delete(plays).where(eq(plays.id, seedPlay.id))
+      await db.insert(plays).values({
+        userId: seedRow!.userId,
+        movieId: seedRow!.movieId!,
+        watchedAt: new Date(),
+        source: 'plex',
+        sourceRef: 'plex-ratingkey-1:2026-01-01',
+      })
+
+      const res = await app.request('/api/v1/plays', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', cookie },
+        body: JSON.stringify({ movie: { source: 'tmdb', externalId: '603' } }),
+      })
+      expect(res.status).toBe(201)
+      const play = await json<Play>(res)
+      expect(play.source).toBe('plex')
+
+      const list = await app.request('/api/v1/plays', { headers: { cookie } })
+      const { plays: history } = await json<ListPlaysResponse>(list)
+      expect(history).toHaveLength(1)
+      expect(history[0]?.source).toBe('plex')
+    })
+
+    it('replaces an existing import play when the same watch is logged manually', async () => {
+      const cookie = await createUserAndCookie()
+
+      // A manual entry is still the user's own explicit action, so it
+      // outranks a relayed Trakt import — the import row gets replaced,
+      // not deferred to (apps/api/src/lib/plays.ts's
+      // reconcilePlayDuplicates).
+      const seedRes = await app.request('/api/v1/plays', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', cookie },
+        body: JSON.stringify({ movie: { source: 'tmdb', externalId: '603' } }),
+      })
+      const seedPlay = await json<Play>(seedRes)
+      const [seedRow] = await db.select().from(plays).where(eq(plays.id, seedPlay.id))
+      await db.delete(plays).where(eq(plays.id, seedPlay.id))
+      await db.insert(plays).values({
+        userId: seedRow!.userId,
+        movieId: seedRow!.movieId!,
+        watchedAt: new Date(),
+        source: 'import',
+        sourceRef: 'trakt-history-item-1',
+      })
+
+      const res = await app.request('/api/v1/plays', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', cookie },
+        body: JSON.stringify({ movie: { source: 'tmdb', externalId: '603' } }),
+      })
+      expect(res.status).toBe(201)
+      const play = await json<Play>(res)
+      expect(play.source).toBe('manual')
+
+      const list = await app.request('/api/v1/plays', { headers: { cookie } })
+      const { plays: history } = await json<ListPlaysResponse>(list)
+      expect(history).toHaveLength(1)
+      expect(history[0]?.source).toBe('manual')
+    })
   })
 
   describe('PATCH /plays/{id}', () => {
@@ -397,6 +534,45 @@ describe('plays', () => {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', cookie },
         body: JSON.stringify({ watchedAt: '2099-01-01T00:00:00.000Z' }),
+      })
+      expect(res.status).toBe(400)
+    })
+
+    it('allows editing a play to a "now watching" watchedAt (now + the movie\'s own runtime)', async () => {
+      const cookie = await createUserAndCookie()
+      const created = await app.request('/api/v1/plays', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', cookie },
+        body: JSON.stringify({ movie: { source: 'tmdb', externalId: '603' } }),
+      })
+      const play = await json<Play>(created)
+
+      // Same bound POST /plays now accepts — "Other date" mode is clamped
+      // client-side to the same ceiling.
+      const watchedAt = new Date(Date.now() + 136 * 60_000).toISOString()
+      const res = await app.request(`/api/v1/plays/${play.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', cookie },
+        body: JSON.stringify({ watchedAt }),
+      })
+      expect(res.status).toBe(200)
+      expect((await json<Play>(res)).watchedAt).toBe(watchedAt)
+    })
+
+    it("still rejects an edited watchedAt beyond even the movie's own runtime", async () => {
+      const cookie = await createUserAndCookie()
+      const created = await app.request('/api/v1/plays', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', cookie },
+        body: JSON.stringify({ movie: { source: 'tmdb', externalId: '603' } }),
+      })
+      const play = await json<Play>(created)
+
+      const watchedAt = new Date(Date.now() + (136 + 10) * 60_000).toISOString()
+      const res = await app.request(`/api/v1/plays/${play.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', cookie },
+        body: JSON.stringify({ watchedAt }),
       })
       expect(res.status).toBe(400)
     })

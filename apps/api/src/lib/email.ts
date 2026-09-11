@@ -341,23 +341,30 @@ function registrationInstructions(
  * earlier draft led straight with "X keeps track of what you've
  * watched, and someone there has spotted a Plex account...", which read
  * as surveillance-flavored to someone with zero context on rwnd.tv,
- * rather than as an invitation. */
+ * rather than as an invitation.
+ *
+ * `sourceLabel` (e.g. "Plex", "Jellyfin", "Emby") comes from the app's
+ * own `WEBHOOK_SOURCE_LABELS` constant (`@rwnd/shared`), not from
+ * anything in the incoming webhook payload — it's interpolated the same
+ * as `instanceName` below, not an exception to the "no
+ * attacker-influenceable text" rule two paragraphs up. */
 export async function sendWebhookLinkEmail(
   to: string,
   code: string,
   registrationMode: RegistrationMode,
   instanceName: string,
   adminEmail: string | null,
+  sourceLabel: string,
 ): Promise<void> {
   const appUrl = loadEnv().APP_URL
   const linkUrl = `${appUrl}/link-account?code=${encodeURIComponent(code)}`
   const instructions = registrationInstructions(registrationMode, instanceName, adminEmail)
   await sendMail(
     to,
-    `Link your Plex account on ${instanceName}`,
-    `${instanceName} is a free tool that helps you privately keep track of the TV shows and movies you watch.\n\nSomeone there has spotted a Plex account that looks like it might be yours. If that's right, open this link to connect it to your ${instanceName} login (${appUrl}) and your future Plex viewing will be automatically tracked. Nothing happens until you do this yourself:\n${linkUrl}\n\n${instructions.text}\n\nThis link expires in 7 days and can only be used once. If you don't recognize this, you can safely ignore this email.`,
+    `Link your ${sourceLabel} account on ${instanceName}`,
+    `${instanceName} is a free tool that helps you privately keep track of the TV shows and movies you watch.\n\nSomeone there has spotted a ${sourceLabel} account that looks like it might be yours. If that's right, open this link to connect it to your ${instanceName} login (${appUrl}) and your future ${sourceLabel} viewing will be automatically tracked. Nothing happens until you do this yourself:\n${linkUrl}\n\n${instructions.text}\n\nThis link expires in 7 days and can only be used once. If you don't recognize this, you can safely ignore this email.`,
     `<p><a href="${appUrl}">${instanceName}</a> is a free tool that helps you privately keep track of the TV shows and movies you watch.</p>` +
-      `<p>Someone there has spotted a Plex account that looks like it might be yours. If that's right, click the button below to connect it to your <a href="${appUrl}">${instanceName}</a> login and your future Plex viewing will be automatically tracked. Nothing happens until you do this yourself.</p>` +
+      `<p>Someone there has spotted a ${sourceLabel} account that looks like it might be yours. If that's right, click the button below to connect it to your <a href="${appUrl}">${instanceName}</a> login and your future ${sourceLabel} viewing will be automatically tracked. Nothing happens until you do this yourself.</p>` +
       emailButton(linkUrl, 'Link this account') +
       fallbackLinkParagraph(linkUrl) +
       `<p>${instructions.html}</p>` +

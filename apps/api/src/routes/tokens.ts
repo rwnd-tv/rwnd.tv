@@ -10,6 +10,7 @@ import {
   listWebhookLinksResponseSchema,
   webhookAccountLinkSchema,
   uuidSchema,
+  WEBHOOK_SOURCE_LABELS,
 } from '@rwnd/shared'
 import { apiTokens, instanceSettings, users, webhookAccountLinks, webhookLinkCodes } from '@rwnd/db'
 import type { Database } from '@rwnd/db'
@@ -403,6 +404,7 @@ tokenRoutes.openapi(
           settings?.registrationMode ?? 'closed',
           settings?.instanceName ?? 'rwnd.tv',
           settings?.adminEmail ?? null,
+          WEBHOOK_SOURCE_LABELS[link.source],
         )
         emailSent = true
       } catch (err) {

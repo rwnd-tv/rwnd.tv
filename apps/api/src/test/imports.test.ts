@@ -389,11 +389,15 @@ describe('Trakt import', () => {
     await db.delete(plays).where(eq(plays.userId, me.id))
 
     // Simulates Trakt's own separate Plex scrobbling already having logged
-    // this same real watch via rwnd.tv's direct webhook, same day.
+    // this same real watch via rwnd.tv's direct webhook — within the
+    // dedup window (matrixHistoryItem.watched_at is 12:00:00.000Z) since
+    // the two pipelines report the same real-world event at essentially
+    // the same instant, not just "the same day" (see plays.ts's
+    // reconcilePlayDuplicates doc comment).
     await db.insert(plays).values({
       userId: me.id,
       movieId: movie!.id,
-      watchedAt: new Date('2024-01-01T09:00:00.000Z'),
+      watchedAt: new Date('2024-01-01T12:03:00.000Z'),
       source: 'plex',
       sourceRef: '5001:2024-01-01',
     })
@@ -416,6 +420,98 @@ describe('Trakt import', () => {
     const allPlays = await db.select().from(plays).where(eq(plays.userId, me.id))
     expect(allPlays).toHaveLength(1)
     expect(allPlays[0]?.source).toBe('plex')
+  })
+
+  it("skips a history item that already has a 'manual' play for the same movie (manual outranks import too)", async () => {
+    vi.stubGlobal('fetch', createFetchStub({ historyItems: [fx.matrixHistoryItem] }))
+
+    const cookie = await createUserAndCookie()
+    const me = await json<User>(await app.request('/api/v1/auth/me', { headers: { cookie } }))
+    await createTraktConnection(db, me.id)
+
+    const [job1] = await db
+      .insert(importJobs)
+      .values({ userId: me.id, includeRatings: false, includeWatchlist: false })
+      .returning()
+    await runTraktImport(db, providers, env, job1!.id)
+    const [movie] = await db.select().from(movies).where(eq(movies.title, 'The Matrix')).limit(1)
+    await db.delete(plays).where(eq(plays.userId, me.id))
+
+    // A manual entry is still the user's own explicit action, so it beats
+    // import even though origin sources otherwise rank above it (see
+    // plays.ts's reconcilePlayDuplicates doc comment).
+    await db.insert(plays).values({
+      userId: me.id,
+      movieId: movie!.id,
+      watchedAt: new Date('2024-01-01T12:03:00.000Z'),
+      source: 'manual',
+    })
+
+    const [job2] = await db
+      .insert(importJobs)
+      .values({ userId: me.id, includeRatings: false, includeWatchlist: false })
+      .returning()
+    await runTraktImport(db, providers, env, job2!.id)
+
+    const [finished] = await db
+      .select()
+      .from(importJobs)
+      .where(eq(importJobs.id, job2!.id))
+      .limit(1)
+    expect(finished?.itemsImported).toBe(0)
+    expect(finished?.itemsSkipped).toBe(1)
+
+    const allPlays = await db.select().from(plays).where(eq(plays.userId, me.id))
+    expect(allPlays).toHaveLength(1)
+    expect(allPlays[0]?.source).toBe('manual')
+  })
+
+  it('keeps the newer of two conflicting import plays for the same movie', async () => {
+    vi.stubGlobal('fetch', createFetchStub({ historyItems: [fx.matrixHistoryItem] }))
+
+    const cookie = await createUserAndCookie()
+    const me = await json<User>(await app.request('/api/v1/auth/me', { headers: { cookie } }))
+    await createTraktConnection(db, me.id)
+
+    const [job1] = await db
+      .insert(importJobs)
+      .values({ userId: me.id, includeRatings: false, includeWatchlist: false })
+      .returning()
+    await runTraktImport(db, providers, env, job1!.id)
+    const [movie] = await db.select().from(movies).where(eq(movies.title, 'The Matrix')).limit(1)
+    await db.delete(plays).where(eq(plays.userId, me.id))
+
+    // A second, independent import record of the same real watch (e.g. a
+    // different Trakt-connected app) reporting an earlier timestamp than
+    // matrixHistoryItem's own 12:00:00.000Z — plays.watchedAt records when
+    // playback *finished*, so the later of two candidate timestamps is
+    // the one closer to the true finish (see plays.ts's
+    // reconcilePlayDuplicates doc comment).
+    await db.insert(plays).values({
+      userId: me.id,
+      movieId: movie!.id,
+      watchedAt: new Date('2024-01-01T11:55:00.000Z'),
+      source: 'import',
+      sourceRef: 'other-app-history-item-1',
+    })
+
+    const [job2] = await db
+      .insert(importJobs)
+      .values({ userId: me.id, includeRatings: false, includeWatchlist: false })
+      .returning()
+    await runTraktImport(db, providers, env, job2!.id)
+
+    const [finished] = await db
+      .select()
+      .from(importJobs)
+      .where(eq(importJobs.id, job2!.id))
+      .limit(1)
+    expect(finished?.itemsImported).toBe(1)
+
+    const allPlays = await db.select().from(plays).where(eq(plays.userId, me.id))
+    expect(allPlays).toHaveLength(1)
+    expect(allPlays[0]?.source).toBe('import')
+    expect(allPlays[0]?.watchedAt.toISOString()).toBe('2024-01-01T12:00:00.000Z')
   })
 
   it('backfills a missing tvdb id on re-import even for an already-resolved show', async () => {

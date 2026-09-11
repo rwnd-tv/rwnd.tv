@@ -1,11 +1,11 @@
 import { execFileSync } from 'node:child_process'
 import { createReadStream } from 'node:fs'
-import { mkdir, readdir, readFile, rm, writeFile, utimes } from 'node:fs/promises'
+import { mkdtemp, readdir, readFile, rm, writeFile, utimes } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { text } from 'node:stream/consumers'
 import { createGunzip } from 'node:zlib'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { eq } from 'drizzle-orm'
 import { movies, users, watchlistItems, watchlists } from '@rwnd/db'
 import { runDatabaseBackup } from '../lib/database-backup.js'
@@ -28,7 +28,7 @@ function hasPgDump(): boolean {
 }
 
 const db = testDb()
-const DIR = join(tmpdir(), 'rwnd-tv-test-db-backups')
+let DIR: string
 
 async function gunzipToString(path: string): Promise<string> {
   return text(createReadStream(path).pipe(createGunzip()))
@@ -56,7 +56,11 @@ function dumpNameAgedDays(days: number): string {
 
 describe.skipIf(!hasPgDump())('database backup', () => {
   beforeEach(async () => {
-    await Promise.all([resetDb(db), rm(DIR, { recursive: true, force: true })])
+    ;[DIR] = await Promise.all([mkdtemp(join(tmpdir(), 'rwnd-tv-test-db-backups-')), resetDb(db)])
+  })
+
+  afterEach(async () => {
+    await rm(DIR, { recursive: true, force: true })
   })
 
   it('dumps schema and data, including the watchlists FK cycle and bytea', async () => {
@@ -179,7 +183,6 @@ describe.skipIf(!hasPgDump())('database backup', () => {
   })
 
   it('prunes under the default retention policy and never touches anything else', async () => {
-    await mkdir(DIR, { recursive: true })
     // Well within the default policy's 7-day daily window
     // (DEFAULT_RETENTION_TIERS, database-backup.ts) — must all survive
     // regardless of count, since that tier keeps every dump by age, not a

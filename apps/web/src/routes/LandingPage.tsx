@@ -46,6 +46,7 @@ const MILESTONES = [
   { key: 'm1', status: 'done' },
   { key: 'm2', status: 'done' },
   { key: 'm3', status: 'done' },
+  { key: 'm4', status: 'inProgress' },
 ] as const
 
 const QUICK_START = `curl -O https://raw.githubusercontent.com/rwnd-tv/rwnd.tv/main/docker-compose.yml
@@ -239,10 +240,13 @@ export function LandingPage() {
         </div>
       </section>
 
-      {/* PROOF STRIP */}
+      {/* PROOF STRIP — only ever shows fully-shipped milestones (✓ is an
+          unconditional "done" checkmark here); an in-progress one belongs in
+          the more nuanced STATUS section below instead, not diluting this
+          strip's simple trust signal. */}
       <div className="border-y border-[var(--color-border)] bg-[var(--color-surface)]">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-9 px-5 py-4">
-          {MILESTONES.map(({ key }) => (
+          {MILESTONES.filter(({ status }) => status === 'done').map(({ key }) => (
             <span
               key={key}
               className="font-mono text-[12.5px] font-semibold text-[var(--color-success)]"
@@ -445,16 +449,18 @@ export function LandingPage() {
               {t('landing.status.body', { version: settings?.appVersion ?? '' })}
             </p>
           </div>
-          <div className="mb-9 grid gap-0 lg:grid-cols-3">
-            {MILESTONES.map(({ key }, i) => (
+          <div className="mb-9 grid gap-0 lg:grid-cols-4">
+            {MILESTONES.map(({ key, status }, i) => (
               <div
                 key={key}
                 className={`px-7 first:pl-0 ${i > 0 ? 'border-[var(--color-border)] lg:border-l' : ''}`}
               >
                 <div className="mb-4 flex items-baseline justify-between gap-2 border-b border-[var(--color-border)] pb-3">
                   <h3 className="text-[15px] font-bold">{t(`landing.status.${key}.title`)}</h3>
-                  <span className="font-mono text-[11.5px] font-bold text-[var(--color-success)]">
-                    {t('landing.status.done')}
+                  <span
+                    className={`font-mono text-[11.5px] font-bold ${status === 'done' ? 'text-[var(--color-success)]' : 'text-[var(--color-fg-muted)]'}`}
+                  >
+                    {t(`landing.status.${status}`)}
                   </span>
                 </div>
                 <ul className="m-0 flex list-none flex-col gap-[11px] p-0 text-[13.5px] leading-[1.5] text-[var(--color-fg-muted)]">

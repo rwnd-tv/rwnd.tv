@@ -76,7 +76,7 @@ Admins get an **Admin** page in the sidebar: a searchable, filterable (by role, 
 - **Promote or demote** a user between the `admin` and `user` roles.
 - **Send a password reset email** to a user, using the same reset link the "Forgot password" flow sends: an admin never sets or sees another user's password directly.
 - **View and revoke a user's sessions**, individually or all at once, the same session list a user sees for themselves under Account → Sessions.
-- **Delete a user's account.** This is permanent and cascades: their watch history, ratings, watchlists, dropped shows and API tokens all go with it, and so does any invite or Plex account-link code they personally created (if they're an admin who created any).
+- **Delete a user's account.** This is permanent and cascades: their watch history, ratings, watchlists, dropped shows and API tokens all go with it, and so does any invite or webhook account-link code (Plex, Jellyfin, or Emby) they personally created (if they're an admin who created any).
 
 **Any of the four actions above can be applied to several accounts at once**, by ticking rows on the Admin list (a "Select all" checkbox picks up everything currently visible) and using the bar that appears. A selection made before filtering stays intact even if a filter later hides some of the ticked accounts, shown as "N hidden by the current filter" rather than silently dropped. The acting admin's own account can never be included in a bulk action; anything the server refuses for a particular account (the owner's account, an account with no password to reset) is reported per account once the batch finishes, rather than failing the whole selection.
 

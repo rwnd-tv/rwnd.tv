@@ -48,8 +48,8 @@
         "body": "Find a film or a specific episode, log that you watched it, and browse your History: every watch, rating, watchlist add and drop in one place."
       },
       "plex": {
-        "title": "Plex logs it for you",
-        "body": "Point Plex at your webhook URL and watches log themselves. Multi-user servers are first class: every Plex account seen is linked to its own rwnd.tv user, and earlier watches are backfilled once linked."
+        "title": "Your media server logs it for you",
+        "body": "Point Plex, Jellyfin, or Emby at your webhook URL and watches log themselves. Multi-user servers are first class: every account seen is linked to its own rwnd.tv user, and earlier watches are backfilled once linked."
       },
       "trakt": {
         "title": "Bring your Trakt data",
@@ -141,6 +141,15 @@
           "History as a full-width poster grid, shipped",
           "Metadata accuracy fixes, self-hosting readiness pass, shipped",
           "Full ASVS L1 security review, then v1.0.0, both shipped"
+        ]
+      },
+      "m4": {
+        "title": "M4: Broader ingestion & upcoming episodes",
+        "items": [
+          "Jellyfin and Emby webhook ingestion, shipped",
+          "Automatic scheduled database backups, shipped",
+          "Calendar of upcoming episodes, via webcal subscription feeds, shipped",
+          "Admin UI for managing users, shipped; Tautulli and Kodi ingestion next"
         ]
       },
       "builtTitle": "Built with Claude Code, in the open.",

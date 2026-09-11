@@ -299,3 +299,20 @@ password via the child's environment rather than argv), and what it costs.
 Noted here so a future review of this file does not treat the spawn sink, or
 the new package's CVE surface in the Trivy scan, as an unexplained finding.
 The decision is recorded, not incidental.
+
+## Update (2026-09-11): trust model widened from Plex-specific to source-agnostic
+
+The Trust model section above still describes "the Plex webhook's
+multi-user support" as the feature this ADR's boundary applies to,
+naming Plex specifically because it was the only webhook source that
+existed when this ADR was written. Jellyfin and Emby webhook ingestion
+shipped today (`docs/TODO_ARCHIVE.md`), built on the same shared
+account-linking/attribution mechanism the 2026-09-02 consent-rework
+update above already describes: one token, any of the three sources,
+`ownsToken()` gating, and the target's own one-time-code redemption for
+anyone other than the token owner. Nothing about the trust boundary
+itself changed; the same instance-as-trust-boundary reasoning applies
+identically regardless of which media server a given webhook link
+belongs to. Read "the Plex webhook" in the Trust model section as "a
+webhook" going forward, same as the 2026-09-02 update already did for
+consent, rather than as a section still scoped to one source.

@@ -120,6 +120,12 @@ describe.skipIf(!hasPgDump())('database backup', () => {
     // The test that actually matters: a dump nobody can restore is not a
     // backup. Loads into a scratch database via psql, exactly as
     // docs/self-hosting.md tells a self-hoster to.
+    //
+    // Explicit timeout: this is the only test here doing a real psql
+    // round trip (create scratch DB, restore, two SELECTs, drop DB), and
+    // it's flaked past vitest's 5s default on a loaded CI runner (took
+    // 6997ms in a real run, 2026-09-11) despite the code itself being
+    // correct — a shared amd64 runner's variance, not a regression.
     const userId = await createLocalUser(db, 'restore@example.com', 'correct horse battery')
     await db.insert(movies).values({ title: 'Restored Film', slug: 'restored-film' })
 
@@ -180,7 +186,7 @@ describe.skipIf(!hasPgDump())('database backup', () => {
         },
       )
     }
-  })
+  }, 15_000)
 
   it('prunes under the default retention policy and never touches anything else', async () => {
     // Well within the default policy's 7-day daily window

@@ -105,7 +105,7 @@ is a new class implementing that interface (including `getSeason()` and
 example) plus a case in `apps/api/src/providers/index.ts`; it shouldn't
 require touching routes or the database schema. Provider _availability_ is
 credential-derived (whichever API keys are set), and priority order is
-admin-configurable at runtime (Settings → Instance) rather than a
+admin-configurable at runtime (Admin → Instance settings) rather than a
 `METADATA_PROVIDER` env var; there's nothing to register beyond the
 provider class itself.
 

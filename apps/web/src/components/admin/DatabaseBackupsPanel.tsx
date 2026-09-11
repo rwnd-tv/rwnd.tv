@@ -48,7 +48,7 @@ function formatBytes(bytes: number): string {
 export function DatabaseBackupsPanel() {
   const { t, i18n } = useTranslation()
   const queryClient = useQueryClient()
-  const [open, setOpen] = usePanelOpen('panelAdminDatabaseBackups', true)
+  const [open, setOpen] = usePanelOpen('panelAdminDatabaseBackups')
 
   const { data, isLoading, isError } = useQuery({
     queryKey: QUERY_KEY,

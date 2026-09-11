@@ -246,25 +246,6 @@ Format:
       a watch history page; the other three kinds stay one click away in
       the Filters panel same as today.
 
-- [ ] **Default the Admin page's Users panel to expanded** (2026-09-06 added)
-
-      `UsersPanel.tsx` (`AdminPage.tsx`'s only panel) is a `<details>` +
-      `usePanelOpen('panelAdminUsers')`, which defaults to collapsed
-      (`defaultOpen` unset, so `use-panel-open.ts`'s `false`). Change the
-      call to `usePanelOpen('panelAdminUsers', true)` so a first-time (or
-      cookie-cleared) visit shows the user list immediately rather than
-      needing a click to reveal it.
-
-      Note this reverses an explicit prior decision, not an oversight:
-      `UsersPanel.tsx`'s own doc comment records James asking on
-      2026-09-03 for this panel to match the rest of the app's collapsed-
-      by-default panels rather than always rendering open. Worth a quick
-      "still want this changed?" gut-check given that history, though the
-      Admin page's own panel (nothing else on the page competing for
-      space, unlike Account/Settings/Import's several stacked panels) is
-      a reasonable place for a "sensible defaults" pass to land
-      differently.
-
 - [ ] **Default the TV Shows calendar feed to "Include every show I've ever watched" only** (2026-09-06 added)
 
       `ShowsSettingsForm` (`CalendarFeedsPanel.tsx`) has three checkboxes

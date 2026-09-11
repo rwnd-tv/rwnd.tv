@@ -27,8 +27,9 @@ const EMPTY_SELECTION: Record<Category, boolean> = {
  * to/from a file (apps/api/src/routes/backups.ts). Both scoped to the
  * signed-in user only — same tier as ProfileForm/TokensPanel in
  * SettingsPage.tsx, not gated behind `user?.role === 'admin'` the way
- * InstanceSettingsPanel is. Collapsed by default like every other panel
- * on this page except AboutPanel.tsx (2026-09-02) — see
+ * the Admin page's panels are (route-level, AdminRoute.tsx). Collapsed by
+ * default like every other panel on this page except AboutPanel.tsx
+ * (2026-09-02) — see
  * account/AdvancedPreferencesCard.tsx's doc comment for why `<details>`
  * over a bespoke show/hide component.
  */

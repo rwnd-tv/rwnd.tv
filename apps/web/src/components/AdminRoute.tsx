@@ -13,8 +13,8 @@ import { Spinner } from './ui/Spinner.js'
  * there's no dedicated "forbidden" page in this app.
  *
  * Same reasoning as every other client-side role check in this codebase
- * (DeleteAccountCard.tsx's admin framing, SettingsPage.tsx's admin-only
- * panel gates): this is only ever a UX convenience, never the real gate.
+ * (DeleteAccountCard.tsx's admin framing, Sidebar.tsx's conditional admin
+ * nav link): this is only ever a UX convenience, never the real gate.
  * The server enforces independently — every `/admin/users/*` route is
  * `requireAdmin`-gated (apps/api/src/middleware/auth.ts, which admits an
  * owner the same way) regardless of what this component decides to render.

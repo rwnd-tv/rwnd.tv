@@ -22,8 +22,10 @@ type View = 'idle' | 'enrolling' | 'recovery-codes' | 'disabling' | 'regeneratin
  * instance has ENCRYPTION_KEY configured) the same way DatabasePanel.tsx
  * self-gates a section on `backupsConfigured` — hides the whole card when
  * unavailable rather than letting someone start enrolling into a feature
- * that'll fail on confirmation, mirrored by InvitesPanel.tsx's full-card
- * self-gating on `registrationMode`. Collapsed by default like every
+ * that'll fail on confirmation (unlike InvitesPanel.tsx's admin.invites,
+ * which since 2026-09-11 always renders and explains itself instead — that
+ * shape fits better there since the control that unlocks it,
+ * Instance settings, lives on the very same page). Collapsed by default like every
  * other card on this page as of 2026-09-02 — see
  * AdvancedPreferencesCard.tsx's doc comment for why `<details>` over a
  * bespoke show/hide component.

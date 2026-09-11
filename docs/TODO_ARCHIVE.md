@@ -168,6 +168,45 @@ grouping, sorted oldest to newest.
       and the phone-width pass (still open in TODO.md) is where narrow
       viewports get looked at properly.
 
+- [x] **Move admin-only Settings panels (Instance settings, Invites) onto the
+      Admin page** (2026-09-10 added, done 2026-09-11)
+
+      `InstanceSettingsPanel.tsx` and `InvitesPanel.tsx` moved from the
+      Settings page to `/admin` (`components/settings/` ->
+      `components/admin/`), closing a gap `AdminPage.tsx`'s own doc comment
+      had flagged since M4: these two admin-only panels stayed on Settings
+      "for now" while `/admin` existed as a separate, route-guarded
+      (`AdminRoute.tsx`) admin surface. Neither panel gained a role check of
+      its own in the move — both already relied entirely on their page's
+      gate (Settings' `{isAdmin && ...}`, now `/admin`'s route guard), same
+      as `UsersPanel.tsx`/`DatabaseBackupsPanel.tsx` already did.
+
+      i18n keys `settings.instance.*`/`settings.invites.*` renamed to
+      `admin.instance.*`/`admin.invites.*` (nested sub-objects, matching the
+      existing `admin.databaseBackups.*` precedent) in both en-GB and en-US;
+      the one wording difference (`environmentLabel`: "labelled" vs.
+      "labeled") preserved per locale. Collapsible-panel cookies renamed
+      `panelSettingsInstance`/`panelSettingsInvites` ->
+      `panelAdminInstance`/`panelAdminInvites` — the stale old cookies are
+      simply never read again, no migration needed for session-scoped UI
+      state.
+
+      New panel order on `/admin`, top to bottom: Users, Invites, Instance
+      settings, Database backups, chosen by expected frequency of use (see
+      the "Sensible defaults" entry below for the Users/Database backups
+      default-open swap that came with it).
+
+      Invites' gating behaviour changed as part of the move, not just its
+      location: it used to hide its whole card unless registration mode was
+      already invite-only. Once it sits on the same page as the control
+      that sets that mode (Instance settings), hiding it below its own
+      on-switch stopped making sense. It now always renders, and explains
+      inline why it's inactive when registration isn't invite-only
+      (`admin.invites.notInviteOnly`), the same "stay visible and explain"
+      convention `DatabaseBackupsPanel.tsx` already used for its own
+      unconfigured state. The invites-list query still stays disabled
+      outside invite-only mode, so nothing extra gets fetched.
+
 ## TV Shows / Movies gallery follow-ups
 
 - [x] **Gallery nav overflow on narrow viewports** (2026-08-19 15:25)\
@@ -4366,3 +4405,25 @@ up -d` pull-based quick start test (no local Docker CLI reachable
       which needed the per-token account list on `TokensPanel.tsx`
       renamed from "Linked accounts" to "Detected accounts" to stop two
       differently-scoped panels on the same page sharing a name.
+
+## Sensible defaults
+
+- [x] **Default the Admin page's Users panel to expanded** (2026-09-06
+      added, done 2026-09-11)
+
+      `UsersPanel.tsx`'s `usePanelOpen('panelAdminUsers')` changed to
+      `usePanelOpen('panelAdminUsers', true)`, shipped alongside the
+      Instance settings/Invites panel move above rather than on its own:
+      with four panels on `/admin` instead of two, one expanded-by-default
+      panel earns its keep again the way it does on Settings (`AboutPanel`)
+      and Account (`ProfileForm`). Users took over that slot from
+      `DatabaseBackupsPanel.tsx`, whose own `usePanelOpen` call dropped its
+      `true` default in the same change, keeping exactly one expanded panel
+      per page.
+
+      This explicitly reverses a 2026-09-03 decision recorded in
+      `UsersPanel.tsx`'s own doc comment (James asked then for this panel
+      to match the rest of the app's collapsed-by-default panels). Not an
+      oversight being corrected — the page's shape changed under it (two
+      more panels arrived) and the "still want this changed?" gut-check the
+      original TODO item asked for came back yes.

@@ -54,13 +54,22 @@ function ChevronDownIcon() {
   )
 }
 
-/** Collapsed by default like every other panel on this page except
- * AboutPanel.tsx (2026-09-02) — see account/AdvancedPreferencesCard.tsx's
- * doc comment for why `<details>` over a bespoke show/hide component. */
+/**
+ * Admin-only, but not self-gated on role — this panel relies entirely on
+ * `/admin` itself being gated by `AdminRoute.tsx` (isAdminRole), same as
+ * UsersPanel.tsx/DatabaseBackupsPanel.tsx on this page. The server still
+ * enforces independently (`PATCH /settings` is `requireAdmin`). Moved here
+ * from the Settings page 2026-09-11 (docs/TODO_ARCHIVE.md) as part of
+ * consolidating every admin surface onto this page.
+ *
+ * Collapsed by default — UsersPanel.tsx is the one panel on this page
+ * expanded by default, not this one. See account/AdvancedPreferencesCard.tsx's
+ * doc comment for why `<details>` over a bespoke show/hide component.
+ */
 export function InstanceSettingsPanel() {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
-  const [open, setOpen] = usePanelOpen('panelSettingsInstance')
+  const [open, setOpen] = usePanelOpen('panelAdminInstance')
   const { data } = usePublicSettings()
 
   const [instanceName, setInstanceName] = useState('')
@@ -74,8 +83,8 @@ export function InstanceSettingsPanel() {
   // rather than in an effect, per
   // https://react.dev/learn/you-might-not-need-an-effect#adjusting-some-state-when-a-prop-changes.
   // Deliberately starts at `undefined`, not `useState(data)`: if `data` is
-  // already cached and fresh at mount (e.g. revisiting Settings within the
-  // query's staleTime), `useState(data)` would seed `loadedSettings` to
+  // already cached and fresh at mount (e.g. revisiting the Admin page within
+  // the query's staleTime), `useState(data)` would seed `loadedSettings` to
   // that same object on its very first render, making `data !== loadedSettings`
   // false immediately and skipping the sync below entirely — leaving every
   // field stuck at its hardcoded useState default (e.g. registrationMode
@@ -134,22 +143,20 @@ export function InstanceSettingsPanel() {
     <Card>
       <details className="group" open={open} onToggle={(e) => setOpen(e.currentTarget.open)}>
         <summary className="flex cursor-pointer list-none items-center justify-between text-lg font-semibold [&::-webkit-details-marker]:hidden">
-          {t('settings.instance.title')}
+          {t('admin.instance.title')}
           <CollapseChevronIcon className="h-5 w-5 flex-shrink-0 transition-transform group-open:rotate-180" />
         </summary>
         <div className="mt-4 mb-4 border-t border-[var(--color-border)]" />
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <Field
-            label={t('settings.instance.instanceName')}
+            label={t('admin.instance.instanceName')}
             value={instanceName}
             onChange={(e) => setInstanceName(e.target.value)}
             required
           />
 
           <fieldset className="flex flex-col gap-1">
-            <legend className="text-sm font-medium">
-              {t('settings.instance.registrationMode')}
-            </legend>
+            <legend className="text-sm font-medium">{t('admin.instance.registrationMode')}</legend>
             <div className="flex flex-col gap-2">
               {(['open', 'invite', 'closed'] as const).map((mode) => (
                 <label key={mode} className="flex items-center gap-2 text-sm">
@@ -160,7 +167,7 @@ export function InstanceSettingsPanel() {
                     checked={registrationMode === mode}
                     onChange={() => setRegistrationMode(mode)}
                   />
-                  {t(`settings.instance.registration${mode[0]!.toUpperCase()}${mode.slice(1)}`)}
+                  {t(`admin.instance.registration${mode[0]!.toUpperCase()}${mode.slice(1)}`)}
                 </label>
               ))}
             </div>
@@ -168,21 +175,21 @@ export function InstanceSettingsPanel() {
 
           <div className="flex flex-col gap-1">
             <Field
-              label={t('settings.instance.adminEmail')}
+              label={t('admin.instance.adminEmail')}
               type="email"
               value={adminEmail}
               onChange={(e) => setAdminEmail(e.target.value)}
-              placeholder={t('settings.instance.adminEmailPlaceholder')}
+              placeholder={t('admin.instance.adminEmailPlaceholder')}
               error={error}
             />
             <p className="text-xs text-[var(--color-fg-muted)]">
-              {t('settings.instance.adminEmailHint')}
+              {t('admin.instance.adminEmailHint')}
             </p>
           </div>
 
           {priorityOrder.length > 0 && (
             <div className="flex flex-col gap-1">
-              <h3 className="text-sm font-medium">{t('settings.instance.metadataProviders')}</h3>
+              <h3 className="text-sm font-medium">{t('admin.instance.metadataProviders')}</h3>
               <ol className="flex flex-col gap-0.5 text-sm">
                 {priorityOrder.map((source, index) => (
                   <li key={source} className="flex items-center gap-2">
@@ -193,10 +200,10 @@ export function InstanceSettingsPanel() {
                       type="button"
                       className="px-1 py-1"
                       disabled={index === 0 || updatePriority.isPending}
-                      title={t('settings.instance.metadataProviderMoveUp', {
+                      title={t('admin.instance.metadataProviderMoveUp', {
                         provider: PROVIDER_LABELS[source],
                       })}
-                      aria-label={t('settings.instance.metadataProviderMoveUp', {
+                      aria-label={t('admin.instance.metadataProviderMoveUp', {
                         provider: PROVIDER_LABELS[source],
                       })}
                       onClick={() => moveProvider(index, -1)}
@@ -208,10 +215,10 @@ export function InstanceSettingsPanel() {
                       type="button"
                       className="px-1 py-1"
                       disabled={index === priorityOrder.length - 1 || updatePriority.isPending}
-                      title={t('settings.instance.metadataProviderMoveDown', {
+                      title={t('admin.instance.metadataProviderMoveDown', {
                         provider: PROVIDER_LABELS[source],
                       })}
-                      aria-label={t('settings.instance.metadataProviderMoveDown', {
+                      aria-label={t('admin.instance.metadataProviderMoveDown', {
                         provider: PROVIDER_LABELS[source],
                       })}
                       onClick={() => moveProvider(index, 1)}
@@ -223,7 +230,7 @@ export function InstanceSettingsPanel() {
               </ol>
               {priorityOrder.length === 1 && (
                 <p className="text-xs text-[var(--color-fg-muted)]">
-                  {t('settings.instance.metadataProvidersSingle')}
+                  {t('admin.instance.metadataProvidersSingle')}
                 </p>
               )}
               {updatePriority.isError && (
@@ -236,13 +243,13 @@ export function InstanceSettingsPanel() {
 
           <div>
             <Button type="submit" isLoading={updateSettings.isPending}>
-              {t('settings.instance.save')}
+              {t('admin.instance.save')}
             </Button>
           </div>
         </form>
         {data?.environmentLabel && (
           <p className="mt-4 text-sm text-[var(--color-fg-muted)]">
-            {t('settings.instance.environmentLabel', { label: data.environmentLabel })}
+            {t('admin.instance.environmentLabel', { label: data.environmentLabel })}
           </p>
         )}
       </details>

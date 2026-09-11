@@ -322,7 +322,7 @@ authRoutes.openapi(
     // gating solely on it meant deleting the redeemer silently revived
     // their code for the rest of its TTL. `usedAt` is never touched by
     // that cascade — both are still set together, `usedBy` just for
-    // attribution/display (Settings > Invites).
+    // attribution/display (Admin > Invites).
     let user: typeof users.$inferSelect
     try {
       user = await db.transaction(async (tx) => {

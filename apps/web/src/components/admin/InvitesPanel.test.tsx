@@ -52,16 +52,20 @@ describe('InvitesPanel', () => {
     vi.mocked(api.invites.create).mockReset()
   })
 
-  it('renders nothing when registration is not invite-only', async () => {
-    vi.mocked(api.settings.get).mockResolvedValue({ ...baseSettings, registrationMode: 'open' })
-    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-    const { container } = render(
-      <QueryClientProvider client={queryClient}>
-        <InvitesPanel />
-      </QueryClientProvider>,
+  it('explains why invites are unavailable when registration is not invite-only', async () => {
+    renderPanel({ registrationMode: 'open' })
+
+    await screen.findByText('Invites')
+    await screen.findByText(
+      'Invites are only used when registration is set to invite-only. Change the registration mode in Instance settings on this page to start creating them.',
     )
-    await vi.waitFor(() => expect(api.settings.get).toHaveBeenCalled())
-    expect(container).toBeEmptyDOMElement()
+    expect(screen.queryByRole('button', { name: 'Create invite' })).not.toBeInTheDocument()
+    expect(
+      screen.queryByText(
+        'Registration is invite-only — create a code to hand out. Each one works once and expires after 7 days.',
+      ),
+    ).not.toBeInTheDocument()
+    expect(api.invites.list).not.toHaveBeenCalled()
   })
 
   it('creates an invite with no email field when SMTP is not configured', async () => {

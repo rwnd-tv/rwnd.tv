@@ -319,8 +319,8 @@ function FeedRow({
 /**
  * Subscription feeds for Google/Apple/other webcal-compatible calendar
  * apps: History, TV Shows, and Movies. Self-gates on
- * `calendarFeedsAvailable`, same shape as InvitesPanel.tsx self-gating on
- * `registrationMode` — this instance has no `ENCRYPTION_KEY` configured,
+ * `calendarFeedsAvailable`, same shape as MfaCard.tsx self-gating on
+ * `mfaAvailable` — this instance has no `ENCRYPTION_KEY` configured,
  * so there's nowhere to durably store a re-copyable token (see
  * `calendarFeedsAvailable`'s doc comment,
  * packages/shared/src/schemas/settings.ts). Collapsed by default like

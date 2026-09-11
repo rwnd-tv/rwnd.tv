@@ -1,6 +1,6 @@
 import type { MetadataProviderSource } from '@rwnd/shared'
 
-/** Display name for a metadata provider source — shared by the Settings
+/** Display name for a metadata provider source — shared by the Admin
  * page's provider-priority list (InstanceSettingsPanel.tsx) and the
  * show/movie detail pages' "Metadata: TMDB" provenance indicator. Not
  * translated: these are proper nouns (product names), same convention as

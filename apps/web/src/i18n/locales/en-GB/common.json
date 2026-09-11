@@ -865,40 +865,6 @@
       "migrationCount": "Migrations applied",
       "uptime": "Uptime",
       "environment": "Environment"
-    },
-    "instance": {
-      "title": "Instance settings",
-      "instanceName": "Instance name",
-      "registrationMode": "Registration",
-      "registrationOpen": "Open — anyone can register",
-      "registrationInvite": "Invite only",
-      "registrationClosed": "Closed — admin creates accounts",
-      "adminEmail": "Admin email",
-      "adminEmailPlaceholder": "admin@example.com",
-      "adminEmailHint": "Shown publicly (e.g. on the login page) as a contact address for this instance. Leave blank to hide it.",
-      "save": "Save changes",
-      "environmentLabel": "This instance is labelled \"{{label}}\", set via the ENVIRONMENT_LABEL environment variable — not editable here.",
-      "metadataProviders": "Metadata providers",
-      "metadataProvidersSingle": "Only one provider is configured on this instance.",
-      "metadataProviderMoveUp": "Move {{provider}} up",
-      "metadataProviderMoveDown": "Move {{provider}} down"
-    },
-    "invites": {
-      "title": "Invites",
-      "description": "Registration is invite-only — create a code to hand out. Each one works once and expires after 7 days.",
-      "create": "Create invite",
-      "createdOnce": "Copy this code now — it won't be shown again.",
-      "email": "Email (optional)",
-      "emailed": "Also emailed to {{email}}",
-      "copy": "Copy",
-      "copied": "Copied",
-      "statusPending": "Pending",
-      "statusUsed": "Used",
-      "statusExpired": "Expired",
-      "created": "Created {{date}}",
-      "expires": "Expires {{date}}",
-      "revoke": "Revoke",
-      "empty": "No invites yet."
     }
   },
   "admin": {
@@ -1011,6 +977,41 @@
         "demote_one": "{{succeeded}} of {{count}} account demoted.",
         "demote_other": "{{succeeded}} of {{count}} accounts demoted."
       }
+    },
+    "invites": {
+      "title": "Invites",
+      "description": "Registration is invite-only — create a code to hand out. Each one works once and expires after 7 days.",
+      "notInviteOnly": "Invites are only used when registration is set to invite-only. Change the registration mode in Instance settings on this page to start creating them.",
+      "create": "Create invite",
+      "createdOnce": "Copy this code now — it won't be shown again.",
+      "email": "Email (optional)",
+      "emailed": "Also emailed to {{email}}",
+      "copy": "Copy",
+      "copied": "Copied",
+      "statusPending": "Pending",
+      "statusUsed": "Used",
+      "statusExpired": "Expired",
+      "created": "Created {{date}}",
+      "expires": "Expires {{date}}",
+      "revoke": "Revoke",
+      "empty": "No invites yet."
+    },
+    "instance": {
+      "title": "Instance settings",
+      "instanceName": "Instance name",
+      "registrationMode": "Registration",
+      "registrationOpen": "Open — anyone can register",
+      "registrationInvite": "Invite only",
+      "registrationClosed": "Closed — admin creates accounts",
+      "adminEmail": "Admin email",
+      "adminEmailPlaceholder": "admin@example.com",
+      "adminEmailHint": "Shown publicly (e.g. on the login page) as a contact address for this instance. Leave blank to hide it.",
+      "save": "Save changes",
+      "environmentLabel": "This instance is labelled \"{{label}}\", set via the ENVIRONMENT_LABEL environment variable — not editable here.",
+      "metadataProviders": "Metadata providers",
+      "metadataProvidersSingle": "Only one provider is configured on this instance.",
+      "metadataProviderMoveUp": "Move {{provider}} up",
+      "metadataProviderMoveDown": "Move {{provider}} down"
     },
     "databaseBackups": {
       "title": "Database backups",

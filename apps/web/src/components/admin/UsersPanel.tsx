@@ -88,18 +88,21 @@ function sortUsers(users: AdminUserSummary[], sortBy: SortKey, locale: string): 
  * facet (`RoleFilterPanel`/`MfaFilterPanel`/`VerifiedFilterPanel`, modelled
  * on `StatusFilterPanel`/`DroppedFilterPanel`), and a Reset button.
  *
- * Collapsed by default, same `<details>`/`<summary>` + `usePanelOpen`
- * idiom as every other panel on Import/Settings/Account (see
- * AdvancedPreferencesCard.tsx's doc comment for why `<details>` over a
- * bespoke show/hide component), and remembered the same way across a page
- * remount (James, 2026-09-03: asked for this page to match those rather
- * than always rendering open).
+ * Expanded by default as of 2026-09-11 (docs/TODO_ARCHIVE.md), reversing
+ * the 2026-09-03 decision recorded above to collapse it like every other
+ * panel — the user list is what's most worth seeing immediately on this
+ * page, and it took over the one-expanded-panel-per-page slot from
+ * DatabaseBackupsPanel.tsx when Instance settings and Invites joined this
+ * page. Same `<details>`/`<summary>` + `usePanelOpen` idiom as every other
+ * panel here (see AdvancedPreferencesCard.tsx's doc comment for why
+ * `<details>` over a bespoke show/hide component); its open/closed state
+ * is still remembered across a page remount the same way as before.
  */
 export function UsersPanel() {
   const { t } = useTranslation()
   const { user: currentUser } = useAuth()
   const locale = currentUser?.locale ?? 'en-GB'
-  const [open, setOpen] = usePanelOpen('panelAdminUsers')
+  const [open, setOpen] = usePanelOpen('panelAdminUsers', true)
 
   const [filter, setFilter] = useState('')
   const [filtersOpen, setFiltersOpen] = useState(false)

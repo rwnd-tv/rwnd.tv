@@ -455,7 +455,17 @@ Format:
             out of `/security-review`'s own scope. ASVS rows for Stage 7:
             V4.2.1 pass, new V11 section (business-logic/workflow-bypass)
             needed - pass, no bypass found.
-      - [ ] Stage 2: admin & owner-role privilege model
+      - [x] Stage 2: admin & owner-role privilege model — 2026-09-14. No
+            findings. Verified `assertNotLastAdmin`'s row-lock genuinely
+            closes the concurrent-demotion race (same transaction as the
+            write, at every call site), bulk actions re-enforce every
+            invariant server-side per item (no separate weaker bulk route),
+            `transfer-ownership` re-proves the password and locks the owner
+            row before swapping, `GET /admin/users` exposes nothing beyond
+            ADR 0007's already-accepted scope, and the password-reset
+            trigger never lets an admin see/set another user's password.
+            ASVS rows for Stage 7: V4.1.1, V4.1.2, V4.1.3, V4.2.1, V2.5.x —
+            all pass.
       - [ ] Stage 3: scheduled database backups (verify against ADR 0008)
       - [ ] Stage 4: calendar feeds & in-app calendar
       - [ ] Stage 5: Webhooks panel redesign & token-encryption posture change

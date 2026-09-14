@@ -58,7 +58,7 @@ importers:
         version: 0.6.1(hono@4.13.7)
       '@hono/zod-openapi':
         specifier: ^1.6.3
-        version: 1.6.3(hono@4.13.7)(zod@4.5.4)
+        version: 1.6.3(hono@4.13.7)(zod@4.6.1)
       '@node-rs/argon2':
         specifier: ^2.2.1
         version: 2.2.1
@@ -81,8 +81,8 @@ importers:
         specifier: ^10.0.0
         version: 10.0.0
       zod:
-        specifier: ^4.5.4
-        version: 4.5.4
+        specifier: ^4.6.1
+        version: 4.6.1
     devDependencies:
       '@types/node':
         specifier: ^26.5.1
@@ -198,8 +198,8 @@ importers:
   packages/shared:
     dependencies:
       zod:
-        specifier: ^4.5.4
-        version: 4.5.4
+        specifier: ^4.6.1
+        version: 4.6.1
     devDependencies:
       typescript:
         specifier: ^5.7.3
@@ -3324,10 +3324,10 @@ snapshots:
       is-potential-custom-element-name: 1.0.1
       lru-cache: 11.5.2
 
-  '@asteasolutions/zod-to-openapi@9.1.0(zod@4.5.4)':
+  '@asteasolutions/zod-to-openapi@9.1.0(zod@4.6.1)':
     dependencies:
       openapi3-ts: 4.6.1
-      zod: 4.5.4
+      zod: 4.6.1
 
   '@babel/code-frame@7.29.7':
     dependencies:
@@ -3845,18 +3845,18 @@ snapshots:
     dependencies:
       hono: 4.13.7
 
-  '@hono/zod-openapi@1.6.3(hono@4.13.7)(zod@4.5.4)':
+  '@hono/zod-openapi@1.6.3(hono@4.13.7)(zod@4.6.1)':
     dependencies:
-      '@asteasolutions/zod-to-openapi': 9.1.0(zod@4.5.4)
-      '@hono/zod-validator': 0.9.1(hono@4.13.7)(zod@4.5.4)
+      '@asteasolutions/zod-to-openapi': 9.1.0(zod@4.6.1)
+      '@hono/zod-validator': 0.9.1(hono@4.13.7)(zod@4.6.1)
       hono: 4.13.7
       openapi3-ts: 4.6.1
-      zod: 4.5.4
+      zod: 4.6.1
 
-  '@hono/zod-validator@0.9.1(hono@4.13.7)(zod@4.5.4)':
+  '@hono/zod-validator@0.9.1(hono@4.13.7)(zod@4.6.1)':
     dependencies:
       hono: 4.13.7
-      zod: 4.5.4
+      zod: 4.6.1
 
   '@humanfs/core@0.19.2':
     dependencies:

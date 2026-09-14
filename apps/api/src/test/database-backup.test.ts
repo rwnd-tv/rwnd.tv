@@ -209,6 +209,13 @@ describe.skipIf(!hasPgDump())('database backup', () => {
     await writeFile(stalePartial, 'crashed run')
     const old = new Date(Date.now() - 24 * 60 * 60 * 1000)
     await utimes(stalePartial, old, old)
+    // A stale .partial that ISN'T this job's own shape — the stale-partial
+    // sweep used to match any name ending in .partial, which would delete
+    // this too (M4 review finding, docs/TODO.md). It must survive exactly
+    // like notes.txt/rwnd-backup.sql.gz above.
+    const strangePartial = join(DIR, 'my-export.sql.gz.partial')
+    await writeFile(strangePartial, "not this job's")
+    await utimes(strangePartial, old, old)
 
     await runDatabaseBackup({ db, dir: DIR, databaseUrl: databaseUrl() })
 
@@ -219,6 +226,7 @@ describe.skipIf(!hasPgDump())('database backup', () => {
     )
     expect(left).toContain('notes.txt')
     expect(left).toContain('rwnd-backup.sql.gz')
+    expect(left).toContain('my-export.sql.gz.partial')
     expect(left).not.toContain('rwnd-20260101T000000Z.sql.gz.partial')
   })
 

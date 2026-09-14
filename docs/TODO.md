@@ -384,6 +384,37 @@ Format:
       clear enough in the UI once real entries (not just counts) are on
       screen.
 
+- [ ] **No cross-process concurrent-run guard on the scheduled database backup** (2026-09-14 added, M4 review Stage 3)
+
+      `scheduleDatabaseBackup` (`apps/api/src/lib/database-backup.ts`) has
+      no protection against two `runDatabaseBackup()` calls overlapping
+      across processes — e.g. a botched deploy briefly running two
+      containers against the same `DATABASE_BACKUP_DIR`, or a tight
+      restart loop. Within one process this is effectively impossible
+      (`setInterval` only fires again after 24h regardless of how long the
+      previous run took, and a dump never takes anywhere near that long),
+      so no fix was applied there.
+
+      The real risk is narrow but not nothing: two runs starting in the
+      same second compute the identical `rwnd-<timestamp>.sql.gz.partial`
+      name (`timestampName`'s resolution is per-second) and both open a
+      write stream to it. `createWriteStream`'s default truncating `'w'`
+      flag means the second opener can truncate the file out from under
+      the first mid-write, producing an interleaved/corrupt dump that
+      still renames successfully and looks like a valid backup — exactly
+      the failure class the `.partial` + atomic-rename design
+      ([ADR 0008](adr/0008-database-backups.md)) exists to prevent, just
+      not for this particular collision.
+
+      Same shape as the concurrent-run guard already named as needed for
+      the manual "back up now" button above, but applies to the scheduled
+      job today, independent of whether that button ever gets built. A
+      real fix needs cross-process coordination (a lock file via exclusive
+      `open()`, or including a random suffix in the partial filename so
+      two concurrent runs can never collide on one path) - worth deciding
+      once, covering both the scheduled job and any future manual-trigger
+      route, rather than solving it twice.
+
 ## Ratings
 
 - [ ] **Don't allow rating anything that hasn't aired/released yet** (2026-09-06 added)
@@ -466,7 +497,19 @@ Format:
             trigger never lets an admin see/set another user's password.
             ASVS rows for Stage 7: V4.1.1, V4.1.2, V4.1.3, V4.2.1, V2.5.x —
             all pass.
-      - [ ] Stage 3: scheduled database backups (verify against ADR 0008)
+      - [x] Stage 3: scheduled database backups (verify against ADR 0008) —
+            2026-09-14. 6 of 7 ADR 0008 claims held exactly; one had
+            drifted: the stale-`.partial` cleanup matched any
+            `*.partial` file, not just this job's own `rwnd-<ISO>.sql.gz.partial`
+            shape, so a human-placed `.partial` file sitting in the bind
+            mount for 6h+ would get silently deleted — contradicted the
+            ADR's own "can't delete anything it didn't write" claim. Fixed
+            with a matching regex, regression test added. Also found and
+            logged a new (not ADR-covered) cross-process concurrent-run
+            risk — see the item above. Verified container hardening
+            (read_only/cap_drop/no-new-privileges) directly against
+            docker-compose.yml. ASVS rows for Stage 7: V8.3.x, V12.1.1,
+            V14.4.x — pass (V12.1.1 pass only after the fix).
       - [ ] Stage 4: calendar feeds & in-app calendar
       - [ ] Stage 5: Webhooks panel redesign & token-encryption posture change
       - [ ] Stage 6: supply-chain, CI & dependency hygiene

@@ -17,6 +17,15 @@ import { loadEnv } from '../env.js'
  */
 const DUMP_RE = /^rwnd-\d{8}T\d{6}Z\.sql\.gz$/
 
+/** Same file, mid-write. Deliberately its own pattern rather than
+ * `DUMP_RE.test(name.slice(0, -'.partial'.length))`: a plain
+ * `.endsWith('.partial')` check (what this used to be) would let the stale-
+ * partial sweep below delete *any* `.partial` file a human placed in the
+ * bind mount, not just this job's own — the exact thing DUMP_RE above
+ * exists to rule out, just missed on this one path. Found in the M4
+ * milestone review (docs/TODO.md). */
+const PARTIAL_DUMP_RE = /^rwnd-\d{8}T\d{6}Z\.sql\.gz\.partial$/
+
 /** A partial older than this is from a crashed run, not one in flight, so
  * it's safe to clear. Generous relative to how long a dump of a
  * self-hosted instance actually takes. */
@@ -230,7 +239,7 @@ function sortedDumpNames(entries: string[]): string[] {
 async function prune(dir: string, now: number, tiers: RetentionTiers): Promise<number> {
   const entries = await readdir(dir)
 
-  for (const name of entries.filter((n) => n.endsWith('.partial'))) {
+  for (const name of entries.filter((n) => PARTIAL_DUMP_RE.test(n))) {
     const path = join(dir, name)
     try {
       const info = await stat(path)

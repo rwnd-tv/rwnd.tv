@@ -15,11 +15,15 @@ export function generateSecret(byteLength = 32): string {
  * (`lib/password.ts`) — see `docs/adr/0007-security-posture.md`'s "Bearer
  * secrets are hashed, not encrypted" section.
  *
- * CodeQL's `js/insufficient-password-hash` (alert #1) flags this as a weak
- * password hash — a false positive dismissed for the same reason: it can't
- * see that `secret` is never a password.
+ * CodeQL's `js/insufficient-password-hash` flags this as a weak password
+ * hash — a false positive dismissed twice now (alert #1, then alert #16
+ * after an unrelated edit shifted this function down a line and the new
+ * line number registered as a "new" alert): it can't see that `secret` is
+ * never a password. Suppressed inline below so a future line shift
+ * doesn't reopen it a third time.
  */
 export function hashSecret(secret: string): string {
+  // codeql[js/insufficient-password-hash] — always a 256-bit CSPRNG value from generateSecret() above, never a human-chosen password; see this function's own doc comment.
   return createHash('sha256').update(secret).digest('hex')
 }
 

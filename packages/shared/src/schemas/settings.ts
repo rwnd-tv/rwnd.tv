@@ -51,14 +51,25 @@ export const instanceSettingsSchema = z.object({
   mfaAvailable: z.boolean(),
   // True when this instance has ENCRYPTION_KEY configured — same gate as
   // mfaAvailable above, and for the same reason: a calendar feed's
-  // subscription URL must be re-copyable indefinitely (unlike an API
-  // token's one-time reveal), so the secret is encrypted at rest rather
-  // than only hashed, the same "must be replayed, not just compared"
-  // category Trakt tokens and TOTP secrets already use
-  // (apps/api/src/lib/crypto.ts). The web app hides the Settings >
-  // Calendar feeds panel entirely when false, rather than letting someone
-  // create a feed that can never redisplay its own URL.
+  // subscription URL must be re-copyable indefinitely, so the secret is
+  // encrypted at rest rather than only hashed, the same "must be
+  // replayed, not just compared" category Trakt tokens and TOTP secrets
+  // already use (apps/api/src/lib/crypto.ts). The web app hides the
+  // Settings > Calendar feeds panel entirely when false, rather than
+  // letting someone create a feed that can never redisplay its own URL —
+  // unlike webhookTokensRecoverable below, this one gates the whole
+  // feature, since calendar feeds are an optional convenience rather
+  // than core functionality.
   calendarFeedsAvailable: z.boolean(),
+  // True when this instance has ENCRYPTION_KEY configured — same gate as
+  // calendarFeedsAvailable above, but doesn't hide anything: a webhook
+  // token is core functionality (see docs/adr/0007-security-posture.md's
+  // 2026-09-14 update), so Settings > Webhooks always works regardless.
+  // This only tells the web app whether a *newly created or regenerated*
+  // token's URL will stay durably visible afterward, versus falling back
+  // to the old shown-once behavior for that one token — used to show or
+  // hide a one-time note in the create wizard, not to gate anything.
+  webhookTokensRecoverable: z.boolean(),
   // This package's own package.json `version` — see apps/api/src/version.ts.
   // Derived, not admin-editable, same convention as environmentLabel above.
   appVersion: z.string(),
@@ -80,6 +91,7 @@ export const updateInstanceSettingsRequestSchema = instanceSettingsSchema
     emailConfigured: true,
     mfaAvailable: true,
     calendarFeedsAvailable: true,
+    webhookTokensRecoverable: true,
     appVersion: true,
   })
   .partial()

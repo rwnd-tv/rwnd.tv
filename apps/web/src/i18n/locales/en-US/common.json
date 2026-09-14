@@ -89,7 +89,7 @@
       },
       "current": {
         "title": "Keep it current",
-        "body": "Add the Plex webhook and your per-user API token, or keep logging by hand."
+        "body": "Add a webhook for your media server, or keep logging by hand."
       }
     },
     "gallery": {
@@ -119,7 +119,7 @@
       "m1": {
         "title": "M1: Foundation",
         "items": [
-          "Local accounts, sessions, per-user API tokens",
+          "Local accounts, sessions, per-user webhook tokens",
           "TMDB search, manual watch logging, history",
           "Docker image, CI and a GHCR release pipeline",
           "Light/dark/system theming, i18n-ready UI"
@@ -747,19 +747,26 @@
   },
   "settings": {
     "title": "Settings",
-    "tokens": {
-      "title": "API tokens",
-      "description": "Use API tokens to let other apps (like Plex, Jellyfin, Emby or Tautulli) log watches on your behalf.",
-      "name": "Token name",
-      "create": "Create token",
-      "createdOnce": "Copy this token now — it won't be shown again.",
-      "lastUsed": "Last used {{date}}",
-      "neverUsed": "Never used",
-      "revoke": "Revoke",
-      "webhook": {
-        "title": "Connect {{source}}",
-        "copy": "Copy",
-        "copied": "Copied",
+    "webhooks": {
+      "title": "Webhooks",
+      "description": "Connect a media server so it can log your watches here automatically.",
+      "disclaimer": "rwnd.tv is not affiliated with, endorsed by, or sponsored by Plex Inc., Jellyfin, Emby, or Tautulli. Logos and trademarks are property of their respective owners.",
+      "add": "+ Add webhook",
+      "sourcePicker": {
+        "stepLabel": "Step 1 of 2 — Which media server?",
+        "blurb": {
+          "plex": "Requires Plex Pass",
+          "jellyfin": "Webhook plugin",
+          "emby": "Built-in notifications",
+          "tautulli": "Monitors a Plex server"
+        }
+      },
+      "setup": {
+        "stepLabel": "Step 2 of 2 — {{source}} setup",
+        "name": "Name",
+        "namePlaceholder": "e.g. Living room {{source}}",
+        "back": "Back",
+        "create": "Create webhook",
         "instructions": {
           "plex": "Paste this URL into your Plex server's Settings → Webhooks (requires Plex Pass). Watches will start logging automatically.",
           "jellyfin": "Paste this URL into Jellyfin's Dashboard → Plugins → Webhook → Generic Destination, with \"Send All Properties\" enabled. Watches will start logging automatically.",
@@ -769,6 +776,21 @@
         "template": {
           "label": "Data tab JSON template"
         }
+      },
+      "card": {
+        "lastUsed": "Last used {{date}}",
+        "neverUsed": "Never used",
+        "setupInstructions": "Setup instructions",
+        "copy": "Copy",
+        "copied": "Copied",
+        "urlUnavailable": "This webhook's URL can no longer be shown here. Regenerate to get a new one.",
+        "pickSource": "Which media server is this for?",
+        "regenerate": "Regenerate",
+        "regenerateConfirmTitle": "Regenerate this webhook's URL?",
+        "regenerateConfirmBody": "The current URL stops working immediately. You'll need to paste the new one into {{source}} again.",
+        "revoke": "Revoke",
+        "revokeConfirmTitle": "Revoke this webhook?",
+        "revokeConfirmBody": "{{name}} will stop logging watches immediately. This can't be undone."
       },
       "detectedAccounts": {
         "title": "Detected accounts",
@@ -785,7 +807,7 @@
         "unlink": "Unlink",
         "remove": "Remove",
         "removeConfirmTitle": "Remove this account?",
-        "removeConfirmBody": "This permanently removes {{name}} from this token's detected accounts. If it shows up again on a future webhook, it'll come back as unlinked."
+        "removeConfirmBody": "This permanently removes {{name}} from this webhook's detected accounts. If it shows up again on a future webhook, it'll come back as unlinked."
       }
     },
     "calendarFeeds": {
@@ -837,7 +859,7 @@
       "description": "Watch-history accounts (e.g. a Plex profile) that have been linked to you.",
       "empty": "No linked accounts yet.",
       "unlink": "Unlink",
-      "redeemDescription": "Have a link code from someone else's API tokens settings? Redeem it here to link a detected watch-history account to your own.",
+      "redeemDescription": "Have a link code from someone else's Webhooks settings? Redeem it here to link a detected watch-history account to your own.",
       "linkCode": "Link code",
       "redeemSubmit": "Link"
     },
@@ -918,7 +940,7 @@
     "roleTitle": "Role",
     "passwordTitle": "Password",
     "deleteTitle": "Delete account",
-    "deleteWarning": "Permanently delete this account and everything in it: watch history, ratings, watchlists, dropped shows, API tokens, and any connected services. This can't be undone.",
+    "deleteWarning": "Permanently delete this account and everything in it: watch history, ratings, watchlists, dropped shows, webhook tokens, and any connected services. This can't be undone.",
     "deleteOwnerBlocked": "The owner's account can't be deleted, by another admin or by the owner themselves. Ownership has to be transferred to another admin first, from the owner's own Account page. This account then becomes an ordinary admin and can be deleted like any other.",
     "deleteSelfBlocked": "You can't delete your own account from here. Go to your Account page instead, where deleting it needs your password to confirm.",
     "passwordResetUnavailable": "Email isn't configured on this instance, so a password reset can't be sent. Whoever manages this server needs to set the SMTP_HOST environment variable (and related settings) first.",
@@ -943,7 +965,7 @@
     "passwordResetSent": "Reset email sent.",
     "deleteUser": "Delete account",
     "deleteConfirmTitle": "Delete this account?",
-    "deleteConfirmBody": "This will permanently delete the account and everything in it — watch history, ratings, watchlists, dropped shows, API tokens, and any connected services. This can't be undone. To confirm, type the account's email address ({{email}}) below.",
+    "deleteConfirmBody": "This will permanently delete the account and everything in it — watch history, ratings, watchlists, dropped shows, webhook tokens, and any connected services. This can't be undone. To confirm, type the account's email address ({{email}}) below.",
     "deleteConfirmEmail": "Email address",
     "sessionsTitle": "Sessions",
     "sessionsEmpty": "No active sessions.",
@@ -971,7 +993,7 @@
       "delete": "Delete accounts",
       "deleteConfirmTitle_one": "Delete {{count}} account?",
       "deleteConfirmTitle_other": "Delete {{count}} accounts?",
-      "deleteConfirmBody": "This permanently deletes each account listed below and everything in it — watch history, ratings, watchlists, dropped shows, API tokens, and any connected services. This can't be undone.",
+      "deleteConfirmBody": "This permanently deletes each account listed below and everything in it — watch history, ratings, watchlists, dropped shows, webhook tokens, and any connected services. This can't be undone.",
       "promoteConfirmTitle_one": "Promote {{count}} account to admin?",
       "promoteConfirmTitle_other": "Promote {{count}} accounts to admin?",
       "promoteConfirmBody": "Each account listed below will be able to manage every user on this instance, including promoting and demoting other admins.",
@@ -1134,7 +1156,7 @@
     "transferOwnershipConfirmBody": "You will become a regular admin. {{name}} will become the owner of this instance. This can't be undone by you alone.",
     "transferOwnershipPassword": "Current password",
     "deleteTitle": "Delete account",
-    "deleteWarning": "Permanently delete your account and everything in it — watch history, ratings, watchlist, dropped shows, API tokens, and any connected services. This can't be undone.",
+    "deleteWarning": "Permanently delete your account and everything in it — watch history, ratings, watchlist, dropped shows, webhook tokens, and any connected services. This can't be undone.",
     "deleteButton": "Delete account",
     "deleteConfirmTitle": "Delete your account?",
     "deleteConfirmBody": "This will permanently delete your account and everything in it. This can't be undone. To confirm, type your email address ({{email}}) and current password below.",

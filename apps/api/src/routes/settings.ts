@@ -74,6 +74,7 @@ function serializeSettings(row?: {
     emailConfigured: Boolean(loadEnv().SMTP_HOST),
     mfaAvailable: Boolean(loadEnv().ENCRYPTION_KEY),
     calendarFeedsAvailable: Boolean(loadEnv().ENCRYPTION_KEY),
+    webhookTokensRecoverable: Boolean(loadEnv().ENCRYPTION_KEY),
     appVersion: APP_VERSION,
     adminEmail: source.adminEmail,
   }

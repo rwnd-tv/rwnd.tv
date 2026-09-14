@@ -23,7 +23,7 @@ import { usePanelOpen } from '../../lib/use-panel-open.js'
  * know it" reasoning as ChangePasswordCard.tsx/EmailCard.tsx.
  *
  * Every table referencing the user cascades on delete (plays, ratings,
- * watchlist, dropped shows, sessions, API tokens, Trakt connection,
+ * watchlist, dropped shows, sessions, webhook tokens, Trakt connection,
  * import jobs, ...) — see the FK comment on `DELETE /auth/me` in
  * apps/api/src/routes/auth.ts. No confirmation-of-what-gets-deleted list
  * here (unlike DatabasePanel.tsx's Clear database, which shows per-

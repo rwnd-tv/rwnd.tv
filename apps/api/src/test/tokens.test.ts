@@ -1,6 +1,12 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { and, eq, isNull } from 'drizzle-orm'
-import { pendingWebhookEvents, plays, webhookAccountLinks, webhookLinkCodes } from '@rwnd/db'
+import {
+  apiTokens,
+  pendingWebhookEvents,
+  plays,
+  webhookAccountLinks,
+  webhookLinkCodes,
+} from '@rwnd/db'
 import type {
   ApiToken,
   CreateApiTokenResponse,
@@ -11,6 +17,7 @@ import type {
 } from '@rwnd/shared'
 import { createLocalUser, extractCookie, json, resetDb, testApp, testDb } from './helpers.js'
 import { createApp } from '../app.js'
+import { hashSecret } from '../lib/tokens.js'
 import type { MetadataProvider } from '../providers/types.js'
 
 const db = testDb()
@@ -109,11 +116,11 @@ async function loginAs(email: string, password: string) {
   return extractCookie(res)!
 }
 
-async function createToken(cookie: string, name = 'Plex') {
+async function createToken(cookie: string, name = 'Plex', source = 'plex') {
   const res = await app.request('/api/v1/tokens', {
     method: 'POST',
     headers: { cookie, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name }),
+    body: JSON.stringify({ name, source }),
   })
   return json<CreateApiTokenResponse>(res)
 }
@@ -177,6 +184,133 @@ describe('tokens', () => {
       headers: { cookie: cookieB },
     })
     expect(res.status).toBe(404)
+  })
+
+  it('400s a create request with no source', async () => {
+    const cookie = await createUserAndCookie()
+    const res = await app.request('/api/v1/tokens', {
+      method: 'POST',
+      headers: { cookie, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'No source' }),
+    })
+    expect(res.status).toBe(400)
+  })
+
+  // apps/api/vitest.config.ts always sets ENCRYPTION_KEY for this whole
+  // package (same reason calendar.test.ts's own comment on this gives —
+  // there's no per-test way to unset it), so `token` being redisplayable
+  // here is the normal case this suite can actually exercise. The other
+  // branch (no ENCRYPTION_KEY, or a pre-migration row) is covered below
+  // by seeding a row with `tokenEncrypted: null` directly, which doesn't
+  // depend on the env var at all.
+  it('list redisplays the source and decrypted token', async () => {
+    const cookie = await createUserAndCookie()
+    const created = await createToken(cookie, 'Plex', 'plex')
+
+    const res = await app.request('/api/v1/tokens', { headers: { cookie } })
+    const { tokens } = await json<{ tokens: ApiToken[] }>(res)
+    expect(tokens[0]?.source).toBe('plex')
+    expect(tokens[0]?.token).toBe(created.token)
+  })
+
+  it('a token with no recoverable secret (no ENCRYPTION_KEY when it was last generated, or pre-dating this column) lists as token: null', async () => {
+    const cookie = await createUserAndCookie()
+    const userId = await meId(cookie)
+    await db.insert(apiTokens).values({
+      userId,
+      name: 'Legacy',
+      tokenHash: hashSecret('rwnd_legacy-unrecoverable'),
+      tokenEncrypted: null,
+      source: null,
+    })
+
+    const res = await app.request('/api/v1/tokens', { headers: { cookie } })
+    const { tokens } = await json<{ tokens: ApiToken[] }>(res)
+    expect(tokens[0]?.token).toBeNull()
+    expect(tokens[0]?.source).toBeNull()
+  })
+
+  describe('PATCH /tokens/{id}', () => {
+    it("sets a legacy token's source", async () => {
+      const cookie = await createUserAndCookie()
+      const userId = await meId(cookie)
+      const [legacy] = await db
+        .insert(apiTokens)
+        .values({
+          userId,
+          name: 'Legacy',
+          tokenHash: hashSecret('rwnd_legacy-no-source'),
+          tokenEncrypted: null,
+          source: null,
+        })
+        .returning()
+
+      const res = await app.request(`/api/v1/tokens/${legacy!.id}`, {
+        method: 'PATCH',
+        headers: { cookie, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ source: 'tautulli' }),
+      })
+      expect(res.status).toBe(200)
+      const body = await json<ApiToken>(res)
+      expect(body.source).toBe('tautulli')
+    })
+
+    it("404s for a token that isn't the caller's own", async () => {
+      const cookieA = await createUserAndCookie('owner@example.com')
+      const created = await createToken(cookieA)
+      await createLocalUser(db, 'other@example.com', 'correct-horse-battery-staple')
+      const cookieB = await loginAs('other@example.com', 'correct-horse-battery-staple')
+
+      const res = await app.request(`/api/v1/tokens/${created.id}`, {
+        method: 'PATCH',
+        headers: { cookie: cookieB, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ source: 'plex' }),
+      })
+      expect(res.status).toBe(404)
+    })
+  })
+
+  describe('POST /tokens/{id}/regenerate', () => {
+    it("rotates the token's secret, keeping its detected accounts", async () => {
+      const cookie = await createUserAndCookie()
+      const created = await createToken(cookie)
+      const link = await seedLink(created.id)
+
+      const res = await app.request(`/api/v1/tokens/${created.id}/regenerate`, {
+        method: 'POST',
+        headers: { cookie },
+      })
+      expect(res.status).toBe(200)
+      const body = await json<CreateApiTokenResponse>(res)
+      expect(body.token).not.toBe(created.token)
+      expect(body.token).toMatch(/^rwnd_/)
+
+      // The old token no longer resolves — same hash-lookup mechanism a
+      // webhook delivery uses (apps/api/src/lib/api-tokens.ts).
+      const [row] = await db.select().from(apiTokens).where(eq(apiTokens.id, created.id))
+      expect(row?.tokenHash).not.toBe(hashSecret(created.token))
+
+      // The detected account seeded before regenerating is untouched —
+      // it's keyed on the token's row id, not its secret.
+      const [stillLinked] = await db
+        .select()
+        .from(webhookAccountLinks)
+        .where(eq(webhookAccountLinks.id, link.id))
+      expect(stillLinked).toBeDefined()
+    })
+
+    it("404s for a token that isn't the caller's own", async () => {
+      const cookieA = await createUserAndCookie('owner@example.com')
+      const created = await createToken(cookieA)
+      await createLocalUser(db, 'other@example.com', 'correct-horse-battery-staple')
+      const cookieB = await loginAs('other@example.com', 'correct-horse-battery-staple')
+
+      const res = await app.request(`/api/v1/tokens/${created.id}/regenerate`, {
+        method: 'POST',
+        headers: { cookie: cookieB },
+      })
+      expect(res.status).toBe(404)
+    })
   })
 
   describe('GET /tokens/{id}/webhook-links', () => {
@@ -376,7 +510,7 @@ describe('tokens', () => {
       const createdRes = await customApp.request('/api/v1/tokens', {
         method: 'POST',
         headers: { cookie, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: 'Plex' }),
+        body: JSON.stringify({ name: 'Plex', source: 'plex' }),
       })
       const created = await json<CreateApiTokenResponse>(createdRes)
       const link = await seedLink(created.id)
@@ -460,7 +594,7 @@ describe('tokens', () => {
       const createdRes = await customApp.request('/api/v1/tokens', {
         method: 'POST',
         headers: { cookie, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: 'Plex' }),
+        body: JSON.stringify({ name: 'Plex', source: 'plex' }),
       })
       const created = await json<CreateApiTokenResponse>(createdRes)
       const link = await seedLink(created.id)

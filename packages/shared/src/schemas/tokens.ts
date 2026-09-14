@@ -1,25 +1,6 @@
 import { z } from 'zod'
 import { uuidSchema } from './common.js'
 
-export const createApiTokenRequestSchema = z.object({
-  name: z.string().trim().min(1).max(100),
-})
-export type CreateApiTokenRequest = z.infer<typeof createApiTokenRequestSchema>
-
-export const apiTokenSchema = z.object({
-  id: uuidSchema,
-  name: z.string(),
-  lastUsedAt: z.string().datetime().nullable(),
-  createdAt: z.string().datetime(),
-})
-export type ApiToken = z.infer<typeof apiTokenSchema>
-
-/** Returned exactly once, at creation time. Only the hash is ever stored. */
-export const createApiTokenResponseSchema = apiTokenSchema.extend({
-  token: z.string(),
-})
-export type CreateApiTokenResponse = z.infer<typeof createApiTokenResponseSchema>
-
 export const webhookSourceSchema = z.enum(['plex', 'jellyfin', 'emby', 'tautulli'])
 export type WebhookSource = z.infer<typeof webhookSourceSchema>
 
@@ -34,6 +15,55 @@ export const WEBHOOK_SOURCE_LABELS: Record<WebhookSource, string> = {
   emby: 'Emby',
   tautulli: 'Tautulli',
 }
+
+/** `source` is the server picked in the create wizard's first step —
+ * display-only, not an ingestion constraint; see `apiTokens.source`'s own
+ * doc comment (packages/db/src/schema.ts). */
+export const createApiTokenRequestSchema = z.object({
+  name: z.string().trim().min(1).max(100),
+  source: webhookSourceSchema,
+})
+export type CreateApiTokenRequest = z.infer<typeof createApiTokenRequestSchema>
+
+/** `source` is nullable only for a token created before this column
+ * existed and never backfilled (no webhook delivery to infer it from) —
+ * see the migration that added it. `token` is the decrypted webhook
+ * secret, re-derivable only when this instance has `ENCRYPTION_KEY`
+ * configured *and* this particular row was created or regenerated while
+ * it was; null otherwise, meaning Settings can't redisplay a URL for it
+ * without a regenerate first. Every source's webhook URL is
+ * `{origin}/api/v1/webhooks/{source}/{token}` — the API never returns a
+ * pre-built URL, since the web app already knows how to build one from
+ * `window.location.origin`. */
+export const apiTokenSchema = z.object({
+  id: uuidSchema,
+  name: z.string(),
+  source: webhookSourceSchema.nullable(),
+  token: z.string().nullable(),
+  lastUsedAt: z.string().datetime().nullable(),
+  createdAt: z.string().datetime(),
+})
+export type ApiToken = z.infer<typeof apiTokenSchema>
+
+/** Create and regenerate both always know the plaintext token — it was
+ * just generated in this same request — so `token` is guaranteed
+ * non-null here regardless of whether it's durably recoverable later.
+ * Reused as-is for `POST /tokens/{id}/regenerate`'s response too:
+ * regenerating is really "issue a new secret for this same row," the
+ * same shape as creating one. */
+export const createApiTokenResponseSchema = apiTokenSchema.extend({
+  token: z.string(),
+})
+export type CreateApiTokenResponse = z.infer<typeof createApiTokenResponseSchema>
+
+/** `PATCH /tokens/{id}` — the only field settable after creation.
+ * Exists solely to let a pre-migration token (`source: null`, never
+ * backfilled) be assigned one from Settings, without forcing a
+ * revoke-and-recreate that would lose its detected accounts. */
+export const updateApiTokenRequestSchema = z.object({
+  source: webhookSourceSchema,
+})
+export type UpdateApiTokenRequest = z.infer<typeof updateApiTokenRequestSchema>
 
 /** One external account (e.g. a Plex user) seen on this token's webhook,
  * and which rwnd.tv user — if any — its plays should log against. See

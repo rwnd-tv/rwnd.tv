@@ -256,6 +256,37 @@ export const sessions = pgTable(
 )
 
 /** Long-lived tokens for webhooks/scrobblers (Plex/Tautulli in M2, CLI/export clients later). */
+/**
+ * A user's webhook token (Settings → Webhooks in the UI; the underlying
+ * table/route names stay `apiTokens`/`tokens.ts` — this is still the same
+ * bearer secret embedded in a webhook URL, just presented around a
+ * server-first flow now instead of one wall of every source's setup
+ * steps at once. See `docs/adr/0007-security-posture.md`'s 2026-09-14
+ * update for the reasoning behind the two columns below.
+ *
+ * `source` is the media server picked in the create wizard — display-only,
+ * not an ingestion constraint: `resolveApiToken`
+ * (apps/api/src/lib/api-tokens.ts) still accepts a hit for *any* of the
+ * four `webhookSourceEnum` values against any token, unchanged, because a
+ * self-hoster can legitimately point both `plex` and `tautulli` at the
+ * same token (see `webhookAccountLinks.externalServerId`'s own comment).
+ * Nullable for rows created before this column existed — backfilled from
+ * `webhookAccountLinks` where a match exists (this migration), left null
+ * otherwise and settable once via `PATCH /tokens/{id}`.
+ *
+ * `tokenEncrypted` is the same secret as `tokenHash`, AES-256-GCM
+ * (`lib/crypto.ts`), following `calendarFeeds.tokenEncrypted`'s exact
+ * precedent below: a webhook URL has to be re-copyable whenever a self-
+ * hoster reconfigures Plex/Jellyfin/Emby/Tautulli, not just shown once.
+ * Unlike calendar feeds, the *whole* Webhooks panel isn't gated on
+ * `ENCRYPTION_KEY` — webhook ingestion is core functionality, not an
+ * optional convenience — so this column is nullable and the encrypted
+ * value is only ever populated when `ENCRYPTION_KEY` happens to be
+ * configured at the moment a token is created or regenerated
+ * (`webhookTokensRecoverable`, packages/shared/src/schemas/settings.ts).
+ * A row with a null value here falls back to the old "shown once, then
+ * only the hash remains" behavior for that one token.
+ */
 export const apiTokens = pgTable(
   'api_tokens',
   {
@@ -265,10 +296,12 @@ export const apiTokens = pgTable(
       .references(() => users.id, { onDelete: 'cascade' }),
     name: text('name').notNull(),
     tokenHash: text('token_hash').notNull().unique(),
+    tokenEncrypted: text('token_encrypted'),
+    source: webhookSourceEnum('source'),
     lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
-  // Backs every load of the API-tokens settings page
+  // Backs every load of the Webhooks settings panel
   // (apps/api/src/routes/tokens.ts).
   (table) => [index('api_tokens_user_idx').on(table.userId)],
 )
@@ -286,15 +319,18 @@ export const apiTokens = pgTable(
  * `tokenHash` is the lookup key on the feed-serving hot path, same
  * unsalted-SHA-256-of-a-CSPRNG-value convention as sessions/apiTokens.
  * `tokenEncrypted` is the same secret, AES-256-GCM (lib/crypto.ts), and
- * exists only so Settings can re-display the URL every time it's
- * opened: unlike an API token (shown once, then only its hash is kept),
- * a subscription URL has to be re-copyable whenever the user sets up
- * another device, and this capability is narrow enough — read-only,
- * one derived view, one user — that the recoverability is worth it.
- * Same "must be replayed, not just compared" category as
- * traktConnections/userTotp; see lib/crypto.ts's doc comment. Gated on
- * `ENCRYPTION_KEY` being configured (apps/api/src/routes/settings.ts's
- * `calendarFeedsAvailable`), same as MFA.
+ * exists only so Settings can re-display the URL every time it's opened —
+ * `apiTokens.tokenEncrypted` above now does the same thing for the same
+ * reason. The real difference is how each degrades without
+ * `ENCRYPTION_KEY`: a calendar feed simply can't be created at all
+ * (this whole panel is gated on `calendarFeedsAvailable`, an optional
+ * convenience feature), where a webhook token still gets created and
+ * still ingests watches either way, just without a re-copyable URL —
+ * webhook ingestion is core functionality, not optional. Same "must be
+ * replayed, not just compared" category as traktConnections/userTotp;
+ * see lib/crypto.ts's doc comment. Gated on `ENCRYPTION_KEY` being
+ * configured (apps/api/src/routes/settings.ts's `calendarFeedsAvailable`),
+ * same as MFA.
  *
  * All four settings booleans live on one row even though only two apply
  * per feed type (includeMovies/includeShows for 'history',

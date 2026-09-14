@@ -36,6 +36,7 @@ const baseSettings: InstanceSettings = {
   emailConfigured: false,
   mfaAvailable: false,
   calendarFeedsAvailable: true,
+  webhookTokensRecoverable: true,
   appVersion: '0.1.0',
   adminEmail: null,
 }
@@ -101,10 +102,9 @@ describe('CalendarFeedsPanel', () => {
     expect(container).toBeEmptyDOMElement()
   })
 
-  // The deliberate divergence from TokensPanel.tsx's one-time API token
-  // reveal (see CalendarFeedsPanel.tsx's FeedRow doc comment): a
-  // subscription URL must be re-copyable indefinitely, so it's shown on
-  // first render with zero interaction, not behind a `justCreated` gate.
+  // See CalendarFeedsPanel.tsx's FeedRow doc comment: a subscription URL
+  // must be re-copyable indefinitely, so it's shown on first render with
+  // zero interaction, not behind a `justCreated` gate.
   it('shows an existing feed’s subscription URL immediately, with no interaction', async () => {
     renderPanel([historyFeed])
 

@@ -121,6 +121,10 @@ Contributions are welcome; see [CONTRIBUTING.md](CONTRIBUTING.md). Please also r
 
 Metadata provided by [TheTVDB](https://www.thetvdb.com/). Please consider adding missing information or subscribing.
 
+## Trademarks
+
+<img src="apps/web/public/attribution/plex-icon.png" alt="" height="20"> <img src="apps/web/public/attribution/jellyfin-icon.svg" alt="" height="20"> <img src="apps/web/public/attribution/emby-icon.png" alt="" height="20"> <img src="apps/web/public/attribution/tautulli-icon.png" alt="" height="20"> rwnd.tv is not affiliated with, endorsed by, or sponsored by Plex Inc., Jellyfin, Emby, or Tautulli. Logos and trademarks are property of their respective owners.
+
 ## License
 
 [MIT](LICENSE)

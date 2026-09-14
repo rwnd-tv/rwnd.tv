@@ -33,6 +33,7 @@ const baseSettings: InstanceSettings = {
   emailConfigured: false,
   mfaAvailable: false,
   calendarFeedsAvailable: false,
+  webhookTokensRecoverable: false,
   appVersion: '0.1.0',
   adminEmail: null,
 }

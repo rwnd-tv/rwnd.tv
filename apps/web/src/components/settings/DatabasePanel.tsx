@@ -25,7 +25,7 @@ const EMPTY_SELECTION: Record<Category, boolean> = {
 /**
  * Bulk-delete the current user's own tracked data, and back up/restore it
  * to/from a file (apps/api/src/routes/backups.ts). Both scoped to the
- * signed-in user only — same tier as ProfileForm/TokensPanel in
+ * signed-in user only — same tier as ProfileForm/WebhooksPanel in
  * SettingsPage.tsx, not gated behind `user?.role === 'admin'` the way
  * the Admin page's panels are (route-level, AdminRoute.tsx). Collapsed by
  * default like every other panel on this page except AboutPanel.tsx

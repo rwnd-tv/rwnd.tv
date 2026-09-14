@@ -92,7 +92,7 @@ async function createToken(customApp: RequestableApp, cookie: string) {
   const res = await customApp.request('/api/v1/tokens', {
     method: 'POST',
     headers: { cookie, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name: 'Plex' }),
+    body: JSON.stringify({ name: 'Plex', source: 'plex' }),
   })
   return json<CreateApiTokenResponse>(res)
 }

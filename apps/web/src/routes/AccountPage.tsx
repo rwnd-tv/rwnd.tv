@@ -29,8 +29,9 @@ import { LogoutButton } from '../components/account/LogoutButton.js'
  * link a webhook account (the view and redeem halves of the link-code
  * consent rework, `docs/adr/0007-security-posture.md`'s addendum)
  * briefly lived here too (2026-09-02), then moved the same day to
- * Settings, directly below TokensPanel — James decided both belong with
- * the rest of the webhook/token machinery rather than on Account, and
+ * Settings, directly below WebhooksPanel (`TokensPanel.tsx` until its
+ * 2026-09-14 rename) — James decided both belong with the rest of the
+ * webhook/token machinery rather than on Account, and
  * later the same day merged into one `LinkedAccountsPanel.tsx`
  * (`components/settings/`) rather than two separate panels. See
  * ProfileCard.tsx's doc comment for why

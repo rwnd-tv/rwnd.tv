@@ -16,8 +16,8 @@ import { Spinner } from '../ui/Spinner.js'
  * user on it) can have several of its own, discovered one at a time as
  * events actually arrive (see `packages/db/src/schema.ts`'s
  * `webhookAccountLinks` doc comment). Renders nothing until at least one
- * external account has been seen for this token — most tokens, and every
- * non-webhook token, show nothing extra here.
+ * external account has been seen for this token — most freshly created
+ * webhooks show nothing extra here yet.
  *
  * Linking an account for anyone but yourself always goes through a
  * one-time code the target redeems themselves
@@ -49,7 +49,7 @@ export function TokenWebhookLinks({ tokenId }: { tokenId: string }) {
   return (
     <div className="mt-2 border-t border-[var(--color-border)] pt-2">
       <p className="mb-1 text-xs font-medium text-[var(--color-fg-muted)]">
-        {t('settings.tokens.detectedAccounts.title')}
+        {t('settings.webhooks.detectedAccounts.title')}
       </p>
       <ul className="flex flex-col gap-2">
         {data.links.map((link) => (
@@ -156,7 +156,7 @@ function WebhookLinkRow({
         <span className="truncate text-sm">
           {link.externalAccountName}
           <span className="ml-2 text-xs text-[var(--color-fg-muted)]">
-            {link.userId ? link.userDisplayName : t('settings.tokens.detectedAccounts.unlinked')}
+            {link.userId ? link.userDisplayName : t('settings.webhooks.detectedAccounts.unlinked')}
           </span>
         </span>
         <div className="flex shrink-0 items-center gap-2">
@@ -170,16 +170,16 @@ function WebhookLinkRow({
                 unlink.mutate()
               }}
             >
-              {t('settings.tokens.detectedAccounts.unlink')}
+              {t('settings.webhooks.detectedAccounts.unlink')}
             </Button>
           )}
           <Button
             type="button"
             variant="danger"
             onClick={() => setConfirmRemoveOpen(true)}
-            aria-label={`${t('settings.tokens.detectedAccounts.remove')}: ${link.externalAccountName}`}
+            aria-label={`${t('settings.webhooks.detectedAccounts.remove')}: ${link.externalAccountName}`}
           >
-            {t('settings.tokens.detectedAccounts.remove')}
+            {t('settings.webhooks.detectedAccounts.remove')}
           </Button>
         </div>
       </div>
@@ -197,10 +197,10 @@ function WebhookLinkRow({
                   linkSelf.mutate()
                 }}
               >
-                {t('settings.tokens.detectedAccounts.thisIsMe')}
+                {t('settings.webhooks.detectedAccounts.thisIsMe')}
               </Button>
               <span className="text-xs text-[var(--color-fg-muted)]">
-                {t('settings.tokens.detectedAccounts.or')}
+                {t('settings.webhooks.detectedAccounts.or')}
               </span>
             </>
           )}
@@ -215,21 +215,21 @@ function WebhookLinkRow({
                   the *row's* remaining space rather than just the form's. */}
               <form onSubmit={handleSendEmail} className="contents">
                 <Field
-                  label={t('settings.tokens.detectedAccounts.email')}
+                  label={t('settings.webhooks.detectedAccounts.email')}
                   hideLabel
                   type="email"
                   required
                   value={linkCodeEmail}
                   onChange={(e) => setLinkCodeEmail(e.target.value)}
-                  placeholder={t('settings.tokens.detectedAccounts.email')}
+                  placeholder={t('settings.webhooks.detectedAccounts.email')}
                   className="min-w-32 flex-1"
                 />
                 <Button type="submit" variant="secondary" isLoading={createCode.isPending}>
-                  {t('settings.tokens.detectedAccounts.sendLinkEmail')}
+                  {t('settings.webhooks.detectedAccounts.sendLinkEmail')}
                 </Button>
               </form>
               <span className="text-xs text-[var(--color-fg-muted)]">
-                {t('settings.tokens.detectedAccounts.or')}
+                {t('settings.webhooks.detectedAccounts.or')}
               </span>
             </>
           )}
@@ -239,7 +239,7 @@ function WebhookLinkRow({
             isLoading={createCode.isPending}
             onClick={handleShowCode}
           >
-            {t('settings.tokens.detectedAccounts.showLinkCode')}
+            {t('settings.webhooks.detectedAccounts.showLinkCode')}
           </Button>
         </div>
       )}
@@ -249,7 +249,7 @@ function WebhookLinkRow({
           role="status"
           className="rounded-md border border-[var(--color-primary)] bg-[var(--color-bg)] p-2"
         >
-          <p className="mb-1 text-xs">{t('settings.tokens.detectedAccounts.linkCodeCreated')}</p>
+          <p className="mb-1 text-xs">{t('settings.webhooks.detectedAccounts.linkCodeCreated')}</p>
           <div className="flex items-center gap-2">
             <code className="block flex-1 truncate rounded-md bg-[var(--color-surface)] px-2 py-1 text-xs">
               {codeData.code}
@@ -264,13 +264,13 @@ function WebhookLinkRow({
               }}
             >
               {copied
-                ? t('settings.tokens.detectedAccounts.copied')
-                : t('settings.tokens.detectedAccounts.copy')}
+                ? t('settings.webhooks.detectedAccounts.copied')
+                : t('settings.webhooks.detectedAccounts.copy')}
             </Button>
           </div>
           {codeData.emailSent && (
             <p className="mt-1 text-xs text-[var(--color-fg-muted)]">
-              {t('settings.tokens.detectedAccounts.linkCodeEmailed', { email: linkCodeEmail })}
+              {t('settings.webhooks.detectedAccounts.linkCodeEmailed', { email: linkCodeEmail })}
             </p>
           )}
         </div>
@@ -285,10 +285,10 @@ function WebhookLinkRow({
       <Dialog
         open={confirmRemoveOpen}
         onClose={() => setConfirmRemoveOpen(false)}
-        title={t('settings.tokens.detectedAccounts.removeConfirmTitle')}
+        title={t('settings.webhooks.detectedAccounts.removeConfirmTitle')}
       >
         <p className="mb-4 text-sm text-[var(--color-fg-muted)]">
-          {t('settings.tokens.detectedAccounts.removeConfirmBody', {
+          {t('settings.webhooks.detectedAccounts.removeConfirmBody', {
             name: link.externalAccountName,
           })}
         </p>
@@ -302,7 +302,7 @@ function WebhookLinkRow({
             isLoading={remove.isPending}
             onClick={() => remove.mutate()}
           >
-            {t('settings.tokens.detectedAccounts.remove')}
+            {t('settings.webhooks.detectedAccounts.remove')}
           </Button>
         </div>
       </Dialog>

@@ -1,4 +1,5 @@
 import { randomBytes, createHash } from 'node:crypto'
+import { encryptSecret } from './crypto.js'
 
 /** A high-entropy opaque secret, suitable for session cookies or API tokens. */
 export function generateSecret(byteLength = 32): string {
@@ -24,7 +25,20 @@ export function hashSecret(secret: string): string {
 
 const API_TOKEN_PREFIX = 'rwnd_'
 
-export function generateApiToken(): { token: string; hash: string } {
+/** `encryptionKey` is `loadEnv().ENCRYPTION_KEY`, passed in rather than
+ * loaded here — optional, so `encrypted` is only ever produced when the
+ * caller actually has one to give. See `apiTokens.tokenEncrypted`'s doc
+ * comment (packages/db/src/schema.ts) for why a webhook token's secret
+ * is durably recoverable only when this instance has one configured. */
+export function generateApiToken(encryptionKey?: string): {
+  token: string
+  hash: string
+  encrypted: string | null
+} {
   const token = API_TOKEN_PREFIX + generateSecret(32)
-  return { token, hash: hashSecret(token) }
+  return {
+    token,
+    hash: hashSecret(token),
+    encrypted: encryptionKey ? encryptSecret(token, encryptionKey) : null,
+  }
 }

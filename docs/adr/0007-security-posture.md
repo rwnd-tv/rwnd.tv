@@ -346,3 +346,60 @@ place `hasLinkedSource` already enforces the one-account-per-source
 rule. A _different_ Plex server without Plex Pass still links normally:
 the check only refuses a matching server id, never a source pairing
 alone.
+
+## Update (2026-09-14): webhook URLs become durably recoverable, not shown-once
+
+James, discussing a Settings redesign: "API tokens" (the panel and the
+term) was daunting for a new user — one wall of every source's setup
+instructions on every token, and a webhook URL only ever shown once,
+with no way to see it again afterward if lost. The redesign shipped as
+**Settings → Webhooks**: creating one now picks a media server first and
+shows only that server's own setup steps, and each existing webhook is
+its own collapsible panel instead of a shared list.
+
+That surfaced a real tension with this ADR's own "Bearer secrets are
+hashed, not encrypted" line above, written when this token type's only
+job was still generic enough to read as "an API token." It's never
+actually been that — `apps/api/src/lib/api-tokens.ts`'s `resolveApiToken`
+has only ever backed webhook ingestion, nothing else — and a webhook URL
+has the same "has to be re-copyable, not just shown once" shape
+`calendarFeeds.tokenEncrypted` was already built for (this ADR's own
+Trust model section, and `packages/db/src/schema.ts`'s doc comment on
+that column). So `apiTokens` gained the same `tokenEncrypted`
+(AES-256-GCM, `lib/crypto.ts`) column calendar feeds already had, and
+Settings now shows a webhook's URL persistently, with Regenerate as the
+rotation mechanism instead of one-time reveal — matching what Slack,
+Discord and Sentry do with their own inbound webhook/DSN URLs, chosen
+over GitHub/AWS's reveal-once model because a leaked webhook token's
+blast radius is genuinely small (it can inject fake watch history into
+the token owner's own account, or someone else's only via the existing
+consent-code flow — never read private data or grant account access, see
+this ADR's Trust model section above).
+
+**Unlike calendar feeds, this doesn't gate the whole feature.** Webhook
+ingestion is core functionality — self-hosting rwnd.tv without it means
+no live watch tracking at all — where calendar feeds are an optional
+convenience. So `apiTokens.tokenEncrypted` is nullable, populated only
+when `ENCRYPTION_KEY` happens to be configured at the moment a token is
+created or regenerated (`webhookTokensRecoverable`,
+`packages/shared/src/schemas/settings.ts`), and a token without one
+falls back to the pre-2026-09-14 behavior for that one token: still
+fully functional for ingestion, just not redisplayable in Settings
+without a regenerate first. A pre-migration row backfills `source` (the
+new column recording which media server a webhook's create wizard was
+for — display-only, never an ingestion constraint; see `apiTokens`' own
+doc comment) from its `webhookAccountLinks` where one exists, and stays
+null otherwise, settable once via `PATCH /tokens/{id}`.
+
+This changes what a database compromise costs for this token class: previously,
+a leaked `api_tokens` table handed an attacker only SHA-256 hashes,
+useless without brute-forcing a 256-bit CSPRNG value. On an instance with
+`ENCRYPTION_KEY` configured, it now also hands over every recoverable
+token's live, working webhook URL in one query — the same trade-off this
+ADR already accepted for Trakt OAuth tokens and TOTP secrets, extended
+here because the trade is favorable for the same reason it was for the
+calendar-feed URLs it mirrors: a bounded-scope secret whose usability
+cost from one-time reveal was real and recurring, weighed against a
+theft scenario (database _and_ `ENCRYPTION_KEY` both compromised) that
+was already the worst case for two other secret classes on this same
+instance.

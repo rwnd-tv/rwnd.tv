@@ -177,7 +177,12 @@ export async function createTokenAndCookie(app: ReturnType<typeof createApp>) {
   const res = await app.request('/api/v1/tokens', {
     method: 'POST',
     headers: { cookie, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name: 'webhook token' }),
+    // source is display-only (see apiTokens.source's doc comment,
+    // packages/db/src/schema.ts) — never enforced against which source
+    // path a delivery actually arrives on, so 'plex' here is just a
+    // valid placeholder, not a constraint on what this fixture is used
+    // to test.
+    body: JSON.stringify({ name: 'webhook token', source: 'plex' }),
   })
   const { id: tokenId, token } = await json<CreateApiTokenResponse>(res)
   return { cookie, token, tokenId }

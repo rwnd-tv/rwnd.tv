@@ -8,6 +8,7 @@ import {
   createWebhookLinkCodeRequestSchema,
   createWebhookLinkCodeResponseSchema,
   listWebhookLinksResponseSchema,
+  updateApiTokenRequestSchema,
   webhookAccountLinkSchema,
   uuidSchema,
   WEBHOOK_SOURCE_LABELS,
@@ -15,7 +16,9 @@ import {
 import { apiTokens, instanceSettings, users, webhookAccountLinks, webhookLinkCodes } from '@rwnd/db'
 import type { Database } from '@rwnd/db'
 import type { AppEnv, UserRecord } from '../types.js'
+import { loadEnv } from '../env.js'
 import { generateApiToken, generateSecret, hashSecret } from '../lib/tokens.js'
+import { decryptSecret } from '../lib/crypto.js'
 import { replayPendingWebhookEvents } from '../lib/webhook-plays.js'
 import { hasLinkedSource, hasConflictingServerLink } from '../lib/webhook-accounts.js'
 import { orderedProviders } from '../providers/priority.js'
@@ -29,10 +32,21 @@ export const tokenRoutes = new OpenAPIHono<AppEnv>()
 // around to it) without leaving a stale code valid indefinitely.
 const WEBHOOK_LINK_TTL_MS = 7 * 24 * 60 * 60 * 1000
 
-function serializeToken(row: typeof apiTokens.$inferSelect) {
+/** `encryptionKey` is only needed to redisplay an *existing* row's URL
+ * (GET /tokens) — create and regenerate below always know the plaintext
+ * already, from generating it in the same request, and overwrite `token`
+ * themselves rather than passing a key in here. Null `token` means this
+ * row's `tokenEncrypted` is null: either this instance had no
+ * `ENCRYPTION_KEY` when the token was last (re)generated, or it predates
+ * this column entirely — either way, Settings falls back to "regenerate
+ * to get a copyable URL" for that one token. */
+function serializeToken(row: typeof apiTokens.$inferSelect, encryptionKey?: string) {
   return {
     id: row.id,
     name: row.name,
+    source: row.source,
+    token:
+      row.tokenEncrypted && encryptionKey ? decryptSecret(row.tokenEncrypted, encryptionKey) : null,
     lastUsedAt: row.lastUsedAt?.toISOString() ?? null,
     createdAt: row.createdAt.toISOString(),
   }
@@ -121,7 +135,7 @@ tokenRoutes.openapi(
   createRoute({
     method: 'get',
     path: '/tokens',
-    summary: "List the current user's API tokens",
+    summary: "List the current user's webhook tokens",
     responses: {
       200: {
         description: 'Tokens',
@@ -130,12 +144,13 @@ tokenRoutes.openapi(
     },
   }),
   async (c) => {
+    const env = loadEnv()
     const rows = await c
       .get('db')
       .select()
       .from(apiTokens)
       .where(eq(apiTokens.userId, c.get('user')!.id))
-    return c.json({ tokens: rows.map(serializeToken) })
+    return c.json({ tokens: rows.map((row) => serializeToken(row, env.ENCRYPTION_KEY)) })
   },
 )
 
@@ -143,7 +158,7 @@ tokenRoutes.openapi(
   createRoute({
     method: 'post',
     path: '/tokens',
-    summary: 'Create a new API token (shown once)',
+    summary: 'Create a new webhook token',
     request: {
       body: { content: { 'application/json': { schema: createApiTokenRequestSchema } } },
     },
@@ -155,12 +170,18 @@ tokenRoutes.openapi(
     },
   }),
   async (c) => {
-    const { name } = c.req.valid('json')
-    const { token, hash } = generateApiToken()
+    const { name, source } = c.req.valid('json')
+    const { token, hash, encrypted } = generateApiToken(loadEnv().ENCRYPTION_KEY)
     const [row] = await c
       .get('db')
       .insert(apiTokens)
-      .values({ userId: c.get('user')!.id, name, tokenHash: hash })
+      .values({
+        userId: c.get('user')!.id,
+        name,
+        source,
+        tokenHash: hash,
+        tokenEncrypted: encrypted,
+      })
       .returning()
     if (!row) throw new Error('Failed to create token')
     return c.json({ ...serializeToken(row), token }, 201)
@@ -169,9 +190,75 @@ tokenRoutes.openapi(
 
 tokenRoutes.openapi(
   createRoute({
+    method: 'patch',
+    path: '/tokens/{id}',
+    summary: "Set a token's source — only settable field, and only once null",
+    request: {
+      params: z.object({ id: uuidSchema }),
+      body: { content: { 'application/json': { schema: updateApiTokenRequestSchema } } },
+    },
+    responses: {
+      200: { description: 'Updated', content: { 'application/json': { schema: apiTokenSchema } } },
+      404: { description: 'Token not found' },
+    },
+  }),
+  async (c) => {
+    const { id } = c.req.valid('param')
+    const { source } = c.req.valid('json')
+    const db = c.get('db')
+    const [row] = await db
+      .update(apiTokens)
+      .set({ source })
+      .where(and(eq(apiTokens.id, id), eq(apiTokens.userId, c.get('user')!.id)))
+      .returning()
+    if (!row) return c.json({ error: 'Token not found' }, 404)
+    return c.json(serializeToken(row, loadEnv().ENCRYPTION_KEY))
+  },
+)
+
+tokenRoutes.openapi(
+  createRoute({
+    method: 'post',
+    path: '/tokens/{id}/regenerate',
+    summary: "Rotate a webhook token's URL",
+    request: { params: z.object({ id: uuidSchema }) },
+    responses: {
+      200: {
+        description: 'Regenerated — the previous URL stops working immediately',
+        content: { 'application/json': { schema: createApiTokenResponseSchema } },
+      },
+      404: { description: 'Token not found' },
+    },
+  }),
+  async (c) => {
+    const { id } = c.req.valid('param')
+    const db = c.get('db')
+    const userId = c.get('user')!.id
+    const { token, hash, encrypted } = generateApiToken(loadEnv().ENCRYPTION_KEY)
+
+    // Updates the secret columns in place, same as calendar feeds'
+    // regenerate (routes/calendar.ts) — name/source/createdAt survive,
+    // and webhookAccountLinks/pendingWebhookEvents (keyed on this row's
+    // id, not the secret itself) are untouched, so detected accounts
+    // aren't lost. lastUsedAt is reset: the new URL genuinely hasn't
+    // been hit yet.
+    const [row] = await db
+      .update(apiTokens)
+      .set({ tokenHash: hash, tokenEncrypted: encrypted, lastUsedAt: null })
+      .where(and(eq(apiTokens.id, id), eq(apiTokens.userId, userId)))
+      .returning()
+    if (!row) return c.json({ error: 'Token not found' }, 404)
+
+    logSecurityEvent('api_token_regenerated', { userId })
+    return c.json({ ...serializeToken(row), token })
+  },
+)
+
+tokenRoutes.openapi(
+  createRoute({
     method: 'delete',
     path: '/tokens/{id}',
-    summary: 'Revoke an API token',
+    summary: 'Revoke a webhook token',
     request: { params: z.object({ id: uuidSchema }) },
     responses: {
       204: { description: 'Revoked' },

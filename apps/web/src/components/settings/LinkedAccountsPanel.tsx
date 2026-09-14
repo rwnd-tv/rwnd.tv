@@ -14,7 +14,7 @@ import { usePanelOpen } from '../../lib/use-panel-open.js'
 /** Found missing 2026-09-02 (James, after running the link flow for
  * real): linking a webhook account only ever showed a one-time success
  * message (`LinkWebhookAccountPage.tsx`) with nothing persistent
- * afterward, and `Settings → API tokens → Detected accounts` (per-token,
+ * afterward, and `Settings → Webhooks → Detected accounts` (per-token,
  * `TokenWebhookLinks.tsx`) only helps the *token owner*, who the person
  * doing the linking usually isn't. This is the missing "what's linked
  * to me, and let me undo it myself" view, backed by
@@ -31,10 +31,11 @@ import { usePanelOpen } from '../../lib/use-panel-open.js'
  * (`WebhookClaimPanel.tsx`, now deleted) 2026-09-02 (James: "there is a
  * lot of overlap [...] I think the claim mechanism could go into the
  * Linked accounts panel") — same "list plus a way to add one" shape
- * `TokensPanel.tsx` already uses one panel up, rather than two separate
- * panels for what's really one feature. Both panels briefly lived on
- * the Account page before moving to Settings, directly below
- * `TokensPanel`, the same day. Collapsed by default like every other
+ * `WebhooksPanel.tsx` (`TokensPanel.tsx` until its 2026-09-14 rename)
+ * already uses one panel up, rather than two separate panels for what's
+ * really one feature. Both panels briefly lived on the Account page
+ * before moving to Settings, directly below it, the same day. Collapsed
+ * by default like every other
  * panel on this page except AboutPanel.tsx (2026-09-02) — see
  * account/AdvancedPreferencesCard.tsx's doc comment for why `<details>`
  * over a bespoke show/hide component. */

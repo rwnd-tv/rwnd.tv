@@ -78,6 +78,7 @@ import {
   type TraktConnectionStatus,
   type TraktDevicePairing,
   type TransferOwnershipRequest,
+  type UpdateApiTokenRequest,
   type UpdateCalendarFeedRequest,
   type UpdateDatabaseBackupRetentionRequest,
   type UpdateInstanceSettingsRequest,
@@ -239,6 +240,8 @@ export const api = {
   tokens: {
     list: () => get<{ tokens: ApiToken[] }>('/tokens'),
     create: (body: CreateApiTokenRequest) => post<CreateApiTokenResponse>('/tokens', body),
+    update: (id: string, body: UpdateApiTokenRequest) => patch<ApiToken>(`/tokens/${id}`, body),
+    regenerate: (id: string) => post<CreateApiTokenResponse>(`/tokens/${id}/regenerate`),
     delete: (id: string) => del<void>(`/tokens/${id}`),
     webhookLinks: (id: string) => get<ListWebhookLinksResponse>(`/tokens/${id}/webhook-links`),
     linkWebhookLink: (id: string, linkId: string) =>

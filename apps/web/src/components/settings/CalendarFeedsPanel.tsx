@@ -231,13 +231,15 @@ function MoviesSettingsForm({ feed }: { feed: Extract<CalendarFeed, { feedType: 
  * exists, or the URL/settings/regenerate/delete block once it does.
  *
  * Deliberately shows the subscription URL unconditionally, with no
- * `justCreated`-style one-time reveal the way TokensPanel.tsx's API
- * token is — an API token grants arbitrary API access and is shown once
- * because of that; this URL grants read-only access to one derived view
- * and has to be re-copyable indefinitely (a new device, a calendar app
- * reinstalled, etc). Regenerate is the invalidation mechanism here, not
- * one-time reveal. Getting this backwards would silently reintroduce the
- * exact usability problem this feature exists to avoid.
+ * `justCreated`-style one-time reveal — this URL has to be re-copyable
+ * indefinitely (a new device, a calendar app reinstalled, etc), and
+ * Regenerate is the invalidation mechanism here, not one-time reveal.
+ * `WebhookCard.tsx`'s own URL row now follows the same shape for the
+ * same reason (docs/adr/0007-security-posture.md's 2026-09-14 update) —
+ * this file just got there first, back when a webhook token's one-time
+ * reveal was still the only precedent in the codebase to contrast with.
+ * Getting either backwards would silently reintroduce the exact
+ * usability problem this feature exists to avoid.
  */
 function FeedRow({
   feed,

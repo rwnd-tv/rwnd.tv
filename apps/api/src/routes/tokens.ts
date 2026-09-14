@@ -39,14 +39,33 @@ const WEBHOOK_LINK_TTL_MS = 7 * 24 * 60 * 60 * 1000
  * row's `tokenEncrypted` is null: either this instance had no
  * `ENCRYPTION_KEY` when the token was last (re)generated, or it predates
  * this column entirely — either way, Settings falls back to "regenerate
- * to get a copyable URL" for that one token. */
+ * to get a copyable URL" for that one token.
+ *
+ * `decryptSecret` is wrapped in try/catch rather than called bare: it
+ * throws (GCM auth-tag mismatch) if `ENCRYPTION_KEY` has changed since
+ * this row was encrypted — a real scenario, not just theoretical, since
+ * rotating the key is itself a legitimate response to a suspected
+ * compromise. Without this, one undecryptable row would 500 the whole
+ * GET /tokens list (every token, not just the affected one) instead of
+ * falling back to the same "regenerate to get a copyable URL" treatment
+ * a never-encrypted row already gets. Found in the M4 review
+ * (docs/TODO.md) — the same gap exists in `calendar-feeds.ts`'s
+ * `serializeCalendarFeed`, logged there separately since that field
+ * isn't nullable, so the fix shape differs. */
 function serializeToken(row: typeof apiTokens.$inferSelect, encryptionKey?: string) {
+  let token: string | null = null
+  if (row.tokenEncrypted && encryptionKey) {
+    try {
+      token = decryptSecret(row.tokenEncrypted, encryptionKey)
+    } catch {
+      token = null
+    }
+  }
   return {
     id: row.id,
     name: row.name,
     source: row.source,
-    token:
-      row.tokenEncrypted && encryptionKey ? decryptSecret(row.tokenEncrypted, encryptionKey) : null,
+    token,
     lastUsedAt: row.lastUsedAt?.toISOString() ?? null,
     createdAt: row.createdAt.toISOString(),
   }
@@ -200,6 +219,7 @@ tokenRoutes.openapi(
     responses: {
       200: { description: 'Updated', content: { 'application/json': { schema: apiTokenSchema } } },
       404: { description: 'Token not found' },
+      409: { description: 'Source is already set and cannot be changed' },
     },
   }),
   async (c) => {
@@ -209,10 +229,21 @@ tokenRoutes.openapi(
     const [row] = await db
       .update(apiTokens)
       .set({ source })
-      .where(and(eq(apiTokens.id, id), eq(apiTokens.userId, c.get('user')!.id)))
+      .where(
+        and(
+          eq(apiTokens.id, id),
+          eq(apiTokens.userId, c.get('user')!.id),
+          isNull(apiTokens.source),
+        ),
+      )
       .returning()
-    if (!row) return c.json({ error: 'Token not found' }, 404)
-    return c.json(serializeToken(row, loadEnv().ENCRYPTION_KEY))
+    if (row) return c.json(serializeToken(row, loadEnv().ENCRYPTION_KEY))
+    const [existing] = await db
+      .select()
+      .from(apiTokens)
+      .where(and(eq(apiTokens.id, id), eq(apiTokens.userId, c.get('user')!.id)))
+    if (!existing) return c.json({ error: 'Token not found' }, 404)
+    return c.json({ error: 'Source is already set and cannot be changed' }, 409)
   },
 )
 

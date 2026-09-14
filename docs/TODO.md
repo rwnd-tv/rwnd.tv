@@ -524,7 +524,36 @@ Format:
             V8.2.x/V8.3.x and new V11 (spoiler invariant across every
             surface, not just ones with a client to blur with) — pass, but
             only after today's fix.
-      - [ ] Stage 5: Webhooks panel redesign & token-encryption posture change
+      - [x] Stage 5: Webhooks panel redesign & token-encryption posture
+            change — 2026-09-14. Found and fixed two real gaps. First,
+            `serializeToken` called `decryptSecret` bare, so a single row
+            encrypted under a since-rotated `ENCRYPTION_KEY` would 500 the
+            whole `GET /tokens` list instead of just falling back to
+            `token: null` for that row (GCM's auth-tag check fails on any
+            key mismatch); wrapped in try/catch, regression test added.
+            The same gap exists in `calendar-feeds.ts`'s
+            `serializeCalendarFeed` but needs a different fix shape (its
+            wire type is non-nullable); logged separately above rather
+            than folded in here. Second, `PATCH /tokens/{id}` was
+            documented ("only settable field, and only once null") but
+            the `UPDATE` had no `source IS NULL` guard, so a token owner
+            could silently overwrite `source` repeatedly via a direct API
+            call, contradicting its own contract; added the missing
+            `isNull` guard plus a 409 response and regression test
+            (cosmetic only: confirmed via grep that `source` is never an
+            ingestion constraint in `routes/webhooks.ts`). Verified
+            AES-256-GCM's fresh-IV-per-call and auth-tag handling in
+            `lib/crypto.ts`, that regenerate atomically invalidates the
+            old token, that every PATCH/regenerate/link mutation scopes
+            its `WHERE` to the caller's own `userId` (no cross-user
+            access), that no webhook secret/URL ever reaches a log call,
+            and the four downloaded attribution icon files for embedded
+            metadata (all clean). Full suite green (1041 passed, 7
+            skipped, 0 failed) after clearing a corrupted local Vite
+            dependency cache that had produced spurious failures against
+            stale compiled output. ASVS rows for Stage 7: new V6 section
+            (Stored Cryptography) — pass, grounded in this stage's crypto
+            review; V4.1.x (cross-user access) — pass.
       - [ ] Stage 6: supply-chain, CI & dependency hygiene
       - [ ] Stage 7: close-out (ASVS V6/V10/V11 gaps, dated ADR 0007 update,
             flip M4 to `✅ done` in ROADMAP.md)
@@ -550,6 +579,33 @@ Format:
       site. Touches the shared provider-client layer (also used by
       ordinary search/browse, not just webhooks), so it's its own
       follow-up rather than a Stage 1 inline fix.
+
+- [ ] **`serializeCalendarFeed` still 500s on a since-rotated `ENCRYPTION_KEY`** (2026-09-14 added, Stage 5 of the M4 review)
+
+      `apps/api/src/routes/tokens.ts`'s `serializeToken` and
+      `apps/api/src/lib/calendar-feeds.ts`'s `serializeCalendarFeed` both
+      call `decryptSecret` on a row's encrypted secret to redisplay it,
+      and both would throw uncaught if `ENCRYPTION_KEY` has changed since
+      that row was encrypted (a real scenario, not just theoretical, since
+      rotating the key is itself a legitimate response to a suspected
+      compromise): GCM's auth-tag check fails and `decipher.final()`
+      throws, so one undecryptable row would 500 the whole list response
+      instead of failing gracefully just for that row. Stage 5 fixed
+      `serializeToken` (try/catch around the decrypt, falling back to
+      `token: null` the same way a never-encrypted row already does, with
+      a regression test in `apps/api/src/test/tokens.test.ts`), but
+      `serializeCalendarFeed` needs a different fix shape: its wire type
+      (`CalendarFeed.token`) is non-nullable, since
+      `calendarFeeds.tokenEncrypted` itself is `.notNull()` (every
+      calendar feed requires `ENCRYPTION_KEY` to be configured at
+      creation, unlike webhook tokens, which degrade gracefully with no
+      key at all). Fixing it properly likely means either making the wire
+      type nullable too (a small API-shape change other call sites need
+      updating for) or a documented operational stance, e.g. "rotating
+      `ENCRYPTION_KEY` invalidates existing calendar-feed subscriptions;
+      resubscribe from Settings," worth deciding deliberately rather than
+      folding into Stage 5's scope, which only covers the webhooks panel
+      work.
 
 ## Roadmap
 

@@ -17,6 +17,7 @@ import type {
 } from '@rwnd/shared'
 import { createLocalUser, extractCookie, json, resetDb, testApp, testDb } from './helpers.js'
 import { createApp } from '../app.js'
+import { encryptSecret } from '../lib/crypto.js'
 import { hashSecret } from '../lib/tokens.js'
 import type { MetadataProvider } from '../providers/types.js'
 
@@ -230,6 +231,30 @@ describe('tokens', () => {
     expect(tokens[0]?.source).toBeNull()
   })
 
+  it('a token encrypted under a since-rotated ENCRYPTION_KEY lists as token: null rather than 500ing', async () => {
+    const cookie = await createUserAndCookie()
+    const userId = await meId(cookie)
+    // Encrypted under a different (but equally valid-shaped) key than the
+    // one vitest.config.ts sets for this whole test run, simulating a
+    // rotated ENCRYPTION_KEY — the GCM auth tag won't verify against the
+    // current key, so decryptSecret throws. serializeToken must catch
+    // that per-row rather than let it crash the whole list response.
+    const staleKey = 'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA='
+    await db.insert(apiTokens).values({
+      userId,
+      name: 'Rotated-key victim',
+      tokenHash: hashSecret('rwnd_rotated'),
+      tokenEncrypted: encryptSecret('rwnd_rotated', staleKey),
+      source: 'plex',
+    })
+
+    const res = await app.request('/api/v1/tokens', { headers: { cookie } })
+    expect(res.status).toBe(200)
+    const { tokens } = await json<{ tokens: ApiToken[] }>(res)
+    expect(tokens[0]?.token).toBeNull()
+    expect(tokens[0]?.source).toBe('plex')
+  })
+
   describe('PATCH /tokens/{id}', () => {
     it("sets a legacy token's source", async () => {
       const cookie = await createUserAndCookie()
@@ -253,6 +278,21 @@ describe('tokens', () => {
       expect(res.status).toBe(200)
       const body = await json<ApiToken>(res)
       expect(body.source).toBe('tautulli')
+    })
+
+    it('409s on a second attempt to set an already-sourced token', async () => {
+      const cookie = await createUserAndCookie()
+      const created = await createToken(cookie)
+
+      const res = await app.request(`/api/v1/tokens/${created.id}`, {
+        method: 'PATCH',
+        headers: { cookie, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ source: 'jellyfin' }),
+      })
+      expect(res.status).toBe(409)
+
+      const [row] = await db.select().from(apiTokens).where(eq(apiTokens.id, created.id))
+      expect(row!.source).toBe(created.source)
     })
 
     it("404s for a token that isn't the caller's own", async () => {

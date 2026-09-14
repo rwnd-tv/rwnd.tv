@@ -414,6 +414,48 @@ Format:
       (announced/upcoming) should also be blocked, or whether show-level
       rating is out of scope for this one.
 
+## Security
+
+- [ ] **Full structured request logging** (2026-08-29 added, re-homed here 2026-09-14)
+
+      The M3 ASVS review (`docs/adr/0007-security-posture.md`,
+      `docs/security/asvs-l1.md`) only ever added minimal
+      `[security]`-prefixed event logging (`apps/api/src/lib/security-log.ts`),
+      not a general request-logging pipeline. Left as a genuine, deliberately
+      unclosed gap at the time — but the old Security section this item lived
+      in got fully closed out and archived to `docs/TODO_ARCHIVE.md` without
+      this one item being carried forward, leaving `asvs-l1.md`'s "Deferred
+      items" section pointing at a section that no longer existed. Re-homed
+      here 2026-09-14 while scoping the M4 milestone review, so the pointer
+      resolves again.
+
+- [ ] **M4 milestone code + security review** (2026-09-14 21:02 added; M4)
+
+      Per `CLAUDE.md`'s "Closing out a milestone" rule: before marking M4
+      `✅ done` in `ROADMAP.md`, run both a code review and a security review
+      over everything that shipped for it (122 commits since `v1.0.0`, M3's
+      close), not just the latest diff. Matching M3's own method
+      (`docs/adr/0007-security-posture.md`, a structured ASVS 4.0.3 Level 1
+      pass) rather than a single `/security-review` run, since that skill has
+      no scope argument and excludes several categories this milestone needs
+      (dependency findings, secrets-at-rest nuance, hardening/audit-log gaps).
+      Spans multiple sessions; full plan at
+      `C:\Users\James\.claude\plans\joyful-discovering-peach.md`. Progress:
+
+      - [ ] Stage 1: webhook ingestion core & trust model (Jellyfin/Emby/Tautulli,
+            source-agnostic dispatch, play-dedup/advisory-lock rework,
+            consent-based attribution rework)
+      - [ ] Stage 2: admin & owner-role privilege model
+      - [ ] Stage 3: scheduled database backups (verify against ADR 0008)
+      - [ ] Stage 4: calendar feeds & in-app calendar
+      - [ ] Stage 5: Webhooks panel redesign & token-encryption posture change
+      - [ ] Stage 6: supply-chain, CI & dependency hygiene
+      - [ ] Stage 7: close-out (ASVS V6/V10/V11 gaps, dated ADR 0007 update,
+            flip M4 to `✅ done` in ROADMAP.md)
+
+      `docs/security/asvs-l1.md` stays the durable record, updated in place
+      per stage rather than replaced.
+
 ## Roadmap
 
 Every open item from [ROADMAP.md](ROADMAP.md) that doesn't already have a

@@ -82,10 +82,11 @@ account: display name, email, watch history, and whatever's on screen. Before
 committing new screenshots:
 
 - Open each one and check for anything you wouldn't want public.
-- The Settings shot in particular: the script never creates an API token
-  (a freshly created one shows its full secret on screen), but if the
-  account already has one from an earlier run, confirm the panel isn't
-  showing a value that shouldn't be there.
+- The Settings shot in particular: the script never creates a webhook (a
+  freshly created one opens its own card automatically, showing its URL),
+  but if the account already has one from an earlier run, confirm every
+  webhook card is collapsed and the panel isn't showing a URL that
+  shouldn't be there.
 - Confirm the `en-GB`/`en-US` pairs actually differ (e.g. "Films" vs.
   "Movies") — that's the easiest way to catch a locale switch that silently
   no-opped.

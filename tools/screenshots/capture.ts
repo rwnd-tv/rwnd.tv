@@ -173,12 +173,15 @@ function buildDocsShots({ showSlug }: ShotContext): Shot[] {
     // none, so this is always the default (Agenda since 2026-09-09).
     { name: 'calendar', path: '/calendar', viewport: DOCS_VIEWPORT, settleMs: 700 },
     { name: 'import', path: '/import', viewport: DOCS_VIEWPORT, settleMs: 300 },
-    // Whole /settings page — includes the Tokens panel the "Connecting
-    // Plex" doc section needs. Deliberately never creates a token here: a
-    // freshly created one shows its full secret on screen, which is not
-    // something that belongs in a screenshot committed to a public repo.
-    // With no token just-created, the panel only ever shows names/dates.
-    { name: 'settings-tokens', path: '/settings', viewport: DOCS_VIEWPORT, settleMs: 300 },
+    // Whole /settings page — includes the Webhooks panel the "Connecting
+    // Plex" doc section needs. Deliberately never creates a webhook here:
+    // a freshly created one opens its own card automatically, and that
+    // card shows its (now durably re-copyable, not one-time) URL, which is
+    // not something that belongs in a screenshot committed to a public
+    // repo forever. With no webhook just-created, every existing one stays
+    // in its default collapsed state, so the panel only ever shows
+    // names/dates, never a URL.
+    { name: 'settings-webhooks', path: '/settings', viewport: DOCS_VIEWPORT, settleMs: 300 },
   ]
   if (showSlug) {
     shots.push({

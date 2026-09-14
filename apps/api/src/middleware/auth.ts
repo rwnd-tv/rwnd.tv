@@ -34,9 +34,10 @@ export const PUBLIC_ROUTES: ReadonlyArray<{ method: string; path: string }> = [
   { method: 'GET', path: '/settings' }, // deliberately public instance metadata
 ]
 
-// None of Plex/Jellyfin/Emby offer a way to set a custom header on their
-// webhook, so the bearer token travels as a URL path segment instead of
-// the usual Authorization header — see routes/webhooks.ts's doc comment.
+// The bearer token travels as a URL path segment instead of the usual
+// Authorization header, uniformly across every source — see
+// routes/webhooks.ts's doc comment for why even Tautulli, whose own
+// webhook agent *can* set a custom header, still uses this shape.
 // Matched by full pattern rather than a bare prefix, same reasoning as
 // CALENDAR_FEED_PATH below: a bare `/webhooks/` prefix would publish
 // everything under it by construction, not just this one route shape.

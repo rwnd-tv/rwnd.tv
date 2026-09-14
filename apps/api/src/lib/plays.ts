@@ -8,9 +8,19 @@ import type { PlaySource } from '@rwnd/shared'
  * explicit, not-necessarily-live entry) or `import` (a relay of a watch
  * Trakt already has on file, which itself originated somewhere else
  * entirely — Trakt's own scrobbler, another Trakt-connected app, or a
- * manual mark on trakt.tv). Any future live integration (Tautulli, Kodi,
- * ...) belongs here once it exists. */
-const ORIGIN_SOURCES = ['plex', 'jellyfin', 'emby'] as const
+ * manual mark on trakt.tv). A future live integration (Kodi, still open,
+ * see docs/TODO.md) belongs here once it exists.
+ *
+ * `tautulli` monitors a Plex server, so it can report the *same* watch as
+ * an existing `plex` link, minutes apart — unlike every other pair here,
+ * where two origin sources genuinely can't describe the same event. This
+ * is handled at link time, not here: `hasConflictingServerLink`
+ * (apps/api/src/lib/webhook-accounts.ts) stops a user ever linking both
+ * `plex` and `tautulli` against the same physical server in the first
+ * place, so by the time an event reaches this file, "two origin sources,
+ * two real watches" still holds for every source pair, tautulli
+ * included. */
+const ORIGIN_SOURCES = ['plex', 'jellyfin', 'emby', 'tautulli'] as const
 type OriginSource = (typeof ORIGIN_SOURCES)[number]
 
 export function isOrigin(source: PlaySource): source is OriginSource {

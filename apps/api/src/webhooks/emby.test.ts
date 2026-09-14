@@ -21,6 +21,7 @@ describe('parseEmbyPayload', () => {
     expect(event).toEqual({
       ids: { tmdb: '11176', imdb: 'tt0079588', tvdb: '5790' },
       ratingKey: '12',
+      serverId: null,
       account: { externalId: 'user-1', name: 'root' },
       media: { type: 'movie' },
     })
@@ -44,6 +45,7 @@ describe('parseEmbyPayload', () => {
     expect(event).toEqual({
       ids: { tvdb: '8891221', imdb: 'tt11650328' },
       ratingKey: 'ep-1',
+      serverId: null,
       account: { externalId: 'user-1', name: 'root' },
       media: { type: 'episode', showTitle: 'Severance', seasonNumber: 1, episodeNumber: 1 },
     })

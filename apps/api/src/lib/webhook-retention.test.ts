@@ -23,7 +23,7 @@ async function insertPendingEvent(tokenId: string, createdAt: Date): Promise<str
       source: 'plex',
       externalAccountId: 'external-account-1',
       watchedAt: createdAt,
-      event: { ids: {}, ratingKey: '1', media: { type: 'movie' } },
+      event: { ids: {}, ratingKey: '1', serverId: null, media: { type: 'movie' } },
       createdAt,
     })
     .returning()

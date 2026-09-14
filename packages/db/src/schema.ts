@@ -54,8 +54,9 @@ export const playSourceEnum = pgEnum('play_source', [
   'import',
   'jellyfin',
   'emby',
+  'tautulli',
 ])
-export const webhookSourceEnum = pgEnum('webhook_source', ['plex', 'jellyfin', 'emby'])
+export const webhookSourceEnum = pgEnum('webhook_source', ['plex', 'jellyfin', 'emby', 'tautulli'])
 export const importSourceEnum = pgEnum('import_source', ['trakt', 'trakt_zip', 'csv'])
 export const importJobStatusEnum = pgEnum('import_job_status', [
   'pending',
@@ -386,6 +387,22 @@ export const webhookAccountLinks = pgTable(
     // match key, just so the link UI shows a human a name instead of a
     // bare number. Refreshed on every sighting in case it changes.
     externalAccountName: text('external_account_name').notNull(),
+    // The physical server this account was seen on — Plex's own Server.uuid
+    // (its `machineIdentifier`) and Tautulli's `{server_machine_id}` are the
+    // same identifier space (Tautulli monitors a Plex server, live-confirmed
+    // by comparing a real Tautulli delivery's server_machine_id against that
+    // same Plex server's own GET /identity response, 2026-09-14) — so this is
+    // how `hasConflictingServerLink` (apps/api/src/lib/webhook-accounts.ts)
+    // tells apart "Tautulli relaying the *same* Plex server a `plex` link
+    // already covers" (refuse — would double-log every watch, see
+    // apps/api/src/lib/plays.ts's ORIGIN_SOURCES) from "Tautulli covering a
+    // *different* Plex server than the one already linked" (a genuinely
+    // separate, valid setup). Null for Jellyfin/Emby, which never report a
+    // server id, and null until the first sighting for Plex/Tautulli too —
+    // refreshed on every sighting the same way externalAccountName is,
+    // rather than only set once, so a link created before this column
+    // existed backfills itself on its next delivery.
+    externalServerId: text('external_server_id'),
     userId: uuid('user_id').references(() => users.id, { onDelete: 'set null' }),
     firstSeenAt: timestamp('first_seen_at', { withTimezone: true }).notNull().defaultNow(),
     lastSeenAt: timestamp('last_seen_at', { withTimezone: true }).notNull().defaultNow(),
@@ -467,6 +484,7 @@ export const pendingWebhookEvents = pgTable(
       .$type<{
         ids: { imdb?: string | null; tmdb?: string | number | null; tvdb?: string | number | null }
         ratingKey: string
+        serverId: string | null
         media:
           | { type: 'movie' }
           | { type: 'episode'; showTitle: string; seasonNumber: number; episodeNumber: number }

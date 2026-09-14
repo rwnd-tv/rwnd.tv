@@ -125,7 +125,7 @@ export function parseEmbyPayload(payload: unknown): IncomingWatchEvent | null {
   const itemType = asString(item.Type)
 
   if (itemType === 'Movie') {
-    return { ids, ratingKey, account, media: { type: 'movie' } }
+    return { ids, ratingKey, serverId: null, account, media: { type: 'movie' } }
   }
 
   if (itemType === 'Episode') {
@@ -138,6 +138,7 @@ export function parseEmbyPayload(payload: unknown): IncomingWatchEvent | null {
     return {
       ids,
       ratingKey,
+      serverId: null,
       account,
       media: { type: 'episode', showTitle, seasonNumber, episodeNumber },
     }

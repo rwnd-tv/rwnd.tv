@@ -316,3 +316,33 @@ identically regardless of which media server a given webhook link
 belongs to. Read "the Plex webhook" in the Trust model section as "a
 webhook" going forward, same as the 2026-09-02 update already did for
 consent, rather than as a section still scoped to one source.
+
+## Update (2026-09-14): a fourth source, and a new link-time invariant
+
+Tautulli webhook ingestion shipped today (`docs/TODO_ARCHIVE.md`), on
+the same account-linking/attribution mechanism the two updates above
+already describe. Nothing about the trust boundary changed here either:
+one more source, same one-token-many-users model, same
+`ownsToken()`/redemption gating.
+
+Two things worth recording as deliberate choices, not oversights. First,
+`routes/webhooks.ts`'s route stays token-in-URL-path for every source
+uniformly, even though Tautulli's own webhook agent can attach custom
+JSON headers, unlike Plex/Jellyfin/Emby: a per-source auth shape would
+be a real inconsistency in a security-reviewed surface for a benefit
+(an `Authorization` header instead of a path segment) that doesn't
+outweigh it. Second, Tautulli monitors a Plex server, so a self-hoster
+could otherwise link both `plex` and `tautulli` against the _same_
+server and have every real watch double-logged. Rather than treat that
+as a data-quality problem to clean up after the fact, it's enforced as
+a genuine invariant at link time: a captured physical-server identity
+(Plex's `Server.uuid`, confirmed to equal Tautulli's own
+`{server_machine_id}`) is stored per link
+(`webhook_account_links.external_server_id`) and checked before a
+second link against the same server is allowed
+(`hasConflictingServerLink`,
+`apps/api/src/lib/webhook-accounts.ts`), in both link paths, the same
+place `hasLinkedSource` already enforces the one-account-per-source
+rule. A _different_ Plex server without Plex Pass still links normally:
+the check only refuses a matching server id, never a source pairing
+alone.

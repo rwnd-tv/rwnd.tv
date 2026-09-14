@@ -14,18 +14,20 @@ export const webhookRoutes = new OpenAPIHono<AppEnv>()
 
 /**
  * One route for every supported media-server webhook (Plex, Jellyfin,
- * Emby — see `apps/api/src/webhooks/index.js`'s registry), not sibling
- * literal routes: the rate limit, body cap, token resolution, account
- * linking, pending-event stash, and `logWebhookPlay` call below are
- * identical across sources and must never drift between them — three
- * literal routes would triple the security-reviewed surface
- * (docs/security/asvs-l1.md) for no benefit. None of these servers offer
- * a way to attach custom headers to their own webhook feature, which is
- * why auth is a token in the URL path rather than an `Authorization`
- * header, and why this is a plain route rather than going through the
- * `.openapi()` typed-JSON-body convention every other route uses: it
- * isn't part of the documented API contract the frontend consumes, the
- * same reasoning as it being token- rather than session-authenticated.
+ * Emby, Tautulli — see `apps/api/src/webhooks/index.js`'s registry), not
+ * sibling literal routes: the rate limit, body cap, token resolution,
+ * account linking, pending-event stash, and `logWebhookPlay` call below
+ * are identical across sources and must never drift between them — one
+ * literal route per source would multiply the security-reviewed surface
+ * (docs/security/asvs-l1.md) for no benefit. Auth is a token in the URL
+ * path rather than an `Authorization` header for every source uniformly
+ * — even though Tautulli's own webhook agent *can* attach custom JSON
+ * headers, Plex/Jellyfin/Emby's webhook features can't, and one auth
+ * shape across all four avoids a per-source special case. Also why this
+ * is a plain route rather than going through the `.openapi()`
+ * typed-JSON-body convention every other route uses: it isn't part of
+ * the documented API contract the frontend consumes, the same reasoning
+ * as it being token- rather than session-authenticated.
  *
  * Always responds 200 once the token/source/payload themselves are
  * valid, even when nothing gets logged immediately (an irrelevant event,
@@ -102,6 +104,15 @@ webhookRoutes.post(
       }
     }
 
+    // An empty body is a genuinely different case from a malformed one —
+    // Tautulli's own "Test Webhook" button (Settings > Notification
+    // Agents > a source's Test Notifications tab) sends a real request
+    // with a zero-length body and no JSON at all, as a plain connectivity
+    // check. Treating it as a 200 no-op, the same as any other event with
+    // nothing to act on, rather than a 400, means a self-hoster's very
+    // first click while setting this up doesn't read as broken.
+    if (!rawPayload) return c.body(null, 200)
+
     let parsedJson: unknown
     try {
       parsedJson = JSON.parse(rawPayload)
@@ -124,6 +135,7 @@ webhookRoutes.post(
       source,
       event.account.externalId,
       event.account.name,
+      event.serverId,
     )
     if (!user) {
       await db.insert(pendingWebhookEvents).values({

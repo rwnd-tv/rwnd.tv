@@ -20,7 +20,7 @@ export const createApiTokenResponseSchema = apiTokenSchema.extend({
 })
 export type CreateApiTokenResponse = z.infer<typeof createApiTokenResponseSchema>
 
-export const webhookSourceSchema = z.enum(['plex', 'jellyfin', 'emby'])
+export const webhookSourceSchema = z.enum(['plex', 'jellyfin', 'emby', 'tautulli'])
 export type WebhookSource = z.infer<typeof webhookSourceSchema>
 
 /** Untranslated proper nouns, one source of truth shared by the API (email
@@ -32,6 +32,7 @@ export const WEBHOOK_SOURCE_LABELS: Record<WebhookSource, string> = {
   plex: 'Plex',
   jellyfin: 'Jellyfin',
   emby: 'Emby',
+  tautulli: 'Tautulli',
 }
 
 /** One external account (e.g. a Plex user) seen on this token's webhook,

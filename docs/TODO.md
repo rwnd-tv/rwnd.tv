@@ -420,18 +420,14 @@ Every open item from [ROADMAP.md](ROADMAP.md) that doesn't already have a
 more specific TODO elsewhere in this file. Kept brief: ROADMAP.md is the
 source of truth for scope; this is just so a TODO listing is complete.
 
-- [ ] **Tautulli/Kodi webhook ingestion** (2026-08-24 16:25 added, un-M2'd 2026-08-24, M4'd 2026-08-28, scoped down 2026-09-11; M4)
+- [ ] **Kodi webhook ingestion** (2026-08-24 16:25 added, un-M2'd 2026-08-24, M4'd 2026-08-28, scoped down 2026-09-11, Tautulli split off 2026-09-14; M4)
 
-      Jellyfin and Emby shipped 2026-09-11 (see `docs/TODO_ARCHIVE.md`),
-      on a webhook core that's now actually source-agnostic (one
-      `{bodyFormat, parse}` registry entry per source, dispatched from a
-      single `POST /webhooks/:source/:token` route), not just Plex's own
-      entity-resolution/auth layer. Tautulli and Kodi remain: Tautulli's
-      webhook body is fully user-templated (no fixed shape, needs its
-      own JSON template + setup docs, unlike the fixed shapes the three
-      shipped sources send), and Kodi has no native webhook support at
-      all, so it would need an addon-based approach rather than a plain
-      payload parser.
+      Tautulli shipped 2026-09-14 (see `docs/TODO_ARCHIVE.md`), leaving
+      Kodi as the only source left on what was originally "Tautulli/Kodi
+      webhook ingestion." Kodi has no native webhook support at all, so
+      it needs an addon-based approach rather than a plain payload
+      parser, most likely a small service addon shipped and distributed
+      from this repo rather than a config paste.
 
       James, 2026-08-24: not needed to close out M2. ROADMAP.md's own M2
       "Plex webhook ingestion" bullet only ever mentioned these in

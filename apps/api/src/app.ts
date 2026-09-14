@@ -122,7 +122,7 @@ export function createApp(services?: { db: Database; metadataProviders: Metadata
   // that JSON's preflight requirement + SameSite=Lax don't otherwise
   // cover. Origin is widened to CORS_ORIGINS for dev's cross-port setup;
   // default (same-origin only) is correct for production's single-origin
-  // serving. The media-server webhooks (Plex/Jellyfin/Emby) are
+  // serving. The media-server webhooks (Plex/Jellyfin/Emby/Tautulli) are
   // deliberately exempt: they're bearer-token authenticated in the URL,
   // not cookie-authenticated, and a media server (not a browser) never
   // sends Origin/Sec-Fetch-Site — CSRF exists to protect ambient browser

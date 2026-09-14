@@ -2897,6 +2897,64 @@ query.queryKey[0] !== 'auth' })` — drops every _other_ cached query
       found and logged separately (`docs/TODO.md`, "Season/episode
       pages can drift from the runtime...").
 
+- [x] **Tautulli webhook ingestion, on the same source-agnostic core** (2026-09-14 added, done 2026-09-14)\
+      The Tautulli half of "Tautulli/Kodi webhook ingestion" (Roadmap
+      M4; Kodi stays open, see the retitled TODO.md item). Verified
+      against real deliveries first, not built on guesswork: an
+      ephemeral Tautulli container was stood up on the home-server,
+      pointed read-only at the real Plex server, with its watched-
+      percent thresholds temporarily lowered so the Watched trigger
+      fired within seconds instead of needing a real 85% playthrough;
+      real movie and episode deliveries were captured via a throwaway
+      echo listener, then everything was torn down with no lasting
+      infrastructure.\
+      Tautulli's webhook body has no fixed shape at all, so rather than
+      a plain payload parser, rwnd.tv ships a JSON template
+      (`apps/api/src/webhooks/tautulli.ts`, also copyable from Settings
+      > API tokens) that the self-hoster pastes into Tautulli's
+      "Watched" trigger. The capture caught two things guessing would
+      have missed: an unrecognized or unavailable token renders as the
+      literal text `{token}` rather than an empty string (guarded
+      against locally in the parser, not added to `coerce.ts`, since
+      it's specific to Tautulli's own formatter), and Tautulli's own
+      TMDB/TVmaze lookups are off by default, so a modern Plex library
+      often has no external id to hand over until they're enabled
+      (documented in `docs/self-hosting.md`).\
+      The one genuinely new problem: Tautulli monitors Plex, so a
+      self-hoster who linked both `plex` and `tautulli` against the
+      *same* server would have every watch reported twice, by two
+      different `ORIGIN_SOURCES` (`apps/api/src/lib/plays.ts`) minutes
+      apart. Teaching `reconcilePlayDuplicates` a same-server exception
+      was considered and rejected — it would only be correct at each
+      source's *default* watched-percent threshold, and silently wrong
+      the moment a self-hoster changed either one. Instead, a physical-
+      server identity is captured and checked at link time: Plex's own
+      `Server.uuid` and Tautulli's `{server_machine_id}` are the same
+      identifier (live-confirmed by comparing a captured Tautulli
+      delivery against that same Plex server's own `GET /identity`),
+      stored on each webhook account link
+      (`webhook_account_links.external_server_id`, refreshed on every
+      sighting so an existing link backfills itself), and checked by
+      `hasConflictingServerLink`
+      (`apps/api/src/lib/webhook-accounts.ts`) in both link paths — the
+      second link is refused outright, with the reason shown in
+      Settings, rather than cleaned up after the fact. A *different*
+      Plex server without Plex Pass still links normally: the check only
+      refuses a matching server id, never a source pairing alone. This
+      needed no change to `reconcilePlayDuplicates` itself, or to its
+      own heavily-reasoned doc comments.\
+      Also fixed along the way: Tautulli's own "Test Webhook" button
+      sends a genuinely empty body (confirmed live), which the shared
+      webhook route previously rejected with a 400 before any parser
+      ever ran, meaning a self-hoster's very first click while setting
+      this up would have looked broken. Now a 200 no-op, the same as any
+      other event with nothing to act on
+      (`apps/api/src/routes/webhooks.ts`). Separately, a stale doc
+      comment on `apps/api/src/webhooks/jellyfin.ts` referenced a
+      Handlebars fallback template that was never actually written into
+      `docs/self-hosting.md` — added it in the same pass, since this
+      entry is centrally about a pasted template.
+
 ## Auth & accounts
 
 - [x] **"Forgot password" / account recovery, and email verification** (2026-08-23 15:46 added, done 2026-08-25) — M2\

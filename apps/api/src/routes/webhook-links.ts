@@ -10,7 +10,7 @@ import { webhookAccountLinks, webhookLinkCodes } from '@rwnd/db'
 import type { AppEnv } from '../types.js'
 import { hashSecret } from '../lib/tokens.js'
 import { replayPendingWebhookEvents } from '../lib/webhook-plays.js'
-import { hasLinkedSource } from '../lib/webhook-accounts.js'
+import { hasLinkedSource, hasConflictingServerLink } from '../lib/webhook-accounts.js'
 import { orderedProviders } from '../providers/priority.js'
 import { rateLimit } from '../middleware/rate-limit.js'
 import { logSecurityEvent } from '../lib/security-log.js'
@@ -37,6 +37,14 @@ class AlreadyLinkedError extends Error {}
  * on the self-link route, applied here too so redeeming a code can't
  * be used to route around it. */
 class AlreadySelfLinkedError extends Error {}
+
+/** Thrown when the code and link are both valid, but the redeemer
+ * already has an account linked from a *different* source describing
+ * the same physical server (Plex ↔ Tautulli) — the same
+ * `hasConflictingServerLink` invariant the self-link route enforces,
+ * applied here too so redeeming a code can't be used to route around
+ * it either. */
+class ServerAlreadyLinkedError extends Error {}
 
 /**
  * Redeems a one-time webhook link code
@@ -73,7 +81,7 @@ webhookLinkRoutes.openapi(
       400: { description: 'Invalid or expired code' },
       409: {
         description:
-          'The account has already been linked, or the caller already has a linked account for this source',
+          'The account has already been linked, the caller already has a linked account for this source, or this same server is already linked via a different source',
       },
     },
   }),
@@ -115,6 +123,9 @@ webhookLinkRoutes.openapi(
         if (await hasLinkedSource(tx, user.id, link.source)) {
           throw new AlreadySelfLinkedError()
         }
+        if (await hasConflictingServerLink(tx, user.id, link.source, link.externalServerId)) {
+          throw new ServerAlreadyLinkedError()
+        }
 
         const [updated] = await tx
           .update(webhookAccountLinks)
@@ -133,6 +144,12 @@ webhookLinkRoutes.openapi(
       }
       if (err instanceof AlreadySelfLinkedError) {
         return c.json({ error: 'You already have a linked account for this source' }, 409)
+      }
+      if (err instanceof ServerAlreadyLinkedError) {
+        return c.json(
+          { error: 'This server already has a linked account via a different source' },
+          409,
+        )
       }
       throw err
     }

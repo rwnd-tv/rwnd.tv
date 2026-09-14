@@ -83,7 +83,7 @@ export function parseJellyfinPayload(payload: unknown): IncomingWatchEvent | nul
   const itemType = asString(body.ItemType)
 
   if (itemType === 'Movie') {
-    return { ids, ratingKey, account, media: { type: 'movie' } }
+    return { ids, ratingKey, serverId: null, account, media: { type: 'movie' } }
   }
 
   if (itemType === 'Episode') {
@@ -96,6 +96,7 @@ export function parseJellyfinPayload(payload: unknown): IncomingWatchEvent | nul
     return {
       ids,
       ratingKey,
+      serverId: null,
       account,
       media: { type: 'episode', showTitle, seasonNumber, episodeNumber },
     }

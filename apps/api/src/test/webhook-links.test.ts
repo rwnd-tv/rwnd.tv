@@ -184,7 +184,7 @@ describe('POST /webhook-links/redeem', () => {
       source: 'plex',
       externalAccountId: '2',
       watchedAt,
-      event: { ids: { tmdb: '603' }, ratingKey: '5001', media: { type: 'movie' } },
+      event: { ids: { tmdb: '603' }, ratingKey: '5001', serverId: null, media: { type: 'movie' } },
     })
 
     const redeemerId = await createLocalUser(

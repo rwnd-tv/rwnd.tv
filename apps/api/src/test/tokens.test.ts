@@ -389,7 +389,12 @@ describe('tokens', () => {
           source: 'plex',
           externalAccountId: '2',
           watchedAt: movieWatchedAt,
-          event: { ids: { tmdb: '603' }, ratingKey: '5001', media: { type: 'movie' } },
+          event: {
+            ids: { tmdb: '603' },
+            ratingKey: '5001',
+            serverId: null,
+            media: { type: 'movie' },
+          },
         },
         {
           tokenId: created.id,
@@ -399,6 +404,7 @@ describe('tokens', () => {
           event: {
             ids: { tmdb: '1396' },
             ratingKey: '5002',
+            serverId: null,
             media: {
               type: 'episode',
               showTitle: 'Breaking Bad',
@@ -475,14 +481,24 @@ describe('tokens', () => {
           // transient network error), not the ordinary "no configured
           // provider recognizes this title" case, which logWebhookPlay
           // already handles by returning normally rather than throwing.
-          event: { ids: { tmdb: '999999' }, ratingKey: '5003', media: { type: 'movie' } },
+          event: {
+            ids: { tmdb: '999999' },
+            ratingKey: '5003',
+            serverId: null,
+            media: { type: 'movie' },
+          },
         },
         {
           tokenId: created.id,
           source: 'plex',
           externalAccountId: '2',
           watchedAt: goodWatchedAt,
-          event: { ids: { tmdb: '603' }, ratingKey: '5001', media: { type: 'movie' } },
+          event: {
+            ids: { tmdb: '603' },
+            ratingKey: '5001',
+            serverId: null,
+            media: { type: 'movie' },
+          },
         },
       ])
 

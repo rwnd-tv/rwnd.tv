@@ -25,10 +25,21 @@ interface PlexAccount {
   title?: unknown
 }
 
+interface PlexServer {
+  uuid?: unknown
+}
+
 interface PlexPayload {
   event?: unknown
   Metadata?: unknown
   Account?: unknown
+  Server?: unknown
+}
+
+function parseServerId(server: unknown): string | null {
+  if (typeof server !== 'object' || server === null) return null
+  const uuid = (server as PlexServer).uuid
+  return typeof uuid === 'string' && uuid !== '' ? uuid : null
 }
 
 function parseAccount(account: unknown): { externalId: string; name: string } | null {
@@ -77,6 +88,12 @@ function parseGuids(guids: unknown): ExternalIdBundle {
  * comment) is read as a top-level sibling of `Metadata`, not nested
  * inside it. A payload missing it entirely (or shaped unexpectedly) is
  * treated the same as any other unparseable event — null, not a guess.
+ *
+ * `Server.uuid` (also a top-level sibling of `Metadata`) becomes
+ * `serverId` — see `WatchEvent.serverId`'s doc comment (`./types.ts`)
+ * for what it's used for. Missing/malformed just means null, same as a
+ * missing `Guid` yields an empty id bundle rather than failing the
+ * whole event.
  */
 export function parsePlexPayload(payload: unknown): IncomingWatchEvent | null {
   if (typeof payload !== 'object' || payload === null) return null
@@ -96,8 +113,10 @@ export function parsePlexPayload(payload: unknown): IncomingWatchEvent | null {
   const ratingKey = meta.ratingKey
   if (typeof ratingKey !== 'string' && typeof ratingKey !== 'number') return null
 
+  const serverId = parseServerId(body.Server)
+
   if (meta.type === 'movie') {
-    return { ids, ratingKey: String(ratingKey), account, media: { type: 'movie' } }
+    return { ids, ratingKey: String(ratingKey), serverId, account, media: { type: 'movie' } }
   }
 
   if (meta.type === 'episode') {
@@ -114,6 +133,7 @@ export function parsePlexPayload(payload: unknown): IncomingWatchEvent | null {
     return {
       ids,
       ratingKey: String(ratingKey),
+      serverId,
       account,
       media: { type: 'episode', showTitle, seasonNumber, episodeNumber },
     }

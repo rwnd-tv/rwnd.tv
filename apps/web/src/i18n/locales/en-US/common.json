@@ -49,7 +49,7 @@
       },
       "plex": {
         "title": "Your media server logs it for you",
-        "body": "Point Plex, Jellyfin, or Emby at your webhook URL and watches log themselves. Multi-user servers are first class: every account seen is linked to its own rwnd.tv user, and earlier watches are backfilled once linked."
+        "body": "Point Plex, Jellyfin, Emby, or Tautulli at your webhook URL and watches log themselves. Multi-user servers are first class: every account seen is linked to its own rwnd.tv user, and earlier watches are backfilled once linked."
       },
       "trakt": {
         "title": "Bring your Trakt data",
@@ -146,10 +146,10 @@
       "m4": {
         "title": "M4: Broader ingestion & upcoming episodes",
         "items": [
-          "Jellyfin and Emby webhook ingestion, shipped",
+          "Jellyfin, Emby and Tautulli webhook ingestion, shipped",
           "Automatic scheduled database backups, shipped",
           "Calendar of upcoming episodes, via webcal subscription feeds, shipped",
-          "Admin UI for managing users, shipped; Tautulli and Kodi ingestion next"
+          "Admin UI for managing users, shipped; Kodi ingestion next"
         ]
       },
       "builtTitle": "Built with Claude Code, in the open.",
@@ -179,8 +179,8 @@
         "a": "Docker, a PostgreSQL database and a TMDB or TheTVDB API key. To work on it: Node.js 22 or newer and pnpm."
       },
       "players": {
-        "q": "Jellyfin, Emby or Kodi?",
-        "a": "Jellyfin and Emby are both supported via their own webhook features. Kodi isn't yet: it has no native webhook support, so it needs an addon-based approach the ingestion core doesn't cover yet."
+        "q": "Jellyfin, Emby, Tautulli or Kodi?",
+        "a": "Jellyfin and Emby are both supported via their own webhook features. Plex users without Plex Pass can get the same automatic logging through Tautulli instead. Kodi isn't yet: it has no native webhook support, so it needs an addon-based approach the ingestion core doesn't cover yet."
       }
     },
     "cta": {
@@ -598,6 +598,7 @@
       "plex": "Scrobbled",
       "jellyfin": "Scrobbled",
       "emby": "Scrobbled",
+      "tautulli": "Scrobbled",
       "import": "Imported"
     },
     "filterLabel": "Filter activity",
@@ -748,7 +749,7 @@
     "title": "Settings",
     "tokens": {
       "title": "API tokens",
-      "description": "Use API tokens to let other apps (like Plex, Jellyfin or Emby) log watches on your behalf.",
+      "description": "Use API tokens to let other apps (like Plex, Jellyfin, Emby or Tautulli) log watches on your behalf.",
       "name": "Token name",
       "create": "Create token",
       "createdOnce": "Copy this token now — it won't be shown again.",
@@ -762,7 +763,11 @@
         "instructions": {
           "plex": "Paste this URL into your Plex server's Settings → Webhooks (requires Plex Pass). Watches will start logging automatically.",
           "jellyfin": "Paste this URL into Jellyfin's Dashboard → Plugins → Webhook → Generic Destination, with \"Send All Properties\" enabled. Watches will start logging automatically.",
-          "emby": "Paste this URL into Emby's Settings → Notifications → Add Notification → Webhooks. Watches will start logging automatically."
+          "emby": "Paste this URL into Emby's Settings → Notifications → Add Notification → Webhooks. Watches will start logging automatically.",
+          "tautulli": "Add a Webhook notification agent in Tautulli, paste this URL into it, enable only the Watched trigger, and paste the JSON template below into its Data tab. See the self-hosting guide for the full setup, including a couple of settings that matter for accurate matching."
+        },
+        "template": {
+          "label": "Data tab JSON template"
         }
       },
       "detectedAccounts": {

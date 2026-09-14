@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm'
+import { and, eq, inArray } from 'drizzle-orm'
 import type { Database, Tx } from '@rwnd/db'
 import { users, webhookAccountLinks } from '@rwnd/db'
 import type { WebhookSource } from '@rwnd/shared'
@@ -37,6 +37,7 @@ export async function resolveWebhookAccount(
   source: WebhookSource,
   externalAccountId: string,
   externalAccountName: string,
+  externalServerId: string | null,
 ): Promise<UserRecord | null> {
   const [existing] = await db
     .select({ userId: webhookAccountLinks.userId })
@@ -53,7 +54,7 @@ export async function resolveWebhookAccount(
   if (!existing) {
     await db
       .insert(webhookAccountLinks)
-      .values({ tokenId, source, externalAccountId, externalAccountName })
+      .values({ tokenId, source, externalAccountId, externalAccountName, externalServerId })
     console.error(
       `Webhook: new ${source} account "${externalAccountName}" (${externalAccountId}) seen for the first time — link it in Settings.`,
     )
@@ -62,7 +63,15 @@ export async function resolveWebhookAccount(
 
   await db
     .update(webhookAccountLinks)
-    .set({ lastSeenAt: new Date(), externalAccountName })
+    // Only overwrites externalServerId when this event actually carried
+    // one — Jellyfin/Emby events never do, and a source that can carry one
+    // (Plex, Tautulli) shouldn't have a previously-known value wiped by a
+    // delivery that happened not to include it.
+    .set({
+      lastSeenAt: new Date(),
+      externalAccountName,
+      ...(externalServerId ? { externalServerId } : {}),
+    })
     .where(
       and(
         eq(webhookAccountLinks.tokenId, tokenId),
@@ -74,6 +83,54 @@ export async function resolveWebhookAccount(
 
   const [user] = await db.select().from(users).where(eq(users.id, existing.userId)).limit(1)
   return user ?? null
+}
+
+/** Sources that can describe the exact same physical media server as
+ * another source — today, just Tautulli monitoring a Plex server. See
+ * `hasConflictingServerLink` below for what this is used for. */
+const SAME_SERVER_SOURCES: Partial<Record<WebhookSource, readonly WebhookSource[]>> = {
+  plex: ['tautulli'],
+  tautulli: ['plex'],
+}
+
+/** Whether `userId` already has a linked account, on a source in the same
+ * server group as `source` (see `SAME_SERVER_SOURCES`), for the *same
+ * physical server* as `serverId` — checked before linking a new account,
+ * alongside `hasLinkedSource` below, so a user can never end up linked to
+ * both `plex` and `tautulli` against one server: Tautulli relays that
+ * server's own Plex webhook events, so every watch would otherwise be
+ * reported twice, by two different `ORIGIN_SOURCES`
+ * (apps/api/src/lib/plays.ts) minutes apart, and get logged as two plays.
+ *
+ * Deliberately permissive whenever either side's server id is unknown
+ * (this link's own, just-seen `serverId`, or an existing link's stored
+ * `externalServerId` — e.g. one created before this check existed and
+ * not yet re-seen) rather than refusing on source pairing alone: Tautulli
+ * may equally be watching a *different* Plex server than the one already
+ * linked (a Plex-Pass server plus a second, Pass-less one Tautulli
+ * covers instead), which is a genuinely separate, valid setup that must
+ * not be blocked. The residual duplicate-logging risk in the "unknown"
+ * gap is accepted, not solved here — it closes itself once both sides
+ * have reported at least one event since this column existed. */
+export async function hasConflictingServerLink(
+  db: Database | Tx,
+  userId: string,
+  source: WebhookSource,
+  serverId: string | null,
+): Promise<boolean> {
+  const groupSources = SAME_SERVER_SOURCES[source]
+  if (!groupSources || !serverId) return false
+
+  const rows = await db
+    .select({ externalServerId: webhookAccountLinks.externalServerId })
+    .from(webhookAccountLinks)
+    .where(
+      and(
+        eq(webhookAccountLinks.userId, userId),
+        inArray(webhookAccountLinks.source, groupSources as WebhookSource[]),
+      ),
+    )
+  return rows.some((row) => row.externalServerId === serverId)
 }
 
 /** Whether `userId` already has a linked webhook account for `source` —

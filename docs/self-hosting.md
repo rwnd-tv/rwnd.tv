@@ -104,6 +104,26 @@ Jellyfin's Webhook plugin lets rwnd.tv log a watch automatically as you watch it
 2. Copy the webhook URL shown next to it: it's `https://<your-instance>/api/v1/webhooks/jellyfin/<token>`.
 3. In Jellyfin, install the Webhook plugin (**Dashboard → Plugins → Catalog**, search for "Webhook"), then add a Generic destination pointed at that URL. Enable **Send All Properties** on the destination: this bypasses its templating entirely, which is both the simplest option and the one rwnd.tv's parser expects.
 
+If your plugin version lacks that option, use this Handlebars template instead (every value is quoted deliberately: an unquoted missing variable renders as an empty string, and an unquoted `.NET` boolean renders as `True`/`False`, both invalid JSON):
+
+```json
+{
+  "NotificationType": "{{NotificationType}}",
+  "ItemType": "{{ItemType}}",
+  "ItemId": "{{ItemId}}",
+  "Name": "{{Name}}",
+  "SeriesName": "{{SeriesName}}",
+  "SeasonNumber": "{{SeasonNumber}}",
+  "EpisodeNumber": "{{EpisodeNumber}}",
+  "PlayedToCompletion": "{{PlayedToCompletion}}",
+  "UserId": "{{UserId}}",
+  "NotificationUsername": "{{NotificationUsername}}",
+  "Provider_tmdb": "{{Provider_tmdb}}",
+  "Provider_tvdb": "{{Provider_tvdb}}",
+  "Provider_imdb": "{{Provider_imdb}}"
+}
+```
+
 ## Connecting Emby
 
 Emby's built-in Webhooks notification lets rwnd.tv log a watch automatically as you watch it, instead of logging manually:
@@ -112,9 +132,43 @@ Emby's built-in Webhooks notification lets rwnd.tv log a watch automatically as 
 2. Copy the webhook URL shown next to it: it's `https://<your-instance>/api/v1/webhooks/emby/<token>`.
 3. In Emby, go to **Settings → Notifications → Add Notification**, choose **Webhooks**, and paste that URL.
 
+## Connecting Tautulli
+
+Tautulli monitors a Plex server and can log a watch automatically the same way Plex's own webhook does: it's for a Plex user **without** Plex Pass, since Plex's own webhook feature requires it and Tautulli doesn't.
+
+1. Sign in, go to **Settings → API tokens**, and create a token (name it something like "Tautulli").
+2. Copy the webhook URL shown next to it: it's `https://<your-instance>/api/v1/webhooks/tautulli/<token>`.
+3. In Tautulli, go to **Settings → Notification Agents → Add a new notification agent → Webhook**.
+4. On the **Configuration** tab, paste that URL into **Webhook URL** and leave **Webhook Method** as `POST`.
+5. On the **Triggers** tab, enable **only Watched**. Don't also enable Playback Stop: Tautulli's own "Allow Playback Stop Notifications Exceeding Watched Percent" setting can silently suppress a stop notification for exactly the completed plays rwnd.tv is trying to catch, while Watched has no such trap.
+6. On the **Data** tab, expand **Watched** and paste this into its **JSON Data** field (also copyable from Settings → API tokens once a Tautulli token exists):
+
+```json
+{
+  "action": "{action}",
+  "media_type": "{media_type}",
+  "show_name": "{show_name}",
+  "season_num": "{season_num}",
+  "episode_num": "{episode_num}",
+  "imdb_id": "{imdb_id}",
+  "themoviedb_id": "{themoviedb_id}",
+  "thetvdb_id": "{thetvdb_id}",
+  "rating_key": "{rating_key}",
+  "user_id": "{user_id}",
+  "user": "{user}",
+  "username": "{username}",
+  "server_machine_id": "{server_machine_id}"
+}
+```
+
+7. Leave the Data tab's **Content-Type** alone (default `application/json`); changing it stops Tautulli sending the body as JSON at all.
+8. For accurate matching, go to **Settings → 3rd Party APIs** and enable **Lookup TheMovieDB info** (and, for TV, **Lookup TVmaze info** too, which is how Tautulli fills in a TVDB id for most shows). Without these, a modern Plex library often has no external id to hand over at all, and the watch won't match anything.
+
+**Don't enable both the Plex webhook above and Tautulli for the same Plex server**: Tautulli relays that server's own watches, so every watch would be reported twice. rwnd.tv actively prevents linking both against the _same_ server (you'll see an error when trying to link the second one), but a _different_ Plex server that doesn't have Plex Pass is a genuinely separate, valid setup; link Tautulli's account for that server instead.
+
 ## Multi-user servers
 
-This applies the same way to Plex, Jellyfin and Emby: rwnd.tv doesn't guess which account on the media server is "the owner." The first webhook event from each distinct account shows up in Settings → API tokens as unlinked, next to a "This is me" button. If it's someone else on this instance, generate a one-time link code for their account instead: email it to them (if this instance has SMTP configured) and they just click the link, or show the code on screen and hand it to them to enter themselves on their own Settings page. Either way, it's never attributed to them without their own action. Any watch that arrived before an account was linked is logged retroactively the moment it's linked, so nobody loses history by linking an account a little late.
+This applies the same way to Plex, Jellyfin, Emby and Tautulli: rwnd.tv doesn't guess which account on the media server is "the owner." The first webhook event from each distinct account shows up in Settings → API tokens as unlinked, next to a "This is me" button. If it's someone else on this instance, generate a one-time link code for their account instead: email it to them (if this instance has SMTP configured) and they just click the link, or show the code on screen and hand it to them to enter themselves on their own Settings page. Either way, it's never attributed to them without their own action. Any watch that arrived before an account was linked is logged retroactively the moment it's linked, so nobody loses history by linking an account a little late.
 
 ## Importing from Trakt
 

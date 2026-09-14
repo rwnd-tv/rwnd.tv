@@ -188,12 +188,15 @@ export async function createTokenAndCookie(app: ReturnType<typeof createApp>) {
  * has its own dedicated tests in tokens.test.ts) so these tests can focus
  * purely on webhook behavior. `externalAccountId`/`externalAccountName`
  * default to a Plex-shaped account; pass real values for a Jellyfin/Emby
- * fixture's own account shape. */
+ * fixture's own account shape. `externalServerId` defaults to null (most
+ * fixtures don't care); pass a real value for a Plex/Tautulli
+ * same-server-conflict test. */
 export async function createLinkedTokenAndCookie(
   app: ReturnType<typeof createApp>,
   source: WebhookSource = 'plex',
   externalAccountId = '1',
   externalAccountName = 'james',
+  externalServerId: string | null = null,
 ) {
   const { cookie, token, tokenId } = await createTokenAndCookie(app)
   const meRes = await app.request('/api/v1/auth/me', { headers: { cookie } })
@@ -203,6 +206,7 @@ export async function createLinkedTokenAndCookie(
     source,
     externalAccountId,
     externalAccountName,
+    externalServerId,
     userId,
   })
   return { cookie, token, tokenId }

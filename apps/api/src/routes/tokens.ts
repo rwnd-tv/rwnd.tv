@@ -17,7 +17,7 @@ import type { Database } from '@rwnd/db'
 import type { AppEnv, UserRecord } from '../types.js'
 import { generateApiToken, generateSecret, hashSecret } from '../lib/tokens.js'
 import { replayPendingWebhookEvents } from '../lib/webhook-plays.js'
-import { hasLinkedSource } from '../lib/webhook-accounts.js'
+import { hasLinkedSource, hasConflictingServerLink } from '../lib/webhook-accounts.js'
 import { orderedProviders } from '../providers/priority.js'
 import { isEmailConfigured, sendWebhookLinkEmail } from '../lib/email.js'
 import { logSecurityEvent } from '../lib/security-log.js'
@@ -283,7 +283,8 @@ tokenRoutes.openapi(
       },
       404: { description: 'Token or link not found' },
       409: {
-        description: 'Already linked, or the caller already has a linked account for this source',
+        description:
+          'Already linked, the caller already has a linked account for this source, or this same server is already linked via a different source',
       },
     },
   }),
@@ -299,6 +300,12 @@ tokenRoutes.openapi(
     if (link.userId) return c.json({ error: 'Already linked' }, 409)
     if (await hasLinkedSource(db, user.id, link.source)) {
       return c.json({ error: 'You already have a linked account for this source' }, 409)
+    }
+    if (await hasConflictingServerLink(db, user.id, link.source, link.externalServerId)) {
+      return c.json(
+        { error: 'This server already has a linked account via a different source' },
+        409,
+      )
     }
 
     const updated = await linkAndReplay(c, db, link, user)

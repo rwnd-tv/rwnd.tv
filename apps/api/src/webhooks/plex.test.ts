@@ -21,9 +21,20 @@ describe('parsePlexPayload', () => {
     expect(event).toEqual({
       ids: { tmdb: '603', imdb: 'tt0133093' },
       ratingKey: '12345',
+      serverId: null,
       account: { externalId: '1', name: 'james' },
       media: { type: 'movie' },
     })
+  })
+
+  it('parses Server.uuid into serverId', () => {
+    const event = parsePlexPayload({
+      event: 'media.scrobble',
+      Account: { id: 1, title: 'james' },
+      Server: { title: 'home-server', uuid: 'abc-server-uuid' },
+      Metadata: { type: 'movie', ratingKey: '1', Guid: [{ id: 'tmdb://603' }] },
+    })
+    expect(event?.serverId).toBe('abc-server-uuid')
   })
 
   it('parses an episode scrobble', () => {
@@ -40,6 +51,7 @@ describe('parsePlexPayload', () => {
     expect(event).toEqual({
       ids: { tvdb: '81189' },
       ratingKey: '67890',
+      serverId: null,
       account: { externalId: '1', name: 'james' },
       media: { type: 'episode', showTitle: 'Breaking Bad', seasonNumber: 1, episodeNumber: 3 },
     })

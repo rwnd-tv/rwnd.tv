@@ -14,10 +14,40 @@ import { TokenWebhookLinks } from './TokenWebhookLinks.js'
 // One row per source, always — there's no server-side signal for "which
 // sources this self-hoster actually uses" until a webhook first arrives
 // (see webhook-accounts.ts), so filtering to "configured" sources isn't
-// possible, and three short rows is not a lot of UI.
+// possible, and four short rows is not a lot of UI.
 function webhookUrl(source: WebhookSource, token: string): string {
   return `${window.location.origin}/api/v1/webhooks/${source}/${token}`
 }
+
+// Tautulli's webhook body has no fixed shape — the self-hoster pastes this
+// into the "Watched" trigger's Data tab. Kept as a plain constant (not
+// i18n: it's a JSON/token template, not prose) with the same content as
+// docs/self-hosting.md's Tautulli section — that duplication is
+// unavoidable, since markdown can't import a JS constant, but keeping the
+// two in sync matters, since apps/api/src/webhooks/tautulli.ts's parser is
+// built against exactly these field names. See that file's own doc
+// comment for what each field is used for.
+const TAUTULLI_JSON_TEMPLATE = `{
+  "action": "{action}",
+  "media_type": "{media_type}",
+  "show_name": "{show_name}",
+  "season_num": "{season_num}",
+  "episode_num": "{episode_num}",
+  "imdb_id": "{imdb_id}",
+  "themoviedb_id": "{themoviedb_id}",
+  "thetvdb_id": "{thetvdb_id}",
+  "rating_key": "{rating_key}",
+  "user_id": "{user_id}",
+  "user": "{user}",
+  "username": "{username}",
+  "server_machine_id": "{server_machine_id}"
+}`
+
+/** What's currently showing "Copied" — a webhook block has two independent
+ * copy buttons per source once Tautulli's template is in the mix (the URL,
+ * and the template), so a single `copiedSource` state (the pre-Tautulli
+ * shape) would make copying one silently un-copy the other's label. */
+type Copied = { source: WebhookSource; what: 'url' | 'template' }
 
 /** Collapsed by default like every other panel on this page except
  * AboutPanel.tsx (2026-09-02) — see account/AdvancedPreferencesCard.tsx's
@@ -28,7 +58,13 @@ export function TokensPanel() {
   const [open, setOpen] = usePanelOpen('panelSettingsTokens')
   const [name, setName] = useState('')
   const [justCreated, setJustCreated] = useState<string>()
-  const [copiedSource, setCopiedSource] = useState<WebhookSource>()
+  const [copied, setCopied] = useState<Copied>()
+
+  function copy(text: string, source: WebhookSource, what: Copied['what']) {
+    void navigator.clipboard.writeText(text)
+    setCopied({ source, what })
+    setTimeout(() => setCopied(undefined), 2000)
+  }
 
   const { data, isLoading } = useQuery({
     queryKey: ['tokens'],
@@ -90,17 +126,35 @@ export function TokensPanel() {
                   <Button
                     type="button"
                     variant="secondary"
-                    onClick={() => {
-                      void navigator.clipboard.writeText(webhookUrl(source, justCreated))
-                      setCopiedSource(source)
-                      setTimeout(() => setCopiedSource(undefined), 2000)
-                    }}
+                    onClick={() => copy(webhookUrl(source, justCreated), source, 'url')}
                   >
-                    {copiedSource === source
+                    {copied?.source === source && copied.what === 'url'
                       ? t('settings.tokens.webhook.copied')
                       : t('settings.tokens.webhook.copy')}
                   </Button>
                 </div>
+
+                {source === 'tautulli' && (
+                  <div className="mt-2">
+                    <p className="mb-1 text-xs font-medium text-[var(--color-fg-muted)]">
+                      {t('settings.tokens.webhook.template.label')}
+                    </p>
+                    <div className="flex items-start gap-2">
+                      <pre className="block flex-1 overflow-x-auto rounded-md bg-[var(--color-surface)] px-2 py-1 text-xs">
+                        {TAUTULLI_JSON_TEMPLATE}
+                      </pre>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={() => copy(TAUTULLI_JSON_TEMPLATE, source, 'template')}
+                      >
+                        {copied?.source === source && copied.what === 'template'
+                          ? t('settings.tokens.webhook.copied')
+                          : t('settings.tokens.webhook.copy')}
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </div>
             ))}
           </div>

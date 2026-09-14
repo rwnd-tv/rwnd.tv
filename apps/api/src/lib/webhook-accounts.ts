@@ -52,9 +52,27 @@ export async function resolveWebhookAccount(
     .limit(1)
 
   if (!existing) {
+    // onConflictDoNothing rather than a bare insert: two webhook deliveries
+    // for the same never-before-seen account, close enough together to
+    // both reach this branch before either's insert commits, would
+    // otherwise race webhookAccountLinks' own unique index
+    // (tokenId, source, externalAccountId) and throw on whichever loses —
+    // an unhandled 500 for what should always be a safe no-op path (see
+    // routes/webhooks.ts's own doc comment on staying 200 whenever
+    // possible). Safe to just return null either way: at SELECT time above
+    // this row didn't exist yet, so a concurrent winner's insert is also
+    // necessarily a brand-new, unlinked row — never one this event should
+    // treat differently.
     await db
       .insert(webhookAccountLinks)
       .values({ tokenId, source, externalAccountId, externalAccountName, externalServerId })
+      .onConflictDoNothing({
+        target: [
+          webhookAccountLinks.tokenId,
+          webhookAccountLinks.source,
+          webhookAccountLinks.externalAccountId,
+        ],
+      })
     console.error(
       `Webhook: new ${source} account "${externalAccountName}" (${externalAccountId}) seen for the first time — link it in Settings.`,
     )

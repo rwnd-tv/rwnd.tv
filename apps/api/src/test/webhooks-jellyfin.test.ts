@@ -265,6 +265,31 @@ describe('POST /webhooks/jellyfin/:token — multi-user attribution', () => {
     expect(pending?.event.media).toEqual({ type: 'movie' })
   })
 
+  it('does not 500 when the same never-before-seen account is delivered twice concurrently', async () => {
+    const app = createApp({ db, metadataProviders: [fakeTmdb()] })
+    const { token, tokenId } = await createTokenAndCookie(app)
+
+    // Same race shape as the already-linked concurrent-delivery test above,
+    // but for an account resolveWebhookAccount has never seen before:
+    // its own select-then-insert (apps/api/src/lib/webhook-accounts.ts)
+    // has no equivalent of reconcilePlayDuplicates's advisory lock, so two
+    // requests can both see "no existing link row" and both attempt to
+    // insert one, racing webhookAccountLinks' own
+    // (tokenId, source, externalAccountId) unique index.
+    const [resA, resB] = await Promise.all([
+      postWebhook(app, token, jellyfinMoviePayload(MANAGED_ACCOUNT)),
+      postWebhook(app, token, jellyfinMoviePayload(MANAGED_ACCOUNT)),
+    ])
+    expect(resA.status).toBe(200)
+    expect(resB.status).toBe(200)
+
+    const links = await db
+      .select()
+      .from(webhookAccountLinks)
+      .where(eq(webhookAccountLinks.tokenId, tokenId))
+    expect(links).toHaveLength(1)
+  })
+
   it('logs against the linked user, with their own locale, once linked (replay)', async () => {
     const app = createApp({ db, metadataProviders: [fakeTmdb()] })
     const { token, tokenId } = await createTokenAndCookie(app)

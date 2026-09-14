@@ -442,9 +442,19 @@ Format:
       Spans multiple sessions; full plan at
       `C:\Users\James\.claude\plans\joyful-discovering-peach.md`. Progress:
 
-      - [ ] Stage 1: webhook ingestion core & trust model (Jellyfin/Emby/Tautulli,
+      - [x] Stage 1: webhook ingestion core & trust model (Jellyfin/Emby/Tautulli,
             source-agnostic dispatch, play-dedup/advisory-lock rework,
-            consent-based attribution rework)
+            consent-based attribution rework) — 2026-09-14. Fixed a real
+            TOCTOU race in `resolveWebhookAccount` (concurrent first-sighting
+            deliveries for the same account could 500 on a unique-index
+            collision; `apps/api/src/lib/webhook-accounts.ts`), with a
+            regression test. Logged the TMDB/TVDB path-encoding item below
+            as a follow-up. Everything else (rate limiting, log hygiene,
+            token-in-URL auth, consent/attribution flow, `f930234`'s cascade
+            fixes) checked against ADR 0007 and found already covered or
+            out of `/security-review`'s own scope. ASVS rows for Stage 7:
+            V4.2.1 pass, new V11 section (business-logic/workflow-bypass)
+            needed - pass, no bypass found.
       - [ ] Stage 2: admin & owner-role privilege model
       - [ ] Stage 3: scheduled database backups (verify against ADR 0008)
       - [ ] Stage 4: calendar feeds & in-app calendar
@@ -455,6 +465,25 @@ Format:
 
       `docs/security/asvs-l1.md` stays the durable record, updated in place
       per stage rather than replaced.
+
+- [ ] **URL-encode external ids interpolated into TMDB/TVDB request paths** (2026-09-14 added, Stage 1 of the M4 review)
+
+      `providers/tmdb.ts` and `providers/tvdb.ts` build request paths like
+      `` `/tv/${externalId}` `` and `` `/series/${externalId}/extended` ``
+      with no `encodeURIComponent`, for every provider client call — not
+      just the webhook-driven ones. `externalId` for a webhook-triggered
+      lookup ultimately traces back to attacker-controlled webhook payload
+      content (Plex's `Metadata.Guid[].id`, Tautulli's templated fields,
+      etc. — anyone holding a valid webhook token controls the full body,
+      not just legitimate media-server data), so a crafted id containing
+      `/` or `..` could redirect the request to a different TMDB/TVDB API
+      path than intended. Narrow in practice — same fixed host, this
+      server's own API key, no cross-host redirection possible, and
+      `/security-review`'s own scope explicitly excludes path-only SSRF —
+      but cheap to close with `encodeURIComponent(externalId)` at each call
+      site. Touches the shared provider-client layer (also used by
+      ordinary search/browse, not just webhooks), so it's its own
+      follow-up rather than a Stage 1 inline fix.
 
 ## Roadmap
 

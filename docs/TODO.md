@@ -510,7 +510,20 @@ Format:
             (read_only/cap_drop/no-new-privileges) directly against
             docker-compose.yml. ASVS rows for Stage 7: V8.3.x, V12.1.1,
             V14.4.x — pass (V12.1.1 pass only after the fix).
-      - [ ] Stage 4: calendar feeds & in-app calendar
+      - [x] Stage 4: calendar feeds & in-app calendar — 2026-09-14. Found and
+            fixed a real spoiler-protection gap: the .ics feed's SUMMARY
+            field always embedded the real episode title regardless of
+            spoilerProtectionEnabled, the one field on a calendar event an
+            .ics subscriber can't avoid seeing (DESCRIPTION was already
+            correctly omitted for the same reason). Fixed by reusing
+            episodeSummary()'s existing null-title branch; regression test
+            added. Verified the token-in-URL rate limit, `Cache-Control:
+            no-store`, no token logging anywhere, and the `ENCRYPTION_KEY`
+            503 gate are all genuine, not just documented. ASVS rows for
+            Stage 7: V2/V3 (token pattern), V9.1.x (no-store) — pass;
+            V8.2.x/V8.3.x and new V11 (spoiler invariant across every
+            surface, not just ones with a client to blur with) — pass, but
+            only after today's fix.
       - [ ] Stage 5: Webhooks panel redesign & token-encryption posture change
       - [ ] Stage 6: supply-chain, CI & dependency hygiene
       - [ ] Stage 7: close-out (ASVS V6/V10/V11 gaps, dated ADR 0007 update,

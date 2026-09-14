@@ -725,6 +725,51 @@ describe('calendar feeds', () => {
       expect(unprotectedBody).toContain('DESCRIPTION:An unwatched synopsis.')
     })
 
+    it("omits an unwatched episode's title from SUMMARY when spoiler protection is on, but includes a watched one's (M4 review regression: SUMMARY used to always include the real title, the one field on this event an .ics subscriber can't avoid seeing)", async () => {
+      const cookie = await createUserAndCookie()
+      const userId = await meId(cookie)
+      const show = await seedShow('a-show', 'A Show')
+      const [, watched] = await db
+        .insert(episodes)
+        .values([
+          {
+            showId: show.id,
+            seasonNumber: 1,
+            episodeNumber: 1,
+            firstAired: '2099-01-01',
+            title: 'A Spoilery Episode Title',
+          },
+          {
+            showId: show.id,
+            seasonNumber: 1,
+            episodeNumber: 2,
+            firstAired: '2099-01-08',
+            title: 'A Watched Episode Title',
+          },
+        ])
+        .returning()
+      await db.insert(plays).values({ userId, episodeId: watched!.id, watchedAt: new Date() })
+      await addToDefaultWatchlist(cookie, 'a-show', 'shows')
+
+      const feed = await createFeed(cookie, 'shows')
+      const body = await (await app.request(`/api/v1/calendar/${feed.token}/feed.ics`)).text()
+      expect(body).not.toContain('A Spoilery Episode Title')
+      expect(body).toContain('SUMMARY:A Show — S01E01')
+      expect(body).toContain('SUMMARY:A Show — S01E02 A Watched Episode Title')
+
+      // With spoiler protection off, the same unwatched episode's title is
+      // no longer withheld.
+      await app.request('/api/v1/auth/me', {
+        method: 'PATCH',
+        headers: { cookie, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ spoilerProtectionEnabled: false }),
+      })
+      const unprotectedBody = await (
+        await app.request(`/api/v1/calendar/${feed.token}/feed.ics`)
+      ).text()
+      expect(unprotectedBody).toContain('SUMMARY:A Show — S01E01 A Spoilery Episode Title')
+    })
+
     it.skipIf(!APP_URL)(
       "appends a link to the episode's page even when its synopsis is spoiler-hidden",
       async () => {

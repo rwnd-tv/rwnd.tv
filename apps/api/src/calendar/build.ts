@@ -440,44 +440,62 @@ async function buildShowsEvents(
     .orderBy(desc(episodes.firstAired))
     .limit(MAX_CALENDAR_EVENTS)
 
-  return rows.map((row) => ({
-    uid: `episode-${row.episodeId}@rwnd.tv`,
-    date: row.firstAired!,
-    summary: episodeSummary(
-      showsById.get(row.showId)!.title,
-      row.seasonNumber,
-      row.episodeNumber,
-      row.title,
-    ),
-    // Same rule EpisodeDetailPage.tsx's `spoilerHidden` uses in the UI
-    // (apps/web/src/routes/EpisodeDetailPage.tsx) — there it's a CSS
-    // blur-until-clicked, but an ICS event has no such mechanism, so a
-    // spoiler-hidden synopsis has to be omitted outright rather than
-    // sent and hidden client-side. The link itself is never withheld —
-    // it points at the episode's own page, which applies this same
-    // spoiler rule again client-side.
-    description: withLink(
-      user.spoilerProtectionEnabled && !row.watched ? undefined : (row.overview ?? undefined),
-      opts.baseUrl
-        ? `${opts.baseUrl}/shows/${showsById.get(row.showId)!.slug}/season/${row.seasonNumber}/episode/${row.episodeNumber}`
-        : undefined,
-    ),
-    // See latestOf's own doc comment.
-    stamp: latestOf(row.createdAt, row.overviewCheckedAt),
-    kind: 'episode',
-    media: {
-      type: 'episode',
-      title: episodeDisplayTitle(row.title, row.seasonNumber, row.episodeNumber),
-      posterPath: showsById.get(row.showId)!.posterPath,
-      showTitle: showsById.get(row.showId)!.title,
-      showSlug: showsById.get(row.showId)!.slug,
-      seasonNumber: row.seasonNumber,
-      episodeNumber: row.episodeNumber,
-    },
-    watched: row.watched,
-    spoilerHidden: user.spoilerProtectionEnabled && !row.watched,
-    overview: row.overview,
-  }))
+  return rows.map((row) => {
+    // Computed once, reused below: the same condition already governed
+    // `description` and the `spoilerHidden` flag this row returns, before
+    // `summary` also started reusing it (M4 review, docs/TODO.md).
+    const spoilerHidden = user.spoilerProtectionEnabled && !row.watched
+    return {
+      uid: `episode-${row.episodeId}@rwnd.tv`,
+      date: row.firstAired!,
+      // `episodeSummary`'s own null-title branch ("ShowTitle — S01E05", no
+      // episode title) doubles as the spoiler-hidden case here — unlike
+      // `description` below, this field has no "TMDB just hasn't
+      // populated it yet" reason to ever be null on a real episode, so
+      // reusing that branch for spoilerHidden is unambiguous, not
+      // overloading two different meanings onto one null. Found in the
+      // M4 review (docs/TODO.md): this SUMMARY used to always embed the
+      // real episode title regardless of spoilerHidden, the one field on
+      // this event an .ics subscriber can't avoid seeing (unlike
+      // `description`, already omitted below for exactly this reason, or
+      // the in-app calendar, which blurs `media.title` client-side —
+      // CalendarEventTile.tsx).
+      summary: episodeSummary(
+        showsById.get(row.showId)!.title,
+        row.seasonNumber,
+        row.episodeNumber,
+        spoilerHidden ? null : row.title,
+      ),
+      // Same rule EpisodeDetailPage.tsx's `spoilerHidden` uses in the UI
+      // (apps/web/src/routes/EpisodeDetailPage.tsx) — there it's a CSS
+      // blur-until-clicked, but an ICS event has no such mechanism, so a
+      // spoiler-hidden synopsis has to be omitted outright rather than
+      // sent and hidden client-side. The link itself is never withheld —
+      // it points at the episode's own page, which applies this same
+      // spoiler rule again client-side.
+      description: withLink(
+        spoilerHidden ? undefined : (row.overview ?? undefined),
+        opts.baseUrl
+          ? `${opts.baseUrl}/shows/${showsById.get(row.showId)!.slug}/season/${row.seasonNumber}/episode/${row.episodeNumber}`
+          : undefined,
+      ),
+      // See latestOf's own doc comment.
+      stamp: latestOf(row.createdAt, row.overviewCheckedAt),
+      kind: 'episode',
+      media: {
+        type: 'episode',
+        title: episodeDisplayTitle(row.title, row.seasonNumber, row.episodeNumber),
+        posterPath: showsById.get(row.showId)!.posterPath,
+        showTitle: showsById.get(row.showId)!.title,
+        showSlug: showsById.get(row.showId)!.slug,
+        seasonNumber: row.seasonNumber,
+        episodeNumber: row.episodeNumber,
+      },
+      watched: row.watched,
+      spoilerHidden,
+      overview: row.overview,
+    }
+  })
 }
 
 /**

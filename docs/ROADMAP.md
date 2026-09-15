@@ -48,7 +48,7 @@ genuinely production-ready.
 - [x] Cut the first tagged release (`v1.0.0`), moving `:latest` off tracking `:edge`
 - [x] **Redesign the History page as a full-width grid**, matching the Shows/Movies gallery treatment; shipped 2026-08-26 as the Activity page (merges watches, ratings, watchlist adds and drops into one feed)
 
-## M4: Broader ingestion & upcoming episodes
+## M4: Broader ingestion & upcoming episodes ✅ done
 
 - [x] **Jellyfin/Emby webhook ingestion**: built on a newly source-agnostic core (entity resolution, per-user API token auth, and now a single `POST /webhooks/:source/:token` route dispatching per source) that Plex's own webhook (M2) previously ran alone. Both parsers were verified against real webhook deliveries, captured from ephemeral Jellyfin/Emby containers pointed at the real (read-only) Plex media library, before either shipped. See TODO_ARCHIVE.md.
 - [x] **Tautulli webhook ingestion**: same source-agnostic core as Jellyfin/Emby above, with a self-hoster-pasted JSON template rather than a fixed payload shape, since Tautulli's webhook body is fully user-templated. The one non-mechanical part: Tautulli monitors a Plex server, so a self-hoster could otherwise link both `plex` and `tautulli` against the _same_ server and have every watch double-logged; a physical-server identity (Plex's `Server.uuid`, confirmed to match Tautulli's own `{server_machine_id}`) is captured on each account link and checked at link time, refusing the second link rather than deduplicating after the fact. Kodi remains open (see TODO.md): it has no native webhook support at all, so it needs an addon-based approach instead.

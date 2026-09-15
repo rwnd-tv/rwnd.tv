@@ -403,3 +403,87 @@ cost from one-time reveal was real and recurring, weighed against a
 theft scenario (database _and_ `ENCRYPTION_KEY` both compromised) that
 was already the worst case for two other secret classes on this same
 instance.
+
+## Update (2026-09-15): M4 milestone review close-out
+
+Per `CLAUDE.md`'s "Closing out a milestone" rule, M4 got the same treatment
+M3 did: a structured review before the milestone counts as done, this time
+across 130+ commits since `v1.0.0`. Staged as seven commits (`docs/TODO.md`'s
+"M4 milestone code + security review" item has the full per-stage detail)
+plus one milestone-wide mechanical `/code-review high` pass, rather than
+one long session, since M4 was too large a diff for a single pass to stay
+accurate over.
+
+Real findings, all fixed inline with a regression test each:
+
+- **Stage 1** (webhook ingestion trust model): a TOCTOU race in
+  `resolveWebhookAccount`, where two near-simultaneous first-sighting
+  deliveries for the same account could both attempt to insert a link row
+  and race its unique index, an unhandled 500 for what should always be a
+  safe no-op. Fixed with `onConflictDoNothing()`.
+- **Stage 3** (scheduled database backups): the stale-`.partial` cleanup
+  matched any `.partial` file sitting in the backup directory, not just
+  this job's own `rwnd-<ISO>.sql.gz.partial` shape, contradicting
+  [ADR 0008](0008-database-backups.md)'s own "can't delete anything it
+  didn't write" claim. Fixed with a matching regex.
+- **Stage 4** (calendar feeds): the `.ics` feed's `SUMMARY` field always
+  embedded the real episode title regardless of `spoilerProtectionEnabled`,
+  the one field an `.ics` subscriber can't avoid seeing, where
+  `DESCRIPTION` was already correctly omitted for the same reason. Fixed
+  by reusing `episodeSummary()`'s existing null-title branch.
+- **Stage 5** (Webhooks panel redesign / token-encryption posture change):
+  `serializeToken` called `decryptSecret` bare, so one row encrypted under
+  a since-rotated `ENCRYPTION_KEY` 500'd the whole `GET /tokens` list
+  instead of falling back to `token: null` like a never-encrypted row
+  already does. Also, `PATCH /tokens/{id}` had no `source IS NULL` guard
+  despite being documented as "only settable once," letting a token owner
+  silently overwrite it via a direct API call.
+- **Milestone-wide `/code-review high v1.0.0` pass** (not tied to one
+  stage: CLAUDE.md's revised "Closing out a milestone" rule now runs this
+  mechanical pass once per milestone rather than once per stage, after an
+  earlier `max`-level attempt over-fanned-out and burned a session's usage
+  limit for no output): the same rotated-`ENCRYPTION_KEY` gap Stage 5 fixed
+  in `serializeToken` turned out to be unguarded at four more
+  `decryptSecret` call sites, in MFA/TOTP login verification, MFA
+  disable/regenerate-recovery-codes, and enrollment confirm
+  (`apps/api/src/routes/auth.ts`, `routes/mfa.ts`), meaning any MFA-enabled
+  user got a raw 500 lockout, not a clean "wrong code," after a legitimate
+  key rotation. Fixed with a shared `verifyEncryptedTotp()` helper
+  (`lib/totp.ts`) that fails closed instead of throwing. The same pass also
+  found that the webhook self-link route
+  (`POST /tokens/{id}/webhook-links/{linkId}/link`) could let a user link
+  two different accounts of the same source at once under concurrent
+  requests, since wrapping the check-then-write in a transaction alone
+  doesn't close this: the two racing writes land on two different rows.
+  Fixed with `lockUserSource()`, a Postgres advisory lock scoped to
+  `(userId, source)`, the same pattern `lib/plays.ts`'s `lockEntity`
+  already uses for a related play-dedup race.
+
+Stages 2 and 6 (admin/owner privilege model; supply-chain, CI and
+dependency hygiene) found nothing to fix: both areas were already
+correctly built or already hardened. Stage 6 did enable one previously-off
+free toggle (Dependabot malware alerts) and confirmed two GitHub Advanced
+Security detectors are genuinely unavailable to this org (zero GHAS seats),
+not misconfigured.
+
+`docs/security/asvs-l1.md` gained three chapters it didn't have before,
+V6 (Stored Cryptography), V10 (Malicious Code), and V11 (Business Logic),
+none of which existed in the M3 review, closing the gap its own "Deferred
+items" section used to leave unaddressed. See that file for the row-level
+detail; it stays the durable record, updated in place rather than
+replaced, same as every other update in this ADR.
+
+Smaller follow-ups from across the review that didn't warrant an inline
+fix are logged to `docs/TODO.md`, most under its Security section:
+TMDB/TVDB request-path encoding (Stage 1), a cross-process concurrent-run
+guard on the scheduled backup (Stage 3), the matching
+`serializeCalendarFeed` rotated-key gap Stage 5 didn't cover (different
+fix shape needed, its wire type is non-nullable), a friendlier error
+message for `trakt.ts`'s equivalent gap (already fails gracefully via the
+import job runner's own error handling, so lower priority), and six
+reuse/simplification cleanups from the milestone-wide pass.
+
+Milestone close (flipping M4 to `✅ done` in `docs/ROADMAP.md`) and any
+eventual version cut both stay separate, later, explicit decisions, not
+automatic just because this review is now complete, same as M3's own
+close-out.

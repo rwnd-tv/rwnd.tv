@@ -36,21 +36,6 @@ Format:
       same thing from different angles; removing the ignore once TS 7 is
       supported stays the exit condition either way.
 
-- [ ] **`trakt.ts`'s `ensureFreshAccessToken` gives a cryptic error on a rotated `ENCRYPTION_KEY`** (2026-09-15 19:53 added, M4 review's milestone-wide `/code-review high` pass)
-
-      Same unguarded-`decryptSecret` shape the M4 review already fixed
-      elsewhere (`lib/totp.ts`'s `verifyEncryptedTotp`, Stage 5's
-      `serializeToken`/`serializeCalendarFeed`), but lower priority here:
-      `apps/api/src/import/trakt.ts`'s `ensureFreshAccessToken` is already
-      inside the job runner's own try/catch (`runTraktImport` →
-      `runImportJob`, `trakt.ts` around line 431), so a decrypt failure
-      after a key rotation fails the import job gracefully (`status:
-      'failed'`) rather than crashing or 500ing a live request. The gap is
-      purely UX: the stored `error` message is GCM's raw auth-tag-mismatch
-      text, not something that tells the user to reconnect their Trakt
-      account. Worth a friendlier error message (and maybe clearing the
-      connection so the UI prompts to reconnect) but not a correctness bug.
-
 - [ ] **Six reuse/simplification cleanups from the M4 review's milestone-wide `/code-review high` pass** (2026-09-15 19:53 added)
 
       Each independently confirmed, none urgent (maintainability only, no
@@ -528,7 +513,7 @@ Format:
       here 2026-09-14 while scoping the M4 milestone review, so the pointer
       resolves again.
 
-- [ ] **M4 milestone code + security review** (2026-09-14 21:02 added; M4)
+- [x] **M4 milestone code + security review** (2026-09-14 21:02 added, all 7 stages + milestone-wide pass completed 2026-09-15; M4)
 
       Per `CLAUDE.md`'s "Closing out a milestone" rule: before marking M4
       `✅ done` in `ROADMAP.md`, run both a code review and a security review
@@ -658,8 +643,46 @@ Format:
             (pinned actions/image, signed+digest-pinned release, Trivy gate
             on every CI run and release, Dependabot alerts + malware
             alerts, CodeQL).
-      - [ ] Stage 7: close-out (ASVS V6/V10/V11 gaps, dated ADR 0007 update,
-            flip M4 to `✅ done` in ROADMAP.md)
+      - [x] Milestone-wide mechanical code review (`/code-review high
+            v1.0.0`), 2026-09-15, commit `0050bc3`. Not tied to one stage:
+            CLAUDE.md's revised "Closing out a milestone" rule now runs
+            this pass once per milestone rather than once per stage (the
+            earlier `max`-level attempt during Stage 6 over-fanned-out and
+            burned a session's usage limit for no output). Found and fixed
+            two real bugs: the same rotated-`ENCRYPTION_KEY` gap Stage 5
+            fixed in `serializeToken` was unguarded at 4 more
+            `decryptSecret` call sites (MFA login, disable/regenerate,
+            enrollment confirm), locking out any MFA-enabled user after a
+            key rotation instead of a clean "wrong code"; fixed with a
+            shared `verifyEncryptedTotp()` helper (`lib/totp.ts`) that
+            fails closed. Also a webhook self-link TOCTOU race letting a
+            user link two accounts of the same source at once; fixed with
+            `lockUserSource()`, a Postgres advisory lock matching
+            `lib/plays.ts`'s existing pattern for a related race. Plus two
+            trivial `Promise.all` efficiency fixes and 7 smaller findings
+            logged above/below as follow-ups. Verified via two clean full
+            local suite runs (1043/1043) and end-to-end against a live
+            dev.rwnd.tv deploy (MFA enroll/login round-trip; a synthetic
+            webhook self-linked via the UI) after an earlier run's 47
+            failures turned out to be a one-off transient environment blip,
+            confirmed via a clean-baseline comparison against unmodified
+            code. ASVS rows for Stage 7: new V11 section (Business Logic),
+            pass, grounded in the webhook-linking invariant this pass
+            fixed plus the other invariants Stages 1/4/5 already verified.
+      - [x] Stage 7: close-out, 2026-09-15. Added V6 (Stored Cryptography),
+            V10 (Malicious Code), and V11 (Business Logic) sections to
+            `docs/security/asvs-l1.md`, each verified against the real
+            ASVS 4.0.3 requirement text (fetched live, not from memory),
+            worth noting since V6 and V10 turn out to have only one and
+            three Level 1 requirements respectively, not full chapters of
+            them, so those sections lean on this file's existing "named L2
+            items" allowance rather than a full L1 table. Added a dated
+            "M4 milestone review close-out" update to
+            [ADR 0007](adr/0007-security-posture.md) summarizing all 7
+            stages plus the milestone-wide pass. Deliberately did **not**
+            flip M4 to `✅ done` in `ROADMAP.md`, James's explicit call
+            this session: that stays a separate, later decision, not
+            automatic just because the review is complete.
 
       `docs/security/asvs-l1.md` stays the durable record, updated in place
       per stage rather than replaced.
@@ -709,6 +732,22 @@ Format:
       resubscribe from Settings," worth deciding deliberately rather than
       folding into Stage 5's scope, which only covers the webhooks panel
       work.
+
+- [ ] **`trakt.ts`'s `ensureFreshAccessToken` gives a cryptic error on a rotated `ENCRYPTION_KEY`** (2026-09-15 added, M4 review's milestone-wide `/code-review high` pass)
+
+      Same unguarded-`decryptSecret` shape as the item above and the one
+      the milestone-wide pass fixed elsewhere (`lib/totp.ts`'s
+      `verifyEncryptedTotp`, covering MFA login/disable/regenerate/confirm),
+      but lower priority here: `apps/api/src/import/trakt.ts`'s
+      `ensureFreshAccessToken` is already inside the job runner's own
+      try/catch (`runTraktImport` → `runImportJob`, `trakt.ts` around line
+      431), so a decrypt failure after a key rotation fails the import job
+      gracefully (`status: 'failed'`) rather than crashing or 500ing a
+      live request. The gap is purely UX: the stored `error` message is
+      GCM's raw auth-tag-mismatch text, not something that tells the user
+      to reconnect their Trakt account. Worth a friendlier error message
+      (and maybe clearing the connection so the UI prompts to reconnect)
+      but not a correctness bug.
 
 ## Roadmap
 

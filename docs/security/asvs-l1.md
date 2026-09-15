@@ -11,6 +11,7 @@ revocation UI, `__Host-` cookies).
 
 - **Review started:** 2026-08-29
 - **Review completed:** 2026-08-29 (Stages A–J, ten staged commits)
+- **M4 incremental additions:** 2026-09-15, V6/V10/V11 sections added, closing the gaps the M4 milestone review found; see [ADR 0007](../adr/0007-security-posture.md)'s "M4 milestone review close-out" update for the full narrative
 - **ASVS version:** [4.0.3](https://github.com/OWASP/ASVS/blob/master/4.0/docs_en/OWASP%20Application%20Security%20Verification%20Standard%204.0.3-en.pdf)
 - **Reviewed against commit:** `6fd743a7aab30df92b065b170ca1c4075bab795e` (Stage I; this record itself lands in Stage J: see `git log` for the current HEAD)
 - **Target level:** L1 throughout, plus named L2 items
@@ -106,6 +107,26 @@ project, rather than scattering that reasoning across this table.
 | V5.3.4        | Pass                 | Drizzle ORM parameterized queries throughout; no raw SQL string concatenation                                                                                                                                     |
 | V5.5.4        | Pass                 | `JSON.parse`, never `eval`, including the hand-rolled webhook payload parser                                                                                                                                      |
 
+## V6: Stored Cryptography
+
+Added 2026-09-15 (M4 review Stage 5/7): only V6.2.1 is a Level 1
+requirement in ASVS 4.0.3; the rest of this chapter is L2/L3. Included
+here as named L2 items anyway, per this file's own stated scope ("L1 plus
+the handful of L2 items called out explicitly where relevant"), since
+reversible encryption is a real feature of this app (Trakt tokens, TOTP
+secrets, webhook URLs, calendar-feed URLs).
+
+| Req                  | Status        | Evidence / rationale                                                                                                                                                                                                                                                      |
+| -------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| V6.1.1–3             | N/A           | No PII/health/financial data classes stored beyond ordinary account credentials, already covered under V2/V3                                                                                                                                                              |
+| V6.2.1 (L1)          | Pass          | Decrypt failures fail closed rather than throwing a raw exception into a response: `serializeToken` (`routes/tokens.ts`) and `verifyEncryptedTotp` (`lib/totp.ts`, M4 review) both catch a GCM auth-tag mismatch and treat it as absent/wrong, not an unhandled 500       |
+| V6.2.2 (L2, named)   | Pass          | AES-256-GCM via `node:crypto`, not custom-coded cryptography: `apps/api/src/lib/crypto.ts`                                                                                                                                                                                |
+| V6.2.3 (L2, named)   | Pass          | Fresh random IV (`randomBytes(12)`) generated per `encryptSecret()` call: `lib/crypto.ts`                                                                                                                                                                                 |
+| V6.2.5 (L2, named)   | Pass          | GCM only for reversible secrets; no ECB/CBC-PKCS7 or weak hashes for this secret class. `hashSecret()`'s unsalted SHA-256 is a deliberate, separate case for one-way CSPRNG bearer tokens, not password storage; see its own doc comment and the CodeQL suppression on it |
+| V6.2.6 (L2, named)   | Pass          | IV never reused: freshly generated every `encryptSecret()` call, never derived or cached                                                                                                                                                                                  |
+| V6.3.1–2 (L2, named) | Pass          | CSPRNG (`node:crypto`'s `randomBytes`) for every secret, IV, and token generated in this codebase; cross-references the V2.6.1-3 and V3.2.2 evidence already in this file                                                                                                 |
+| V6.4.1–2             | Accepted risk | `ENCRYPTION_KEY` is a single environment variable, not a vault-managed secret. Reasonable for this project's self-hosted deployment model: a self-hoster isn't expected to run a secrets vault alongside one Docker Compose stack; documented in `docs/self-hosting.md`   |
+
 ## V7: Error Handling and Logging
 
 | Req    | Status               | Evidence / rationale                                                                                                                                                                                                                                       |
@@ -129,6 +150,35 @@ project, rather than scattering that reasoning across this table.
 | -------- | ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | V9.1.1   | Fail → fixed | `http://rwnd.tv/` and `http://dev.rwnd.tv/` now 301-redirect to HTTPS: James enabled Force SSL/HTTP2/HSTS on both proxy hosts in Nginx Proxy Manager (2026-08-30), the last piece this repository itself couldn't fix. Confirmed live: both domains redirect, and both send `Strict-Transport-Security` (now doubled up: the app's own header from Stage D, `max-age=15552000`, plus NPM's own `max-age=63072000; includeSubDomains; preload` now that its HSTS setting is on too; redundant but harmless, both agree on "always HTTPS") |
 | V9.1.2–3 | Pass         | Observed live via `openssl s_client -connect rwnd.tv:443`: negotiates TLS 1.3 (TLS_AES_256_GCM_SHA384) by default; TLS 1.2 also available with a strong cipher (ECDHE-ECDSA-AES256-GCM-SHA384); Let's Encrypt certificate, correct CN                                                                                                                                                                                                                                                                                                    |
+
+## V10: Malicious Code
+
+Added 2026-09-15 (M4 review Stage 6/7). Only V10.3.x is Level 1 in ASVS
+4.0.3; V10.1/V10.2 (dedicated malicious-code SAST, backdoor/Easter-egg
+search) are L2/L3 and not this repo's realistic threat model: a
+solo-maintainer, direct-push repo with no external contributors landing
+unreviewed code.
+
+| Req     | Status | Evidence / rationale                                                                                                                                                                                            |
+| ------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| V10.1.1 | N/A    | No dedicated malicious-code SAST tool; CodeQL's `security-extended` query suite (`.github/workflows/codeql.yml`) is adjacent but not equivalent coverage                                                        |
+| V10.2.x | N/A    | No backdoor/Easter-egg search process; not a realistic threat for this repo's contribution model                                                                                                                |
+| V10.3.1 | Pass   | The published image is cosign-signed (keyless OIDC/Fulcio, `.github/workflows/release.yml`), distributed over HTTPS via GHCR; self-hoster verification documented at `docs/self-hosting.md#verifying-the-image` |
+| V10.3.2 | Pass   | Every GitHub Action pinned by commit SHA, not a floating tag (`.github/workflows/*.yml`); Dependabot + Trivy gate every dependency on every CI run and release; no dynamic code loading anywhere (V5.2.4)       |
+| V10.3.3 | N/A    | `rwnd.tv`/`dev.rwnd.tv` DNS points at James's own home-server reverse proxy, not a transient cloud resource (no serverless/storage-bucket subdomain pattern), so a low subdomain-takeover surface               |
+
+## V11: Business Logic
+
+Added 2026-09-15 (M4 review Stages 1/4/7). All five ASVS 4.0.3 V11.1.x
+requirements are Level 1.
+
+| Req     | Status | Evidence / rationale                                                                                                                                                                                                                                                                                                            |
+| ------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| V11.1.1 | Pass   | MFA challenge→verify, webhook link-code redemption, and invite redemption all enforce server-side step order: none of them can be claimed without the preceding challenge/code/invite row already existing                                                                                                                      |
+| V11.1.2 | N/A    | No scenario in this app where a too-fast submission is a meaningful risk (not an e-commerce/voting-shaped flow)                                                                                                                                                                                                                 |
+| V11.1.3 | Pass   | Per-route, per-caller rate limiting (`apps/api/src/middleware/rate-limit.ts`) across login, MFA challenge, webhook delivery, password reset, and more                                                                                                                                                                           |
+| V11.1.4 | Pass   | Same rate limiting plus a global request body-size limit (`lib/body-limit.ts`); bounded rather than CAPTCHA-grade, reasonable for this app's actual scale and threat model                                                                                                                                                      |
+| V11.1.5 | Pass   | Concrete business-logic invariants this review verified or fixed: one-account-per-source webhook linking (M4 review's `lockUserSource` advisory lock, `lib/webhook-accounts.ts`), `assertNotLastAdmin`, owner-role immutability, the calendar spoiler-protection invariant (Stage 4), and token `source`-immutability (Stage 5) |
 
 ## V12: Files and Resources
 
@@ -175,6 +225,11 @@ logged to `docs/TODO.md`:
   added minimal `[security]`-prefixed event logging, not a general
   request-logging pipeline; that stays a real gap, not a narrowing worth
   hiding
+
+- The M4 milestone review (2026-09-15) logged several further follow-ups
+  to `docs/TODO.md`'s Security section (not enumerated here, to avoid
+  duplicating and going stale against that file; see it directly for the
+  current list)
 
 Closed in the 2026-08-29 follow-up pass (see `docs/TODO_ARCHIVE.md`):
 F-25 (`packages/db`'s scripts now share one validated `env.ts` loader, plus

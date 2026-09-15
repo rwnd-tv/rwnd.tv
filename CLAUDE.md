@@ -110,8 +110,8 @@ about: there's no path filter. Running it once per stage therefore
 re-reviews the entire milestone's diff every time, which is redundant and,
 at `max` level, can fan out into a large number of parallel subagents on
 a big diff. To avoid burning a large amount of usage for little marginal
-value (this happened once, 2026-09-15, and cost a full weekly allowance
-for zero usable output after hitting a rate limit mid-run):
+value (this happened once, 2026-09-15, and exhausted a full session usage
+limit for zero usable output after hitting a rate limit mid-run):
 
 - Run the mechanical `/code-review` pass **at most once per milestone**
   (covering the whole range), not once per stage. Each stage still gets

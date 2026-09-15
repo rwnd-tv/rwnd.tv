@@ -34,6 +34,10 @@
         "label": "M3 · done",
         "body": "Ratings, watchlists, and a full security review, all shipped"
       },
+      "m4": {
+        "label": "M4 · done",
+        "body": "Jellyfin/Emby/Tautulli webhooks, scheduled backups, calendar feeds, admin roles"
+      },
       "honest": {
         "label": "Honestly:",
         "body": "this is a young, single-maintainer project, so expect the occasional rough edge, and please file an issue when you hit one.",
@@ -113,7 +117,7 @@
     },
     "status": {
       "title": "Where the project actually is",
-      "body": "The first three milestones are done, and v{{version}} is out — the fourth is already underway. The roadmap in the repo is a living document and this page follows it rather than getting ahead of it.",
+      "body": "The first four milestones are done, and v{{version}} is out. The roadmap in the repo is a living document and this page follows it rather than getting ahead of it.",
       "done": "done",
       "inProgress": "in progress",
       "m1": {
@@ -148,8 +152,8 @@
         "items": [
           "Jellyfin, Emby and Tautulli webhook ingestion, shipped",
           "Automatic scheduled database backups, shipped",
-          "Calendar of upcoming episodes, via webcal subscription feeds, shipped",
-          "Admin UI for managing users, shipped; Kodi ingestion next"
+          "Calendar of upcoming episodes, via webcal feeds and an in-app Calendar page, shipped",
+          "Admin UI for managing users, an owner role, and bulk actions, shipped"
         ]
       },
       "builtTitle": "Built with Claude Code, in the open.",

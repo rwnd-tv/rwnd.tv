@@ -46,7 +46,7 @@ const MILESTONES = [
   { key: 'm1', status: 'done' },
   { key: 'm2', status: 'done' },
   { key: 'm3', status: 'done' },
-  { key: 'm4', status: 'inProgress' },
+  { key: 'm4', status: 'done' },
 ] as const
 
 const QUICK_START = `curl -O https://raw.githubusercontent.com/rwnd-tv/rwnd.tv/main/docker-compose.yml

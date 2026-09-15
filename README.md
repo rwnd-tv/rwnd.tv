@@ -12,7 +12,7 @@ rwnd.tv (rewind dot tv) is an open source, self-hosted app for tracking the TV s
 
 ## Status
 
-**v1.0.12: ready for real use, with M4 underway.** Milestones 1–3 are done: local accounts, search and manual logging, Trakt/CSV import, Plex webhook ingestion, watchlists and ratings, and a full OWASP ASVS 4.0.3 Level 1 security review. M4 has also shipped admin user-management, an owner role, IMDb deep links, personal webcal/iCal calendar feeds for watch history, upcoming episodes, and movie release dates, an in-app Calendar page built on that same data, automatic scheduled whole-database backups with admin-editable retention and status, and Jellyfin/Emby/Tautulli webhook ingestion alongside Plex; Kodi webhook ingestion is the last M4 item open. See [docs/ROADMAP.md](docs/ROADMAP.md) for the full history and what's next.
+**v1.0.14: ready for real use, M1–M4 all done.** Local accounts, search and manual logging, Trakt/CSV import, watchlists and ratings, admin user-management with an owner role and bulk actions, IMDb deep links, personal webcal/iCal calendar feeds for watch history, upcoming episodes, and movie release dates, an in-app Calendar page built on that same data, automatic scheduled whole-database backups with admin-editable retention and status, and Plex/Jellyfin/Emby/Tautulli webhook ingestion, all backed by a full OWASP ASVS 4.0.3 Level 1 security review. Kodi webhook ingestion (it has no native webhook support, so needs an addon-based approach) is a separate, unscheduled follow-up. See [docs/ROADMAP.md](docs/ROADMAP.md) for the full history and what's next.
 
 ## Screenshots
 

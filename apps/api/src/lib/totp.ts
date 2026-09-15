@@ -1,4 +1,5 @@
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
+import { decryptSecret } from './crypto.js'
 
 /**
  * RFC 6238 TOTP (M3 security review follow-up, ASVS V4.3.1, docs/TODO.md),
@@ -102,6 +103,30 @@ export function verifyTotp(base32Secret: string, code: string, atMs: number = Da
     if (timingSafeEqual(candidate, codeBuffer)) return true
   }
   return false
+}
+
+/** Decrypts a stored TOTP secret and verifies a code against it in one
+ * step, treating a decrypt failure (GCM auth-tag mismatch from a rotated
+ * `ENCRYPTION_KEY`) the same as a wrong code rather than letting it throw.
+ * Every real call site (login, enrollment confirm, disable/regenerate) is
+ * already fail-closed on a wrong code, so this is the safe failure mode
+ * for an undecryptable secret too, rather than an unhandled 500. Found
+ * unguarded at four call sites in the M4 review (docs/TODO.md, Stage 6) —
+ * the same gap Stage 5 already fixed for `tokens.ts`'s `serializeToken`. */
+export function verifyEncryptedTotp(
+  secretEncrypted: string,
+  encryptionKey: string,
+  code: string,
+  atMs: number = Date.now(),
+): boolean {
+  if (!/^\d{6}$/.test(code)) return false
+  let secret: string
+  try {
+    secret = decryptSecret(secretEncrypted, encryptionKey)
+  } catch {
+    return false
+  }
+  return verifyTotp(secret, code, atMs)
 }
 
 /** The `otpauth://` URI an authenticator app's QR-code scanner (or manual

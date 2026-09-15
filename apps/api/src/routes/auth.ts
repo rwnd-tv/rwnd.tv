@@ -26,8 +26,7 @@ import { rateLimit, tryConsume } from '../middleware/rate-limit.js'
 import { isLoginLocked, recordFailedLogin, clearLoginAttempts } from '../lib/login-lockout.js'
 import { hashPassword, verifyPassword, verifyDummyPassword } from '../lib/password.js'
 import { isPasswordPwned } from '../lib/hibp.js'
-import { decryptSecret } from '../lib/crypto.js'
-import { verifyTotp } from '../lib/totp.js'
+import { verifyEncryptedTotp } from '../lib/totp.js'
 import { getUserTotp, consumeRecoveryCode } from '../lib/mfa.js'
 import {
   createMfaChallenge,
@@ -209,10 +208,7 @@ authRoutes.openapi(
 
     const env = loadEnv()
     let usedVia: 'totp' | 'recovery' | null = null
-    if (
-      /^\d{6}$/.test(code) &&
-      verifyTotp(decryptSecret(totp.secretEncrypted, env.ENCRYPTION_KEY!), code)
-    ) {
+    if (verifyEncryptedTotp(totp.secretEncrypted, env.ENCRYPTION_KEY!, code)) {
       usedVia = 'totp'
     } else if (await consumeRecoveryCode(db, userId, code)) {
       usedVia = 'recovery'

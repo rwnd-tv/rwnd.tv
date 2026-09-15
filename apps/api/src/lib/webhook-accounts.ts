@@ -1,4 +1,4 @@
-import { and, eq, inArray } from 'drizzle-orm'
+import { and, eq, inArray, sql } from 'drizzle-orm'
 import type { Database, Tx } from '@rwnd/db'
 import { users, webhookAccountLinks } from '@rwnd/db'
 import type { WebhookSource } from '@rwnd/shared'
@@ -165,6 +165,25 @@ export async function hasConflictingServerLink(
  * under a *different* token, which would be the same violation.
  * `Database | Tx` — the redeem route's own check needs to run inside its
  * link transaction, not after it. */
+/** Takes a Postgres advisory lock scoped to this exact (userId, source)
+ * pair for the rest of the enclosing transaction — same shape as
+ * `apps/api/src/lib/plays.ts`'s `lockEntity` for a related race. Without
+ * it, `hasLinkedSource`'s check and the write that follows aren't
+ * actually atomic together: two concurrent link attempts for two
+ * *different* not-yet-linked accounts of the same source (self-link and/
+ * or redeem-by-code, `apps/api/src/routes/tokens.ts` and
+ * `apps/api/src/routes/webhook-links.ts`) could each pass the check
+ * before either commits its own write — different target rows, so
+ * Postgres's own row locking doesn't serialize them — and both succeed,
+ * leaving this user linked to two accounts of the same source at once.
+ * Found unguarded on the self-link route in the M4 review (docs/TODO.md,
+ * Stage 6); the redeem route had the identical latent gap despite already
+ * running inside a transaction, so both call this. `pg_advisory_xact_lock`
+ * releases automatically on commit or rollback. */
+export async function lockUserSource(tx: Tx, userId: string, source: WebhookSource): Promise<void> {
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${userId}), hashtext(${source}))`)
+}
+
 export async function hasLinkedSource(
   db: Database | Tx,
   userId: string,

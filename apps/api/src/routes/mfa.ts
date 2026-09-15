@@ -10,8 +10,8 @@ import {
 import { userCredentials } from '@rwnd/db'
 import type { AppEnv } from '../types.js'
 import { loadEnv } from '../env.js'
-import { encryptSecret, decryptSecret } from '../lib/crypto.js'
-import { generateTotpSecret, otpauthUri, verifyTotp } from '../lib/totp.js'
+import { encryptSecret } from '../lib/crypto.js'
+import { generateTotpSecret, otpauthUri, verifyEncryptedTotp } from '../lib/totp.js'
 import { generateRecoveryCodes, hashRecoveryCode } from '../lib/recovery-codes.js'
 import { verifyPassword } from '../lib/password.js'
 import { logSecurityEvent } from '../lib/security-log.js'
@@ -54,10 +54,7 @@ async function verifyPasswordAndCode(
   }
 
   const env = loadEnv()
-  if (
-    /^\d{6}$/.test(code) &&
-    verifyTotp(decryptSecret(secretEncrypted, env.ENCRYPTION_KEY!), code)
-  ) {
+  if (verifyEncryptedTotp(secretEncrypted, env.ENCRYPTION_KEY!, code)) {
     return 'totp'
   }
   if (await consumeRecoveryCode(db, userId, code)) {
@@ -139,7 +136,7 @@ mfaRoutes.openapi(
     if (!row || row.confirmedAt) {
       return c.json({ error: 'No enrollment in progress' }, 400)
     }
-    if (!verifyTotp(decryptSecret(row.secretEncrypted, env.ENCRYPTION_KEY!), code)) {
+    if (!verifyEncryptedTotp(row.secretEncrypted, env.ENCRYPTION_KEY!, code)) {
       return c.json({ error: 'Incorrect code' }, 400)
     }
 

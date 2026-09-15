@@ -213,8 +213,10 @@ export async function getFollowedShows(
   userId: string,
   opts: FollowedShowOptions = {},
 ): Promise<FollowedShow[]> {
-  const recentlyWatched = await getRecentlyWatchedShows(db, userId, opts)
-  const watchlisted = await getWatchlistedShows(db, userId, opts)
+  const [recentlyWatched, watchlisted] = await Promise.all([
+    getRecentlyWatchedShows(db, userId, opts),
+    getWatchlistedShows(db, userId, opts),
+  ])
   const recentlyWatchedIds = new Set(recentlyWatched.map((show) => show.id))
   return [...recentlyWatched, ...watchlisted.filter((show) => !recentlyWatchedIds.has(show.id))]
 }

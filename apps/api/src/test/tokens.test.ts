@@ -760,6 +760,39 @@ describe('tokens', () => {
       })
       expect(res.status).toBe(404)
     })
+
+    it('only lets one of two concurrent self-links of different accounts of the same source through', async () => {
+      // Same race shape as the sequential "second Plex account" test
+      // above, but actually concurrent: hasLinkedSource's check and the
+      // claiming write aren't atomic together without lockUserSource
+      // (apps/api/src/lib/webhook-accounts.ts) — two different link rows
+      // means Postgres's own row locking doesn't serialize the two
+      // requests on its own.
+      const cookie = await createUserAndCookie()
+      const created = await createToken(cookie)
+      const linkA = await seedLink(created.id, '2')
+      const linkB = await seedLink(created.id, '3')
+
+      const [resA, resB] = await Promise.all([
+        app.request(`/api/v1/tokens/${created.id}/webhook-links/${linkA.id}/link`, {
+          method: 'POST',
+          headers: { cookie },
+        }),
+        app.request(`/api/v1/tokens/${created.id}/webhook-links/${linkB.id}/link`, {
+          method: 'POST',
+          headers: { cookie },
+        }),
+      ])
+      const statuses = [resA.status, resB.status].sort()
+      expect(statuses).toEqual([200, 409])
+
+      const links = await db
+        .select()
+        .from(webhookAccountLinks)
+        .where(eq(webhookAccountLinks.tokenId, created.id))
+      const linkedCount = links.filter((link) => link.userId !== null).length
+      expect(linkedCount).toBe(1)
+    })
   })
 
   describe('POST /tokens/{id}/webhook-links/{linkId}/link-code', () => {

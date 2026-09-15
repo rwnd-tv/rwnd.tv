@@ -104,8 +104,10 @@ export async function getFollowedMovies(
   userId: string,
   opts: FollowedMovieOptions = {},
 ): Promise<FollowedMovie[]> {
-  const recentlyWatched = await getRecentlyWatchedMovies(db, userId, opts)
-  const watchlisted = await getWatchlistedMovies(db, userId)
+  const [recentlyWatched, watchlisted] = await Promise.all([
+    getRecentlyWatchedMovies(db, userId, opts),
+    getWatchlistedMovies(db, userId),
+  ])
   const recentlyWatchedIds = new Set(recentlyWatched.map((movie) => movie.id))
   return [...recentlyWatched, ...watchlisted.filter((movie) => !recentlyWatchedIds.has(movie.id))]
 }

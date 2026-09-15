@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { eq } from 'drizzle-orm'
-import { mfaChallenges, userRecoveryCodes } from '@rwnd/db'
+import { mfaChallenges, userRecoveryCodes, userTotp, users } from '@rwnd/db'
 import type {
   ConfirmTotpResponse,
   EnrollTotpResponse,
@@ -10,6 +10,7 @@ import type {
 } from '@rwnd/shared'
 import { generateTotp } from '../lib/totp.js'
 import { hashRecoveryCode } from '../lib/recovery-codes.js'
+import { encryptSecret } from '../lib/crypto.js'
 import { createLocalUser, extractCookie, json, resetDb, testApp, testDb } from './helpers.js'
 
 const db = testDb()
@@ -307,6 +308,50 @@ describe('TOTP MFA (M3 security review follow-up, ASVS V4.3.1)', () => {
         body: JSON.stringify({ challengeToken: login2.challengeToken, code: usedCode }),
       })
       expect(reuse.status).toBe(401)
+    })
+
+    it('a rotated ENCRYPTION_KEY 401s the correct TOTP code instead of 500ing, but a recovery code still works', async () => {
+      // M4 review, Stage 6 (docs/TODO.md): decryptSecret throws (GCM
+      // auth-tag mismatch) if ENCRYPTION_KEY has changed since this row
+      // was encrypted — a real scenario, since rotating the key is itself
+      // a legitimate response to a suspected compromise. verifyEncryptedTotp
+      // (lib/totp.ts) must fail closed (treat it as a wrong code) rather
+      // than let it throw into an unhandled 500. The recovery-code path
+      // is unaffected, since it isn't gated on decrypting anything, and is
+      // this account's actual way back in after a rotation like this.
+      const cookie = await createUserAndCookie('user@example.com')
+      const { secret, recoveryCodes } = await enrollAndConfirm(cookie)
+      const [row] = await db.select().from(users).where(eq(users.email, 'user@example.com'))
+      const staleKey = 'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA='
+      await db
+        .update(userTotp)
+        .set({ secretEncrypted: encryptSecret(secret, staleKey) })
+        .where(eq(userTotp.userId, row!.id))
+
+      const login = await json<MfaRequiredResponse>(
+        await app.request('/api/v1/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: 'user@example.com',
+            password: 'correct-horse-battery-staple',
+          }),
+        }),
+      )
+
+      const wrongKeyAttempt = await app.request('/api/v1/auth/login/mfa', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ challengeToken: login.challengeToken, code: generateTotp(secret) }),
+      })
+      expect(wrongKeyAttempt.status).toBe(401)
+
+      const recoveryAttempt = await app.request('/api/v1/auth/login/mfa', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ challengeToken: login.challengeToken, code: recoveryCodes[0] }),
+      })
+      expect(recoveryAttempt.status).toBe(200)
     })
   })
 

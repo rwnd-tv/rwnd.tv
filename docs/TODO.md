@@ -36,6 +36,74 @@ Format:
       same thing from different angles; removing the ignore once TS 7 is
       supported stays the exit condition either way.
 
+- [ ] **`trakt.ts`'s `ensureFreshAccessToken` gives a cryptic error on a rotated `ENCRYPTION_KEY`** (2026-09-15 19:53 added, M4 review's milestone-wide `/code-review high` pass)
+
+      Same unguarded-`decryptSecret` shape the M4 review already fixed
+      elsewhere (`lib/totp.ts`'s `verifyEncryptedTotp`, Stage 5's
+      `serializeToken`/`serializeCalendarFeed`), but lower priority here:
+      `apps/api/src/import/trakt.ts`'s `ensureFreshAccessToken` is already
+      inside the job runner's own try/catch (`runTraktImport` →
+      `runImportJob`, `trakt.ts` around line 431), so a decrypt failure
+      after a key rotation fails the import job gracefully (`status:
+      'failed'`) rather than crashing or 500ing a live request. The gap is
+      purely UX: the stored `error` message is GCM's raw auth-tag-mismatch
+      text, not something that tells the user to reconnect their Trakt
+      account. Worth a friendlier error message (and maybe clearing the
+      connection so the UI prompts to reconnect) but not a correctness bug.
+
+- [ ] **Six reuse/simplification cleanups from the M4 review's milestone-wide `/code-review high` pass** (2026-09-15 19:53 added)
+
+      Each independently confirmed, none urgent (maintainability only, no
+      behavior change needed):
+
+      - `apps/web/src/routes/ShowDetailPage.tsx` and `SeasonDetailPage.tsx`
+        both add `sm:items-start` to fix the same poster/text
+        layout-shift bug independently applied earlier to
+        `MovieDetailPage.tsx`/`EpisodeDetailPage.tsx`. No shared
+        poster+text layout component exists, so the next new detail-style
+        page will silently reintroduce the bug. Worth factoring into one
+        shared component.
+
+      - A clipboard "copied" feedback state machine (`writeText` +
+        `useState` flag + 2s `setTimeout` reset) is hand-rolled
+        identically in five files (`InvitesPanel.tsx`,
+        `TokenWebhookLinks.tsx`, `WebhookCard.tsx`, `WebhooksPanel.tsx`,
+        `CalendarFeedsPanel.tsx`). A `useCopyFeedback()` hook would fix all
+        five at once and keep future changes (e.g. an unavailable-clipboard
+        error state) in sync.
+
+      - `apps/web/src/components/calendar/calendar-shared.ts`'s
+        `parseLocalDay` reimplements the `split('-').map(Number) -> new
+        Date(year, month-1, day)` local-date-parsing idiom that already
+        exists three times in `lib/date.ts` (`localDayStartISO`,
+        `localDayEndISO`, `formatReleaseDate`) plus once more in
+        `WatchDateDialog.tsx` — five copies of a pattern that exists
+        specifically to avoid a UTC-midnight off-by-one-day bug, with
+        nothing enforcing they stay in sync.
+
+      - `HistorySettingsForm`, `ShowsSettingsForm`, and
+        `MoviesSettingsForm` in `CalendarFeedsPanel.tsx` are three
+        near-identical ~150-line components (one `useState` per checkbox,
+        a hand-computed dirty boolean, an identical mutation/`onSuccess`
+        shape). Adding a 4th feed type means copy-pasting a whole new
+        component instead of adding one config entry to a shared,
+        config-driven one.
+
+      - A 6-line collapsible-panel-header block (`Card` +
+        `details`/`summary` + `ChevronDownIcon` + divider, paired with
+        `usePanelOpen`) is duplicated by hand across 23 files
+        (`UsersPanel.tsx`, `DatabasePanel.tsx`, `CalendarFeedsPanel.tsx`,
+        `AdminUserPage.tsx`, `InstanceSettingsPanel.tsx`, and 18 more). A
+        shared `CollapsiblePanel` component would turn every future visual
+        tweak (e.g. the chevron transition) from 23 edits into one.
+
+      - `InstanceSettingsPanel.tsx` has four independent `useState` fields
+        (`instanceName`, `registrationMode`, `adminEmail`,
+        `priorityOrder`) plus a fifth sentinel state purely to re-seed the
+        form when query data changes, synced by a manual `if (data && data
+        !== loadedSettings)` block calling four setters. One form-state
+        object would need a single seed line instead.
+
 ## UI polish
 
 - [ ] **Inset the dropdown arrow on `<select>` controls** (2026-09-06 added)

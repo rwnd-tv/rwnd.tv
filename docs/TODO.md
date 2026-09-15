@@ -554,7 +554,42 @@ Format:
             stale compiled output. ASVS rows for Stage 7: new V6 section
             (Stored Cryptography) — pass, grounded in this stage's crypto
             review; V4.1.x (cross-user access) — pass.
-      - [ ] Stage 6: supply-chain, CI & dependency hygiene
+      - [x] Stage 6: supply-chain, CI & dependency hygiene — 2026-09-15. No
+            code findings: `.github/workflows/{ci,codeql,release}.yml`,
+            `Dockerfile`, `docker-entrypoint.sh`, `pnpm-workspace.yaml`, and
+            `.github/dependabot.yml` are all already hardened (every action
+            pinned by SHA, the published image pinned by digest and
+            cosign-signed, Trivy gating both the source lockfile and the
+            built image on every CI run and release, a non-root runtime
+            user with `npm`/`npx` stripped, and the `hashSecret()` CodeQL
+            false positive suppressed with a correctly-placed inline
+            `codeql[js/insufficient-password-hash]` comment). Verified live
+            against the GitHub API rather than trusting the docs' claims:
+            dependency graph and Dependabot security updates both actually
+            enabled, zero open Dependabot or CodeQL alerts, branch
+            protection matches the documented direct-push-with-admin-bypass
+            posture, secret scanning + push protection both on. Enabled
+            **Dependabot malware alerts** (free, no license needed, was
+            off). Checked "Prevent direct alert dismissals" (Dependabot and
+            code scanning) and deliberately left it off — more process than
+            a solo-maintainer direct-push repo needs. Confirmed
+            `secret_scanning_non_provider_patterns` and
+            `secret_scanning_validity_checks` are genuinely unavailable, not
+            misconfigured: no toggle in Settings → Advanced Security or via
+            the repo API, because the `rwnd-tv` org has zero GitHub Advanced
+            Security seats. The planned mechanical `/code-review max
+            v1.0.0` pass fanned out into ~20 parallel subagents and, after
+            30+ minutes, the session hit its rate limit before compiling a
+            report; killed rather than repeated this session. Not
+            re-attempted, since this stage's files are static
+            config/infra rather than application logic and the manual
+            read-through above already covers them; worth a `/code-review
+            high` (less fan-out) if a mechanical pass over these same files
+            is ever wanted later. ASVS rows for Stage 7: new V10 section
+            (Malicious Code) — pass, grounded in this stage's review
+            (pinned actions/image, signed+digest-pinned release, Trivy gate
+            on every CI run and release, Dependabot alerts + malware
+            alerts, CodeQL).
       - [ ] Stage 7: close-out (ASVS V6/V10/V11 gaps, dated ADR 0007 update,
             flip M4 to `✅ done` in ROADMAP.md)
 

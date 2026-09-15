@@ -103,6 +103,35 @@ commit, or the last version tag, whichever is the better base), not just
 `/code-review ultra` is billed and multi-agent, so ask before running that
 variant rather than defaulting to it.
 
+If the milestone review is split into multiple subsystem stages spanning
+several sessions (as M4's was), remember that `/code-review` always diffs
+the full `<base-ref>...HEAD` range, not just the files a given stage cares
+about: there's no path filter. Running it once per stage therefore
+re-reviews the entire milestone's diff every time, which is redundant and,
+at `max` level, can fan out into a large number of parallel subagents on
+a big diff. To avoid burning a large amount of usage for little marginal
+value (this happened once, 2026-09-15, and cost a full weekly allowance
+for zero usable output after hitting a rate limit mid-run):
+
+- Run the mechanical `/code-review` pass **at most once per milestone**
+  (covering the whole range), not once per stage. Each stage still gets
+  its own manual ASVS-style pass; only the mechanical bug/cleanup pass
+  needs to be milestone-wide and singular.
+- Default to `high`, not `max`, for that pass: `max`'s heavy multi-agent
+  fan-out is rarely worth it once the manual per-stage passes are doing
+  the deep-dive work anyway.
+- Skip the mechanical pass entirely for a stage whose surface is mostly
+  static config/infra (CI workflows, Dockerfile, IaC) — a manual
+  read-through plus checking live state (GitHub API/settings, deployed
+  config) against the docs' claims finds more there than a generic
+  bug-hunt would.
+- Before launching any of this, say so explicitly (diff size, level,
+  that it runs as a background multi-agent operation) and wait for a
+  go-ahead, the same bar as commit/push permission: don't just start it
+  on a general "continue the review."
+- If a subagent reports hitting concurrency or rate limits, treat that as
+  an immediate stop-and-reassess signal rather than continuing to wait.
+
 Log whatever the reviews turn up: fix it inline before closing the
 milestone, or record it as a follow-up in `docs/TODO.md` /
 `docs/ROADMAP.md`, same as M3's own pass did. Don't let a review with open

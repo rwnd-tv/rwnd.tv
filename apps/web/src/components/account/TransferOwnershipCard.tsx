@@ -2,12 +2,11 @@ import { useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, ApiError } from '../../lib/api-client.js'
-import { Card } from '../ui/Card.js'
+import { CollapsiblePanel } from '../ui/CollapsiblePanel.js'
 import { Field } from '../ui/Field.js'
 import { Select } from '../ui/Select.js'
 import { Button } from '../ui/Button.js'
 import { Dialog } from '../ui/Dialog.js'
-import { ChevronDownIcon } from '../icons.js'
 import { usePanelOpen } from '../../lib/use-panel-open.js'
 
 /**
@@ -76,78 +75,75 @@ export function TransferOwnershipCard() {
   const target = admins.find((a) => a.id === targetUserId)
 
   return (
-    <Card>
-      <details className="group" open={open} onToggle={(e) => setOpen(e.currentTarget.open)}>
-        <summary className="flex cursor-pointer list-none items-center justify-between text-lg font-semibold [&::-webkit-details-marker]:hidden">
-          {t('account.transferOwnershipTitle')}
-          <ChevronDownIcon className="h-5 w-5 flex-shrink-0 transition-transform group-open:rotate-180" />
-        </summary>
-        <div className="mt-4 mb-4 border-t border-[var(--color-border)]" />
-        <p className="mb-4 text-sm text-[var(--color-fg-muted)]">
-          {t('account.transferOwnershipDescription')}
-        </p>
+    <CollapsiblePanel
+      title={t('account.transferOwnershipTitle')}
+      open={open}
+      onOpenChange={setOpen}
+    >
+      <p className="mb-4 text-sm text-[var(--color-fg-muted)]">
+        {t('account.transferOwnershipDescription')}
+      </p>
 
-        {admins.length === 0 ? (
-          <p className="text-sm text-[var(--color-fg-muted)]">
-            {t('account.transferOwnershipNoAdmins')}
-          </p>
-        ) : (
-          <>
-            <Select
-              label={t('account.transferOwnershipTarget')}
-              value={targetUserId}
-              onChange={(e) => setTargetUserId(e.target.value)}
-            >
-              <option value="" disabled>
-                {t('account.transferOwnershipSelectPrompt')}
+      {admins.length === 0 ? (
+        <p className="text-sm text-[var(--color-fg-muted)]">
+          {t('account.transferOwnershipNoAdmins')}
+        </p>
+      ) : (
+        <>
+          <Select
+            label={t('account.transferOwnershipTarget')}
+            value={targetUserId}
+            onChange={(e) => setTargetUserId(e.target.value)}
+          >
+            <option value="" disabled>
+              {t('account.transferOwnershipSelectPrompt')}
+            </option>
+            {admins.map((admin) => (
+              <option key={admin.id} value={admin.id}>
+                {admin.displayName} ({admin.email})
               </option>
-              {admins.map((admin) => (
-                <option key={admin.id} value={admin.id}>
-                  {admin.displayName} ({admin.email})
-                </option>
-              ))}
-            </Select>
-            <Button
-              type="button"
-              variant="danger"
-              className="mt-4"
-              disabled={!targetUserId}
-              onClick={() => setConfirmOpen(true)}
-            >
+            ))}
+          </Select>
+          <Button
+            type="button"
+            variant="danger"
+            className="mt-4"
+            disabled={!targetUserId}
+            onClick={() => setConfirmOpen(true)}
+          >
+            {t('account.transferOwnershipButton')}
+          </Button>
+        </>
+      )}
+
+      <Dialog
+        open={confirmOpen}
+        onClose={handleClose}
+        title={t('account.transferOwnershipConfirmTitle')}
+      >
+        <p className="mb-4 text-sm text-[var(--color-fg-muted)]">
+          {t('account.transferOwnershipConfirmBody', { name: target?.displayName ?? '' })}
+        </p>
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          <Field
+            label={t('account.transferOwnershipPassword')}
+            type="password"
+            value={currentPassword}
+            onChange={(e) => setCurrentPassword(e.target.value)}
+            required
+            autoComplete="current-password"
+            error={error}
+          />
+          <div className="mt-2 flex justify-end gap-2">
+            <Button type="button" variant="secondary" onClick={handleClose}>
+              {t('common.cancel')}
+            </Button>
+            <Button type="submit" variant="danger" isLoading={transferOwnership.isPending}>
               {t('account.transferOwnershipButton')}
             </Button>
-          </>
-        )}
-
-        <Dialog
-          open={confirmOpen}
-          onClose={handleClose}
-          title={t('account.transferOwnershipConfirmTitle')}
-        >
-          <p className="mb-4 text-sm text-[var(--color-fg-muted)]">
-            {t('account.transferOwnershipConfirmBody', { name: target?.displayName ?? '' })}
-          </p>
-          <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-            <Field
-              label={t('account.transferOwnershipPassword')}
-              type="password"
-              value={currentPassword}
-              onChange={(e) => setCurrentPassword(e.target.value)}
-              required
-              autoComplete="current-password"
-              error={error}
-            />
-            <div className="mt-2 flex justify-end gap-2">
-              <Button type="button" variant="secondary" onClick={handleClose}>
-                {t('common.cancel')}
-              </Button>
-              <Button type="submit" variant="danger" isLoading={transferOwnership.isPending}>
-                {t('account.transferOwnershipButton')}
-              </Button>
-            </div>
-          </form>
-        </Dialog>
-      </details>
-    </Card>
+          </div>
+        </form>
+      </Dialog>
+    </CollapsiblePanel>
   )
 }

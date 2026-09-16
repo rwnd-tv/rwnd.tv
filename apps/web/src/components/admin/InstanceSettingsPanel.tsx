@@ -5,19 +5,14 @@ import type { InstanceSettings, MetadataProviderSource, RegistrationMode } from 
 import { api, ApiError } from '../../lib/api-client.js'
 import { usePublicSettings } from '../../lib/use-public-settings.js'
 import { PROVIDER_LABELS } from '../../lib/provider-labels.js'
-import { Card } from '../ui/Card.js'
+import { CollapsiblePanel } from '../ui/CollapsiblePanel.js'
 import { Field } from '../ui/Field.js'
 import { Button } from '../ui/Button.js'
-import { ChevronDownIcon as CollapseChevronIcon } from '../icons.js'
 import { usePanelOpen } from '../../lib/use-panel-open.js'
 
 /** Icons for the metadata-provider reorder buttons below — same "one small
  * icon component per file" precedent as ShowDetailPage.tsx/
- * MovieDetailPage.tsx's own icons, not shared/exported. Aliased on import
- * where the shared `ChevronDownIcon` (icons.tsx) is also used below, for
- * the collapsible panel's own chevron — same name, different icon, so
- * the shared one is imported as `CollapseChevronIcon` to avoid shadowing
- * this file's own. */
+ * MovieDetailPage.tsx's own icons, not shared/exported. */
 function ChevronUpIcon() {
   return (
     <svg
@@ -140,119 +135,110 @@ export function InstanceSettingsPanel() {
   }
 
   return (
-    <Card>
-      <details className="group" open={open} onToggle={(e) => setOpen(e.currentTarget.open)}>
-        <summary className="flex cursor-pointer list-none items-center justify-between text-lg font-semibold [&::-webkit-details-marker]:hidden">
-          {t('admin.instance.title')}
-          <CollapseChevronIcon className="h-5 w-5 flex-shrink-0 transition-transform group-open:rotate-180" />
-        </summary>
-        <div className="mt-4 mb-4 border-t border-[var(--color-border)]" />
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+    <CollapsiblePanel title={t('admin.instance.title')} open={open} onOpenChange={setOpen}>
+      <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+        <Field
+          label={t('admin.instance.instanceName')}
+          value={instanceName}
+          onChange={(e) => setInstanceName(e.target.value)}
+          required
+        />
+
+        <fieldset className="flex flex-col gap-1">
+          <legend className="text-sm font-medium">{t('admin.instance.registrationMode')}</legend>
+          <div className="flex flex-col gap-2">
+            {(['open', 'invite', 'closed'] as const).map((mode) => (
+              <label key={mode} className="flex items-center gap-2 text-sm">
+                <input
+                  type="radio"
+                  name="registrationMode"
+                  value={mode}
+                  checked={registrationMode === mode}
+                  onChange={() => setRegistrationMode(mode)}
+                />
+                {t(`admin.instance.registration${mode[0]!.toUpperCase()}${mode.slice(1)}`)}
+              </label>
+            ))}
+          </div>
+        </fieldset>
+
+        <div className="flex flex-col gap-1">
           <Field
-            label={t('admin.instance.instanceName')}
-            value={instanceName}
-            onChange={(e) => setInstanceName(e.target.value)}
-            required
+            label={t('admin.instance.adminEmail')}
+            type="email"
+            value={adminEmail}
+            onChange={(e) => setAdminEmail(e.target.value)}
+            placeholder={t('admin.instance.adminEmailPlaceholder')}
+            error={error}
           />
-
-          <fieldset className="flex flex-col gap-1">
-            <legend className="text-sm font-medium">{t('admin.instance.registrationMode')}</legend>
-            <div className="flex flex-col gap-2">
-              {(['open', 'invite', 'closed'] as const).map((mode) => (
-                <label key={mode} className="flex items-center gap-2 text-sm">
-                  <input
-                    type="radio"
-                    name="registrationMode"
-                    value={mode}
-                    checked={registrationMode === mode}
-                    onChange={() => setRegistrationMode(mode)}
-                  />
-                  {t(`admin.instance.registration${mode[0]!.toUpperCase()}${mode.slice(1)}`)}
-                </label>
-              ))}
-            </div>
-          </fieldset>
-
-          <div className="flex flex-col gap-1">
-            <Field
-              label={t('admin.instance.adminEmail')}
-              type="email"
-              value={adminEmail}
-              onChange={(e) => setAdminEmail(e.target.value)}
-              placeholder={t('admin.instance.adminEmailPlaceholder')}
-              error={error}
-            />
-            <p className="text-xs text-[var(--color-fg-muted)]">
-              {t('admin.instance.adminEmailHint')}
-            </p>
-          </div>
-
-          {priorityOrder.length > 0 && (
-            <div className="flex flex-col gap-1">
-              <h3 className="text-sm font-medium">{t('admin.instance.metadataProviders')}</h3>
-              <ol className="flex flex-col gap-0.5 text-sm">
-                {priorityOrder.map((source, index) => (
-                  <li key={source} className="flex items-center gap-2">
-                    <span className="w-4 text-[var(--color-fg-muted)]">{index + 1}.</span>
-                    <span className="flex-1">{PROVIDER_LABELS[source]}</span>
-                    <Button
-                      variant="ghost"
-                      type="button"
-                      className="px-1 py-1"
-                      disabled={index === 0 || updatePriority.isPending}
-                      title={t('admin.instance.metadataProviderMoveUp', {
-                        provider: PROVIDER_LABELS[source],
-                      })}
-                      aria-label={t('admin.instance.metadataProviderMoveUp', {
-                        provider: PROVIDER_LABELS[source],
-                      })}
-                      onClick={() => moveProvider(index, -1)}
-                    >
-                      <ChevronUpIcon />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      type="button"
-                      className="px-1 py-1"
-                      disabled={index === priorityOrder.length - 1 || updatePriority.isPending}
-                      title={t('admin.instance.metadataProviderMoveDown', {
-                        provider: PROVIDER_LABELS[source],
-                      })}
-                      aria-label={t('admin.instance.metadataProviderMoveDown', {
-                        provider: PROVIDER_LABELS[source],
-                      })}
-                      onClick={() => moveProvider(index, 1)}
-                    >
-                      <ChevronDownIcon />
-                    </Button>
-                  </li>
-                ))}
-              </ol>
-              {priorityOrder.length === 1 && (
-                <p className="text-xs text-[var(--color-fg-muted)]">
-                  {t('admin.instance.metadataProvidersSingle')}
-                </p>
-              )}
-              {updatePriority.isError && (
-                <p className="text-xs text-[var(--color-danger)]">
-                  {t('common.somethingWentWrong')}
-                </p>
-              )}
-            </div>
-          )}
-
-          <div>
-            <Button type="submit" isLoading={updateSettings.isPending}>
-              {t('admin.instance.save')}
-            </Button>
-          </div>
-        </form>
-        {data?.environmentLabel && (
-          <p className="mt-4 text-sm text-[var(--color-fg-muted)]">
-            {t('admin.instance.environmentLabel', { label: data.environmentLabel })}
+          <p className="text-xs text-[var(--color-fg-muted)]">
+            {t('admin.instance.adminEmailHint')}
           </p>
+        </div>
+
+        {priorityOrder.length > 0 && (
+          <div className="flex flex-col gap-1">
+            <h3 className="text-sm font-medium">{t('admin.instance.metadataProviders')}</h3>
+            <ol className="flex flex-col gap-0.5 text-sm">
+              {priorityOrder.map((source, index) => (
+                <li key={source} className="flex items-center gap-2">
+                  <span className="w-4 text-[var(--color-fg-muted)]">{index + 1}.</span>
+                  <span className="flex-1">{PROVIDER_LABELS[source]}</span>
+                  <Button
+                    variant="ghost"
+                    type="button"
+                    className="px-1 py-1"
+                    disabled={index === 0 || updatePriority.isPending}
+                    title={t('admin.instance.metadataProviderMoveUp', {
+                      provider: PROVIDER_LABELS[source],
+                    })}
+                    aria-label={t('admin.instance.metadataProviderMoveUp', {
+                      provider: PROVIDER_LABELS[source],
+                    })}
+                    onClick={() => moveProvider(index, -1)}
+                  >
+                    <ChevronUpIcon />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    type="button"
+                    className="px-1 py-1"
+                    disabled={index === priorityOrder.length - 1 || updatePriority.isPending}
+                    title={t('admin.instance.metadataProviderMoveDown', {
+                      provider: PROVIDER_LABELS[source],
+                    })}
+                    aria-label={t('admin.instance.metadataProviderMoveDown', {
+                      provider: PROVIDER_LABELS[source],
+                    })}
+                    onClick={() => moveProvider(index, 1)}
+                  >
+                    <ChevronDownIcon />
+                  </Button>
+                </li>
+              ))}
+            </ol>
+            {priorityOrder.length === 1 && (
+              <p className="text-xs text-[var(--color-fg-muted)]">
+                {t('admin.instance.metadataProvidersSingle')}
+              </p>
+            )}
+            {updatePriority.isError && (
+              <p className="text-xs text-[var(--color-danger)]">{t('common.somethingWentWrong')}</p>
+            )}
+          </div>
         )}
-      </details>
-    </Card>
+
+        <div>
+          <Button type="submit" isLoading={updateSettings.isPending}>
+            {t('admin.instance.save')}
+          </Button>
+        </div>
+      </form>
+      {data?.environmentLabel && (
+        <p className="mt-4 text-sm text-[var(--color-fg-muted)]">
+          {t('admin.instance.environmentLabel', { label: data.environmentLabel })}
+        </p>
+      )}
+    </CollapsiblePanel>
   )
 }

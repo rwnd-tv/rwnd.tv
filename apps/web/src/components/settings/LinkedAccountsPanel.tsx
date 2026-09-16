@@ -4,11 +4,10 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { WebhookAccountLink } from '@rwnd/shared'
 import { WEBHOOK_SOURCE_LABELS } from '@rwnd/shared'
 import { api, ApiError } from '../../lib/api-client.js'
-import { Card } from '../ui/Card.js'
+import { CollapsiblePanel } from '../ui/CollapsiblePanel.js'
 import { Field } from '../ui/Field.js'
 import { Button } from '../ui/Button.js'
 import { Spinner } from '../ui/Spinner.js'
-import { ChevronDownIcon } from '../icons.js'
 import { usePanelOpen } from '../../lib/use-panel-open.js'
 
 /** Found missing 2026-09-02 (James, after running the link flow for
@@ -89,65 +88,58 @@ export function LinkedAccountsPanel() {
   }
 
   return (
-    <Card>
-      <details className="group" open={open} onToggle={(e) => setOpen(e.currentTarget.open)}>
-        <summary className="flex cursor-pointer list-none items-center justify-between text-lg font-semibold [&::-webkit-details-marker]:hidden">
-          {t('settings.linkedAccounts.title')}
-          <ChevronDownIcon className="h-5 w-5 flex-shrink-0 transition-transform group-open:rotate-180" />
-        </summary>
-        <div className="mt-4 mb-4 border-t border-[var(--color-border)]" />
+    <CollapsiblePanel title={t('settings.linkedAccounts.title')} open={open} onOpenChange={setOpen}>
+      <p className="mb-4 text-sm text-[var(--color-fg-muted)]">
+        {t('settings.linkedAccounts.description')}
+      </p>
+      {isLoading ? (
+        <Spinner label={t('common.loading')} />
+      ) : !data || data.links.length === 0 ? (
         <p className="mb-4 text-sm text-[var(--color-fg-muted)]">
-          {t('settings.linkedAccounts.description')}
+          {t('settings.linkedAccounts.empty')}
         </p>
-        {isLoading ? (
-          <Spinner label={t('common.loading')} />
-        ) : !data || data.links.length === 0 ? (
-          <p className="mb-4 text-sm text-[var(--color-fg-muted)]">
-            {t('settings.linkedAccounts.empty')}
-          </p>
-        ) : (
-          <ul className="mb-4 flex flex-col gap-2">
-            {data.links.map((link) => (
-              <LinkedAccountRow
-                key={link.id}
-                link={link}
-                isUnlinking={unlink.isPending && unlink.variables === link.id}
-                onUnlink={() => {
-                  setError(undefined)
-                  unlink.mutate(link.id)
-                }}
-              />
-            ))}
-          </ul>
-        )}
-
-        <div className="mt-2 border-t border-[var(--color-border)] pt-4">
-          <p className="mb-2 text-sm text-[var(--color-fg-muted)]">
-            {t('settings.linkedAccounts.redeemDescription')}
-          </p>
-          <form onSubmit={handleRedeem} className="flex items-end gap-3">
-            <Field
-              label={t('settings.linkedAccounts.linkCode')}
-              hideLabel
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-              placeholder={t('settings.linkedAccounts.linkCode')}
-              required
-              className="flex-1"
+      ) : (
+        <ul className="mb-4 flex flex-col gap-2">
+          {data.links.map((link) => (
+            <LinkedAccountRow
+              key={link.id}
+              link={link}
+              isUnlinking={unlink.isPending && unlink.variables === link.id}
+              onUnlink={() => {
+                setError(undefined)
+                unlink.mutate(link.id)
+              }}
             />
-            <Button type="submit" isLoading={redeem.isPending}>
-              {t('settings.linkedAccounts.redeemSubmit')}
-            </Button>
-          </form>
-        </div>
+          ))}
+        </ul>
+      )}
 
-        {error && (
-          <p role="alert" className="mt-4 text-sm text-[var(--color-danger)]">
-            {error}
-          </p>
-        )}
-      </details>
-    </Card>
+      <div className="mt-2 border-t border-[var(--color-border)] pt-4">
+        <p className="mb-2 text-sm text-[var(--color-fg-muted)]">
+          {t('settings.linkedAccounts.redeemDescription')}
+        </p>
+        <form onSubmit={handleRedeem} className="flex items-end gap-3">
+          <Field
+            label={t('settings.linkedAccounts.linkCode')}
+            hideLabel
+            value={code}
+            onChange={(e) => setCode(e.target.value)}
+            placeholder={t('settings.linkedAccounts.linkCode')}
+            required
+            className="flex-1"
+          />
+          <Button type="submit" isLoading={redeem.isPending}>
+            {t('settings.linkedAccounts.redeemSubmit')}
+          </Button>
+        </form>
+      </div>
+
+      {error && (
+        <p role="alert" className="mt-4 text-sm text-[var(--color-danger)]">
+          {error}
+        </p>
+      )}
+    </CollapsiblePanel>
   )
 }
 

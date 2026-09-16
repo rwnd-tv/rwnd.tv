@@ -2,10 +2,9 @@ import { useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useMutation } from '@tanstack/react-query'
 import { api, ApiError } from '../../lib/api-client.js'
-import { Card } from '../ui/Card.js'
+import { CollapsiblePanel } from '../ui/CollapsiblePanel.js'
 import { Field } from '../ui/Field.js'
 import { Button } from '../ui/Button.js'
-import { ChevronDownIcon } from '../icons.js'
 import { usePanelOpen } from '../../lib/use-panel-open.js'
 
 /**
@@ -49,44 +48,37 @@ export function ChangePasswordCard() {
   }
 
   return (
-    <Card>
-      <details className="group" open={open} onToggle={(e) => setOpen(e.currentTarget.open)}>
-        <summary className="flex cursor-pointer list-none items-center justify-between text-lg font-semibold [&::-webkit-details-marker]:hidden">
-          {t('account.passwordTitle')}
-          <ChevronDownIcon className="h-5 w-5 flex-shrink-0 transition-transform group-open:rotate-180" />
-        </summary>
-        <div className="mt-4 mb-4 border-t border-[var(--color-border)]" />
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          <Field
-            label={t('account.changePasswordCurrent')}
-            type="password"
-            value={currentPassword}
-            onChange={(e) => setCurrentPassword(e.target.value)}
-            required
-            autoComplete="current-password"
-            error={error}
-          />
-          <Field
-            label={t('account.changePasswordNew')}
-            type="password"
-            value={newPassword}
-            onChange={(e) => setNewPassword(e.target.value)}
-            required
-            minLength={12}
-            autoComplete="new-password"
-          />
-          <div className="flex items-center gap-3">
-            <Button type="submit" isLoading={changePassword.isPending}>
-              {t('account.changePasswordSubmit')}
-            </Button>
-            {changePassword.isSuccess && (
-              <span className="text-sm text-[var(--color-fg-muted)]">
-                {t('account.changePasswordSuccess')}
-              </span>
-            )}
-          </div>
-        </form>
-      </details>
-    </Card>
+    <CollapsiblePanel title={t('account.passwordTitle')} open={open} onOpenChange={setOpen}>
+      <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+        <Field
+          label={t('account.changePasswordCurrent')}
+          type="password"
+          value={currentPassword}
+          onChange={(e) => setCurrentPassword(e.target.value)}
+          required
+          autoComplete="current-password"
+          error={error}
+        />
+        <Field
+          label={t('account.changePasswordNew')}
+          type="password"
+          value={newPassword}
+          onChange={(e) => setNewPassword(e.target.value)}
+          required
+          minLength={12}
+          autoComplete="new-password"
+        />
+        <div className="flex items-center gap-3">
+          <Button type="submit" isLoading={changePassword.isPending}>
+            {t('account.changePasswordSubmit')}
+          </Button>
+          {changePassword.isSuccess && (
+            <span className="text-sm text-[var(--color-fg-muted)]">
+              {t('account.changePasswordSuccess')}
+            </span>
+          )}
+        </div>
+      </form>
+    </CollapsiblePanel>
   )
 }

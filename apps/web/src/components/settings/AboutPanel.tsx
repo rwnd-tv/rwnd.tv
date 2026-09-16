@@ -2,8 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { api } from '../../lib/api-client.js'
 import { usePublicSettings } from '../../lib/use-public-settings.js'
-import { Card } from '../ui/Card.js'
-import { ChevronDownIcon } from '../icons.js'
+import { CollapsiblePanel } from '../ui/CollapsiblePanel.js'
 import { usePanelOpen } from '../../lib/use-panel-open.js'
 
 /** "2d 4h 12m" — always shows minutes, hours once a day has passed, days
@@ -37,40 +36,33 @@ export function AboutPanel() {
   })
 
   return (
-    <Card>
-      <details className="group" open={open} onToggle={(e) => setOpen(e.currentTarget.open)}>
-        <summary className="flex cursor-pointer list-none items-center justify-between text-lg font-semibold [&::-webkit-details-marker]:hidden">
-          {t('settings.about.title')}
-          <ChevronDownIcon className="h-5 w-5 flex-shrink-0 transition-transform group-open:rotate-180" />
-        </summary>
-        <div className="mt-4 mb-4 border-t border-[var(--color-border)]" />
-        <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
-          {settings && (
-            <>
-              <dt className="text-right font-medium">{t('settings.about.version')}</dt>
-              <dd>{settings.appVersion}</dd>
-            </>
-          )}
-          {about && (
-            <>
-              <dt className="text-right font-medium">{t('settings.about.nodeVersion')}</dt>
-              <dd>{about.nodeVersion}</dd>
-              <dt className="text-right font-medium">{t('settings.about.postgresVersion')}</dt>
-              <dd>{about.postgresVersion}</dd>
-              <dt className="text-right font-medium">{t('settings.about.migrationCount')}</dt>
-              <dd>{about.migrationCount}</dd>
-              <dt className="text-right font-medium">{t('settings.about.uptime')}</dt>
-              <dd>{formatUptime(about.uptimeSeconds)}</dd>
-              {about.environmentLabel && (
-                <>
-                  <dt className="text-right font-medium">{t('settings.about.environment')}</dt>
-                  <dd>{about.environmentLabel}</dd>
-                </>
-              )}
-            </>
-          )}
-        </dl>
-      </details>
-    </Card>
+    <CollapsiblePanel title={t('settings.about.title')} open={open} onOpenChange={setOpen}>
+      <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
+        {settings && (
+          <>
+            <dt className="text-right font-medium">{t('settings.about.version')}</dt>
+            <dd>{settings.appVersion}</dd>
+          </>
+        )}
+        {about && (
+          <>
+            <dt className="text-right font-medium">{t('settings.about.nodeVersion')}</dt>
+            <dd>{about.nodeVersion}</dd>
+            <dt className="text-right font-medium">{t('settings.about.postgresVersion')}</dt>
+            <dd>{about.postgresVersion}</dd>
+            <dt className="text-right font-medium">{t('settings.about.migrationCount')}</dt>
+            <dd>{about.migrationCount}</dd>
+            <dt className="text-right font-medium">{t('settings.about.uptime')}</dt>
+            <dd>{formatUptime(about.uptimeSeconds)}</dd>
+            {about.environmentLabel && (
+              <>
+                <dt className="text-right font-medium">{t('settings.about.environment')}</dt>
+                <dd>{about.environmentLabel}</dd>
+              </>
+            )}
+          </>
+        )}
+      </dl>
+    </CollapsiblePanel>
   )
 }

@@ -8,11 +8,10 @@ import { useAuth } from '../lib/use-auth.js'
 import { usePublicSettings } from '../lib/use-public-settings.js'
 import { Avatar } from '../components/Avatar.js'
 import { Button } from '../components/ui/Button.js'
-import { Card } from '../components/ui/Card.js'
+import { CollapsiblePanel } from '../components/ui/CollapsiblePanel.js'
 import { Select } from '../components/ui/Select.js'
 import { Dialog } from '../components/ui/Dialog.js'
 import { Spinner } from '../components/ui/Spinner.js'
-import { ChevronDownIcon } from '../components/icons.js'
 import { usePanelOpen } from '../lib/use-panel-open.js'
 import { Badge } from '../components/admin/role-badge.js'
 import { ROLE_KEY } from '../lib/admin-role-labels.js'
@@ -139,101 +138,76 @@ export function AdminUserPage() {
         <Badge>{user.emailVerifiedAt ? t('admin.verified') : t('admin.unverified')}</Badge>
       </div>
 
-      <Card>
-        <details
-          className="group"
-          open={sessionsOpen}
-          onToggle={(e) => setSessionsOpen(e.currentTarget.open)}
-        >
-          <summary className="flex cursor-pointer list-none items-center justify-between text-lg font-semibold [&::-webkit-details-marker]:hidden">
-            {t('admin.sessionsTitle')}
-            <ChevronDownIcon className="h-5 w-5 flex-shrink-0 transition-transform group-open:rotate-180" />
-          </summary>
-          <div className="mt-4 mb-4 border-t border-[var(--color-border)]" />
-          <UserSessions userId={id!} />
-        </details>
-      </Card>
+      <CollapsiblePanel
+        title={t('admin.sessionsTitle')}
+        open={sessionsOpen}
+        onOpenChange={setSessionsOpen}
+      >
+        <UserSessions userId={id!} />
+      </CollapsiblePanel>
 
-      <Card>
-        <details
-          className="group"
-          open={roleOpen}
-          onToggle={(e) => setRoleOpen(e.currentTarget.open)}
-        >
-          <summary className="flex cursor-pointer list-none items-center justify-between text-lg font-semibold [&::-webkit-details-marker]:hidden">
-            {t('admin.roleTitle')}
-            <ChevronDownIcon className="h-5 w-5 flex-shrink-0 transition-transform group-open:rotate-180" />
-          </summary>
-          <div className="mt-4 mb-4 border-t border-[var(--color-border)]" />
-          {user.role === 'owner' ? (
-            // The owner's role is never changed from a dropdown, by anyone,
-            // including the owner themselves — only via
-            // TransferOwnershipCard.tsx on the Account page (see
-            // PATCH /admin/users/{id}'s server-side guard, which rejects
-            // this regardless of what the UI offers).
-            <p className="text-sm text-[var(--color-fg-muted)]">{t('admin.ownerRoleLocked')}</p>
-          ) : (
-            <Select
-              // The panel's own title already says "Role"; the label stays
-              // in the accessibility tree rather than repeating on screen.
-              label={t('admin.role')}
-              hideLabel
-              value={user.role}
-              onChange={(e) => setPendingRole(e.target.value as AssignableRole)}
-              disabled={updateRole.isPending}
-              className="max-w-xs"
-            >
-              <option value="user">{t('admin.roleUser')}</option>
-              <option value="admin">{t('admin.roleAdmin')}</option>
-            </Select>
-          )}
-        </details>
-      </Card>
+      <CollapsiblePanel title={t('admin.roleTitle')} open={roleOpen} onOpenChange={setRoleOpen}>
+        {user.role === 'owner' ? (
+          // The owner's role is never changed from a dropdown, by anyone,
+          // including the owner themselves — only via
+          // TransferOwnershipCard.tsx on the Account page (see
+          // PATCH /admin/users/{id}'s server-side guard, which rejects
+          // this regardless of what the UI offers).
+          <p className="text-sm text-[var(--color-fg-muted)]">{t('admin.ownerRoleLocked')}</p>
+        ) : (
+          <Select
+            // The panel's own title already says "Role"; the label stays
+            // in the accessibility tree rather than repeating on screen.
+            label={t('admin.role')}
+            hideLabel
+            value={user.role}
+            onChange={(e) => setPendingRole(e.target.value as AssignableRole)}
+            disabled={updateRole.isPending}
+            className="max-w-xs"
+          >
+            <option value="user">{t('admin.roleUser')}</option>
+            <option value="admin">{t('admin.roleAdmin')}</option>
+          </Select>
+        )}
+      </CollapsiblePanel>
 
       {/* Explains rather than disappearing when SMTP isn't configured
           (James, 2026-09-03) — same treatment as Role/Delete account,
           extended to cover an instance-wide gap rather than something
           about this particular user. `requireEmailConfigured` is the
           real guard (routes/admin-users.ts); this is explanation only. */}
-      <Card>
-        <details
-          className="group"
-          open={passwordOpen}
-          onToggle={(e) => setPasswordOpen(e.currentTarget.open)}
-        >
-          <summary className="flex cursor-pointer list-none items-center justify-between text-lg font-semibold [&::-webkit-details-marker]:hidden">
-            {t('admin.passwordTitle')}
-            <ChevronDownIcon className="h-5 w-5 flex-shrink-0 transition-transform group-open:rotate-180" />
-          </summary>
-          <div className="mt-4 mb-4 border-t border-[var(--color-border)]" />
-          {publicSettings?.emailConfigured ? (
-            <div className="flex items-center gap-2">
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={() => sendPasswordReset.mutate()}
-                isLoading={sendPasswordReset.isPending}
-              >
-                {t('admin.sendPasswordReset')}
-              </Button>
-              {resetSent && (
-                <span role="status" className="text-sm text-[var(--color-fg-muted)]">
-                  {t('admin.passwordResetSent')}
-                </span>
-              )}
-              {resetError && (
-                <span role="alert" className="text-sm text-[var(--color-danger)]">
-                  {resetError}
-                </span>
-              )}
-            </div>
-          ) : (
-            <p className="text-sm text-[var(--color-fg-muted)]">
-              {t('admin.passwordResetUnavailable')}
-            </p>
-          )}
-        </details>
-      </Card>
+      <CollapsiblePanel
+        title={t('admin.passwordTitle')}
+        open={passwordOpen}
+        onOpenChange={setPasswordOpen}
+      >
+        {publicSettings?.emailConfigured ? (
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => sendPasswordReset.mutate()}
+              isLoading={sendPasswordReset.isPending}
+            >
+              {t('admin.sendPasswordReset')}
+            </Button>
+            {resetSent && (
+              <span role="status" className="text-sm text-[var(--color-fg-muted)]">
+                {t('admin.passwordResetSent')}
+              </span>
+            )}
+            {resetError && (
+              <span role="alert" className="text-sm text-[var(--color-danger)]">
+                {resetError}
+              </span>
+            )}
+          </div>
+        ) : (
+          <p className="text-sm text-[var(--color-fg-muted)]">
+            {t('admin.passwordResetUnavailable')}
+          </p>
+        )}
+      </CollapsiblePanel>
 
       {/* Always a panel, explaining why the account can't be deleted from
           here rather than silently vanishing whenever it can't act
@@ -242,33 +216,24 @@ export function AdminUserPage() {
           owner and self blocks are enforced server-side too
           (routes/admin-users.ts): this is explanation, not the actual
           guard. */}
-      <Card>
-        <details
-          className="group"
-          open={deletePanelOpen}
-          onToggle={(e) => setDeletePanelOpen(e.currentTarget.open)}
-        >
-          <summary className="flex cursor-pointer list-none items-center justify-between text-lg font-semibold [&::-webkit-details-marker]:hidden">
-            {t('admin.deleteTitle')}
-            <ChevronDownIcon className="h-5 w-5 flex-shrink-0 transition-transform group-open:rotate-180" />
-          </summary>
-          <div className="mt-4 mb-4 border-t border-[var(--color-border)]" />
-          {user.role === 'owner' ? (
-            <p className="text-sm text-[var(--color-fg-muted)]">{t('admin.deleteOwnerBlocked')}</p>
-          ) : isSelf ? (
-            <p className="text-sm text-[var(--color-fg-muted)]">{t('admin.deleteSelfBlocked')}</p>
-          ) : (
-            <>
-              <p className="mb-4 text-sm text-[var(--color-fg-muted)]">
-                {t('admin.deleteWarning')}
-              </p>
-              <Button type="button" variant="danger" onClick={() => setDeleteOpen(true)}>
-                {t('admin.deleteUser')}
-              </Button>
-            </>
-          )}
-        </details>
-      </Card>
+      <CollapsiblePanel
+        title={t('admin.deleteTitle')}
+        open={deletePanelOpen}
+        onOpenChange={setDeletePanelOpen}
+      >
+        {user.role === 'owner' ? (
+          <p className="text-sm text-[var(--color-fg-muted)]">{t('admin.deleteOwnerBlocked')}</p>
+        ) : isSelf ? (
+          <p className="text-sm text-[var(--color-fg-muted)]">{t('admin.deleteSelfBlocked')}</p>
+        ) : (
+          <>
+            <p className="mb-4 text-sm text-[var(--color-fg-muted)]">{t('admin.deleteWarning')}</p>
+            <Button type="button" variant="danger" onClick={() => setDeleteOpen(true)}>
+              {t('admin.deleteUser')}
+            </Button>
+          </>
+        )}
+      </CollapsiblePanel>
 
       <Dialog
         open={pendingRole !== null}

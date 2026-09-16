@@ -25,10 +25,9 @@ import {
   type VerifiedFilterMode,
 } from '../../lib/admin-user-filter.js'
 import { ROLE_KEY } from '../../lib/admin-role-labels.js'
-import { Card } from '../ui/Card.js'
+import { CollapsiblePanel } from '../ui/CollapsiblePanel.js'
 import { Button } from '../ui/Button.js'
 import { Spinner } from '../ui/Spinner.js'
-import { ChevronDownIcon } from '../icons.js'
 import { usePanelOpen } from '../../lib/use-panel-open.js'
 import { LibraryControls } from '../library/LibraryControls.js'
 import { FiltersPanel } from '../library/FiltersPanel.js'
@@ -183,145 +182,138 @@ export function UsersPanel() {
   }
 
   return (
-    <Card>
-      <details className="group" open={open} onToggle={(e) => setOpen(e.currentTarget.open)}>
-        <summary className="flex cursor-pointer list-none items-center justify-between text-lg font-semibold [&::-webkit-details-marker]:hidden">
-          {t('admin.usersTitle')}
-          <ChevronDownIcon className="h-5 w-5 flex-shrink-0 transition-transform group-open:rotate-180" />
-        </summary>
-        <div className="mt-4 mb-4 border-t border-[var(--color-border)]" />
-        <p className="mb-4 text-sm text-[var(--color-fg-muted)]">{t('admin.usersDescription')}</p>
-        {isLoading ? (
-          <Spinner label={t('common.loading')} />
-        ) : data && data.users.length > 0 ? (
-          <div className="flex flex-col gap-4">
-            <LibraryControls<SortKey>
-              filterValue={filter}
-              onFilterChange={setFilter}
-              filterLabel={t('admin.usersFilterLabel')}
-              filterPlaceholder={t('admin.usersFilterPlaceholder')}
-              betweenFilterAndSort={
-                <Button
-                  variant="secondary"
-                  type="button"
-                  aria-expanded={filtersOpen}
-                  onClick={() => setFiltersOpen((next) => !next)}
-                >
-                  {t('admin.usersFiltersButton')}
+    <CollapsiblePanel title={t('admin.usersTitle')} open={open} onOpenChange={setOpen}>
+      <p className="mb-4 text-sm text-[var(--color-fg-muted)]">{t('admin.usersDescription')}</p>
+      {isLoading ? (
+        <Spinner label={t('common.loading')} />
+      ) : data && data.users.length > 0 ? (
+        <div className="flex flex-col gap-4">
+          <LibraryControls<SortKey>
+            filterValue={filter}
+            onFilterChange={setFilter}
+            filterLabel={t('admin.usersFilterLabel')}
+            filterPlaceholder={t('admin.usersFilterPlaceholder')}
+            betweenFilterAndSort={
+              <Button
+                variant="secondary"
+                type="button"
+                aria-expanded={filtersOpen}
+                onClick={() => setFiltersOpen((next) => !next)}
+              >
+                {t('admin.usersFiltersButton')}
+              </Button>
+            }
+            sortValue={sortBy}
+            onSortChange={setSortBy}
+            sortLabel={t('admin.usersSortLabel')}
+            sortOptions={[
+              { value: 'nameAsc', label: t('admin.usersSortNameAsc') },
+              { value: 'nameDesc', label: t('admin.usersSortNameDesc') },
+              { value: 'roleAsc', label: t('admin.usersSortRoleAsc') },
+              { value: 'roleDesc', label: t('admin.usersSortRoleDesc') },
+              { value: 'lastLoginDesc', label: t('admin.usersSortLastLoginDesc') },
+              { value: 'lastLoginAsc', label: t('admin.usersSortLastLoginAsc') },
+              { value: 'createdDesc', label: t('admin.usersSortCreatedDesc') },
+              { value: 'createdAsc', label: t('admin.usersSortCreatedAsc') },
+            ]}
+          />
+
+          {filtersOpen && (
+            <FiltersPanel>
+              <RoleFilterPanel
+                roles={ALL_ROLES}
+                labelFor={(role) => t(`admin.${ROLE_KEY[role]}`)}
+                filters={roleFilters}
+                onChange={setRoleFilters}
+                groupLabel={t('admin.usersFiltersPanel.role')}
+                includeLabel={t('admin.usersFiltersPanel.include')}
+                excludeLabel={t('admin.usersFiltersPanel.exclude')}
+              />
+              <MfaFilterPanel
+                mode={mfaMode}
+                onChange={setMfaMode}
+                groupLabel={t('admin.usersFiltersPanel.mfa')}
+                rowLabel={t('admin.usersFiltersPanel.mfa')}
+                includeLabel={t('admin.usersFiltersPanel.include')}
+                excludeLabel={t('admin.usersFiltersPanel.exclude')}
+              />
+              <VerifiedFilterPanel
+                mode={verifiedMode}
+                onChange={setVerifiedMode}
+                groupLabel={t('admin.usersFiltersPanel.emailVerified')}
+                rowLabel={t('admin.usersFiltersPanel.emailVerified')}
+                includeLabel={t('admin.usersFiltersPanel.include')}
+                excludeLabel={t('admin.usersFiltersPanel.exclude')}
+              />
+              <div>
+                <Button variant="secondary" type="button" onClick={resetFilters}>
+                  {t('admin.usersFiltersPanel.reset')}
                 </Button>
-              }
-              sortValue={sortBy}
-              onSortChange={setSortBy}
-              sortLabel={t('admin.usersSortLabel')}
-              sortOptions={[
-                { value: 'nameAsc', label: t('admin.usersSortNameAsc') },
-                { value: 'nameDesc', label: t('admin.usersSortNameDesc') },
-                { value: 'roleAsc', label: t('admin.usersSortRoleAsc') },
-                { value: 'roleDesc', label: t('admin.usersSortRoleDesc') },
-                { value: 'lastLoginDesc', label: t('admin.usersSortLastLoginDesc') },
-                { value: 'lastLoginAsc', label: t('admin.usersSortLastLoginAsc') },
-                { value: 'createdDesc', label: t('admin.usersSortCreatedDesc') },
-                { value: 'createdAsc', label: t('admin.usersSortCreatedAsc') },
-              ]}
-            />
+              </div>
+            </FiltersPanel>
+          )}
 
-            {filtersOpen && (
-              <FiltersPanel>
-                <RoleFilterPanel
-                  roles={ALL_ROLES}
-                  labelFor={(role) => t(`admin.${ROLE_KEY[role]}`)}
-                  filters={roleFilters}
-                  onChange={setRoleFilters}
-                  groupLabel={t('admin.usersFiltersPanel.role')}
-                  includeLabel={t('admin.usersFiltersPanel.include')}
-                  excludeLabel={t('admin.usersFiltersPanel.exclude')}
-                />
-                <MfaFilterPanel
-                  mode={mfaMode}
-                  onChange={setMfaMode}
-                  groupLabel={t('admin.usersFiltersPanel.mfa')}
-                  rowLabel={t('admin.usersFiltersPanel.mfa')}
-                  includeLabel={t('admin.usersFiltersPanel.include')}
-                  excludeLabel={t('admin.usersFiltersPanel.exclude')}
-                />
-                <VerifiedFilterPanel
-                  mode={verifiedMode}
-                  onChange={setVerifiedMode}
-                  groupLabel={t('admin.usersFiltersPanel.emailVerified')}
-                  rowLabel={t('admin.usersFiltersPanel.emailVerified')}
-                  includeLabel={t('admin.usersFiltersPanel.include')}
-                  excludeLabel={t('admin.usersFiltersPanel.exclude')}
-                />
-                <div>
-                  <Button variant="secondary" type="button" onClick={resetFilters}>
-                    {t('admin.usersFiltersPanel.reset')}
-                  </Button>
-                </div>
-              </FiltersPanel>
-            )}
+          <UserBulkActions
+            selectedUsers={selectedUsers}
+            hiddenSelectedCount={hiddenSelectedCount}
+            onClearSelection={() => setSelectedIds(new Set())}
+            onSelectionSettled={(remainingIds) => setSelectedIds(new Set(remainingIds))}
+            onBusyChange={setIsBulkBusy}
+          />
 
-            <UserBulkActions
-              selectedUsers={selectedUsers}
-              hiddenSelectedCount={hiddenSelectedCount}
-              onClearSelection={() => setSelectedIds(new Set())}
-              onSelectionSettled={(remainingIds) => setSelectedIds(new Set(remainingIds))}
-              onBusyChange={setIsBulkBusy}
-            />
-
-            {users.length === 0 ? (
-              <p className="text-sm text-[var(--color-fg-muted)]">
-                {filter.trim()
-                  ? t('admin.usersNoMatches', { query: filter })
-                  : t('admin.usersNoFilterMatches')}
-              </p>
-            ) : (
-              <>
-                <label className="flex w-fit items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={allSelected}
-                    disabled={isBulkBusy || selectableUsers.length === 0}
-                    ref={(el) => {
-                      // `indeterminate` is DOM-property-only, not a React
-                      // prop — the callback ref is the one imperative line
-                      // in this file, needed purely to set it.
-                      if (el) el.indeterminate = someSelected && !allSelected
-                    }}
-                    onChange={() =>
-                      setSelectedIds(
-                        allSelected ? new Set() : new Set(selectableUsers.map((u) => u.id)),
-                      )
-                    }
-                  />
-                  {t('admin.bulk.selectAll')}
-                </label>
-                <ul className="flex flex-col gap-2">
-                  {users.map((user) => {
-                    const isSelf = user.id === currentUser?.id
-                    return (
-                      <UserRow
-                        key={user.id}
-                        user={user}
-                        selected={selectedIds.has(user.id)}
-                        selectDisabled={isSelf || isBulkBusy}
-                        selectAriaLabel={
-                          isSelf
-                            ? t('admin.bulk.selectSelfDisabled')
-                            : t('admin.bulk.selectAria', { name: user.displayName })
-                        }
-                        selectTitle={isSelf ? t('admin.bulk.selectSelfTooltip') : undefined}
-                        onToggleSelect={() => toggleUserSelected(user.id)}
-                      />
+          {users.length === 0 ? (
+            <p className="text-sm text-[var(--color-fg-muted)]">
+              {filter.trim()
+                ? t('admin.usersNoMatches', { query: filter })
+                : t('admin.usersNoFilterMatches')}
+            </p>
+          ) : (
+            <>
+              <label className="flex w-fit items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={allSelected}
+                  disabled={isBulkBusy || selectableUsers.length === 0}
+                  ref={(el) => {
+                    // `indeterminate` is DOM-property-only, not a React
+                    // prop — the callback ref is the one imperative line
+                    // in this file, needed purely to set it.
+                    if (el) el.indeterminate = someSelected && !allSelected
+                  }}
+                  onChange={() =>
+                    setSelectedIds(
+                      allSelected ? new Set() : new Set(selectableUsers.map((u) => u.id)),
                     )
-                  })}
-                </ul>
-              </>
-            )}
-          </div>
-        ) : (
-          <p className="text-sm text-[var(--color-fg-muted)]">{t('admin.usersEmpty')}</p>
-        )}
-      </details>
-    </Card>
+                  }
+                />
+                {t('admin.bulk.selectAll')}
+              </label>
+              <ul className="flex flex-col gap-2">
+                {users.map((user) => {
+                  const isSelf = user.id === currentUser?.id
+                  return (
+                    <UserRow
+                      key={user.id}
+                      user={user}
+                      selected={selectedIds.has(user.id)}
+                      selectDisabled={isSelf || isBulkBusy}
+                      selectAriaLabel={
+                        isSelf
+                          ? t('admin.bulk.selectSelfDisabled')
+                          : t('admin.bulk.selectAria', { name: user.displayName })
+                      }
+                      selectTitle={isSelf ? t('admin.bulk.selectSelfTooltip') : undefined}
+                      onToggleSelect={() => toggleUserSelected(user.id)}
+                    />
+                  )
+                })}
+              </ul>
+            </>
+          )}
+        </div>
+      ) : (
+        <p className="text-sm text-[var(--color-fg-muted)]">{t('admin.usersEmpty')}</p>
+      )}
+    </CollapsiblePanel>
   )
 }

@@ -4,10 +4,9 @@ import { useMutation } from '@tanstack/react-query'
 import { api, ApiError } from '../../lib/api-client.js'
 import { useAuth } from '../../lib/use-auth.js'
 import { usePublicSettings } from '../../lib/use-public-settings.js'
-import { Card } from '../ui/Card.js'
+import { CollapsiblePanel } from '../ui/CollapsiblePanel.js'
 import { Field } from '../ui/Field.js'
 import { Button } from '../ui/Button.js'
-import { ChevronDownIcon } from '../icons.js'
 import { usePanelOpen } from '../../lib/use-panel-open.js'
 
 /**
@@ -70,86 +69,77 @@ export function EmailCard() {
   }
 
   return (
-    <Card>
-      <details className="group" open={open} onToggle={(e) => setOpen(e.currentTarget.open)}>
-        <summary className="flex cursor-pointer list-none items-center justify-between text-lg font-semibold [&::-webkit-details-marker]:hidden">
-          {t('account.email')}
-          <ChevronDownIcon className="h-5 w-5 flex-shrink-0 transition-transform group-open:rotate-180" />
-        </summary>
-        <div className="mt-4 mb-4 border-t border-[var(--color-border)]" />
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-sm">{user?.email}</span>
-          {user?.emailVerifiedAt ? (
-            <span className="text-xs text-[var(--color-success)]">
-              {t('account.emailVerified')}
-            </span>
-          ) : (
-            settings?.emailConfigured && (
-              <>
-                <span className="text-xs text-[var(--color-danger)]">
-                  {t('account.emailUnverified')}
+    <CollapsiblePanel title={t('account.email')} open={open} onOpenChange={setOpen}>
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-sm">{user?.email}</span>
+        {user?.emailVerifiedAt ? (
+          <span className="text-xs text-[var(--color-success)]">{t('account.emailVerified')}</span>
+        ) : (
+          settings?.emailConfigured && (
+            <>
+              <span className="text-xs text-[var(--color-danger)]">
+                {t('account.emailUnverified')}
+              </span>
+              <Button
+                type="button"
+                variant="ghost"
+                isLoading={resendVerification.isPending}
+                onClick={() => resendVerification.mutate()}
+              >
+                {t('account.resendVerification')}
+              </Button>
+              {resendVerification.isSuccess && (
+                <span className="text-xs text-[var(--color-fg-muted)]">
+                  {t('account.resendVerificationSent')}
                 </span>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  isLoading={resendVerification.isPending}
-                  onClick={() => resendVerification.mutate()}
-                >
-                  {t('account.resendVerification')}
-                </Button>
-                {resendVerification.isSuccess && (
-                  <span className="text-xs text-[var(--color-fg-muted)]">
-                    {t('account.resendVerificationSent')}
-                  </span>
-                )}
-              </>
-            )
-          )}
-        </div>
-
-        {settings?.emailConfigured && (
-          <div className="mt-4">
-            <Button type="button" onClick={handleToggle}>
-              {t('account.changeEmailButton')}
-            </Button>
-
-            {showChangeEmail &&
-              (changeEmail.isSuccess ? (
-                <p className="mt-2 text-sm text-[var(--color-fg-muted)]">
-                  {t('account.changeEmailSuccess', { email: newEmail })}
-                </p>
-              ) : (
-                <form onSubmit={handleSubmit} className="mt-4 flex flex-col gap-4">
-                  <Field
-                    label={t('account.changeEmailNew')}
-                    type="email"
-                    value={newEmail}
-                    onChange={(e) => setNewEmail(e.target.value)}
-                    required
-                    autoComplete="email"
-                  />
-                  <Field
-                    label={t('account.changeEmailPassword')}
-                    type="password"
-                    value={currentPassword}
-                    onChange={(e) => setCurrentPassword(e.target.value)}
-                    required
-                    autoComplete="current-password"
-                    error={error}
-                  />
-                  <div className="flex items-center gap-3">
-                    <Button type="submit" isLoading={changeEmail.isPending}>
-                      {t('account.changeEmailSubmit')}
-                    </Button>
-                    <Button type="button" variant="ghost" onClick={handleToggle}>
-                      {t('account.changeEmailCancel')}
-                    </Button>
-                  </div>
-                </form>
-              ))}
-          </div>
+              )}
+            </>
+          )
         )}
-      </details>
-    </Card>
+      </div>
+
+      {settings?.emailConfigured && (
+        <div className="mt-4">
+          <Button type="button" onClick={handleToggle}>
+            {t('account.changeEmailButton')}
+          </Button>
+
+          {showChangeEmail &&
+            (changeEmail.isSuccess ? (
+              <p className="mt-2 text-sm text-[var(--color-fg-muted)]">
+                {t('account.changeEmailSuccess', { email: newEmail })}
+              </p>
+            ) : (
+              <form onSubmit={handleSubmit} className="mt-4 flex flex-col gap-4">
+                <Field
+                  label={t('account.changeEmailNew')}
+                  type="email"
+                  value={newEmail}
+                  onChange={(e) => setNewEmail(e.target.value)}
+                  required
+                  autoComplete="email"
+                />
+                <Field
+                  label={t('account.changeEmailPassword')}
+                  type="password"
+                  value={currentPassword}
+                  onChange={(e) => setCurrentPassword(e.target.value)}
+                  required
+                  autoComplete="current-password"
+                  error={error}
+                />
+                <div className="flex items-center gap-3">
+                  <Button type="submit" isLoading={changeEmail.isPending}>
+                    {t('account.changeEmailSubmit')}
+                  </Button>
+                  <Button type="button" variant="ghost" onClick={handleToggle}>
+                    {t('account.changeEmailCancel')}
+                  </Button>
+                </div>
+              </form>
+            ))}
+        </div>
+      )}
+    </CollapsiblePanel>
   )
 }

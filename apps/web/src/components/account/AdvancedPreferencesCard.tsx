@@ -3,9 +3,8 @@ import { useTranslation } from 'react-i18next'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '../../lib/api-client.js'
 import { useAuth } from '../../lib/use-auth.js'
-import { Card } from '../ui/Card.js'
+import { CollapsiblePanel } from '../ui/CollapsiblePanel.js'
 import { Button } from '../ui/Button.js'
-import { ChevronDownIcon } from '../icons.js'
 import { usePanelOpen } from '../../lib/use-panel-open.js'
 
 /**
@@ -38,52 +37,49 @@ export function AdvancedPreferencesCard() {
   }
 
   return (
-    <Card>
-      <details className="group" open={open} onToggle={(e) => setOpen(e.currentTarget.open)}>
-        <summary className="flex cursor-pointer list-none items-center justify-between text-lg font-semibold [&::-webkit-details-marker]:hidden">
-          {t('account.advancedPreferencesTitle')}
-          <ChevronDownIcon className="h-5 w-5 flex-shrink-0 transition-transform group-open:rotate-180" />
-        </summary>
-        <div className="mt-4 mb-4 border-t border-[var(--color-border)]" />
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          <div className="flex flex-col gap-1">
-            <label className="flex items-center gap-2 text-sm font-medium">
-              <input
-                type="checkbox"
-                checked={spoilerProtectionEnabled}
-                onChange={(e) => setSpoilerProtectionEnabled(e.target.checked)}
-              />
-              {t('account.spoilerProtection')}
-            </label>
-            <p className="text-xs text-[var(--color-fg-muted)]">
-              {t('account.spoilerProtectionDescription')}
-            </p>
-          </div>
+    <CollapsiblePanel
+      title={t('account.advancedPreferencesTitle')}
+      open={open}
+      onOpenChange={setOpen}
+    >
+      <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+        <div className="flex flex-col gap-1">
+          <label className="flex items-center gap-2 text-sm font-medium">
+            <input
+              type="checkbox"
+              checked={spoilerProtectionEnabled}
+              onChange={(e) => setSpoilerProtectionEnabled(e.target.checked)}
+            />
+            {t('account.spoilerProtection')}
+          </label>
+          <p className="text-xs text-[var(--color-fg-muted)]">
+            {t('account.spoilerProtectionDescription')}
+          </p>
+        </div>
 
-          <div className="flex flex-col gap-1">
-            <label className="flex items-center gap-2 text-sm font-medium">
-              <input
-                type="checkbox"
-                checked={onDeckFillGaps}
-                onChange={(e) => setOnDeckFillGaps(e.target.checked)}
-              />
-              {t('account.onDeckFillGaps')}
-            </label>
-            <p className="text-xs text-[var(--color-fg-muted)]">
-              {t('account.onDeckFillGapsDescription')}
-            </p>
-          </div>
+        <div className="flex flex-col gap-1">
+          <label className="flex items-center gap-2 text-sm font-medium">
+            <input
+              type="checkbox"
+              checked={onDeckFillGaps}
+              onChange={(e) => setOnDeckFillGaps(e.target.checked)}
+            />
+            {t('account.onDeckFillGaps')}
+          </label>
+          <p className="text-xs text-[var(--color-fg-muted)]">
+            {t('account.onDeckFillGapsDescription')}
+          </p>
+        </div>
 
-          <div className="flex items-center gap-3">
-            <Button type="submit" isLoading={updateAdvancedPreferences.isPending}>
-              {t('account.save')}
-            </Button>
-            {updateAdvancedPreferences.isSuccess && (
-              <span className="text-sm text-[var(--color-fg-muted)]">{t('account.saved')}</span>
-            )}
-          </div>
-        </form>
-      </details>
-    </Card>
+        <div className="flex items-center gap-3">
+          <Button type="submit" isLoading={updateAdvancedPreferences.isPending}>
+            {t('account.save')}
+          </Button>
+          {updateAdvancedPreferences.isSuccess && (
+            <span className="text-sm text-[var(--color-fg-muted)]">{t('account.saved')}</span>
+          )}
+        </div>
+      </form>
+    </CollapsiblePanel>
   )
 }

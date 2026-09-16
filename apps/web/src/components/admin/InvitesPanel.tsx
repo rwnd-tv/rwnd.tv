@@ -4,11 +4,10 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { InviteStatus } from '@rwnd/shared'
 import { api } from '../../lib/api-client.js'
 import { usePublicSettings } from '../../lib/use-public-settings.js'
-import { Card } from '../ui/Card.js'
+import { CollapsiblePanel } from '../ui/CollapsiblePanel.js'
 import { Button } from '../ui/Button.js'
 import { Field } from '../ui/Field.js'
 import { Spinner } from '../ui/Spinner.js'
-import { ChevronDownIcon } from '../icons.js'
 import { usePanelOpen } from '../../lib/use-panel-open.js'
 import { useCopyFeedback } from '../../lib/use-copy-feedback.js'
 
@@ -75,101 +74,91 @@ export function InvitesPanel() {
   })
 
   return (
-    <Card>
-      <details className="group" open={open} onToggle={(e) => setOpen(e.currentTarget.open)}>
-        <summary className="flex cursor-pointer list-none items-center justify-between text-lg font-semibold [&::-webkit-details-marker]:hidden">
-          {t('admin.invites.title')}
-          <ChevronDownIcon className="h-5 w-5 flex-shrink-0 transition-transform group-open:rotate-180" />
-        </summary>
-        <div className="mt-4 mb-4 border-t border-[var(--color-border)]" />
-        {!inviteOnly ? (
-          <p className="text-sm text-[var(--color-fg-muted)]">{t('admin.invites.notInviteOnly')}</p>
-        ) : (
-          <>
-            <p className="mb-4 text-sm text-[var(--color-fg-muted)]">
-              {t('admin.invites.description')}
-            </p>
+    <CollapsiblePanel title={t('admin.invites.title')} open={open} onOpenChange={setOpen}>
+      {!inviteOnly ? (
+        <p className="text-sm text-[var(--color-fg-muted)]">{t('admin.invites.notInviteOnly')}</p>
+      ) : (
+        <>
+          <p className="mb-4 text-sm text-[var(--color-fg-muted)]">
+            {t('admin.invites.description')}
+          </p>
 
-            {justCreated && (
-              <div
-                role="status"
-                className="mb-4 rounded-md border border-[var(--color-primary)] bg-[var(--color-bg)] p-3"
-              >
-                <p className="mb-1 text-sm">{t('admin.invites.createdOnce')}</p>
-                <div className="flex items-center gap-2">
-                  <code className="block flex-1 truncate rounded-md bg-[var(--color-surface)] px-2 py-1 text-sm">
-                    {justCreated}
-                  </code>
-                  <Button type="button" variant="secondary" onClick={() => copy(justCreated)}>
-                    {copied ? t('admin.invites.copied') : t('admin.invites.copy')}
-                  </Button>
-                </div>
-                {justCreatedEmailSent && (
-                  <p className="mt-1 text-xs text-[var(--color-fg-muted)]">
-                    {t('admin.invites.emailed', { email: inviteEmail })}
-                  </p>
-                )}
+          {justCreated && (
+            <div
+              role="status"
+              className="mb-4 rounded-md border border-[var(--color-primary)] bg-[var(--color-bg)] p-3"
+            >
+              <p className="mb-1 text-sm">{t('admin.invites.createdOnce')}</p>
+              <div className="flex items-center gap-2">
+                <code className="block flex-1 truncate rounded-md bg-[var(--color-surface)] px-2 py-1 text-sm">
+                  {justCreated}
+                </code>
+                <Button type="button" variant="secondary" onClick={() => copy(justCreated)}>
+                  {copied ? t('admin.invites.copied') : t('admin.invites.copy')}
+                </Button>
               </div>
-            )}
-
-            <form onSubmit={handleCreate} className="mb-6 flex flex-wrap items-end gap-2">
-              {publicSettings?.emailConfigured && (
-                <Field
-                  label={t('admin.invites.email')}
-                  hideLabel
-                  type="email"
-                  value={inviteEmail}
-                  onChange={(e) => setInviteEmail(e.target.value)}
-                  placeholder={t('admin.invites.email')}
-                  className="flex-1"
-                />
+              {justCreatedEmailSent && (
+                <p className="mt-1 text-xs text-[var(--color-fg-muted)]">
+                  {t('admin.invites.emailed', { email: inviteEmail })}
+                </p>
               )}
-              <Button type="submit" isLoading={createInvite.isPending}>
-                {t('admin.invites.create')}
-              </Button>
-            </form>
+            </div>
+          )}
 
-            {isLoading ? (
-              <Spinner label={t('common.loading')} />
-            ) : data?.invites.length === 0 ? (
-              <p className="text-sm text-[var(--color-fg-muted)]">{t('admin.invites.empty')}</p>
-            ) : (
-              <ul className="flex flex-col gap-2">
-                {data?.invites.map((invite) => (
-                  <li
-                    key={invite.id}
-                    className="rounded-md border border-[var(--color-border)] p-3"
-                  >
-                    <div className="flex items-center justify-between gap-4">
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="font-medium">
-                            {t(`admin.invites.${STATUS_KEY[invite.status]}`)}
-                          </span>
-                        </div>
-                        <p className="text-sm text-[var(--color-fg-muted)]">
-                          {t('admin.invites.created', {
-                            date: new Date(invite.createdAt).toLocaleString(i18n.language),
-                          })}
-                          {' — '}
-                          {t('admin.invites.expires', {
-                            date: new Date(invite.expiresAt).toLocaleString(i18n.language),
-                          })}
-                        </p>
-                      </div>
-                      {invite.status === 'pending' && (
-                        <Button variant="danger" onClick={() => revokeInvite.mutate(invite.id)}>
-                          {t('admin.invites.revoke')}
-                        </Button>
-                      )}
-                    </div>
-                  </li>
-                ))}
-              </ul>
+          <form onSubmit={handleCreate} className="mb-6 flex flex-wrap items-end gap-2">
+            {publicSettings?.emailConfigured && (
+              <Field
+                label={t('admin.invites.email')}
+                hideLabel
+                type="email"
+                value={inviteEmail}
+                onChange={(e) => setInviteEmail(e.target.value)}
+                placeholder={t('admin.invites.email')}
+                className="flex-1"
+              />
             )}
-          </>
-        )}
-      </details>
-    </Card>
+            <Button type="submit" isLoading={createInvite.isPending}>
+              {t('admin.invites.create')}
+            </Button>
+          </form>
+
+          {isLoading ? (
+            <Spinner label={t('common.loading')} />
+          ) : data?.invites.length === 0 ? (
+            <p className="text-sm text-[var(--color-fg-muted)]">{t('admin.invites.empty')}</p>
+          ) : (
+            <ul className="flex flex-col gap-2">
+              {data?.invites.map((invite) => (
+                <li key={invite.id} className="rounded-md border border-[var(--color-border)] p-3">
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium">
+                          {t(`admin.invites.${STATUS_KEY[invite.status]}`)}
+                        </span>
+                      </div>
+                      <p className="text-sm text-[var(--color-fg-muted)]">
+                        {t('admin.invites.created', {
+                          date: new Date(invite.createdAt).toLocaleString(i18n.language),
+                        })}
+                        {' — '}
+                        {t('admin.invites.expires', {
+                          date: new Date(invite.expiresAt).toLocaleString(i18n.language),
+                        })}
+                      </p>
+                    </div>
+                    {invite.status === 'pending' && (
+                      <Button variant="danger" onClick={() => revokeInvite.mutate(invite.id)}>
+                        {t('admin.invites.revoke')}
+                      </Button>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
+      )}
+    </CollapsiblePanel>
   )
 }

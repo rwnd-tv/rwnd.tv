@@ -3,10 +3,9 @@ import { useTranslation } from 'react-i18next'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../lib/api-client.js'
 import { usePublicSettings } from '../lib/use-public-settings.js'
-import { Card } from '../components/ui/Card.js'
+import { CollapsiblePanel } from '../components/ui/CollapsiblePanel.js'
 import { Button } from '../components/ui/Button.js'
 import { Spinner } from '../components/ui/Spinner.js'
-import { ChevronDownIcon } from '../components/icons.js'
 import { usePanelOpen } from '../lib/use-panel-open.js'
 import { TraktConnectCard } from '../components/import/TraktConnectCard.js'
 import { TraktZipImportCard } from '../components/import/TraktZipImportCard.js'
@@ -52,83 +51,82 @@ export function ImportPage() {
     <div className="flex flex-col gap-6">
       <h1 className="text-2xl font-semibold">{t('import.title')}</h1>
 
-      <Card>
-        <details className="group" open={open} onToggle={(e) => setOpen(e.currentTarget.open)}>
-          <summary className="flex cursor-pointer list-none items-center justify-between text-lg font-semibold [&::-webkit-details-marker]:hidden">
-            {t('import.trakt.sectionTitle')}
-            <ChevronDownIcon className="h-5 w-5 flex-shrink-0 transition-transform group-open:rotate-180" />
-          </summary>
-          <p className="mt-1 mb-4 text-sm text-[var(--color-fg-muted)]">
-            {t('import.trakt.description')}
-          </p>
+      <CollapsiblePanel
+        title={t('import.trakt.sectionTitle')}
+        open={open}
+        onOpenChange={setOpen}
+        divider={false}
+      >
+        <p className="mt-1 mb-4 text-sm text-[var(--color-fg-muted)]">
+          {t('import.trakt.description')}
+        </p>
 
-          {settings?.traktConfigured ? (
-            <>
-              <h3 className="mb-1 text-sm font-semibold">{t('import.trakt.connectStepTitle')}</h3>
-              <TraktConnectCard />
+        {settings?.traktConfigured ? (
+          <>
+            <h3 className="mb-1 text-sm font-semibold">{t('import.trakt.connectStepTitle')}</h3>
+            <TraktConnectCard />
 
-              {connection?.connected && (
-                <div className="mt-4 border-t border-[var(--color-border)] pt-4">
-                  <h3 className="mb-1 text-sm font-semibold">{t('import.start.title')}</h3>
-                  <p className="mb-3 text-sm text-[var(--color-fg-muted)]">
-                    {t('import.start.description')}
-                  </p>
-                  <form onSubmit={handleSubmit} className="flex flex-col gap-3">
-                    <label className="flex items-center gap-2 text-sm">
-                      <input
-                        type="checkbox"
-                        checked={history}
-                        onChange={(e) => setHistory(e.target.checked)}
-                      />
-                      {t('import.start.history')}
-                    </label>
-                    <label className="flex items-center gap-2 text-sm">
-                      <input
-                        type="checkbox"
-                        checked={ratings}
-                        onChange={(e) => setRatings(e.target.checked)}
-                      />
-                      {t('import.start.ratings')}
-                    </label>
-                    <label className="flex items-center gap-2 text-sm">
-                      <input
-                        type="checkbox"
-                        checked={watchlist}
-                        onChange={(e) => setWatchlist(e.target.checked)}
-                      />
-                      {t('import.start.watchlist')}
-                    </label>
-                    <label className="flex items-center gap-2 text-sm">
-                      <input
-                        type="checkbox"
-                        checked={dropped}
-                        onChange={(e) => setDropped(e.target.checked)}
-                      />
-                      {t('import.start.dropped')}
-                    </label>
-                    <div>
-                      <Button
-                        type="submit"
-                        isLoading={startImport.isPending}
-                        disabled={Boolean(activeJob)}
-                      >
-                        {t('import.start.submit')}
-                      </Button>
-                    </div>
-                    {activeJob && (
-                      <p className="text-sm text-[var(--color-fg-muted)]">
-                        {t('import.start.alreadyRunning')}
-                      </p>
-                    )}
-                  </form>
-                </div>
-              )}
-            </>
-          ) : (
-            <p className="text-[var(--color-fg-muted)]">{t('import.notConfigured')}</p>
-          )}
-        </details>
-      </Card>
+            {connection?.connected && (
+              <div className="mt-4 border-t border-[var(--color-border)] pt-4">
+                <h3 className="mb-1 text-sm font-semibold">{t('import.start.title')}</h3>
+                <p className="mb-3 text-sm text-[var(--color-fg-muted)]">
+                  {t('import.start.description')}
+                </p>
+                <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={history}
+                      onChange={(e) => setHistory(e.target.checked)}
+                    />
+                    {t('import.start.history')}
+                  </label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={ratings}
+                      onChange={(e) => setRatings(e.target.checked)}
+                    />
+                    {t('import.start.ratings')}
+                  </label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={watchlist}
+                      onChange={(e) => setWatchlist(e.target.checked)}
+                    />
+                    {t('import.start.watchlist')}
+                  </label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={dropped}
+                      onChange={(e) => setDropped(e.target.checked)}
+                    />
+                    {t('import.start.dropped')}
+                  </label>
+                  <div>
+                    <Button
+                      type="submit"
+                      isLoading={startImport.isPending}
+                      disabled={Boolean(activeJob)}
+                    >
+                      {t('import.start.submit')}
+                    </Button>
+                  </div>
+                  {activeJob && (
+                    <p className="text-sm text-[var(--color-fg-muted)]">
+                      {t('import.start.alreadyRunning')}
+                    </p>
+                  )}
+                </form>
+              </div>
+            )}
+          </>
+        ) : (
+          <p className="text-[var(--color-fg-muted)]">{t('import.notConfigured')}</p>
+        )}
+      </CollapsiblePanel>
 
       <TraktZipImportCard />
       <CsvImportCard />

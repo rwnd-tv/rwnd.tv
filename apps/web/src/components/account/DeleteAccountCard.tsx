@@ -5,11 +5,10 @@ import { useNavigate } from 'react-router'
 import { api, ApiError } from '../../lib/api-client.js'
 import { useAuth } from '../../lib/use-auth.js'
 import { resetAuthCache } from '../../lib/reset-auth-cache.js'
-import { Card } from '../ui/Card.js'
+import { CollapsiblePanel } from '../ui/CollapsiblePanel.js'
 import { Field } from '../ui/Field.js'
 import { Button } from '../ui/Button.js'
 import { Dialog } from '../ui/Dialog.js'
-import { ChevronDownIcon } from '../icons.js'
 import { usePanelOpen } from '../../lib/use-panel-open.js'
 
 /**
@@ -93,51 +92,49 @@ export function DeleteAccountCard() {
   }
 
   return (
-    <Card>
-      <details className="group" open={open} onToggle={(e) => setOpen(e.currentTarget.open)}>
-        <summary className="flex cursor-pointer list-none items-center justify-between text-lg font-semibold text-[var(--color-danger)] [&::-webkit-details-marker]:hidden">
-          {t('account.deleteTitle')}
-          <ChevronDownIcon className="h-5 w-5 flex-shrink-0 transition-transform group-open:rotate-180" />
-        </summary>
-        <div className="mt-4 mb-4 border-t border-[var(--color-border)]" />
-        <p className="mb-4 text-sm text-[var(--color-fg-muted)]">{t('account.deleteWarning')}</p>
-        <Button type="button" variant="danger" onClick={() => setConfirmOpen(true)}>
-          {t('account.deleteButton')}
-        </Button>
+    <CollapsiblePanel
+      title={t('account.deleteTitle')}
+      open={open}
+      onOpenChange={setOpen}
+      tone="danger"
+    >
+      <p className="mb-4 text-sm text-[var(--color-fg-muted)]">{t('account.deleteWarning')}</p>
+      <Button type="button" variant="danger" onClick={() => setConfirmOpen(true)}>
+        {t('account.deleteButton')}
+      </Button>
 
-        <Dialog open={confirmOpen} onClose={handleClose} title={t('account.deleteConfirmTitle')}>
-          <p className="mb-4 text-sm text-[var(--color-fg-muted)]">
-            {t('account.deleteConfirmBody', { email: user?.email })}
-          </p>
-          <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-            <Field
-              label={t('account.deleteConfirmEmail')}
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              autoComplete="email"
-            />
-            <Field
-              label={t('account.deleteConfirmPassword')}
-              type="password"
-              value={currentPassword}
-              onChange={(e) => setCurrentPassword(e.target.value)}
-              required
-              autoComplete="current-password"
-              error={error}
-            />
-            <div className="mt-2 flex justify-end gap-2">
-              <Button type="button" variant="secondary" onClick={handleClose}>
-                {t('common.cancel')}
-              </Button>
-              <Button type="submit" variant="danger" isLoading={deleteAccount.isPending}>
-                {t('account.deleteButton')}
-              </Button>
-            </div>
-          </form>
-        </Dialog>
-      </details>
-    </Card>
+      <Dialog open={confirmOpen} onClose={handleClose} title={t('account.deleteConfirmTitle')}>
+        <p className="mb-4 text-sm text-[var(--color-fg-muted)]">
+          {t('account.deleteConfirmBody', { email: user?.email })}
+        </p>
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          <Field
+            label={t('account.deleteConfirmEmail')}
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+            autoComplete="email"
+          />
+          <Field
+            label={t('account.deleteConfirmPassword')}
+            type="password"
+            value={currentPassword}
+            onChange={(e) => setCurrentPassword(e.target.value)}
+            required
+            autoComplete="current-password"
+            error={error}
+          />
+          <div className="mt-2 flex justify-end gap-2">
+            <Button type="button" variant="secondary" onClick={handleClose}>
+              {t('common.cancel')}
+            </Button>
+            <Button type="submit" variant="danger" isLoading={deleteAccount.isPending}>
+              {t('account.deleteButton')}
+            </Button>
+          </div>
+        </form>
+      </Dialog>
+    </CollapsiblePanel>
   )
 }

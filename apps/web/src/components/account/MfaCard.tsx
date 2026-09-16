@@ -4,11 +4,10 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import QRCode from 'react-qr-code'
 import { api, ApiError } from '../../lib/api-client.js'
 import { usePublicSettings } from '../../lib/use-public-settings.js'
-import { Card } from '../ui/Card.js'
+import { CollapsiblePanel } from '../ui/CollapsiblePanel.js'
 import { Field } from '../ui/Field.js'
 import { Button } from '../ui/Button.js'
 import { Spinner } from '../ui/Spinner.js'
-import { ChevronDownIcon } from '../icons.js'
 import { usePanelOpen } from '../../lib/use-panel-open.js'
 
 type View = 'idle' | 'enrolling' | 'recovery-codes' | 'disabling' | 'regenerating'
@@ -106,16 +105,9 @@ export function MfaCard() {
   if (!publicSettings) return null
   if (!publicSettings.mfaAvailable) {
     return (
-      <Card>
-        <details className="group" open={open} onToggle={(e) => setOpen(e.currentTarget.open)}>
-          <summary className="flex cursor-pointer list-none items-center justify-between text-lg font-semibold [&::-webkit-details-marker]:hidden">
-            {t('account.mfaTitle')}
-            <ChevronDownIcon className="h-5 w-5 flex-shrink-0 transition-transform group-open:rotate-180" />
-          </summary>
-          <div className="mt-4 mb-4 border-t border-[var(--color-border)]" />
-          <p className="text-sm text-[var(--color-fg-muted)]">{t('account.mfaUnavailable')}</p>
-        </details>
-      </Card>
+      <CollapsiblePanel title={t('account.mfaTitle')} open={open} onOpenChange={setOpen}>
+        <p className="text-sm text-[var(--color-fg-muted)]">{t('account.mfaUnavailable')}</p>
+      </CollapsiblePanel>
     )
   }
 
@@ -138,172 +130,164 @@ export function MfaCard() {
   }
 
   return (
-    <Card>
-      <details className="group" open={open} onToggle={(e) => setOpen(e.currentTarget.open)}>
-        <summary className="flex cursor-pointer list-none items-center justify-between text-lg font-semibold [&::-webkit-details-marker]:hidden">
-          {t('account.mfaTitle')}
-          <ChevronDownIcon className="h-5 w-5 flex-shrink-0 transition-transform group-open:rotate-180" />
-        </summary>
-        <div className="mt-4 mb-4 border-t border-[var(--color-border)]" />
-
-        {isLoading ? (
-          <Spinner label={t('common.loading')} />
-        ) : view === 'recovery-codes' && recoveryCodes ? (
-          <div className="flex flex-col gap-3">
-            <p className="text-sm font-medium">{t('account.mfaRecoveryCodesTitle')}</p>
-            <p className="text-sm text-[var(--color-fg-muted)]">
-              {t('account.mfaRecoveryCodesDescription')}
-            </p>
-            <ul className="grid grid-cols-2 gap-1 rounded-md bg-[var(--color-surface)] p-3 font-mono text-sm">
-              {recoveryCodes.map((rc) => (
-                <li key={rc}>{rc}</li>
-              ))}
-            </ul>
-            <div>
-              <Button
-                type="button"
-                onClick={() => {
-                  setRecoveryCodes(undefined)
-                  setView('idle')
-                }}
-              >
-                {t('account.mfaRecoveryCodesDone')}
-              </Button>
-            </div>
+    <CollapsiblePanel title={t('account.mfaTitle')} open={open} onOpenChange={setOpen}>
+      {isLoading ? (
+        <Spinner label={t('common.loading')} />
+      ) : view === 'recovery-codes' && recoveryCodes ? (
+        <div className="flex flex-col gap-3">
+          <p className="text-sm font-medium">{t('account.mfaRecoveryCodesTitle')}</p>
+          <p className="text-sm text-[var(--color-fg-muted)]">
+            {t('account.mfaRecoveryCodesDescription')}
+          </p>
+          <ul className="grid grid-cols-2 gap-1 rounded-md bg-[var(--color-surface)] p-3 font-mono text-sm">
+            {recoveryCodes.map((rc) => (
+              <li key={rc}>{rc}</li>
+            ))}
+          </ul>
+          <div>
+            <Button
+              type="button"
+              onClick={() => {
+                setRecoveryCodes(undefined)
+                setView('idle')
+              }}
+            >
+              {t('account.mfaRecoveryCodesDone')}
+            </Button>
           </div>
-        ) : view === 'enrolling' && enrollment ? (
-          <form onSubmit={handleConfirm} className="flex flex-col gap-4">
-            <p className="text-sm text-[var(--color-fg-muted)]">{t('account.mfaEnrollScan')}</p>
-            <div className="w-fit rounded-md bg-white p-3">
-              <QRCode value={enrollment.otpauthUri} size={160} />
-            </div>
-            <code className="block w-fit rounded-md bg-[var(--color-surface)] px-2 py-1 text-sm">
-              {enrollment.secret}
-            </code>
-            <Field
-              label={t('account.mfaEnrollCode')}
-              inputMode="numeric"
-              autoComplete="one-time-code"
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-              required
-              error={error}
-            />
-            <div className="flex items-center gap-3">
-              <Button type="submit" isLoading={confirmEnroll.isPending}>
-                {t('account.mfaEnrollConfirm')}
-              </Button>
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={() => {
-                  setEnrollment(undefined)
-                  setView('idle')
-                  resetForm()
-                }}
-              >
-                {t('account.mfaEnrollCancel')}
-              </Button>
-            </div>
-          </form>
-        ) : view === 'disabling' ? (
-          <form onSubmit={handleDisable} className="flex flex-col gap-4">
-            <Field
-              label={t('account.mfaDisablePassword')}
-              type="password"
-              autoComplete="current-password"
-              value={currentPassword}
-              onChange={(e) => setCurrentPassword(e.target.value)}
-              required
-            />
-            <Field
-              label={t('account.mfaDisableCode')}
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-              required
-              error={error}
-            />
-            <div className="flex items-center gap-3">
-              <Button type="submit" variant="danger" isLoading={disable.isPending}>
-                {t('account.mfaDisableSubmit')}
-              </Button>
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={() => {
-                  setView('idle')
-                  resetForm()
-                }}
-              >
-                {t('account.mfaDisableCancel')}
-              </Button>
-            </div>
-          </form>
-        ) : view === 'regenerating' ? (
-          <form onSubmit={handleRegenerate} className="flex flex-col gap-4">
-            <p className="text-sm text-[var(--color-fg-muted)]">
-              {t('account.mfaRegenerateDescription')}
-            </p>
-            <Field
-              label={t('account.mfaDisablePassword')}
-              type="password"
-              autoComplete="current-password"
-              value={currentPassword}
-              onChange={(e) => setCurrentPassword(e.target.value)}
-              required
-            />
-            <Field
-              label={t('account.mfaDisableCode')}
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-              required
-              error={error}
-            />
-            <div className="flex items-center gap-3">
-              <Button type="submit" isLoading={regenerate.isPending}>
-                {t('account.mfaRegenerateSubmit')}
-              </Button>
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={() => {
-                  setView('idle')
-                  resetForm()
-                }}
-              >
-                {t('account.mfaDisableCancel')}
-              </Button>
-            </div>
-          </form>
-        ) : (
-          <div className="flex flex-col gap-3">
-            <p className="text-sm text-[var(--color-fg-muted)]">{t('account.mfaDescription')}</p>
-            <p className="text-sm font-medium">
-              {status?.enabled ? t('account.mfaEnabled') : t('account.mfaDisabledStatus')}
-            </p>
-            <div className="flex items-center gap-3">
-              {status?.enabled ? (
-                <>
-                  <Button type="button" variant="danger" onClick={() => setView('disabling')}>
-                    {t('account.mfaDisable')}
-                  </Button>
-                  <Button type="button" variant="secondary" onClick={() => setView('regenerating')}>
-                    {t('account.mfaRegenerate')}
-                  </Button>
-                </>
-              ) : (
-                <Button
-                  type="button"
-                  onClick={() => startEnroll.mutate()}
-                  isLoading={startEnroll.isPending}
-                >
-                  {t('account.mfaEnable')}
+        </div>
+      ) : view === 'enrolling' && enrollment ? (
+        <form onSubmit={handleConfirm} className="flex flex-col gap-4">
+          <p className="text-sm text-[var(--color-fg-muted)]">{t('account.mfaEnrollScan')}</p>
+          <div className="w-fit rounded-md bg-white p-3">
+            <QRCode value={enrollment.otpauthUri} size={160} />
+          </div>
+          <code className="block w-fit rounded-md bg-[var(--color-surface)] px-2 py-1 text-sm">
+            {enrollment.secret}
+          </code>
+          <Field
+            label={t('account.mfaEnrollCode')}
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            value={code}
+            onChange={(e) => setCode(e.target.value)}
+            required
+            error={error}
+          />
+          <div className="flex items-center gap-3">
+            <Button type="submit" isLoading={confirmEnroll.isPending}>
+              {t('account.mfaEnrollConfirm')}
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => {
+                setEnrollment(undefined)
+                setView('idle')
+                resetForm()
+              }}
+            >
+              {t('account.mfaEnrollCancel')}
+            </Button>
+          </div>
+        </form>
+      ) : view === 'disabling' ? (
+        <form onSubmit={handleDisable} className="flex flex-col gap-4">
+          <Field
+            label={t('account.mfaDisablePassword')}
+            type="password"
+            autoComplete="current-password"
+            value={currentPassword}
+            onChange={(e) => setCurrentPassword(e.target.value)}
+            required
+          />
+          <Field
+            label={t('account.mfaDisableCode')}
+            value={code}
+            onChange={(e) => setCode(e.target.value)}
+            required
+            error={error}
+          />
+          <div className="flex items-center gap-3">
+            <Button type="submit" variant="danger" isLoading={disable.isPending}>
+              {t('account.mfaDisableSubmit')}
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => {
+                setView('idle')
+                resetForm()
+              }}
+            >
+              {t('account.mfaDisableCancel')}
+            </Button>
+          </div>
+        </form>
+      ) : view === 'regenerating' ? (
+        <form onSubmit={handleRegenerate} className="flex flex-col gap-4">
+          <p className="text-sm text-[var(--color-fg-muted)]">
+            {t('account.mfaRegenerateDescription')}
+          </p>
+          <Field
+            label={t('account.mfaDisablePassword')}
+            type="password"
+            autoComplete="current-password"
+            value={currentPassword}
+            onChange={(e) => setCurrentPassword(e.target.value)}
+            required
+          />
+          <Field
+            label={t('account.mfaDisableCode')}
+            value={code}
+            onChange={(e) => setCode(e.target.value)}
+            required
+            error={error}
+          />
+          <div className="flex items-center gap-3">
+            <Button type="submit" isLoading={regenerate.isPending}>
+              {t('account.mfaRegenerateSubmit')}
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => {
+                setView('idle')
+                resetForm()
+              }}
+            >
+              {t('account.mfaDisableCancel')}
+            </Button>
+          </div>
+        </form>
+      ) : (
+        <div className="flex flex-col gap-3">
+          <p className="text-sm text-[var(--color-fg-muted)]">{t('account.mfaDescription')}</p>
+          <p className="text-sm font-medium">
+            {status?.enabled ? t('account.mfaEnabled') : t('account.mfaDisabledStatus')}
+          </p>
+          <div className="flex items-center gap-3">
+            {status?.enabled ? (
+              <>
+                <Button type="button" variant="danger" onClick={() => setView('disabling')}>
+                  {t('account.mfaDisable')}
                 </Button>
-              )}
-            </div>
+                <Button type="button" variant="secondary" onClick={() => setView('regenerating')}>
+                  {t('account.mfaRegenerate')}
+                </Button>
+              </>
+            ) : (
+              <Button
+                type="button"
+                onClick={() => startEnroll.mutate()}
+                isLoading={startEnroll.isPending}
+              >
+                {t('account.mfaEnable')}
+              </Button>
+            )}
           </div>
-        )}
-      </details>
-    </Card>
+        </div>
+      )}
+    </CollapsiblePanel>
   )
 }

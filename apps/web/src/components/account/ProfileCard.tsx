@@ -4,10 +4,9 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { api, ApiError } from '../../lib/api-client.js'
 import { useAuth } from '../../lib/use-auth.js'
 import { Avatar } from '../Avatar.js'
-import { Card } from '../ui/Card.js'
+import { CollapsiblePanel } from '../ui/CollapsiblePanel.js'
 import { Field } from '../ui/Field.js'
 import { Button } from '../ui/Button.js'
-import { ChevronDownIcon } from '../icons.js'
 import { usePanelOpen } from '../../lib/use-panel-open.js'
 
 // Kept in sync with apps/api/src/routes/auth.ts's own limits — checked
@@ -76,69 +75,62 @@ export function ProfileCard() {
   }
 
   return (
-    <Card>
-      <details className="group" open={open} onToggle={(e) => setOpen(e.currentTarget.open)}>
-        <summary className="flex cursor-pointer list-none items-center justify-between text-lg font-semibold [&::-webkit-details-marker]:hidden">
-          {t('account.profileTitle')}
-          <ChevronDownIcon className="h-5 w-5 flex-shrink-0 transition-transform group-open:rotate-180" />
-        </summary>
-        <div className="mt-4 mb-4 border-t border-[var(--color-border)]" />
-        <div className="flex flex-col gap-2">
-          <span className="text-sm font-medium">{t('account.avatar')}</span>
-          <div className="flex items-center gap-4">
-            {user && <Avatar user={user} size={64} />}
-            <div className="flex gap-2">
+    <CollapsiblePanel title={t('account.profileTitle')} open={open} onOpenChange={setOpen}>
+      <div className="flex flex-col gap-2">
+        <span className="text-sm font-medium">{t('account.avatar')}</span>
+        <div className="flex items-center gap-4">
+          {user && <Avatar user={user} size={64} />}
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              variant="secondary"
+              isLoading={uploadAvatar.isPending}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              {t('account.avatarUpload')}
+            </Button>
+            {user?.avatarUpdatedAt && (
               <Button
                 type="button"
-                variant="secondary"
-                isLoading={uploadAvatar.isPending}
-                onClick={() => fileInputRef.current?.click()}
+                variant="ghost"
+                isLoading={deleteAvatar.isPending}
+                onClick={() => deleteAvatar.mutate()}
               >
-                {t('account.avatarUpload')}
+                {t('account.avatarRemove')}
               </Button>
-              {user?.avatarUpdatedAt && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  isLoading={deleteAvatar.isPending}
-                  onClick={() => deleteAvatar.mutate()}
-                >
-                  {t('account.avatarRemove')}
-                </Button>
-              )}
-            </div>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/jpeg,image/png,image/webp"
-              onChange={handleAvatarChange}
-              className="sr-only"
-            />
-          </div>
-          {avatarError && (
-            <p role="alert" className="text-xs text-[var(--color-danger)]">
-              {avatarError}
-            </p>
-          )}
-        </div>
-        <div className="mt-4 mb-4 border-t border-[var(--color-border)]" />
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          <Field
-            label={t('account.displayName')}
-            value={displayName}
-            onChange={(e) => setDisplayName(e.target.value)}
-            required
-          />
-          <div className="flex items-center gap-3">
-            <Button type="submit" isLoading={updateProfile.isPending}>
-              {t('account.save')}
-            </Button>
-            {updateProfile.isSuccess && (
-              <span className="text-sm text-[var(--color-fg-muted)]">{t('account.saved')}</span>
             )}
           </div>
-        </form>
-      </details>
-    </Card>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            onChange={handleAvatarChange}
+            className="sr-only"
+          />
+        </div>
+        {avatarError && (
+          <p role="alert" className="text-xs text-[var(--color-danger)]">
+            {avatarError}
+          </p>
+        )}
+      </div>
+      <div className="mt-4 mb-4 border-t border-[var(--color-border)]" />
+      <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+        <Field
+          label={t('account.displayName')}
+          value={displayName}
+          onChange={(e) => setDisplayName(e.target.value)}
+          required
+        />
+        <div className="flex items-center gap-3">
+          <Button type="submit" isLoading={updateProfile.isPending}>
+            {t('account.save')}
+          </Button>
+          {updateProfile.isSuccess && (
+            <span className="text-sm text-[var(--color-fg-muted)]">{t('account.saved')}</span>
+          )}
+        </div>
+      </form>
+    </CollapsiblePanel>
   )
 }

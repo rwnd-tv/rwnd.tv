@@ -4,11 +4,10 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { CalendarFeed, CalendarFeedType } from '@rwnd/shared'
 import { api } from '../../lib/api-client.js'
 import { usePublicSettings } from '../../lib/use-public-settings.js'
-import { Card } from '../ui/Card.js'
+import { CollapsiblePanel } from '../ui/CollapsiblePanel.js'
 import { Button } from '../ui/Button.js'
 import { Dialog } from '../ui/Dialog.js'
 import { Spinner } from '../ui/Spinner.js'
-import { ChevronDownIcon } from '../icons.js'
 import { usePanelOpen } from '../../lib/use-panel-open.js'
 import { useCopyFeedback } from '../../lib/use-copy-feedback.js'
 
@@ -272,13 +271,12 @@ export function CalendarFeedsPanel() {
   )
 
   return (
-    <Card>
-      <details className="group" open={open} onToggle={(e) => setOpen(e.currentTarget.open)}>
-        <summary className="flex cursor-pointer list-none items-center justify-between text-lg font-semibold [&::-webkit-details-marker]:hidden">
-          {t('settings.calendarFeeds.title')}
-          <ChevronDownIcon className="h-5 w-5 flex-shrink-0 transition-transform group-open:rotate-180" />
-        </summary>
-        <div className="mt-4 mb-4 border-t border-[var(--color-border)]" />
+    <>
+      <CollapsiblePanel
+        title={t('settings.calendarFeeds.title')}
+        open={open}
+        onOpenChange={setOpen}
+      >
         <p className="mb-4 text-sm text-[var(--color-fg-muted)]">
           {t('settings.calendarFeeds.description')}
         </p>
@@ -333,7 +331,7 @@ export function CalendarFeedsPanel() {
             </FeedRow>
           </div>
         )}
-      </details>
+      </CollapsiblePanel>
 
       <Dialog
         open={Boolean(regenerateTarget)}
@@ -380,6 +378,6 @@ export function CalendarFeedsPanel() {
           </Button>
         </div>
       </Dialog>
-    </Card>
+    </>
   )
 }

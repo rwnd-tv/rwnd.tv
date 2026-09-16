@@ -5,6 +5,7 @@ import type { WebhookAccountLink } from '@rwnd/shared'
 import { api, ApiError } from '../../lib/api-client.js'
 import { invalidateWatchData } from '../../lib/query-client.js'
 import { usePublicSettings } from '../../lib/use-public-settings.js'
+import { useCopyFeedback } from '../../lib/use-copy-feedback.js'
 import { Button } from '../ui/Button.js'
 import { Field } from '../ui/Field.js'
 import { Dialog } from '../ui/Dialog.js'
@@ -74,7 +75,7 @@ function WebhookLinkRow({
   const { data: settings } = usePublicSettings()
   const [error, setError] = useState<string>()
   const [linkCodeEmail, setLinkCodeEmail] = useState('')
-  const [copied, setCopied] = useState(false)
+  const { copied, copy, reset: resetCopied } = useCopyFeedback()
   const [confirmRemoveOpen, setConfirmRemoveOpen] = useState(false)
 
   function reportError(err: unknown) {
@@ -133,13 +134,13 @@ function WebhookLinkRow({
   function handleSendEmail(e: FormEvent) {
     e.preventDefault()
     setError(undefined)
-    setCopied(false)
+    resetCopied()
     createCode.mutate(linkCodeEmail)
   }
 
   function handleShowCode() {
     setError(undefined)
-    setCopied(false)
+    resetCopied()
     createCode.mutate(undefined)
   }
 
@@ -254,15 +255,7 @@ function WebhookLinkRow({
             <code className="block flex-1 truncate rounded-md bg-[var(--color-surface)] px-2 py-1 text-xs">
               {codeData.code}
             </code>
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => {
-                void navigator.clipboard.writeText(codeData.code)
-                setCopied(true)
-                setTimeout(() => setCopied(false), 2000)
-              }}
-            >
+            <Button type="button" variant="secondary" onClick={() => copy(codeData.code)}>
               {copied
                 ? t('settings.webhooks.detectedAccounts.copied')
                 : t('settings.webhooks.detectedAccounts.copy')}

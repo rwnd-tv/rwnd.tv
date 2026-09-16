@@ -12,6 +12,7 @@ import { Button } from '../ui/Button.js'
 import { Dialog } from '../ui/Dialog.js'
 import { ChevronDownIcon } from '../icons.js'
 import { TAUTULLI_JSON_TEMPLATE, webhookUrl } from './webhook-sources.js'
+import { useCopyFeedback } from '../../lib/use-copy-feedback.js'
 import { SourceIcon } from './SourceIcon.js'
 import { TokenWebhookLinks } from './TokenWebhookLinks.js'
 
@@ -44,7 +45,7 @@ export function WebhookCard({ token, defaultOpen }: { token: ApiToken; defaultOp
   const { t, i18n } = useTranslation()
   const queryClient = useQueryClient()
   const [open, setOpen] = useState(defaultOpen)
-  const [copied, setCopied] = useState<'url' | 'template' | null>(null)
+  const { copied, copy } = useCopyFeedback<'url' | 'template'>()
   const [confirmRegenerate, setConfirmRegenerate] = useState(false)
   const [confirmRevoke, setConfirmRevoke] = useState(false)
 
@@ -69,12 +70,6 @@ export function WebhookCard({ token, defaultOpen }: { token: ApiToken; defaultOp
     mutationFn: (source: WebhookSource) => api.tokens.update(token.id, { source }),
     onSuccess: (updated) => setTokenInCache(queryClient, updated),
   })
-
-  function copy(text: string, what: 'url' | 'template') {
-    void navigator.clipboard.writeText(text)
-    setCopied(what)
-    setTimeout(() => setCopied((current) => (current === what ? null : current)), 2000)
-  }
 
   const source = token.source
 

@@ -14,6 +14,7 @@ import { Button } from '../ui/Button.js'
 import { Spinner } from '../ui/Spinner.js'
 import { ChevronDownIcon } from '../icons.js'
 import { usePanelOpen } from '../../lib/use-panel-open.js'
+import { useCopyFeedback } from '../../lib/use-copy-feedback.js'
 import { TAUTULLI_JSON_TEMPLATE } from './webhook-sources.js'
 import { SourceIcon } from './SourceIcon.js'
 import { WebhookCard } from './WebhookCard.js'
@@ -40,7 +41,7 @@ export function WebhooksPanel() {
   const [selectedSource, setSelectedSource] = useState<WebhookSource>()
   const [name, setName] = useState('')
   const [justCreatedId, setJustCreatedId] = useState<string>()
-  const [templateCopied, setTemplateCopied] = useState(false)
+  const { copied: templateCopied, copy: copyTemplate } = useCopyFeedback()
 
   const { data, isLoading } = useQuery({
     queryKey: ['tokens'],
@@ -74,12 +75,6 @@ export function WebhooksPanel() {
     setWizardOpen(false)
     setSelectedSource(undefined)
     setName('')
-  }
-
-  function copyTemplate() {
-    void navigator.clipboard.writeText(TAUTULLI_JSON_TEMPLATE)
-    setTemplateCopied(true)
-    setTimeout(() => setTemplateCopied(false), 2000)
   }
 
   function handleCreate(e: FormEvent) {
@@ -163,7 +158,11 @@ export function WebhooksPanel() {
                       <pre className="block flex-1 overflow-x-auto rounded-md bg-[var(--color-bg)] px-2 py-1 text-xs">
                         {TAUTULLI_JSON_TEMPLATE}
                       </pre>
-                      <Button type="button" variant="secondary" onClick={copyTemplate}>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={() => copyTemplate(TAUTULLI_JSON_TEMPLATE)}
+                      >
                         {templateCopied
                           ? t('settings.webhooks.card.copied')
                           : t('settings.webhooks.card.copy')}

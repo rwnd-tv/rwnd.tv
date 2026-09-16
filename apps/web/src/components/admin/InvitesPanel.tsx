@@ -10,6 +10,7 @@ import { Field } from '../ui/Field.js'
 import { Spinner } from '../ui/Spinner.js'
 import { ChevronDownIcon } from '../icons.js'
 import { usePanelOpen } from '../../lib/use-panel-open.js'
+import { useCopyFeedback } from '../../lib/use-copy-feedback.js'
 
 const STATUS_KEY: Record<InviteStatus, 'statusPending' | 'statusUsed' | 'statusExpired'> = {
   pending: 'statusPending',
@@ -43,7 +44,7 @@ export function InvitesPanel() {
   const [justCreated, setJustCreated] = useState<string>()
   const [justCreatedEmailSent, setJustCreatedEmailSent] = useState(false)
   const [inviteEmail, setInviteEmail] = useState('')
-  const [copied, setCopied] = useState(false)
+  const { copied, copy, reset: resetCopied } = useCopyFeedback()
 
   const inviteOnly = publicSettings?.registrationMode === 'invite'
 
@@ -58,7 +59,7 @@ export function InvitesPanel() {
     onSuccess: (created) => {
       setJustCreated(created.code)
       setJustCreatedEmailSent(created.emailSent)
-      setCopied(false)
+      resetCopied()
       void queryClient.invalidateQueries({ queryKey: ['invites'] })
     },
   })
@@ -99,15 +100,7 @@ export function InvitesPanel() {
                   <code className="block flex-1 truncate rounded-md bg-[var(--color-surface)] px-2 py-1 text-sm">
                     {justCreated}
                   </code>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    onClick={() => {
-                      void navigator.clipboard.writeText(justCreated)
-                      setCopied(true)
-                      setTimeout(() => setCopied(false), 2000)
-                    }}
-                  >
+                  <Button type="button" variant="secondary" onClick={() => copy(justCreated)}>
                     {copied ? t('admin.invites.copied') : t('admin.invites.copy')}
                   </Button>
                 </div>

@@ -10,6 +10,7 @@ import { Dialog } from '../ui/Dialog.js'
 import { Spinner } from '../ui/Spinner.js'
 import { ChevronDownIcon } from '../icons.js'
 import { usePanelOpen } from '../../lib/use-panel-open.js'
+import { useCopyFeedback } from '../../lib/use-copy-feedback.js'
 
 function feedUrl(token: string): string {
   return `${window.location.origin}/api/v1/calendar/${token}/feed.ics`
@@ -352,7 +353,7 @@ export function CalendarFeedsPanel() {
   const queryClient = useQueryClient()
   const [open, setOpen] = usePanelOpen('panelSettingsCalendarFeeds')
   const { data: publicSettings } = usePublicSettings()
-  const [copiedFeedType, setCopiedFeedType] = useState<CalendarFeedType>()
+  const { isCopied: isFeedTypeCopied, copy: copyToken } = useCopyFeedback<CalendarFeedType>()
   const [regenerateTarget, setRegenerateTarget] = useState<CalendarFeedType>()
   const [deleteTarget, setDeleteTarget] = useState<CalendarFeedType>()
 
@@ -387,15 +388,6 @@ export function CalendarFeedsPanel() {
 
   if (!enabled) return null
 
-  function copyToken(feedType: CalendarFeedType, token: string) {
-    void navigator.clipboard.writeText(feedUrl(token))
-    setCopiedFeedType(feedType)
-    setTimeout(
-      () => setCopiedFeedType((current) => (current === feedType ? undefined : current)),
-      2000,
-    )
-  }
-
   const historyFeed = data?.feeds.find(
     (feed): feed is Extract<CalendarFeed, { feedType: 'history' }> => feed.feedType === 'history',
   )
@@ -428,8 +420,8 @@ export function CalendarFeedsPanel() {
               description={t('settings.calendarFeeds.history.description')}
               onCreate={() => createFeed.mutate('history')}
               creating={createFeed.isPending && createFeed.variables === 'history'}
-              copied={copiedFeedType === 'history'}
-              onCopy={() => historyFeed?.token && copyToken('history', historyFeed.token)}
+              copied={isFeedTypeCopied('history')}
+              onCopy={() => historyFeed?.token && copyToken(feedUrl(historyFeed.token), 'history')}
               onRegenerate={() => setRegenerateTarget('history')}
               onDelete={() => setDeleteTarget('history')}
               locale={i18n.language}
@@ -443,8 +435,8 @@ export function CalendarFeedsPanel() {
               description={t('settings.calendarFeeds.shows.description')}
               onCreate={() => createFeed.mutate('shows')}
               creating={createFeed.isPending && createFeed.variables === 'shows'}
-              copied={copiedFeedType === 'shows'}
-              onCopy={() => showsFeed?.token && copyToken('shows', showsFeed.token)}
+              copied={isFeedTypeCopied('shows')}
+              onCopy={() => showsFeed?.token && copyToken(feedUrl(showsFeed.token), 'shows')}
               onRegenerate={() => setRegenerateTarget('shows')}
               onDelete={() => setDeleteTarget('shows')}
               locale={i18n.language}
@@ -458,8 +450,8 @@ export function CalendarFeedsPanel() {
               description={t('settings.calendarFeeds.movies.description')}
               onCreate={() => createFeed.mutate('movies')}
               creating={createFeed.isPending && createFeed.variables === 'movies'}
-              copied={copiedFeedType === 'movies'}
-              onCopy={() => moviesFeed?.token && copyToken('movies', moviesFeed.token)}
+              copied={isFeedTypeCopied('movies')}
+              onCopy={() => moviesFeed?.token && copyToken(feedUrl(moviesFeed.token), 'movies')}
               onRegenerate={() => setRegenerateTarget('movies')}
               onDelete={() => setDeleteTarget('movies')}
               locale={i18n.language}

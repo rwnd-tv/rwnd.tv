@@ -530,7 +530,7 @@ Format:
       once, covering both the scheduled job and any future manual-trigger
       route, rather than solving it twice.
 
-- [ ] **Investigate: two database backups being written per day, not one** (2026-09-16 added, root-caused 2026-09-16; M5)
+- [ ] **Investigate: two database backups being written per day, not one** (2026-09-16 added, root-caused 2026-09-16, fixed 2026-09-16, pending dev deploy verification; M5)
 
       James, 2026-09-16: seeing two backup dumps land per calendar day
       instead of the expected one. Not yet root-caused; needs
@@ -589,17 +589,24 @@ Format:
       but it doesn't need to: the bug reproduces from *any* restart,
       deliberate or not, so the distinction doesn't change the fix.
 
-      **Likely fix, not yet implemented** (kept as investigation only, to
-      fit a short session): anchor the backup to a fixed wall-clock time
-      of day (e.g. run once at boot only to catch config errors early, per
-      the existing comment, but schedule the *recurring* run against the
-      next occurrence of a fixed hour — computed as `msUntil(targetHour)`
-      then a 24h `setInterval` from there — rather than blindly `setInterval`
-      from process-start time). That way a restart mid-day never produces
-      an extra dump: the next scheduled run is always the same time
-      tomorrow, regardless of when the process happened to boot today.
-      Needs its own implementation + test + deploy verification pass,
-      scoped separately from this investigation.
+      **Fixed 2026-09-16**: `scheduleDatabaseBackup` still takes an
+      immediate pass on boot (unchanged, catches config errors early), but
+      the recurring pass now anchors to a fixed wall-clock hour
+      (`BACKUP_HOUR_UTC`, 03:00 UTC) via a `setTimeout` to the next
+      occurrence (`msUntilNextHourUtc`, pure and unit-tested in
+      `database-backup-retention.test.ts`) before starting the 24h
+      `setInterval`, rather than `setInterval` running blind from
+      process-start time. A restart mid-day still produces its own
+      immediate sanity-check dump (accepted, same as before, and bounded by
+      retention), but the *recurring* schedule no longer re-anchors to the
+      restart, so it settles back onto the same time every day instead of
+      drifting further with each restart. `webhook-retention.ts`'s
+      identically-shaped scheduler was deliberately left alone: its prune
+      is idempotent, so a same-day double run there is harmless, unlike a
+      backup producing an extra retained file.
+
+      Not yet deployed/verified against dev's real restart pattern; do
+      that before archiving this item.
 
 ## Ratings
 

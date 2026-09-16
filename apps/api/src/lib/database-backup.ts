@@ -391,18 +391,46 @@ function describeFailure(err: unknown): string {
   return text.length > RUN_MESSAGE_MAX ? `${text.slice(0, RUN_MESSAGE_MAX)}...` : text
 }
 
-/** How often scheduleDatabaseBackup runs — fixed, not admin-editable (see
- * RetentionTiers' doc comment for why: the tiers only make sense against a
- * steady daily cadence). Exported so the admin status endpoint can report
- * the real schedule instead of duplicating it in a translation string. */
+/** How often scheduleDatabaseBackup's recurring run repeats — fixed, not
+ * admin-editable (see RetentionTiers' doc comment for why: the tiers only
+ * make sense against a steady daily cadence). Exported so the admin status
+ * endpoint can report the real schedule instead of duplicating it in a
+ * translation string. */
 export const BACKUP_INTERVAL_HOURS = 24
 
+/** Fixed UTC hour the recurring backup re-anchors to on every boot (see
+ * `msUntilNextHourUtc`'s doc comment for why a fixed anchor, not
+ * process-start time, matters). Low-traffic o'clock for a self-hosted app
+ * with no configured timezone to reason about; not admin-editable, same
+ * reasoning as BACKUP_INTERVAL_HOURS above. */
+export const BACKUP_HOUR_UTC = 3
+
 /**
- * Starts the recurring backup: one pass immediately, then every 24h after,
- * same shape as apps/api/src/lib/webhook-retention.ts's
- * scheduleWebhookRetention, and deliberately not inside createApp() for the
- * same reason (testApp() calls createApp() in every test; this must not fire
- * there).
+ * Milliseconds from `now` until the next occurrence of `hourUtc` (00-23) on
+ * the UTC clock, in (0, 24h]. Exported and kept pure so scheduling math is
+ * unit-testable without mocking `setInterval`/`setTimeout`.
+ */
+export function msUntilNextHourUtc(hourUtc: number, now: Date): number {
+  const next = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), hourUtc, 0, 0, 0),
+  )
+  if (next.getTime() <= now.getTime()) next.setUTCDate(next.getUTCDate() + 1)
+  return next.getTime() - now.getTime()
+}
+
+/**
+ * Starts the recurring backup: one pass immediately, then a recurring pass
+ * anchored to a fixed wall-clock hour (`BACKUP_HOUR_UTC`) every
+ * `BACKUP_INTERVAL_HOURS` after that — deliberately not just "one immediate
+ * pass, then setInterval(24h) from process-start time" the way
+ * apps/api/src/lib/webhook-retention.ts's scheduleWebhookRetention is
+ * shaped: that re-anchors the recurring clock to whenever the process last
+ * started, so any restart landing on the same calendar day as the previous
+ * scheduled backup produces an extra same-day dump, and the clock stays
+ * shifted from then on instead of settling back onto a fixed time.
+ * Root-caused against real prod backup timestamps 2026-09-16 (see
+ * docs/TODO.md); harmless for webhook-retention's idempotent prune, so that
+ * scheduler is deliberately left alone.
  *
  * Takes `db` like the other two schedulers, but only to probe the server's
  * major version so the matching pg_dump can be picked; the dump itself
@@ -411,7 +439,11 @@ export const BACKUP_INTERVAL_HOURS = 24
  * The immediate first pass is deliberate even though a restart-happy
  * container will dump more than it strictly needs: retention bounds that,
  * and it means a missing binary, an unwritable directory or a server-version
- * mismatch shows up in the boot log rather than 24 hours later.
+ * mismatch shows up in the boot log rather than 24 hours later. It runs
+ * independently of the fixed-hour recurring schedule below, so a restart
+ * always gets its own immediate sanity-check dump on top of whatever the
+ * fixed schedule already produced that day — accepted the same way the
+ * pre-fix behavior always did, and bounded by retention either way.
  *
  * No-ops when DATABASE_BACKUP_DIR is unset. The gate lives here rather than
  * at the call site so index.ts stays a flat list of unconditional calls and
@@ -447,5 +479,8 @@ export function scheduleDatabaseBackup(db: Database): void {
         lastRun = { at: new Date(), status: 'failed', message }
       })
   void run()
-  setInterval(() => void run(), DAY_MS)
+  setTimeout(() => {
+    void run()
+    setInterval(() => void run(), DAY_MS)
+  }, msUntilNextHourUtc(BACKUP_HOUR_UTC, new Date()))
 }

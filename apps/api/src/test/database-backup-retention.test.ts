@@ -1,13 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import {
   DEFAULT_RETENTION_TIERS,
+  msUntilNextHourUtc,
   selectDumpsToKeep,
   type RetentionTiers,
 } from '../lib/database-backup.js'
 
-// No filesystem, no DB — selectDumpsToKeep is pure, so these run everywhere
-// (unlike database-backup.test.ts's pg_dump round-trip, which skips on
-// Windows).
+// No filesystem, no DB — selectDumpsToKeep and msUntilNextHourUtc are pure,
+// so these run everywhere (unlike database-backup.test.ts's pg_dump
+// round-trip, which skips on Windows).
 
 const DAY_MS = 24 * 60 * 60 * 1000
 const NOW = new Date('2026-09-10T12:00:00Z')
@@ -81,5 +82,38 @@ describe('selectDumpsToKeep', () => {
     const dumps = [dumpAgedDays(0), dumpAgedDays(200), dumpAgedDays(364), dumpAgedDays(366)]
     const keep = selectDumpsToKeep(dumps, NOW, tiers)
     expect(keep).toEqual(new Set(['age-0', 'age-200', 'age-364']))
+  })
+})
+
+describe('msUntilNextHourUtc', () => {
+  it('counts forward to later today when the target hour has not passed yet', () => {
+    const now = new Date('2026-09-16T01:00:00Z')
+    expect(msUntilNextHourUtc(3, now)).toBe(2 * 60 * 60 * 1000)
+  })
+
+  it('rolls over to tomorrow when the target hour already passed today', () => {
+    const now = new Date('2026-09-16T05:00:00Z')
+    expect(msUntilNextHourUtc(3, now)).toBe(22 * 60 * 60 * 1000)
+  })
+
+  it('rolls over to tomorrow, not zero, at the exact target hour', () => {
+    // The bug this guards against: a process that boots at exactly the
+    // target hour must wait a full 24h for the recurring run, not fire it
+    // again immediately (which is exactly the double-dump this scheduling
+    // change exists to prevent).
+    const now = new Date('2026-09-16T03:00:00Z')
+    expect(msUntilNextHourUtc(3, now)).toBe(24 * 60 * 60 * 1000)
+  })
+
+  it('stays anchored to the same wall-clock hour regardless of process-start time', () => {
+    // Two different boot times on the same day both resolve to the same
+    // next-occurrence instant — the property that fixes the two-backups-
+    // per-day bug (docs/TODO.md, root-caused 2026-09-16).
+    const bootA = new Date('2026-09-16T00:10:00Z')
+    const bootB = new Date('2026-09-16T02:59:00Z')
+    const nextA = bootA.getTime() + msUntilNextHourUtc(3, bootA)
+    const nextB = bootB.getTime() + msUntilNextHourUtc(3, bootB)
+    expect(nextA).toBe(nextB)
+    expect(new Date(nextA).toISOString()).toBe('2026-09-16T03:00:00.000Z')
   })
 })

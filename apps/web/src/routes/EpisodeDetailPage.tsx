@@ -8,6 +8,7 @@ import { useEpisodeRatingActions } from '../lib/use-episode-rating-actions.js'
 import { useEpisodeWatchActions } from '../lib/use-episode-watch-actions.js'
 import { TVDB_LOGO_DARK_BG_URL, TVDB_LOGO_LIGHT_BG_URL, tvdbEpisodeUrl } from '../lib/tvdb.js'
 import { imdbTitleUrl } from '../lib/imdb.js'
+import { DetailHeader } from '../components/library/DetailHeader.js'
 import { MetadataAttribution } from '../components/library/MetadataAttribution.js'
 import { RatingPicker } from '../components/library/RatingPicker.js'
 import { SpoilerGuard } from '../components/library/SpoilerGuard.js'
@@ -273,188 +274,178 @@ export function EpisodeDetailPage() {
         </div>
       </div>
 
-      {/* lg:items-start is load-bearing, not decorative: flex's default
-          align-items:stretch forces the aspect-video box below to match
-          the (often taller) text column's height once they sit side by
-          side, and object-cover then crops the still to fill that
-          stretched box instead of its real 16:9 shape — happens at any
-          row-layout width, not just an in-between one, whenever the text
-          column is taller than a true 16:9 image (an episode with a
-          longer overview, for instance). items-start lets each column
-          size to its own content instead. lg, not sm, so the switch to
-          row layout itself only happens once there's enough width for
-          the text column to comfortably fit next to a full-height image. */}
-      <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
-        <div className="aspect-video w-full max-w-96 flex-shrink-0 overflow-hidden rounded-lg bg-[var(--color-surface)]">
-          <SpoilerGuard
-            hidden={spoilerHidden}
-            revealed={spoilersRevealed}
-            onReveal={() => setSpoilersRevealed(true)}
-            revealLabel={t('spoiler.reveal')}
-            className="h-full w-full"
-            overlayClassName="rounded-lg bg-black/50 text-white/90 hover:bg-black/60"
-          >
-            {episode.stillPath ? (
-              <img
-                src={episode.stillPath}
-                alt=""
-                width={780}
-                height={439}
-                className="h-full w-full object-cover"
-              />
-            ) : (
-              <div
-                aria-hidden="true"
-                className="flex h-full items-center justify-center text-4xl font-semibold text-[var(--color-fg-muted)]"
-              >
-                {episode.episodeNumber}
-              </div>
-            )}
-          </SpoilerGuard>
-        </div>
-
-        <div className="flex min-w-0 flex-col gap-3">
-          <h1 className="text-2xl font-semibold">{displayTitle}</h1>
-          <p className="text-sm text-[var(--color-fg-muted)]">{episodeLabel}</p>
-          <div className="flex flex-wrap items-center gap-x-1.5 text-sm text-[var(--color-fg-muted)]">
-            {(
-              [
-                episode.firstAired
-                  ? new Date(episode.firstAired).toLocaleDateString(locale, { dateStyle: 'medium' })
-                  : null,
-                episode.runtimeMinutes !== null
-                  ? t('showDetail.episodeDetail.runtime', { minutes: episode.runtimeMinutes })
-                  : null,
-                episode.voteAverage !== null ? (
-                  <span className="inline-flex items-center gap-1.5">
-                    {show?.tmdbId ? (
-                      <a
-                        href={`https://www.themoviedb.org/tv/${show.tmdbId}/season/${seasonNumber}/episode/${episodeNumber}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        title={t('showDetail.viewOnTmdb.episode')}
-                      >
-                        <img
-                          src={TMDB_LOGO_URL}
-                          alt={t('showDetail.viewOnTmdb.episode')}
-                          className="h-3"
-                        />
-                      </a>
-                    ) : (
-                      <img src={TMDB_LOGO_URL} alt={t('showDetail.ratingSource')} className="h-3" />
-                    )}
-                    {episode.voteAverage.toFixed(1)}
-                  </span>
-                ) : null,
-                // See ShowDetailPage.tsx's own tvdbId fact for why this is
-                // just the logo/link rather than a rating badge. Uses this
-                // episode's own tvdbEpisodeId (a live, best-effort lookup —
-                // see the season route's doc comment), not the show's
-                // tvdbId, so it opens this exact episode on TVDB.
-                episode.tvdbEpisodeId ? (
-                  <a
-                    href={tvdbEpisodeUrl(episode.tvdbEpisodeId)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    title={t('showDetail.viewOnTvdb.episode')}
-                  >
-                    <img
-                      src={TVDB_LOGO_LIGHT_BG_URL}
-                      alt={t('showDetail.viewOnTvdb.episode')}
-                      className="tvdb-logo-light h-[0.9rem]"
-                    />
-                    <img
-                      src={TVDB_LOGO_DARK_BG_URL}
-                      alt={t('showDetail.viewOnTvdb.episode')}
-                      className="tvdb-logo-dark h-[0.9rem]"
-                    />
-                  </a>
-                ) : null,
-                // A plain text link, not a logo — see MovieDetailPage.tsx's
-                // identical fact for why. Backed by its own, non-blocking
-                // query (imdb, above) rather than a season-payload field —
-                // see that query's doc comment.
-                imdb?.imdbId ? (
-                  <a
-                    href={imdbTitleUrl(imdb.imdbId)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    title={t('showDetail.viewOnImdb.episode')}
-                  >
-                    IMDb
-                  </a>
-                ) : null,
-              ] satisfies (ReactNode | null)[]
-            )
-              .filter((fact) => fact !== null)
-              .map((fact, index) => (
-                <span key={index} className="flex items-center gap-1.5">
-                  {index > 0 && <span aria-hidden="true">·</span>}
-                  {fact}
-                </span>
-              ))}
-          </div>
-          {episode.overview && (
+      <DetailHeader
+        breakpoint="lg"
+        media={
+          <div className="aspect-video w-full max-w-96 flex-shrink-0 overflow-hidden rounded-lg bg-[var(--color-surface)]">
             <SpoilerGuard
               hidden={spoilerHidden}
               revealed={spoilersRevealed}
               onReveal={() => setSpoilersRevealed(true)}
               revealLabel={t('spoiler.reveal')}
-              blurClassName="blur-sm"
-              overlayClassName="rounded-md border border-[var(--color-border)] bg-[var(--color-surface)]/90 text-[var(--color-fg)] hover:bg-[var(--color-surface)]"
+              className="h-full w-full"
+              overlayClassName="rounded-lg bg-black/50 text-white/90 hover:bg-black/60"
             >
-              <p className="max-w-2xl text-sm">{episode.overview}</p>
+              {episode.stillPath ? (
+                <img
+                  src={episode.stillPath}
+                  alt=""
+                  width={780}
+                  height={439}
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <div
+                  aria-hidden="true"
+                  className="flex h-full items-center justify-center text-4xl font-semibold text-[var(--color-fg-muted)]"
+                >
+                  {episode.episodeNumber}
+                </div>
+              )}
             </SpoilerGuard>
-          )}
-          {show?.metadataSource && (
-            // Inherited from the show — an episode has no metadata source
-            // of its own.
-            <MetadataAttribution
-              source={show.metadataSource}
-              refreshedAt={show.metadataRefreshedAt}
-              locale={locale}
-            />
-          )}
-
-          <div className="flex gap-2">
-            <Button
-              variant={episode.watched ? 'primary' : 'secondary'}
-              type="button"
-              disabled={watchActions.toggleDisabled}
-              title={toggleTitle}
-              aria-pressed={episode.watched}
-              onClick={() =>
-                episode.watched
-                  ? watchActions.setUnwatchConfirmOpen(true)
-                  : watchActions.setDialogOpen(true)
-              }
-            >
-              <CheckIcon />
-              {toggleLabel}
-            </Button>
-            {episode.watched && (
-              <Button
-                variant="secondary"
-                type="button"
-                className="px-2.5 py-2.5"
-                disabled={watchActions.unwatch.isPending || watchActions.markWatched.isPending}
-                title={t('showDetail.addWatchTooltip.episode')}
-                aria-label={t('showDetail.addWatchTooltip.episode')}
-                onClick={() => watchActions.setLogAdditionalWatchOpen(true)}
-              >
-                <PlusIcon />
-              </Button>
-            )}
           </div>
-
-          <RatingPicker
-            value={episode.myRating}
-            onRate={(rating) => ratingActions.setRating.mutate(rating)}
-            onClear={() => ratingActions.setRating.mutate(null)}
-            disabled={ratingActions.ratingDisabled}
-          />
+        }
+      >
+        <h1 className="text-2xl font-semibold">{displayTitle}</h1>
+        <p className="text-sm text-[var(--color-fg-muted)]">{episodeLabel}</p>
+        <div className="flex flex-wrap items-center gap-x-1.5 text-sm text-[var(--color-fg-muted)]">
+          {(
+            [
+              episode.firstAired
+                ? new Date(episode.firstAired).toLocaleDateString(locale, { dateStyle: 'medium' })
+                : null,
+              episode.runtimeMinutes !== null
+                ? t('showDetail.episodeDetail.runtime', { minutes: episode.runtimeMinutes })
+                : null,
+              episode.voteAverage !== null ? (
+                <span className="inline-flex items-center gap-1.5">
+                  {show?.tmdbId ? (
+                    <a
+                      href={`https://www.themoviedb.org/tv/${show.tmdbId}/season/${seasonNumber}/episode/${episodeNumber}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title={t('showDetail.viewOnTmdb.episode')}
+                    >
+                      <img
+                        src={TMDB_LOGO_URL}
+                        alt={t('showDetail.viewOnTmdb.episode')}
+                        className="h-3"
+                      />
+                    </a>
+                  ) : (
+                    <img src={TMDB_LOGO_URL} alt={t('showDetail.ratingSource')} className="h-3" />
+                  )}
+                  {episode.voteAverage.toFixed(1)}
+                </span>
+              ) : null,
+              // See ShowDetailPage.tsx's own tvdbId fact for why this is
+              // just the logo/link rather than a rating badge. Uses this
+              // episode's own tvdbEpisodeId (a live, best-effort lookup —
+              // see the season route's doc comment), not the show's
+              // tvdbId, so it opens this exact episode on TVDB.
+              episode.tvdbEpisodeId ? (
+                <a
+                  href={tvdbEpisodeUrl(episode.tvdbEpisodeId)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title={t('showDetail.viewOnTvdb.episode')}
+                >
+                  <img
+                    src={TVDB_LOGO_LIGHT_BG_URL}
+                    alt={t('showDetail.viewOnTvdb.episode')}
+                    className="tvdb-logo-light h-[0.9rem]"
+                  />
+                  <img
+                    src={TVDB_LOGO_DARK_BG_URL}
+                    alt={t('showDetail.viewOnTvdb.episode')}
+                    className="tvdb-logo-dark h-[0.9rem]"
+                  />
+                </a>
+              ) : null,
+              // A plain text link, not a logo — see MovieDetailPage.tsx's
+              // identical fact for why. Backed by its own, non-blocking
+              // query (imdb, above) rather than a season-payload field —
+              // see that query's doc comment.
+              imdb?.imdbId ? (
+                <a
+                  href={imdbTitleUrl(imdb.imdbId)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title={t('showDetail.viewOnImdb.episode')}
+                >
+                  IMDb
+                </a>
+              ) : null,
+            ] satisfies (ReactNode | null)[]
+          )
+            .filter((fact) => fact !== null)
+            .map((fact, index) => (
+              <span key={index} className="flex items-center gap-1.5">
+                {index > 0 && <span aria-hidden="true">·</span>}
+                {fact}
+              </span>
+            ))}
         </div>
-      </div>
+        {episode.overview && (
+          <SpoilerGuard
+            hidden={spoilerHidden}
+            revealed={spoilersRevealed}
+            onReveal={() => setSpoilersRevealed(true)}
+            revealLabel={t('spoiler.reveal')}
+            blurClassName="blur-sm"
+            overlayClassName="rounded-md border border-[var(--color-border)] bg-[var(--color-surface)]/90 text-[var(--color-fg)] hover:bg-[var(--color-surface)]"
+          >
+            <p className="max-w-2xl text-sm">{episode.overview}</p>
+          </SpoilerGuard>
+        )}
+        {show?.metadataSource && (
+          // Inherited from the show — an episode has no metadata source
+          // of its own.
+          <MetadataAttribution
+            source={show.metadataSource}
+            refreshedAt={show.metadataRefreshedAt}
+            locale={locale}
+          />
+        )}
+
+        <div className="flex gap-2">
+          <Button
+            variant={episode.watched ? 'primary' : 'secondary'}
+            type="button"
+            disabled={watchActions.toggleDisabled}
+            title={toggleTitle}
+            aria-pressed={episode.watched}
+            onClick={() =>
+              episode.watched
+                ? watchActions.setUnwatchConfirmOpen(true)
+                : watchActions.setDialogOpen(true)
+            }
+          >
+            <CheckIcon />
+            {toggleLabel}
+          </Button>
+          {episode.watched && (
+            <Button
+              variant="secondary"
+              type="button"
+              className="px-2.5 py-2.5"
+              disabled={watchActions.unwatch.isPending || watchActions.markWatched.isPending}
+              title={t('showDetail.addWatchTooltip.episode')}
+              aria-label={t('showDetail.addWatchTooltip.episode')}
+              onClick={() => watchActions.setLogAdditionalWatchOpen(true)}
+            >
+              <PlusIcon />
+            </Button>
+          )}
+        </div>
+
+        <RatingPicker
+          value={episode.myRating}
+          onRate={(rating) => ratingActions.setRating.mutate(rating)}
+          onClear={() => ratingActions.setRating.mutate(null)}
+          disabled={ratingActions.ratingDisabled}
+        />
+      </DetailHeader>
 
       {episode.watchedCount > 0 && (
         <WatchHistoryTable

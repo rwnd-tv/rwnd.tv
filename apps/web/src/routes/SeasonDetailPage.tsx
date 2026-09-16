@@ -8,6 +8,7 @@ import { markWatchedRequestBody } from '../lib/date.js'
 import { averageEpisodeRatingStars } from '../lib/rating.js'
 import { TVDB_LOGO_DARK_BG_URL, TVDB_LOGO_LIGHT_BG_URL, tvdbSeasonUrl } from '../lib/tvdb.js'
 import { useAuth } from '../lib/use-auth.js'
+import { DetailHeader } from '../components/library/DetailHeader.js'
 import { EpisodeCard } from '../components/library/EpisodeCard.js'
 import { MetadataAttribution } from '../components/library/MetadataAttribution.js'
 import { PosterGrid } from '../components/library/PosterGrid.js'
@@ -327,194 +328,189 @@ export function SeasonDetailPage() {
         </div>
       </div>
 
-      {/* sm:items-start is load-bearing, not decorative — see
-          EpisodeDetailPage.tsx's own still-image container for the full
-          explanation: flex's default align-items:stretch would otherwise
-          force this aspect-[2/3] poster box to match the text column's
-          height once they sit side by side, distorting the poster's real
-          crop (same latent bug fixed on ShowDetailPage.tsx 2026-08-31). */}
-      <div className="flex flex-col gap-6 sm:flex-row sm:items-start">
-        <div className="aspect-[2/3] w-48 flex-shrink-0 overflow-hidden rounded-lg bg-[var(--color-surface)]">
-          {posterPath ? (
-            <img
-              src={posterPath}
-              alt=""
-              width={342}
-              height={513}
-              className="h-full w-full object-cover"
-            />
-          ) : (
-            <div
-              aria-hidden="true"
-              className="flex h-full items-center justify-center text-4xl font-semibold text-[var(--color-fg-muted)]"
-            >
-              {seasonName.charAt(0)}
-            </div>
-          )}
-        </div>
-
-        <div className="flex min-w-0 flex-col gap-3">
-          <h1 className="text-2xl font-semibold">{seasonName}</h1>
-          <div className="flex flex-wrap items-center gap-x-1.5 text-sm text-[var(--color-fg-muted)]">
-            {(
-              [
-                seasonYear,
-                season.voteAverage !== null ? (
-                  <span className="inline-flex items-center gap-1.5">
-                    {show?.tmdbId ? (
-                      <a
-                        href={`https://www.themoviedb.org/tv/${show.tmdbId}/season/${season.seasonNumber}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        title={t('showDetail.viewOnTmdb.season')}
-                      >
-                        <img
-                          src={TMDB_LOGO_URL}
-                          alt={t('showDetail.viewOnTmdb.season')}
-                          className="h-3"
-                        />
-                      </a>
-                    ) : (
-                      <img src={TMDB_LOGO_URL} alt={t('showDetail.ratingSource')} className="h-3" />
-                    )}
-                    {season.voteAverage.toFixed(1)}
-                  </span>
-                ) : null,
-                // See ShowDetailPage.tsx's own tvdbId fact for why this is
-                // just the logo/link rather than a rating badge. Uses this
-                // season's own tvdbSeasonId (a live, best-effort lookup —
-                // see the season route's doc comment), not the show's
-                // tvdbId, so it opens this exact season on TVDB.
-                season.tvdbSeasonId ? (
-                  <a
-                    href={tvdbSeasonUrl(season.tvdbSeasonId)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    title={t('showDetail.viewOnTvdb.season')}
-                  >
-                    <img
-                      src={TVDB_LOGO_LIGHT_BG_URL}
-                      alt={t('showDetail.viewOnTvdb.season')}
-                      className="tvdb-logo-light h-[0.9rem]"
-                    />
-                    <img
-                      src={TVDB_LOGO_DARK_BG_URL}
-                      alt={t('showDetail.viewOnTvdb.season')}
-                      className="tvdb-logo-dark h-[0.9rem]"
-                    />
-                  </a>
-                ) : null,
-                // Read-only summary of the episode ratings set individually
-                // below — there's no season-level rating of its own (no
-                // season entityType, only show/movie/episode — see
-                // packages/db/src/schema.ts). Placed last, after both
-                // TMDB/TVDB facts, so it doesn't read as another critic
-                // score alongside them.
-                episodeRatingAverage !== null ? (
-                  <span
-                    title={t('rating.episodeAverageAria', {
-                      average: episodeRatingAverage.toFixed(1),
-                      count: ratedEpisodeCount,
-                    })}
-                  >
-                    ★ {episodeRatingAverage.toFixed(1)}
-                  </span>
-                ) : null,
-              ] satisfies (ReactNode | null)[]
-            )
-              .filter((fact) => fact !== null)
-              .map((fact, index) => (
-                <span key={index} className="flex items-center gap-1.5">
-                  {index > 0 && <span aria-hidden="true">·</span>}
-                  {fact}
+      <DetailHeader
+        breakpoint="sm"
+        media={
+          <div className="aspect-[2/3] w-48 flex-shrink-0 overflow-hidden rounded-lg bg-[var(--color-surface)]">
+            {posterPath ? (
+              <img
+                src={posterPath}
+                alt=""
+                width={342}
+                height={513}
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              <div
+                aria-hidden="true"
+                className="flex h-full items-center justify-center text-4xl font-semibold text-[var(--color-fg-muted)]"
+              >
+                {seasonName.charAt(0)}
+              </div>
+            )}
+          </div>
+        }
+      >
+        <h1 className="text-2xl font-semibold">{seasonName}</h1>
+        <div className="flex flex-wrap items-center gap-x-1.5 text-sm text-[var(--color-fg-muted)]">
+          {(
+            [
+              seasonYear,
+              season.voteAverage !== null ? (
+                <span className="inline-flex items-center gap-1.5">
+                  {show?.tmdbId ? (
+                    <a
+                      href={`https://www.themoviedb.org/tv/${show.tmdbId}/season/${season.seasonNumber}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title={t('showDetail.viewOnTmdb.season')}
+                    >
+                      <img
+                        src={TMDB_LOGO_URL}
+                        alt={t('showDetail.viewOnTmdb.season')}
+                        className="h-3"
+                      />
+                    </a>
+                  ) : (
+                    <img src={TMDB_LOGO_URL} alt={t('showDetail.ratingSource')} className="h-3" />
+                  )}
+                  {season.voteAverage.toFixed(1)}
                 </span>
-              ))}
-          </div>
-          {season.overview && (
-            <SpoilerGuard
-              hidden={Boolean(user?.spoilerProtectionEnabled) && !fullyWatched}
-              revealed={overviewRevealed}
-              onReveal={() => setOverviewRevealed(true)}
-              revealLabel={t('spoiler.reveal')}
-              blurClassName="blur-sm"
-              overlayClassName="rounded-md border border-[var(--color-border)] bg-[var(--color-surface)]/90 text-[var(--color-fg)] hover:bg-[var(--color-surface)]"
-            >
-              <p className="max-w-2xl text-sm">{season.overview}</p>
-            </SpoilerGuard>
-          )}
-          {show?.metadataSource && (
-            // Inherited from the show — a season has no metadata source of
-            // its own.
-            <MetadataAttribution
-              source={show.metadataSource}
-              refreshedAt={show.metadataRefreshedAt}
-              locale={locale}
-            />
-          )}
-
-          <div className="flex max-w-xs flex-col gap-1">
-            <ProgressBar
-              value={watchedEpisodes}
-              max={season.episodes.length}
-              label={t('shows.progressAria', {
-                title: seasonName,
-                watched: watchedEpisodes,
-                total: season.episodes.length,
-              })}
-            />
-            <p className="text-xs text-[var(--color-fg-muted)]">
-              {t('shows.progress', { watched: watchedEpisodes, total: season.episodes.length })}
-            </p>
-          </div>
-
-          <div className="flex gap-2">
-            <Button
-              variant={fullyWatched ? 'primary' : 'secondary'}
-              type="button"
-              disabled={!fullyWatched && !show?.tmdbId}
-              title={
-                !fullyWatched && !show?.tmdbId
-                  ? t('showDetail.watchedButtonDisabled')
-                  : t(
-                      fullyWatched
-                        ? 'showDetail.watchedButtonTooltip.removeSeason'
-                        : 'showDetail.watchedButtonTooltip.addSeason',
-                    )
-              }
-              onClick={() =>
-                fullyWatched ? setRemoveWatchesConfirmOpen(true) : setWatchDialogOpen(true)
-              }
-            >
-              <CheckIcon />
-              {t('showDetail.watchedButton')}
-            </Button>
-            {watchedEpisodes > 0 && (
-              <Button
-                variant="secondary"
-                type="button"
-                className="px-2.5 py-2.5"
-                disabled={markSeasonWatched.isPending || !show?.tmdbId}
-                title={t('showDetail.addWatchTooltip.season')}
-                aria-label={t('showDetail.addWatchTooltip.season')}
-                onClick={() => setLogAdditionalWatchOpen(true)}
-              >
-                <PlusIcon />
-              </Button>
-            )}
-            {hasHiddenEpisodes && (
-              <Button
-                variant="secondary"
-                type="button"
-                title={t('spoiler.revealEpisodes')}
-                onClick={() => setEpisodesRevealed(true)}
-              >
-                <EyeIcon />
-                {t('spoiler.revealEpisodes')}
-              </Button>
-            )}
-          </div>
+              ) : null,
+              // See ShowDetailPage.tsx's own tvdbId fact for why this is
+              // just the logo/link rather than a rating badge. Uses this
+              // season's own tvdbSeasonId (a live, best-effort lookup —
+              // see the season route's doc comment), not the show's
+              // tvdbId, so it opens this exact season on TVDB.
+              season.tvdbSeasonId ? (
+                <a
+                  href={tvdbSeasonUrl(season.tvdbSeasonId)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title={t('showDetail.viewOnTvdb.season')}
+                >
+                  <img
+                    src={TVDB_LOGO_LIGHT_BG_URL}
+                    alt={t('showDetail.viewOnTvdb.season')}
+                    className="tvdb-logo-light h-[0.9rem]"
+                  />
+                  <img
+                    src={TVDB_LOGO_DARK_BG_URL}
+                    alt={t('showDetail.viewOnTvdb.season')}
+                    className="tvdb-logo-dark h-[0.9rem]"
+                  />
+                </a>
+              ) : null,
+              // Read-only summary of the episode ratings set individually
+              // below — there's no season-level rating of its own (no
+              // season entityType, only show/movie/episode — see
+              // packages/db/src/schema.ts). Placed last, after both
+              // TMDB/TVDB facts, so it doesn't read as another critic
+              // score alongside them.
+              episodeRatingAverage !== null ? (
+                <span
+                  title={t('rating.episodeAverageAria', {
+                    average: episodeRatingAverage.toFixed(1),
+                    count: ratedEpisodeCount,
+                  })}
+                >
+                  ★ {episodeRatingAverage.toFixed(1)}
+                </span>
+              ) : null,
+            ] satisfies (ReactNode | null)[]
+          )
+            .filter((fact) => fact !== null)
+            .map((fact, index) => (
+              <span key={index} className="flex items-center gap-1.5">
+                {index > 0 && <span aria-hidden="true">·</span>}
+                {fact}
+              </span>
+            ))}
         </div>
-      </div>
+        {season.overview && (
+          <SpoilerGuard
+            hidden={Boolean(user?.spoilerProtectionEnabled) && !fullyWatched}
+            revealed={overviewRevealed}
+            onReveal={() => setOverviewRevealed(true)}
+            revealLabel={t('spoiler.reveal')}
+            blurClassName="blur-sm"
+            overlayClassName="rounded-md border border-[var(--color-border)] bg-[var(--color-surface)]/90 text-[var(--color-fg)] hover:bg-[var(--color-surface)]"
+          >
+            <p className="max-w-2xl text-sm">{season.overview}</p>
+          </SpoilerGuard>
+        )}
+        {show?.metadataSource && (
+          // Inherited from the show — a season has no metadata source of
+          // its own.
+          <MetadataAttribution
+            source={show.metadataSource}
+            refreshedAt={show.metadataRefreshedAt}
+            locale={locale}
+          />
+        )}
+
+        <div className="flex max-w-xs flex-col gap-1">
+          <ProgressBar
+            value={watchedEpisodes}
+            max={season.episodes.length}
+            label={t('shows.progressAria', {
+              title: seasonName,
+              watched: watchedEpisodes,
+              total: season.episodes.length,
+            })}
+          />
+          <p className="text-xs text-[var(--color-fg-muted)]">
+            {t('shows.progress', { watched: watchedEpisodes, total: season.episodes.length })}
+          </p>
+        </div>
+
+        <div className="flex gap-2">
+          <Button
+            variant={fullyWatched ? 'primary' : 'secondary'}
+            type="button"
+            disabled={!fullyWatched && !show?.tmdbId}
+            title={
+              !fullyWatched && !show?.tmdbId
+                ? t('showDetail.watchedButtonDisabled')
+                : t(
+                    fullyWatched
+                      ? 'showDetail.watchedButtonTooltip.removeSeason'
+                      : 'showDetail.watchedButtonTooltip.addSeason',
+                  )
+            }
+            onClick={() =>
+              fullyWatched ? setRemoveWatchesConfirmOpen(true) : setWatchDialogOpen(true)
+            }
+          >
+            <CheckIcon />
+            {t('showDetail.watchedButton')}
+          </Button>
+          {watchedEpisodes > 0 && (
+            <Button
+              variant="secondary"
+              type="button"
+              className="px-2.5 py-2.5"
+              disabled={markSeasonWatched.isPending || !show?.tmdbId}
+              title={t('showDetail.addWatchTooltip.season')}
+              aria-label={t('showDetail.addWatchTooltip.season')}
+              onClick={() => setLogAdditionalWatchOpen(true)}
+            >
+              <PlusIcon />
+            </Button>
+          )}
+          {hasHiddenEpisodes && (
+            <Button
+              variant="secondary"
+              type="button"
+              title={t('spoiler.revealEpisodes')}
+              onClick={() => setEpisodesRevealed(true)}
+            >
+              <EyeIcon />
+              {t('spoiler.revealEpisodes')}
+            </Button>
+          )}
+        </div>
+      </DetailHeader>
 
       <WatchDateDialog
         open={watchDialogOpen}

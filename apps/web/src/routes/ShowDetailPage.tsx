@@ -10,6 +10,7 @@ import { TMDB_LOGO_URL } from '../lib/tmdb.js'
 import { TVDB_LOGO_DARK_BG_URL, TVDB_LOGO_LIGHT_BG_URL, tvdbSeriesUrl } from '../lib/tvdb.js'
 import { imdbTitleUrl } from '../lib/imdb.js'
 import { useAuth } from '../lib/use-auth.js'
+import { DetailHeader } from '../components/library/DetailHeader.js'
 import { EpisodeCard } from '../components/library/EpisodeCard.js'
 import { MetadataAttribution } from '../components/library/MetadataAttribution.js'
 import { PosterGrid } from '../components/library/PosterGrid.js'
@@ -278,253 +279,240 @@ export function ShowDetailPage() {
 
   return (
     <div className="flex flex-col gap-8">
-      {/* sm:items-start is load-bearing, not decorative — see
-          EpisodeDetailPage.tsx's own still-image container for the full
-          explanation: flex's default align-items:stretch would otherwise
-          force this aspect-[2/3] poster box to match the text column's
-          height once they sit side by side, distorting the poster's real
-          crop (surfaced 2026-08-31: the box visibly grew whenever the
-          "Refreshed." success line added an extra line of height to the
-          text column). */}
-      <div className="flex flex-col gap-6 sm:flex-row sm:items-start">
-        <div className="aspect-[2/3] w-48 flex-shrink-0 overflow-hidden rounded-lg bg-[var(--color-surface)]">
-          {show.posterPath ? (
-            <img
-              src={show.posterPath}
-              alt=""
-              width={342}
-              height={513}
-              className="h-full w-full object-cover"
-            />
-          ) : (
-            <div
-              aria-hidden="true"
-              className="flex h-full items-center justify-center text-4xl font-semibold text-[var(--color-fg-muted)]"
-            >
-              {show.title.charAt(0)}
-            </div>
-          )}
-        </div>
-
-        <div className="flex min-w-0 flex-col gap-3">
-          <h1 className="text-2xl font-semibold">{show.title}</h1>
-          <div className="flex flex-wrap items-center gap-x-1.5 text-sm text-[var(--color-fg-muted)]">
-            {(
-              [
-                show.year,
-                show.genres.length > 0 ? show.genres.join(', ') : null,
-                show.status,
-                show.dropped ? t('showDetail.droppedFact') : null,
-                show.voteAverage !== null ? (
-                  <span className="inline-flex items-center gap-1.5">
-                    {show.tmdbId ? (
-                      <a
-                        href={`https://www.themoviedb.org/tv/${show.tmdbId}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        title={t('showDetail.viewOnTmdb.show')}
-                      >
-                        <img
-                          src={TMDB_LOGO_URL}
-                          alt={t('showDetail.viewOnTmdb.show')}
-                          className="h-3"
-                        />
-                      </a>
-                    ) : (
-                      <img src={TMDB_LOGO_URL} alt={t('showDetail.ratingSource')} className="h-3" />
-                    )}
-                    {show.voteAverage.toFixed(1)}
-                  </span>
-                ) : null,
-                // TVDB never populates voteAverage (see
-                // apps/api/src/providers/tvdb.ts) — its "score" isn't a
-                // comparable rating, so this is just the logo/link, no
-                // number next to it like the TMDB one above.
-                show.tvdbId ? (
-                  <a
-                    href={tvdbSeriesUrl(show.tvdbId)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    title={t('showDetail.viewOnTvdb.show')}
-                  >
-                    <img
-                      src={TVDB_LOGO_LIGHT_BG_URL}
-                      alt={t('showDetail.viewOnTvdb.show')}
-                      className="tvdb-logo-light h-[0.9rem]"
-                    />
-                    <img
-                      src={TVDB_LOGO_DARK_BG_URL}
-                      alt={t('showDetail.viewOnTvdb.show')}
-                      className="tvdb-logo-dark h-[0.9rem]"
-                    />
-                  </a>
-                ) : null,
-                // A plain text link, not a logo — see MovieDetailPage.tsx's
-                // identical fact for why (IMDb's conditions of use forbid
-                // it without written permission). No rating number either:
-                // this app holds no IMDb rating.
-                show.imdbId ? (
-                  <a
-                    href={imdbTitleUrl(show.imdbId)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    title={t('showDetail.viewOnImdb.show')}
-                  >
-                    IMDb
-                  </a>
-                ) : null,
-              ] satisfies (ReactNode | null)[]
-            )
-              .filter((fact) => fact !== null)
-              .map((fact, index) => (
-                <span key={index} className="flex items-center gap-1.5">
-                  {index > 0 && <span aria-hidden="true">·</span>}
-                  {fact}
-                </span>
-              ))}
-          </div>
-          {show.overview && (
-            <SpoilerGuard
-              hidden={Boolean(user?.spoilerProtectionEnabled) && !fullyWatched}
-              revealed={overviewRevealed}
-              onReveal={() => setOverviewRevealed(true)}
-              revealLabel={t('spoiler.reveal')}
-              blurClassName="blur-sm"
-              overlayClassName="rounded-md border border-[var(--color-border)] bg-[var(--color-surface)]/90 text-[var(--color-fg)] hover:bg-[var(--color-surface)]"
-            >
-              <p className="max-w-2xl text-sm">{show.overview}</p>
-            </SpoilerGuard>
-          )}
-          {show.metadataSource && (
-            // Distinct from the rating badge above — that answers "where
-            // did this 8.4 come from and where do I click through"; this
-            // answers "where did the rest of this page's metadata come
-            // from". Its own line rather than folded into the fact line, so
-            // it doesn't compete with year/genres/status for attention.
-            <MetadataAttribution
-              source={show.metadataSource}
-              refreshedAt={show.metadataRefreshedAt}
-              locale={locale}
-            />
-          )}
-
-          {show.totalEpisodes !== null ? (
-            <div className="flex max-w-xs flex-col gap-1">
-              <ProgressBar
-                value={show.watchedEpisodes}
-                max={show.totalEpisodes}
-                label={t('shows.progressAria', {
-                  title: show.title,
-                  watched: show.watchedEpisodes,
-                  total: show.totalEpisodes,
-                })}
+      <DetailHeader
+        breakpoint="sm"
+        media={
+          <div className="aspect-[2/3] w-48 flex-shrink-0 overflow-hidden rounded-lg bg-[var(--color-surface)]">
+            {show.posterPath ? (
+              <img
+                src={show.posterPath}
+                alt=""
+                width={342}
+                height={513}
+                className="h-full w-full object-cover"
               />
-              <p className="text-xs text-[var(--color-fg-muted)]">
-                {t('shows.progress', { watched: show.watchedEpisodes, total: show.totalEpisodes })}
-              </p>
-            </div>
-          ) : (
-            <p className="text-xs text-[var(--color-fg-muted)]">
-              {t('shows.progressUnknown', { count: show.watchedEpisodes })}
-            </p>
-          )}
-
-          <div className="flex gap-2">
-            <Button
-              variant={fullyWatched ? 'primary' : 'secondary'}
-              type="button"
-              disabled={!fullyWatched && !show.tmdbId}
-              title={
-                !fullyWatched && !show.tmdbId
-                  ? t('showDetail.watchedButtonDisabled')
-                  : t(
-                      fullyWatched
-                        ? 'showDetail.watchedButtonTooltip.removeShow'
-                        : 'showDetail.watchedButtonTooltip.addShow',
-                    )
-              }
-              onClick={() =>
-                fullyWatched ? setRemoveWatchesConfirmOpen(true) : setWatchDialogOpen(true)
-              }
-            >
-              <CheckIcon />
-              {t('showDetail.watchedButton')}
-            </Button>
-            {show.firstWatchedAt && (
-              <Button
-                variant="secondary"
-                type="button"
-                className="px-2.5 py-2.5"
-                disabled={markWatched.isPending || !show.tmdbId}
-                title={t('showDetail.addWatchTooltip.show')}
-                aria-label={t('showDetail.addWatchTooltip.show')}
-                onClick={() => setLogAdditionalWatchOpen(true)}
+            ) : (
+              <div
+                aria-hidden="true"
+                className="flex h-full items-center justify-center text-4xl font-semibold text-[var(--color-fg-muted)]"
               >
-                <PlusIcon />
-              </Button>
+                {show.title.charAt(0)}
+              </div>
             )}
-            <Button
-              variant="secondary"
-              type="button"
-              disabled={toggleDropped.isPending}
-              title={t(show.dropped ? 'showDetail.undropTooltip' : 'showDetail.dropTooltip')}
-              onClick={() => toggleDropped.mutate()}
-            >
-              {t(show.dropped ? 'showDetail.undrop' : 'showDetail.drop')}
-            </Button>
-            <WatchlistButton
-              mediaType="show"
-              slug={show.slug}
-              myWatchlistIds={show.myWatchlistIds}
+          </div>
+        }
+      >
+        <h1 className="text-2xl font-semibold">{show.title}</h1>
+        <div className="flex flex-wrap items-center gap-x-1.5 text-sm text-[var(--color-fg-muted)]">
+          {(
+            [
+              show.year,
+              show.genres.length > 0 ? show.genres.join(', ') : null,
+              show.status,
+              show.dropped ? t('showDetail.droppedFact') : null,
+              show.voteAverage !== null ? (
+                <span className="inline-flex items-center gap-1.5">
+                  {show.tmdbId ? (
+                    <a
+                      href={`https://www.themoviedb.org/tv/${show.tmdbId}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title={t('showDetail.viewOnTmdb.show')}
+                    >
+                      <img
+                        src={TMDB_LOGO_URL}
+                        alt={t('showDetail.viewOnTmdb.show')}
+                        className="h-3"
+                      />
+                    </a>
+                  ) : (
+                    <img src={TMDB_LOGO_URL} alt={t('showDetail.ratingSource')} className="h-3" />
+                  )}
+                  {show.voteAverage.toFixed(1)}
+                </span>
+              ) : null,
+              // TVDB never populates voteAverage (see
+              // apps/api/src/providers/tvdb.ts) — its "score" isn't a
+              // comparable rating, so this is just the logo/link, no
+              // number next to it like the TMDB one above.
+              show.tvdbId ? (
+                <a
+                  href={tvdbSeriesUrl(show.tvdbId)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title={t('showDetail.viewOnTvdb.show')}
+                >
+                  <img
+                    src={TVDB_LOGO_LIGHT_BG_URL}
+                    alt={t('showDetail.viewOnTvdb.show')}
+                    className="tvdb-logo-light h-[0.9rem]"
+                  />
+                  <img
+                    src={TVDB_LOGO_DARK_BG_URL}
+                    alt={t('showDetail.viewOnTvdb.show')}
+                    className="tvdb-logo-dark h-[0.9rem]"
+                  />
+                </a>
+              ) : null,
+              // A plain text link, not a logo — see MovieDetailPage.tsx's
+              // identical fact for why (IMDb's conditions of use forbid
+              // it without written permission). No rating number either:
+              // this app holds no IMDb rating.
+              show.imdbId ? (
+                <a
+                  href={imdbTitleUrl(show.imdbId)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title={t('showDetail.viewOnImdb.show')}
+                >
+                  IMDb
+                </a>
+              ) : null,
+            ] satisfies (ReactNode | null)[]
+          )
+            .filter((fact) => fact !== null)
+            .map((fact, index) => (
+              <span key={index} className="flex items-center gap-1.5">
+                {index > 0 && <span aria-hidden="true">·</span>}
+                {fact}
+              </span>
+            ))}
+        </div>
+        {show.overview && (
+          <SpoilerGuard
+            hidden={Boolean(user?.spoilerProtectionEnabled) && !fullyWatched}
+            revealed={overviewRevealed}
+            onReveal={() => setOverviewRevealed(true)}
+            revealLabel={t('spoiler.reveal')}
+            blurClassName="blur-sm"
+            overlayClassName="rounded-md border border-[var(--color-border)] bg-[var(--color-surface)]/90 text-[var(--color-fg)] hover:bg-[var(--color-surface)]"
+          >
+            <p className="max-w-2xl text-sm">{show.overview}</p>
+          </SpoilerGuard>
+        )}
+        {show.metadataSource && (
+          // Distinct from the rating badge above — that answers "where
+          // did this 8.4 come from and where do I click through"; this
+          // answers "where did the rest of this page's metadata come
+          // from". Its own line rather than folded into the fact line, so
+          // it doesn't compete with year/genres/status for attention.
+          <MetadataAttribution
+            source={show.metadataSource}
+            refreshedAt={show.metadataRefreshedAt}
+            locale={locale}
+          />
+        )}
+
+        {show.totalEpisodes !== null ? (
+          <div className="flex max-w-xs flex-col gap-1">
+            <ProgressBar
+              value={show.watchedEpisodes}
+              max={show.totalEpisodes}
+              label={t('shows.progressAria', {
+                title: show.title,
+                watched: show.watchedEpisodes,
+                total: show.totalEpisodes,
+              })}
             />
+            <p className="text-xs text-[var(--color-fg-muted)]">
+              {t('shows.progress', { watched: show.watchedEpisodes, total: show.totalEpisodes })}
+            </p>
+          </div>
+        ) : (
+          <p className="text-xs text-[var(--color-fg-muted)]">
+            {t('shows.progressUnknown', { count: show.watchedEpisodes })}
+          </p>
+        )}
+
+        <div className="flex gap-2">
+          <Button
+            variant={fullyWatched ? 'primary' : 'secondary'}
+            type="button"
+            disabled={!fullyWatched && !show.tmdbId}
+            title={
+              !fullyWatched && !show.tmdbId
+                ? t('showDetail.watchedButtonDisabled')
+                : t(
+                    fullyWatched
+                      ? 'showDetail.watchedButtonTooltip.removeShow'
+                      : 'showDetail.watchedButtonTooltip.addShow',
+                  )
+            }
+            onClick={() =>
+              fullyWatched ? setRemoveWatchesConfirmOpen(true) : setWatchDialogOpen(true)
+            }
+          >
+            <CheckIcon />
+            {t('showDetail.watchedButton')}
+          </Button>
+          {show.firstWatchedAt && (
             <Button
               variant="secondary"
               type="button"
               className="px-2.5 py-2.5"
-              disabled={refreshMetadata.isPending || !show.metadataSource}
-              title={
-                show.metadataSource
-                  ? t('showDetail.refreshMetadataTooltip')
-                  : t('showDetail.refreshMetadataDisabled')
-              }
-              aria-label={t('showDetail.refreshMetadataTooltip')}
-              onClick={() => refreshMetadata.mutate()}
+              disabled={markWatched.isPending || !show.tmdbId}
+              title={t('showDetail.addWatchTooltip.show')}
+              aria-label={t('showDetail.addWatchTooltip.show')}
+              onClick={() => setLogAdditionalWatchOpen(true)}
             >
-              <RefreshIcon />
+              <PlusIcon />
             </Button>
-          </div>
-
-          <RatingPicker
-            value={show.myRating}
-            onRate={(rating) => setRating.mutate(rating)}
-            onClear={() => setRating.mutate(null)}
-            disabled={setRating.isPending}
-          />
-
-          {refreshMetadata.isSuccess && (
-            <p className="text-xs text-[var(--color-fg-muted)]">
-              {t('showDetail.refreshMetadataDone')}
-            </p>
           )}
-          {refreshMetadata.isError && (
-            <p className="text-xs text-[var(--color-danger)]">{t('common.somethingWentWrong')}</p>
-          )}
-
-          {show.firstWatchedAt && show.lastWatchedAt ? (
-            <p className="text-xs text-[var(--color-fg-muted)]">
-              {t('showDetail.watchedPeriod', {
-                range: watchedPeriodRange(show.firstWatchedAt, show.lastWatchedAt),
-              })}
-            </p>
-          ) : (
-            show.hasUnknownWatchDate && (
-              <p className="text-xs text-[var(--color-fg-muted)]">
-                {t('showDetail.watchedUnknown')}
-              </p>
-            )
-          )}
+          <Button
+            variant="secondary"
+            type="button"
+            disabled={toggleDropped.isPending}
+            title={t(show.dropped ? 'showDetail.undropTooltip' : 'showDetail.dropTooltip')}
+            onClick={() => toggleDropped.mutate()}
+          >
+            {t(show.dropped ? 'showDetail.undrop' : 'showDetail.drop')}
+          </Button>
+          <WatchlistButton mediaType="show" slug={show.slug} myWatchlistIds={show.myWatchlistIds} />
+          <Button
+            variant="secondary"
+            type="button"
+            className="px-2.5 py-2.5"
+            disabled={refreshMetadata.isPending || !show.metadataSource}
+            title={
+              show.metadataSource
+                ? t('showDetail.refreshMetadataTooltip')
+                : t('showDetail.refreshMetadataDisabled')
+            }
+            aria-label={t('showDetail.refreshMetadataTooltip')}
+            onClick={() => refreshMetadata.mutate()}
+          >
+            <RefreshIcon />
+          </Button>
         </div>
-      </div>
+
+        <RatingPicker
+          value={show.myRating}
+          onRate={(rating) => setRating.mutate(rating)}
+          onClear={() => setRating.mutate(null)}
+          disabled={setRating.isPending}
+        />
+
+        {refreshMetadata.isSuccess && (
+          <p className="text-xs text-[var(--color-fg-muted)]">
+            {t('showDetail.refreshMetadataDone')}
+          </p>
+        )}
+        {refreshMetadata.isError && (
+          <p className="text-xs text-[var(--color-danger)]">{t('common.somethingWentWrong')}</p>
+        )}
+
+        {show.firstWatchedAt && show.lastWatchedAt ? (
+          <p className="text-xs text-[var(--color-fg-muted)]">
+            {t('showDetail.watchedPeriod', {
+              range: watchedPeriodRange(show.firstWatchedAt, show.lastWatchedAt),
+            })}
+          </p>
+        ) : (
+          show.hasUnknownWatchDate && (
+            <p className="text-xs text-[var(--color-fg-muted)]">{t('showDetail.watchedUnknown')}</p>
+          )
+        )}
+      </DetailHeader>
 
       <WatchDateDialog
         open={watchDialogOpen}

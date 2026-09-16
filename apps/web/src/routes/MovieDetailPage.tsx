@@ -12,6 +12,7 @@ import { useMovieWatchActions } from '../lib/use-movie-watch-actions.js'
 import { TMDB_LOGO_URL } from '../lib/tmdb.js'
 import { TVDB_LOGO_DARK_BG_URL, TVDB_LOGO_LIGHT_BG_URL, tvdbMovieUrl } from '../lib/tvdb.js'
 import { imdbTitleUrl } from '../lib/imdb.js'
+import { DetailHeader } from '../components/library/DetailHeader.js'
 import { MetadataAttribution } from '../components/library/MetadataAttribution.js'
 import { RatingPicker } from '../components/library/RatingPicker.js'
 import { UnwatchConfirmDialog } from '../components/library/UnwatchConfirmDialog.js'
@@ -175,227 +176,212 @@ export function MovieDetailPage() {
 
   return (
     <div className="flex flex-col gap-8">
-      {/* lg:items-start is load-bearing, not decorative — see
-          EpisodeDetailPage.tsx's own still-image container for the full
-          explanation: flex's default align-items:stretch would otherwise
-          force this aspect-[2/3] poster box to match the text column's
-          height once they sit side by side, distorting the poster's real
-          crop. lg, not sm, so the switch to row layout itself only
-          happens once there's enough width for the text column to
-          comfortably fit next to it. */}
-      <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
-        <div className="aspect-[2/3] w-48 flex-shrink-0 overflow-hidden rounded-lg bg-[var(--color-surface)]">
-          {movie.posterPath ? (
-            <img
-              src={movie.posterPath}
-              alt=""
-              width={342}
-              height={513}
-              className="h-full w-full object-cover"
-            />
-          ) : (
-            <div
-              aria-hidden="true"
-              className="flex h-full items-center justify-center text-4xl font-semibold text-[var(--color-fg-muted)]"
-            >
-              {movie.title.charAt(0)}
-            </div>
+      <DetailHeader
+        breakpoint="lg"
+        media={
+          <div className="aspect-[2/3] w-48 flex-shrink-0 overflow-hidden rounded-lg bg-[var(--color-surface)]">
+            {movie.posterPath ? (
+              <img
+                src={movie.posterPath}
+                alt=""
+                width={342}
+                height={513}
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              <div
+                aria-hidden="true"
+                className="flex h-full items-center justify-center text-4xl font-semibold text-[var(--color-fg-muted)]"
+              >
+                {movie.title.charAt(0)}
+              </div>
+            )}
+          </div>
+        }
+      >
+        <h1 className="text-2xl font-semibold">
+          {movie.title}
+          {movie.year !== null && (
+            <span className="text-[var(--color-fg-muted)]"> ({movie.year})</span>
           )}
+        </h1>
+        <div className="flex flex-wrap items-center gap-x-1.5 text-sm text-[var(--color-fg-muted)]">
+          {(
+            [
+              // The release date this user should see (their own
+              // region's, where TMDB has one, else the primary date),
+              // with a flag next to it when it's genuinely regional —
+              // see movieDetailSchema's releaseDate/releaseRegion doc
+              // comments. No fallback to the year here — it's already
+              // shown next to the title above.
+              movie.releaseDate ? (
+                <span className="inline-flex items-center gap-1.5">
+                  {movie.releaseRegion && regionFlagClassName(movie.releaseRegion) && (
+                    <span
+                      className={regionFlagClassName(movie.releaseRegion)!}
+                      aria-hidden="true"
+                    />
+                  )}
+                  {formatReleaseDate(movie.releaseDate, locale)}
+                </span>
+              ) : null,
+              movie.genres.length > 0 ? movie.genres.join(', ') : null,
+              movie.runtimeMinutes !== null
+                ? t('movieDetail.runtime', { minutes: movie.runtimeMinutes })
+                : null,
+              movie.voteAverage !== null ? (
+                <span className="inline-flex items-center gap-1.5">
+                  {movie.tmdbId ? (
+                    <a
+                      href={`https://www.themoviedb.org/movie/${movie.tmdbId}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title={t('movieDetail.viewOnTmdb')}
+                    >
+                      <img src={TMDB_LOGO_URL} alt={t('movieDetail.viewOnTmdb')} className="h-3" />
+                    </a>
+                  ) : (
+                    <img src={TMDB_LOGO_URL} alt={t('movieDetail.ratingSource')} className="h-3" />
+                  )}
+                  {movie.voteAverage.toFixed(1)}
+                </span>
+              ) : null,
+              // See ShowDetailPage.tsx's own tvdbId fact for why this is
+              // just the logo/link rather than a rating badge.
+              movie.tvdbId ? (
+                <a
+                  href={tvdbMovieUrl(movie.tvdbId)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title={t('movieDetail.viewOnTvdb')}
+                >
+                  <img
+                    src={TVDB_LOGO_LIGHT_BG_URL}
+                    alt={t('movieDetail.viewOnTvdb')}
+                    className="tvdb-logo-light h-[0.9rem]"
+                  />
+                  <img
+                    src={TVDB_LOGO_DARK_BG_URL}
+                    alt={t('movieDetail.viewOnTvdb')}
+                    className="tvdb-logo-dark h-[0.9rem]"
+                  />
+                </a>
+              ) : null,
+              // A plain text link, not a logo, unlike the TMDB/TVDB facts
+              // above — IMDb's conditions of use forbid using their
+              // trademark as a link's clickable element without written
+              // permission, where TMDB's and TVDB's terms require their
+              // logos. See lib/imdb.ts. No rating number next to it
+              // either: this app holds no IMDb rating.
+              movie.imdbId ? (
+                <a
+                  href={imdbTitleUrl(movie.imdbId)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title={t('movieDetail.viewOnImdb')}
+                >
+                  IMDb
+                </a>
+              ) : null,
+            ] satisfies (ReactNode | null)[]
+          )
+            .filter((fact) => fact !== null)
+            .map((fact, index) => (
+              <span key={index} className="flex items-center gap-1.5">
+                {index > 0 && <span aria-hidden="true">·</span>}
+                {fact}
+              </span>
+            ))}
         </div>
 
-        <div className="flex min-w-0 flex-col gap-3">
-          <h1 className="text-2xl font-semibold">
-            {movie.title}
-            {movie.year !== null && (
-              <span className="text-[var(--color-fg-muted)]"> ({movie.year})</span>
-            )}
-          </h1>
-          <div className="flex flex-wrap items-center gap-x-1.5 text-sm text-[var(--color-fg-muted)]">
-            {(
-              [
-                // The release date this user should see (their own
-                // region's, where TMDB has one, else the primary date),
-                // with a flag next to it when it's genuinely regional —
-                // see movieDetailSchema's releaseDate/releaseRegion doc
-                // comments. No fallback to the year here — it's already
-                // shown next to the title above.
-                movie.releaseDate ? (
-                  <span className="inline-flex items-center gap-1.5">
-                    {movie.releaseRegion && regionFlagClassName(movie.releaseRegion) && (
-                      <span
-                        className={regionFlagClassName(movie.releaseRegion)!}
-                        aria-hidden="true"
-                      />
-                    )}
-                    {formatReleaseDate(movie.releaseDate, locale)}
-                  </span>
-                ) : null,
-                movie.genres.length > 0 ? movie.genres.join(', ') : null,
-                movie.runtimeMinutes !== null
-                  ? t('movieDetail.runtime', { minutes: movie.runtimeMinutes })
-                  : null,
-                movie.voteAverage !== null ? (
-                  <span className="inline-flex items-center gap-1.5">
-                    {movie.tmdbId ? (
-                      <a
-                        href={`https://www.themoviedb.org/movie/${movie.tmdbId}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        title={t('movieDetail.viewOnTmdb')}
-                      >
-                        <img
-                          src={TMDB_LOGO_URL}
-                          alt={t('movieDetail.viewOnTmdb')}
-                          className="h-3"
-                        />
-                      </a>
-                    ) : (
-                      <img
-                        src={TMDB_LOGO_URL}
-                        alt={t('movieDetail.ratingSource')}
-                        className="h-3"
-                      />
-                    )}
-                    {movie.voteAverage.toFixed(1)}
-                  </span>
-                ) : null,
-                // See ShowDetailPage.tsx's own tvdbId fact for why this is
-                // just the logo/link rather than a rating badge.
-                movie.tvdbId ? (
-                  <a
-                    href={tvdbMovieUrl(movie.tvdbId)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    title={t('movieDetail.viewOnTvdb')}
-                  >
-                    <img
-                      src={TVDB_LOGO_LIGHT_BG_URL}
-                      alt={t('movieDetail.viewOnTvdb')}
-                      className="tvdb-logo-light h-[0.9rem]"
-                    />
-                    <img
-                      src={TVDB_LOGO_DARK_BG_URL}
-                      alt={t('movieDetail.viewOnTvdb')}
-                      className="tvdb-logo-dark h-[0.9rem]"
-                    />
-                  </a>
-                ) : null,
-                // A plain text link, not a logo, unlike the TMDB/TVDB facts
-                // above — IMDb's conditions of use forbid using their
-                // trademark as a link's clickable element without written
-                // permission, where TMDB's and TVDB's terms require their
-                // logos. See lib/imdb.ts. No rating number next to it
-                // either: this app holds no IMDb rating.
-                movie.imdbId ? (
-                  <a
-                    href={imdbTitleUrl(movie.imdbId)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    title={t('movieDetail.viewOnImdb')}
-                  >
-                    IMDb
-                  </a>
-                ) : null,
-              ] satisfies (ReactNode | null)[]
-            )
-              .filter((fact) => fact !== null)
-              .map((fact, index) => (
-                <span key={index} className="flex items-center gap-1.5">
-                  {index > 0 && <span aria-hidden="true">·</span>}
-                  {fact}
-                </span>
-              ))}
-          </div>
+        {movie.overview && <p className="max-w-2xl text-sm">{movie.overview}</p>}
+        {movie.metadataSource && (
+          // See ShowDetailPage.tsx's own metadataSource block for why
+          // this is separate from the rating badge above and on its own
+          // line rather than folded into the fact line.
+          <MetadataAttribution
+            source={movie.metadataSource}
+            refreshedAt={movie.metadataRefreshedAt}
+            locale={locale}
+          />
+        )}
 
-          {movie.overview && <p className="max-w-2xl text-sm">{movie.overview}</p>}
-          {movie.metadataSource && (
-            // See ShowDetailPage.tsx's own metadataSource block for why
-            // this is separate from the rating badge above and on its own
-            // line rather than folded into the fact line.
-            <MetadataAttribution
-              source={movie.metadataSource}
-              refreshedAt={movie.metadataRefreshedAt}
-              locale={locale}
-            />
-          )}
-
-          <div className="flex gap-2">
-            <Button
-              variant={movie.watched ? 'primary' : 'secondary'}
-              type="button"
-              disabled={!movie.watched && !movie.tmdbId}
-              title={
-                !movie.watched && !movie.tmdbId
-                  ? t('movieDetail.watchedButtonDisabled')
-                  : t(
-                      movie.watched
-                        ? 'movieDetail.watchedButtonTooltip.remove'
-                        : 'movieDetail.watchedButtonTooltip.add',
-                    )
-              }
-              onClick={() => (movie.watched ? setUnwatchConfirmOpen(true) : setDialogOpen(true))}
-            >
-              <CheckIcon />
-              {t('movieDetail.watchedButton')}
-            </Button>
-            {movie.watched && (
-              <Button
-                variant="secondary"
-                type="button"
-                className="px-2.5 py-2.5"
-                disabled={toggleDisabled}
-                title={t('movieDetail.addWatchTooltip')}
-                aria-label={t('movieDetail.addWatchTooltip')}
-                onClick={() => setLogAdditionalWatchOpen(true)}
-              >
-                <PlusIcon />
-              </Button>
-            )}
-            <WatchlistButton
-              mediaType="movie"
-              slug={movie.slug}
-              myWatchlistIds={movie.myWatchlistIds}
-            />
+        <div className="flex gap-2">
+          <Button
+            variant={movie.watched ? 'primary' : 'secondary'}
+            type="button"
+            disabled={!movie.watched && !movie.tmdbId}
+            title={
+              !movie.watched && !movie.tmdbId
+                ? t('movieDetail.watchedButtonDisabled')
+                : t(
+                    movie.watched
+                      ? 'movieDetail.watchedButtonTooltip.remove'
+                      : 'movieDetail.watchedButtonTooltip.add',
+                  )
+            }
+            onClick={() => (movie.watched ? setUnwatchConfirmOpen(true) : setDialogOpen(true))}
+          >
+            <CheckIcon />
+            {t('movieDetail.watchedButton')}
+          </Button>
+          {movie.watched && (
             <Button
               variant="secondary"
               type="button"
               className="px-2.5 py-2.5"
-              disabled={refreshMetadata.isPending || !movie.metadataSource}
-              title={
-                movie.metadataSource
-                  ? t('movieDetail.refreshMetadataTooltip')
-                  : t('movieDetail.refreshMetadataDisabled')
-              }
-              aria-label={t('movieDetail.refreshMetadataTooltip')}
-              onClick={() => refreshMetadata.mutate()}
+              disabled={toggleDisabled}
+              title={t('movieDetail.addWatchTooltip')}
+              aria-label={t('movieDetail.addWatchTooltip')}
+              onClick={() => setLogAdditionalWatchOpen(true)}
             >
-              <RefreshIcon />
+              <PlusIcon />
             </Button>
-          </div>
-
-          <RatingPicker
-            value={movie.myRating}
-            onRate={(rating) => setRating.mutate(rating)}
-            onClear={() => setRating.mutate(null)}
-            disabled={setRating.isPending}
+          )}
+          <WatchlistButton
+            mediaType="movie"
+            slug={movie.slug}
+            myWatchlistIds={movie.myWatchlistIds}
           />
-
-          {refreshMetadata.isSuccess && (
-            <p className="text-xs text-[var(--color-fg-muted)]">
-              {t('movieDetail.refreshMetadataDone')}
-            </p>
-          )}
-          {refreshMetadata.isError && (
-            <p className="text-xs text-[var(--color-danger)]">{t('common.somethingWentWrong')}</p>
-          )}
-
-          {movie.watchedCount > 1 && (
-            <p className="text-xs text-[var(--color-fg-muted)]">
-              {t('movieDetail.watchedCount', { count: movie.watchedCount })}
-            </p>
-          )}
+          <Button
+            variant="secondary"
+            type="button"
+            className="px-2.5 py-2.5"
+            disabled={refreshMetadata.isPending || !movie.metadataSource}
+            title={
+              movie.metadataSource
+                ? t('movieDetail.refreshMetadataTooltip')
+                : t('movieDetail.refreshMetadataDisabled')
+            }
+            aria-label={t('movieDetail.refreshMetadataTooltip')}
+            onClick={() => refreshMetadata.mutate()}
+          >
+            <RefreshIcon />
+          </Button>
         </div>
-      </div>
+
+        <RatingPicker
+          value={movie.myRating}
+          onRate={(rating) => setRating.mutate(rating)}
+          onClear={() => setRating.mutate(null)}
+          disabled={setRating.isPending}
+        />
+
+        {refreshMetadata.isSuccess && (
+          <p className="text-xs text-[var(--color-fg-muted)]">
+            {t('movieDetail.refreshMetadataDone')}
+          </p>
+        )}
+        {refreshMetadata.isError && (
+          <p className="text-xs text-[var(--color-danger)]">{t('common.somethingWentWrong')}</p>
+        )}
+
+        {movie.watchedCount > 1 && (
+          <p className="text-xs text-[var(--color-fg-muted)]">
+            {t('movieDetail.watchedCount', { count: movie.watchedCount })}
+          </p>
+        )}
+      </DetailHeader>
 
       {movie.watchedCount > 0 && (
         <WatchHistoryTable

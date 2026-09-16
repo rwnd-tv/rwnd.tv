@@ -17,6 +17,82 @@ permissions:
   contents: read
 
 jobs:
+  # Detects whether this push/PR touches anything beyond documentation, so
+  # a docs-only change (e.g. a docs/TODO.md edit) doesn't have to wait on
+  # the full two-arch `test` matrix below (lint/knip/typecheck/audit/test
+  # suite/Docker build+scan) — none of which can possibly be affected by a
+  # markdown-only diff. `format` below still runs unconditionally for
+  # every push, since Prettier does check `.md` files and a docs-only
+  # change is exactly the case that could fail it.
+  #
+  # `'**'` plus two `!`-prefixed exclusions, with `some-with-excludes`,
+  # rather than just the two negated patterns alone: dorny/paths-filter's
+  # own docs warn that a filter made only of `!` patterns does NOT act as
+  # a blacklist under the default `some` predicate-quantifier — it needs
+  # an explicit positive pattern (`'**'`, i.e. "any file at all") for the
+  # exclusions to actually subtract from.
+  changes:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # Needed only for the pull_request case, where this action fetches
+      # the changed-file list from the GitHub REST API rather than git.
+      pull-requests: read
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+    steps:
+      # Required for the push-to-main case (dorny/paths-filter's own docs:
+      # "Uses git commands to detect changes - repository must be already
+      # checked out"); the pull_request case ignores this and uses the API
+      # instead, but checking out unconditionally is harmless either way.
+      # Default shallow depth is fine — the action fetches more history
+      # itself (doubling until it finds a common ancestor) if needed.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        id: filter
+        with:
+          # Explicit rather than relying on the "defaults to the repo's
+          # default branch" behaviour: this workflow only ever triggers on
+          # push to `main` itself, which is exactly the "long-lived
+          # branch" case dorny/paths-filter's docs describe as comparing
+          # against "the most recent commit on the same branch before the
+          # push" when `base` names that same branch. Ignored for
+          # pull_request events (compared against the PR's own base
+          # instead).
+          base: main
+          predicate-quantifier: some-with-excludes
+          filters: |
+            code:
+              - '**'
+              - '!**/*.md'
+              - '!docs/**'
+
+  # Runs unconditionally (no dependency on `changes` above) — this is the
+  # one check that actually needs to see a docs-only change, since
+  # `pnpm format:check` covers every `.md` file in the repo. Split out
+  # from the heavy `test` matrix below so a docs-only push isn't gated on
+  # a full two-arch build/test/Docker-scan it can't affect; `test` itself
+  # no longer has its own "Format check" step, to avoid running this
+  # twice on a push that touches both code and docs.
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Format check
+        run: pnpm format:check
+
   # Both architectures run the full job identically — lint through the
   # Docker build/scan — rather than assuming which steps are actually
   # arch-sensitive (native deps like @node-rs/argon2/esbuild/tailwindcss-
@@ -28,7 +104,17 @@ jobs:
   # ubuntu-latest)"/"test (arm64, ubuntu-24.04-arm)", not a stable "test",
   # so branch protection's required "ci" check (see the `ci` gate job
   # below) couldn't target it directly.
+  #
+  # Skipped entirely for a docs-only push/PR (`changes.outputs.code`) —
+  # see that job's own comment. `needs.changes.outputs.code == 'true'`
+  # rather than `!= 'false'`: if the `changes` job itself failed, its
+  # output is unset, and this condition (correctly) evaluates to false
+  # rather than accidentally running. The `ci` gate job below separately
+  # fails outright if `changes` didn't succeed, so a broken detector can
+  # never silently skip real coverage.
   test:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -96,9 +182,6 @@ jobs:
 
       - name: Knip (unused files/exports/dependencies)
         run: pnpm knip
-
-      - name: Format check
-        run: pnpm format:check
 
       - name: Typecheck
         run: pnpm typecheck
@@ -211,16 +294,33 @@ jobs:
   # `test`'s own check name varies per matrix leg (see the comment on
   # `test` above). Always runs (even if a `test` leg failed or was
   # skipped) so it can fail deliberately instead of silently not posting.
+  #
+  # `test`'s result is allowed to be "skipped" (a legitimate docs-only
+  # push, per the `changes` job) as well as "success" — but `changes` and
+  # `format` must both actually have succeeded, not just not-failed:
+  # `if: always()` means this step still runs even if `changes` itself
+  # errored, and a broken change-detector must fail the gate rather than
+  # silently read as "no code changed" and wave a real change through.
   ci:
-    needs: test
+    needs: [changes, format, test]
     if: always()
     runs-on: ubuntu-latest
     steps:
-      - name: Check test matrix result
+      - name: Check required jobs' results
         run: |
-          result='${{ needs.test.result }}'
-          if [ "$result" != "success" ]; then
-            echo "test matrix result: $result"
+          changes_result='${{ needs.changes.result }}'
+          if [ "$changes_result" != "success" ]; then
+            echo "changes detection result: $changes_result"
+            exit 1
+          fi
+          format_result='${{ needs.format.result }}'
+          if [ "$format_result" != "success" ]; then
+            echo "format result: $format_result"
+            exit 1
+          fi
+          test_result='${{ needs.test.result }}'
+          if [ "$test_result" != "success" ] && [ "$test_result" != "skipped" ]; then
+            echo "test matrix result: $test_result"
             exit 1
           fi
 

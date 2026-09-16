@@ -530,7 +530,7 @@ Format:
       once, covering both the scheduled job and any future manual-trigger
       route, rather than solving it twice.
 
-- [ ] **Investigate: two database backups being written per day, not one** (2026-09-16 added; M5)
+- [ ] **Investigate: two database backups being written per day, not one** (2026-09-16 added, root-caused 2026-09-16; M5)
 
       James, 2026-09-16: seeing two backup dumps land per calendar day
       instead of the expected one. Not yet root-caused; needs
@@ -557,6 +557,49 @@ Format:
       one day, most likely just retained as two separate files
       (`dailyRetentionDays` keeps everything younger than its window, so
       neither would even get pruned as a duplicate).
+
+      **Root-caused 2026-09-16, hypothesis confirmed against real prod
+      backup files** (`/pool/docker/rwnd-tv/db-backups/` on home-server,
+      timestamps below in UTC): the file list shows a clean recurring
+      pattern of a same-day extra dump every time the container restarts:
+
+      ```
+      2026-09-10 14:50 -> 2026-09-11 14:50 (24h, as expected)
+      2026-09-11 23:44 <- extra, same day, from a restart
+      2026-09-12 23:44 (24h from the restart, not the original 14:50 slot)
+      2026-09-13 12:24 <- another restart shifts the clock again
+      2026-09-14 12:24 (24h from that restart)
+      2026-09-14 19:13 <- another same-day extra, another restart
+      2026-09-15 19:13 (24h from that restart)
+      2026-09-15 21:02 <- another same-day extra, another restart
+      ```
+
+      Every single duplicate lines up with a fresh container start (prod's
+      current `StartedAt` is `2026-09-15T21:02:07Z`, 4 seconds before that
+      last backup) — confirming `scheduleDatabaseBackup`'s "run once
+      immediately on boot, then every 24h via `setInterval`" design is
+      exactly the mechanism: the 24h clock re-anchors to whenever the
+      process last started, so any restart landing on the same calendar
+      day as the previous scheduled backup produces a second one that day,
+      and the clock stays shifted from then on rather than settling back
+      onto a fixed time. `docker inspect`'s `RestartCount: 0` doesn't
+      distinguish a deliberate `docker compose up -d` redeploy from a
+      crash-triggered restart (both reset that counter), so this doesn't
+      by itself say whether prod is crash-looping or just being deployed —
+      but it doesn't need to: the bug reproduces from *any* restart,
+      deliberate or not, so the distinction doesn't change the fix.
+
+      **Likely fix, not yet implemented** (kept as investigation only, to
+      fit a short session): anchor the backup to a fixed wall-clock time
+      of day (e.g. run once at boot only to catch config errors early, per
+      the existing comment, but schedule the *recurring* run against the
+      next occurrence of a fixed hour — computed as `msUntil(targetHour)`
+      then a 24h `setInterval` from there — rather than blindly `setInterval`
+      from process-start time). That way a restart mid-day never produces
+      an extra dump: the next scheduled run is always the same time
+      tomorrow, regardless of when the process happened to boot today.
+      Needs its own implementation + test + deploy verification pass,
+      scoped separately from this investigation.
 
 ## Ratings
 

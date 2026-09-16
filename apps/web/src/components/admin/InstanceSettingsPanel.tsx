@@ -49,6 +49,30 @@ function ChevronDownIcon() {
   )
 }
 
+/** What Save actually submits — deliberately not the full `InstanceSettings`
+ * response shape: that also carries `defaultLocale`/`appVersion`/
+ * `traktConfigured`/etc, none of which this panel edits, and the PATCH
+ * handler spreads its body straight into the DB row (apps/api/src/routes/
+ * settings.ts), so an accidentally-included extra key would really get
+ * written. `priorityOrder` and `error` are deliberately NOT part of this
+ * type — see their own state declarations below for why. */
+interface InstanceSettingsForm {
+  instanceName: string
+  registrationMode: RegistrationMode
+  /** '' rather than null — an <input value> can't take null. Converted
+   * back to null at submit time, the only place the API's own
+   * string|null shape is reconstructed. */
+  adminEmail: string
+}
+
+function formFromSettings(settings: InstanceSettings): InstanceSettingsForm {
+  return {
+    instanceName: settings.instanceName,
+    registrationMode: settings.registrationMode,
+    adminEmail: settings.adminEmail ?? '',
+  }
+}
+
 /**
  * Admin-only, but not self-gated on role — this panel relies entirely on
  * `/admin` itself being gated by `AdminRoute.tsx` (isAdminRole), same as
@@ -67,10 +91,21 @@ export function InstanceSettingsPanel() {
   const [open, setOpen] = usePanelOpen('panelAdminInstance')
   const { data } = usePublicSettings()
 
-  const [instanceName, setInstanceName] = useState('')
-  const [registrationMode, setRegistrationMode] = useState<RegistrationMode>('closed')
-  const [adminEmail, setAdminEmail] = useState('')
+  const [form, setForm] = useState<InstanceSettingsForm>({
+    instanceName: '',
+    registrationMode: 'closed',
+    adminEmail: '',
+  })
+  // Kept separate from `form` above: a reorder click applies immediately
+  // and is overwritten by the *server's* response (see updatePriority
+  // below), neither of which is true of `form` — folding it in would make
+  // `api.settings.update(form)` the obvious-looking call, which would PATCH
+  // metadataProviderPriority on every Save and race a concurrent admin's
+  // own reorder.
   const [priorityOrder, setPriorityOrder] = useState<MetadataProviderSource[]>([])
+  // Also kept separate: this is mutation state, not form state — folding
+  // it into `form` would mean a re-seed either clears it or inconsistently
+  // doesn't.
   const [error, setError] = useState<string>()
 
   // Seeds the editable local state from the query once it loads (and again
@@ -89,18 +124,16 @@ export function InstanceSettingsPanel() {
   const [loadedSettings, setLoadedSettings] = useState<InstanceSettings>()
   if (data && data !== loadedSettings) {
     setLoadedSettings(data)
-    setInstanceName(data.instanceName)
-    setRegistrationMode(data.registrationMode)
-    setAdminEmail(data.adminEmail ?? '')
+    setForm(formFromSettings(data))
     setPriorityOrder(data.metadataProviderPriority)
   }
 
   const updateSettings = useMutation({
     mutationFn: () =>
       api.settings.update({
-        instanceName,
-        registrationMode,
-        adminEmail: adminEmail.trim() === '' ? null : adminEmail.trim(),
+        instanceName: form.instanceName,
+        registrationMode: form.registrationMode,
+        adminEmail: form.adminEmail.trim() === '' ? null : form.adminEmail.trim(),
       }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['settings', 'public'] }),
     onError: (err) =>
@@ -139,8 +172,8 @@ export function InstanceSettingsPanel() {
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <Field
           label={t('admin.instance.instanceName')}
-          value={instanceName}
-          onChange={(e) => setInstanceName(e.target.value)}
+          value={form.instanceName}
+          onChange={(e) => setForm((f) => ({ ...f, instanceName: e.target.value }))}
           required
         />
 
@@ -153,8 +186,8 @@ export function InstanceSettingsPanel() {
                   type="radio"
                   name="registrationMode"
                   value={mode}
-                  checked={registrationMode === mode}
-                  onChange={() => setRegistrationMode(mode)}
+                  checked={form.registrationMode === mode}
+                  onChange={() => setForm((f) => ({ ...f, registrationMode: mode }))}
                 />
                 {t(`admin.instance.registration${mode[0]!.toUpperCase()}${mode.slice(1)}`)}
               </label>
@@ -166,8 +199,8 @@ export function InstanceSettingsPanel() {
           <Field
             label={t('admin.instance.adminEmail')}
             type="email"
-            value={adminEmail}
-            onChange={(e) => setAdminEmail(e.target.value)}
+            value={form.adminEmail}
+            onChange={(e) => setForm((f) => ({ ...f, adminEmail: e.target.value }))}
             placeholder={t('admin.instance.adminEmailPlaceholder')}
             error={error}
           />

@@ -86,7 +86,7 @@ interface RequestLogEntry {
   ip: string
 }
 
-export function formatRequestLog(entry: RequestLogEntry, format: 'json' | 'pretty'): string {
+function formatRequestLog(entry: RequestLogEntry, format: 'json' | 'pretty'): string {
   if (format === 'json') return JSON.stringify(entry)
   return `${entry.at} ${entry.method} ${entry.path} ${entry.status} ${entry.durationMs}ms user=${entry.userId ?? '-'} ip=${entry.ip}`
 }

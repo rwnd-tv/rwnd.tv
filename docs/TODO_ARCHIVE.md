@@ -123,6 +123,74 @@ grouping, sorted oldest to newest.
       holds under a real double-trigger, not just the documented
       concurrency-group semantics it was reasoned from.
 
+- [x] **Six reuse/simplification cleanups from the M4 review's milestone-wide `/code-review high` pass** (2026-09-15 19:53
+      added, done 2026-09-16)\
+      All six landed as one commit each, in dependency order (the
+      collapsible-panel and Instance-settings items both touch
+      `InstanceSettingsPanel.tsx`, done in that order rather than
+      interleaved): (1) a shared `components/library/DetailHeader.tsx`
+      replacing the poster/still+text layout duplicated across
+      Show/Season/Movie/Episode detail pages, breakpoint kept as a prop
+      (`sm` vs `lg`) rather than unified, since the inconsistency predates
+      this cleanup and belongs to M5's mobile pass to resolve; (2) a
+      `useCopyFeedback()` hook replacing five hand-rolled clipboard
+      "Copied!" state machines, covering both the boolean and keyed-by-id
+      shapes those five sites needed; (3) `lib/date.ts`'s `parseLocalDay`
+      absorbing `calendar-shared.ts`'s duplicate of the same
+      UTC-midnight-off-by-one-avoiding idiom; (4) `CalendarFeedsPanel.tsx`'s
+      three near-identical per-feed-type settings forms replaced by one
+      `FeedSettingsForm` driven by a `FEED_FIELDS` config map; (5) a
+      `components/ui/CollapsiblePanel.tsx` replacing 27 hand-rolled
+      `Card`+`details`/`summary`+chevron instances across 22 files
+      (`open`/`onOpenChange` props rather than owning `usePanelOpen`
+      itself, since `ImportProgress.tsx` force-opens its own panel from an
+      effect; a `tone` prop for `DeleteAccountCard`'s red styling; a
+      `divider` prop for the four Import panels that never had one); (6)
+      `InstanceSettingsPanel.tsx`'s three individual `useState` fields
+      consolidated into one `InstanceSettingsForm` object, `priorityOrder`
+      and `error` deliberately left separate (different lifecycle/
+      authority and mutation-state-vs-form-state reasons respectively) —
+      preceded by a characterisation test
+      (`InstanceSettingsPanel.test.tsx`, 8 cases) written and verified
+      green against the *pre*-refactor component, then confirmed to pass
+      completely unmodified against the refactored one. Verified after
+      every commit: `pnpm format:check`/`lint`/`-r typecheck`/`knip`, the
+      full `apps/web` test suite (191 tests by the end), and a final full
+      monorepo suite against a throwaway Postgres container. Deployed to
+      dev.rwnd.tv and manually clicked through all six touched areas
+      before closing this out. Surfaced one new bug along the way
+      (`InstanceSettingsPanel`'s render-phase re-seed discarding unsaved
+      edits on a metadata-provider reorder) — deliberately not fixed here,
+      logged as its own `docs/TODO.md` item instead.
+
+- [x] **Fix `InstanceSettingsPanel`'s render-phase re-seed discarding unsaved edits on a metadata-provider reorder** (2026-09-16
+      added, fixed 2026-09-16)\
+      Root cause (see the item above): `usePublicSettings` has no
+      `staleTime`, so the priority-reorder mutation's own
+      `invalidateQueries` triggers a refetch, and the re-seed logic used
+      to copy every field from that fresh response into the form —
+      including fields nothing had actually changed — overwriting
+      whatever the admin was mid-typing elsewhere.\
+      James proposed the fix directly rather than picking from the three
+      options first drafted: compare each field's freshly-fetched value
+      against what THAT field was last synced from (not against the
+      form's current value). A refetch that brings back the same value a
+      field already had leaves an in-progress edit to it alone; a refetch
+      that brings back a genuinely different value (a real change made
+      elsewhere) still overwrites the edit. This is a materially better
+      rule than the "gate the whole re-seed on any field being dirty"
+      approach floated first, which would have also suppressed genuine
+      external changes to unrelated fields for as long as anything else
+      in the form was mid-edit.\
+      The characterisation test written for the original consolidation
+      (`InstanceSettingsPanel.test.tsx`) was rewritten in place rather
+      than left pinning the old buggy behavior: one test now confirms an
+      edit survives a same-value refetch, one confirms the reorder
+      specifically doesn't clobber an unrelated field, and one confirms a
+      genuinely different incoming value still wins over local edits.
+      Verified: `format:check`/`lint`/`-r typecheck`/`knip`, full
+      `apps/web` suite (193 tests).
+
 ## Open questions / not yet decided
 
 - [x] **Local dev-loop** (2026-08-09 20:40)\

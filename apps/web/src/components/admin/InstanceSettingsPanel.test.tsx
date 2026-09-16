@@ -176,16 +176,18 @@ describe('InstanceSettingsPanel', () => {
     expect(screen.queryByText('Metadata providers')).not.toBeInTheDocument()
   })
 
-  it('a later refetch with a fresh object re-seeds the form, discarding unsaved edits (characterizes current behavior — see docs/TODO.md)', async () => {
+  it('a refetch that brings back the SAME field value leaves an unsaved edit to that field alone (fixed 2026-09-16, see docs/TODO.md)', async () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
     vi.mocked(api.settings.get).mockResolvedValueOnce(SETTINGS)
     // React Query's structural sharing collapses a merely spread-copied
     // object back to the SAME reference as before (deep-equal data keeps
     // the old identity to avoid pointless re-renders) — a plain `{...SETTINGS}`
-    // on the refetch would NOT trigger the render-phase re-seed at all. A
-    // genuinely different field value is needed to force a new identity
-    // through structural sharing, while instanceName stays "My rwnd.tv" so
-    // the assertion below can tell the re-seed actually ran.
+    // on the refetch would NOT trigger the render-phase re-seed check at
+    // all. A genuinely different field (environmentLabel) is needed to
+    // force a new identity through structural sharing, while instanceName
+    // stays "My rwnd.tv" — unchanged from what this field was already
+    // seeded with — so the assertion below can tell whether the re-seed
+    // wrongly overwrote the in-progress edit anyway.
     vi.mocked(api.settings.get).mockResolvedValueOnce({
       ...SETTINGS,
       environmentLabel: 'refetched',
@@ -200,6 +202,59 @@ describe('InstanceSettingsPanel', () => {
     await queryClient.invalidateQueries({ queryKey: ['settings', 'public'] })
     await waitFor(() => expect(api.settings.get).toHaveBeenCalledTimes(2))
 
-    await waitFor(() => expect(screen.getByDisplayValue('My rwnd.tv')).toBeInTheDocument())
+    // The old bug: this used to re-seed to "My rwnd.tv", discarding the
+    // edit, even though instanceName itself never actually changed.
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(screen.getByDisplayValue('Unsaved edit')).toBeInTheDocument()
+  })
+
+  it('a metadata-provider reorder does not discard an unsaved edit to another field', async () => {
+    vi.mocked(api.settings.get).mockResolvedValue(SETTINGS)
+    // The reorder's own server response differs from SETTINGS' original
+    // order, which is exactly what used to trigger the render-phase
+    // re-seed via the reorder's own `invalidateQueries` refetch.
+    vi.mocked(api.settings.update).mockResolvedValue({
+      ...SETTINGS,
+      metadataProviderPriority: ['tvdb', 'tmdb'],
+    })
+    renderPanel()
+
+    const nameInput = await screen.findByDisplayValue('My rwnd.tv')
+    await userEvent.clear(nameInput)
+    await userEvent.type(nameInput, 'Unsaved edit')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Move TMDB up' }))
+    await waitFor(() =>
+      expect(api.settings.update).toHaveBeenCalledWith({
+        metadataProviderPriority: ['tmdb', 'tvdb'],
+      }),
+    )
+
+    expect(screen.getByDisplayValue('Unsaved edit')).toBeInTheDocument()
+  })
+
+  it('a refetch that brings back a GENUINELY DIFFERENT field value overwrites an unsaved edit to that field', async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    vi.mocked(api.settings.get).mockResolvedValueOnce(SETTINGS)
+    // Unlike the previous test, instanceName itself is different this
+    // time — a real change made elsewhere (another admin, another tab).
+    // That has to win over local, unsaved typing: an edit sitting on top
+    // of a now-outdated value isn't a well-formed edit to keep.
+    vi.mocked(api.settings.get).mockResolvedValueOnce({
+      ...SETTINGS,
+      instanceName: 'Renamed from elsewhere',
+    })
+    renderPanel(queryClient)
+
+    const nameInput = await screen.findByDisplayValue('My rwnd.tv')
+    await userEvent.clear(nameInput)
+    await userEvent.type(nameInput, 'Unsaved edit')
+    expect(screen.getByDisplayValue('Unsaved edit')).toBeInTheDocument()
+
+    await queryClient.invalidateQueries({ queryKey: ['settings', 'public'] })
+
+    await waitFor(() =>
+      expect(screen.getByDisplayValue('Renamed from elsewhere')).toBeInTheDocument(),
+    )
   })
 })

@@ -123,8 +123,32 @@ export function InstanceSettingsPanel() {
   // first real `data` always differs from it, so the sync always runs once.
   const [loadedSettings, setLoadedSettings] = useState<InstanceSettings>()
   if (data && data !== loadedSettings) {
+    // Re-seeds per field against what THAT field last read from the
+    // server, not against the form's current value — so a refetch that
+    // brings back the same value this field was already seeded with
+    // (e.g. the immediate-apply provider reorder further down invalidates
+    // this same query purely to refresh metadataProviderPriority) leaves
+    // an in-progress edit alone, while a refetch that brings back a
+    // genuinely different value (someone changed it elsewhere) still
+    // wins and overwrites the edit. Found 2026-09-16, docs/TODO.md: the
+    // previous version re-seeded the whole form from every refetch
+    // regardless of which field, if any, had actually changed.
+    const prev = loadedSettings
     setLoadedSettings(data)
-    setForm(formFromSettings(data))
+    setForm((f) =>
+      !prev
+        ? formFromSettings(data)
+        : {
+            instanceName:
+              data.instanceName === prev.instanceName ? f.instanceName : data.instanceName,
+            registrationMode:
+              data.registrationMode === prev.registrationMode
+                ? f.registrationMode
+                : data.registrationMode,
+            adminEmail:
+              data.adminEmail === prev.adminEmail ? f.adminEmail : (data.adminEmail ?? ''),
+          },
+    )
     setPriorityOrder(data.metadataProviderPriority)
   }
 

@@ -36,7 +36,7 @@ Format:
       same thing from different angles; removing the ignore once TS 7 is
       supported stays the exit condition either way.
 
-- [ ] **Six reuse/simplification cleanups from the M4 review's milestone-wide `/code-review high` pass** (2026-09-15 19:53 added)
+- [ ] **Six reuse/simplification cleanups from the M4 review's milestone-wide `/code-review high` pass** (2026-09-15 19:53 added; M5)
 
       Each independently confirmed, none urgent (maintainability only, no
       behavior change needed):
@@ -44,7 +44,8 @@ Format:
       - `apps/web/src/routes/ShowDetailPage.tsx` and `SeasonDetailPage.tsx`
         both add `sm:items-start` to fix the same poster/text
         layout-shift bug independently applied earlier to
-        `MovieDetailPage.tsx`/`EpisodeDetailPage.tsx`. No shared
+        `MovieDetailPage.tsx`/`EpisodeDetailPage.tsx` (which use the same
+        fix at a different breakpoint, `lg:items-start`). No shared
         poster+text layout component exists, so the next new detail-style
         page will silently reintroduce the bug. Worth factoring into one
         shared component.
@@ -68,11 +69,12 @@ Format:
 
       - `HistorySettingsForm`, `ShowsSettingsForm`, and
         `MoviesSettingsForm` in `CalendarFeedsPanel.tsx` are three
-        near-identical ~150-line components (one `useState` per checkbox,
-        a hand-computed dirty boolean, an identical mutation/`onSuccess`
-        shape). Adding a 4th feed type means copy-pasting a whole new
-        component instead of adding one config entry to a shared,
-        config-driven one.
+        near-identical components (~60-80 lines each; the ~150-line
+        estimate given when this item was first logged was too high)
+        sharing one `useState` per checkbox, a hand-computed dirty
+        boolean, and an identical mutation/`onSuccess` shape. Adding a
+        4th feed type means copy-pasting a whole new component instead of
+        adding one config entry to a shared, config-driven one.
 
       - A 6-line collapsible-panel-header block (`Card` +
         `details`/`summary` + `ChevronDownIcon` + divider, paired with
@@ -91,7 +93,7 @@ Format:
 
 ## UI polish
 
-- [ ] **Inset the dropdown arrow on `<select>` controls** (2026-09-06 added)
+- [ ] **Inset the dropdown arrow on `<select>` controls** (2026-09-06 added; M5)
 
       The native browser dropdown arrow on every `<select>` sits flush
       against the right edge, tighter than the horizontal margin other
@@ -108,7 +110,7 @@ Format:
       `Select.tsx`. Worth folding the latter into `Select.tsx` while
       touching this, unless there's a reason it was kept separate.
 
-- [ ] **Only show the tick on "Watched" buttons once the item is watched** (2026-09-06 added)
+- [ ] **Only show the tick on "Watched" buttons once the item is watched** (2026-09-06 added; M5)
 
       The labeled Watched buttons all render their `CheckIcon` unconditionally,
       next to the label, regardless of watched state; only the button's
@@ -125,7 +127,7 @@ Format:
       an empty circle. Confirm with James whether that one should change
       too, or only the four labeled buttons above.
 
-- [ ] **Remove the calendar month grid's selected-day panel** (2026-09-06 13:37 added, redirected to removal 2026-09-10)
+- [ ] **Remove the calendar month grid's selected-day panel** (2026-09-06 13:37 added, redirected to removal 2026-09-10; M5)
 
       James, 2026-09-10: doesn't serve a purpose any more, remove it
       rather than fix it. Originally tracked a bug where `selectedDay`
@@ -148,9 +150,32 @@ Format:
       will need updating too, along with whatever `CalendarMonthGrid.test.tsx`
       coverage exercises the removed behaviour.
 
+- [ ] **Make each Calendar feeds row collapsible, collapsed by default** (2026-09-16 added; M5)
+
+      `FeedRow` (`CalendarFeedsPanel.tsx`, around line 244) always renders
+      its full body — the feed URL, copy/subscribe/regenerate/delete
+      controls, last-synced text, and the feed-type-specific settings
+      form (`HistorySettingsForm`/`ShowsSettingsForm`/`MoviesSettingsForm`)
+      — for all three rows (History, TV Shows, Films) whenever a feed
+      exists. James, 2026-09-16: each row should collapse, and start
+      collapsed by default, same as the outer "Calendar feeds" panel
+      itself already does via `usePanelOpen('panelSettingsCalendarFeeds')`
+      at the `CalendarFeedsPanel` level (line 336).
+
+      Three independent rows means three independent open/closed states,
+      not one shared toggle. `usePanelOpen` persists to a cookie keyed by
+      name (see its own file), so this likely wants three more keys, e.g.
+      `panelCalendarFeedRow{History,Shows,Movies}`, defaulted closed
+      rather than open (unlike the outer panel's own default) per this
+      request. Worth doing alongside, or reusing parts of, the already-
+      logged `CollapsiblePanel` extraction above (the same `Card` +
+      `details`/`summary` + `ChevronDownIcon` pattern duplicated across 23
+      files), since a `FeedRow` header collapsing would be a 24th
+      near-identical copy otherwise.
+
 ## Mobile / responsive
 
-- [ ] **Quality pass on the whole interface at phone width** (2026-09-06 added)
+- [ ] **Quality pass on the whole interface at phone width** (2026-09-06 added; M5)
 
       James, 2026-09-06: most users interact with this through their
       phones, and it's had very little real testing at that scaling so
@@ -161,13 +186,15 @@ Format:
       fit, and anything that only works because it was built and tested
       at desktop width.
 
-      Current state going in: only 8 `.tsx` files in `apps/web/src` use
-      any Tailwind responsive breakpoint (`sm:`/`md:`/`lg:`/`xl:`) at all
-      (`Sidebar.tsx`, `UserRow.tsx`, `DatabasePanel.tsx`,
-      `EpisodeDetailPage.tsx`, `LandingPage.tsx`, `MovieDetailPage.tsx`,
-      `SeasonDetailPage.tsx`, `ShowDetailPage.tsx`) out of the whole
-      route/component tree, so most of the app has had no explicit mobile
-      treatment at all rather than a few rough edges to touch up.
+      Current state as of 2026-09-06, re-checked 2026-09-16: 10 `.tsx`
+      files in `apps/web/src` use any Tailwind responsive breakpoint
+      (`sm:`/`md:`/`lg:`/`xl:`) at all (`Sidebar.tsx`, `UserRow.tsx`,
+      `DatabasePanel.tsx`, `EpisodeDetailPage.tsx`, `LandingPage.tsx`,
+      `MovieDetailPage.tsx`, `SeasonDetailPage.tsx`, `ShowDetailPage.tsx`,
+      plus `WebhooksPanel.tsx` and `DatabaseBackupsPanel.tsx` added since
+      the original 8 were counted) out of the whole route/component tree,
+      so most of the app has had no explicit mobile treatment at all
+      rather than a few rough edges to touch up.
 
       Broad and open-ended by nature: expect this to surface a long tail
       of individual, page-specific fixes rather than one shared root
@@ -179,7 +206,7 @@ Format:
 
 ## TV Shows / Movies gallery follow-ups
 
-- [ ] **Sticky filter/sort bar on TV Shows** (2026-09-06 added)
+- [ ] **Sticky filter/sort bar on TV Shows** (2026-09-06 added; M5)
 
       "Filter by title", "Filters", and "Sort" (`LibraryControls.tsx`,
       shared with MoviesPage) should stay pinned at the top of the TV Shows
@@ -190,7 +217,7 @@ Format:
       `MoviesPage.tsx` too since it uses the same control bar, but confirm
       with James before extending scope there.
 
-- [ ] **Sticky filter/sort bar on History** (2026-09-06 added)
+- [ ] **Sticky filter/sort bar on History** (2026-09-06 added; M5)
 
       Same as the TV Shows item above: `HistoryPage.tsx`'s "Filter by
       title", "Filters" (`FiltersPanel.tsx`, holding
@@ -198,7 +225,7 @@ Format:
       built from the same shared `LibraryControls.tsx`, should stay pinned
       at the top while the history list scrolls beneath it.
 
-- [ ] **Sticky filter/sort bar on a Watchlist's detail page** (2026-09-06 added)
+- [ ] **Sticky filter/sort bar on a Watchlist's detail page** (2026-09-06 added; M5)
 
       Same as the two items above: `WatchlistDetailPage.tsx`'s "Filter by
       title" and "Sort" row (`LibraryControls.tsx`; no `FiltersPanel` here,
@@ -213,6 +240,27 @@ Format:
       suffers.
 
 ## Auth & accounts
+
+- [ ] **Explain invite-only mode on the Create an account screen** (2026-09-16 added)
+
+      `RegisterPage.tsx` renders the invite code `Field` whenever
+      `settings?.registrationMode === 'invite'` (around line 118), but
+      nothing on the page says why that field is there or that the
+      instance is invite-only at all: the field is just labeled
+      `register.inviteCode` ("Invite code") with no surrounding copy.
+      Someone landing on the page with no code in hand has no way to tell
+      whether it's optional, what it's for, or where to get one.
+
+      `register.closed` and `register.emailNotConfigured`
+      (`i18n/locales/*/common.json`) already show this pattern for the
+      other two gated states on this same page (registration fully closed,
+      SMTP not configured); add a matching string, e.g.
+      "This instance is invite-only. You'll need an invite code from an
+      admin to create an account," shown above or alongside the invite
+      code field only when `registrationMode === 'invite'`.
+
+      James, 2026-09-16: the screen is a bit opaque right now, wants some
+      explanatory text added for this case.
 
 - [ ] **Passkey (WebAuthn) support** (2026-08-23 15:45 added)
 
@@ -243,7 +291,8 @@ Format:
 - [ ] **IMDb ratings on Movies (and maybe TV Shows)** (2026-09-01 13:35 added, shelved 2026-09-01, not on any milestone)
 
       Would show a rating badge next to the existing plain-text "IMDb"
-      link on the detail pages (`MovieDetailPage.tsx`, around line 276;
+      link on the detail pages (`MovieDetailPage.tsx`, around line 288 as
+      of 2026-09-16 — drifted from 276 when this item was first logged;
       that link's own comment currently says "this app holds no IMDb
       rating"). Link groundwork (`imdbId` already resolved for most
       movies/shows) exists; only the rating value itself is missing.
@@ -285,7 +334,7 @@ Format:
       counts as personal use. Movies-only vs. Movies+TV Shows was never
       decided either, moot until this unblocks.
 
-- [ ] **Season/episode pages can drift from the runtime (and other fields) a play was actually logged against** (2026-09-11 23:50 added)
+- [ ] **Season/episode pages can drift from the runtime (and other fields) a play was actually logged against** (2026-09-11 23:50 added; M5)
 
       `routes/library/seasons.ts` fetches episode metadata (title, overview,
       still image, runtime, air date) live from the provider on every
@@ -324,19 +373,23 @@ Format:
 
 ## Sensible defaults
 
-- [ ] **Default History's Filters > Type to "Watched" only** (2026-09-06 added)
+- [ ] **Default History's Filters > Type to "Watched" only** (2026-09-06 added; M5)
 
       `HistoryPage.tsx`'s Filters panel currently defaults to all four
       activity kinds shown (`ACTIVITY_KINDS`: watch/rating/watchlist/
       dropped) when no filter cookie is set yet, via
-      `useActivityKindFilterCookie`'s `new Set(ACTIVITY_KINDS)` fallback
-      (`use-activity-kind-filter-cookie.ts`). Change that fallback to just
-      `watch` so a first-time (or cookie-cleared) visit to History shows
-      watched activity only, matching what most people actually want from
-      a watch history page; the other three kinds stay one click away in
-      the Filters panel same as today.
+      `useActivityKindFilterCookie`'s `new Set(ACTIVITY_KINDS)` fallback.
+      That fallback logic has since moved into the generalized shared
+      `use-kind-filter-cookie.ts` (also used by `CalendarPage.tsx`'s own
+      filter; `use-activity-kind-filter-cookie.ts` now just wraps it), so
+      the fix now lands in `use-kind-filter-cookie.ts`'s default rather
+      than the file this item originally named. Change that default to
+      just `watch` so a first-time (or cookie-cleared) visit to History
+      shows watched activity only, matching what most people actually
+      want from a watch history page; the other three kinds stay one
+      click away in the Filters panel same as today.
 
-- [ ] **Default the TV Shows calendar feed to "Include every show I've ever watched" only** (2026-09-06 added)
+- [ ] **Default the TV Shows calendar feed to "Include every show I've ever watched" only** (2026-09-06 added; M5)
 
       `ShowsSettingsForm` (`CalendarFeedsPanel.tsx`) has three checkboxes
       for a newly-created 'shows' feed, all sourced from the
@@ -359,7 +412,7 @@ Format:
       ships. `includeDropped` has no Movies equivalent (dropping is a
       shows-only concept), so it's untouched either way.
 
-- [ ] **Default the Films calendar feed to "Include every film I've ever watched" only** (2026-09-06 added)
+- [ ] **Default the Films calendar feed to "Include every film I've ever watched" only** (2026-09-06 added; M5)
 
       Same as the TV Shows item above, for `MoviesSettingsForm`
       (`CalendarFeedsPanel.tsx`, Settings > Calendar feeds > Films): its
@@ -374,7 +427,7 @@ Format:
 
 ## Backups
 
-- [ ] **Manual "back up now" button, and restore automation, for the automatic database backup** (2026-09-09 added, narrowed 2026-09-10, narrowed again 2026-09-10)
+- [ ] **Manual "back up now" button for the automatic database backup** (2026-09-09 added, narrowed 2026-09-10, narrowed again 2026-09-10, split from restore automation 2026-09-16; M5)
 
       The admin status/retention view for the automatic whole-database backup
       job shipped 2026-09-10 (`docs/TODO_ARCHIVE.md`, `DatabaseBackupsPanel.tsx`,
@@ -385,27 +438,36 @@ Format:
       nothing else"), last-run outcome, and a link to the Restoring section
       of `docs/self-hosting.md`.
 
-      Two things stay deliberately out of scope:
-
-      A manual "back up now" button is a bigger step: it needs a route that
-      spawns a process on request rather than on a timer, which is a
-      different security shape from a scheduled job (a concurrent-run guard,
-      its own rate limiting) and wants its own decision.
-
-      Restore automation. [ADR 0008](adr/0008-database-backups.md) decided
-      restore stays a manual shell procedure, on the grounds that it's
-      destructive, rare, and deliberate enough that automating it adds risk
-      without adding value. James, 2026-09-10: doesn't fully agree with that
-      call (recorded in the ADR rather than overridden). The panel links out
-      to the documented procedure for now; whether to build an actual
-      in-app restore path is still open and wants its own decision, not a
-      quick follow-on to the button above.
+      A manual "back up now" button is a bigger step than that panel: it
+      needs a route that spawns a process on request rather than on a timer,
+      which is a different security shape from a scheduled job (a
+      concurrent-run guard, its own rate limiting) and wanted its own
+      decision, deliberately left out of scope at the time. Worth building
+      alongside the already-planned M5 cross-process concurrent-run guard on
+      the scheduled job (see below), since a manual-trigger route needs the
+      same guard for the same reason.
 
       The backup cadence itself (24h) stayed a fixed constant, not editable,
       even once retention became admin-editable: the tiers only make sense
       against a steady daily cadence, so there was nothing to open up there.
 
-- [ ] **Show what actually changed in the backup Diff dialog** (2026-09-06 added)
+      Restore automation was originally bundled with this item; split off
+      2026-09-16 as its own item below, since only the button is in M5's
+      scope.
+
+- [ ] **Restore automation for the automatic database backup** (2026-09-09 added, narrowed 2026-09-10 x2, split from the "back up now" button 2026-09-16; Not yet scheduled)
+
+      [ADR 0008](adr/0008-database-backups.md) decided restore stays a
+      manual shell procedure, on the grounds that it's destructive, rare,
+      and deliberate enough that automating it adds risk without adding
+      value. James, 2026-09-10: doesn't fully agree with that call
+      (recorded in the ADR rather than overridden). The admin panel
+      (`DatabaseBackupsPanel.tsx`, shipped 2026-09-10) links out to the
+      documented procedure for now; whether to build an actual in-app
+      restore path is still open and wants its own decision, not a quick
+      follow-on to the manual "back up now" button above.
+
+- [ ] **Show what actually changed in the backup Diff dialog** (2026-09-06 added; M5)
 
       Settings > Database panel > Backups > the Diff button
       (`DatabasePanel.tsx`, the `diffTarget` dialog around line 417)
@@ -437,7 +499,7 @@ Format:
       clear enough in the UI once real entries (not just counts) are on
       screen.
 
-- [ ] **No cross-process concurrent-run guard on the scheduled database backup** (2026-09-14 added, M4 review Stage 3)
+- [ ] **No cross-process concurrent-run guard on the scheduled database backup** (2026-09-14 added, M4 review Stage 3; M5)
 
       `scheduleDatabaseBackup` (`apps/api/src/lib/database-backup.ts`) has
       no protection against two `runDatabaseBackup()` calls overlapping
@@ -468,9 +530,37 @@ Format:
       once, covering both the scheduled job and any future manual-trigger
       route, rather than solving it twice.
 
+- [ ] **Investigate: two database backups being written per day, not one** (2026-09-16 added; M5)
+
+      James, 2026-09-16: seeing two backup dumps land per calendar day
+      instead of the expected one. Not yet root-caused; needs
+      investigation, not just a fix guess.
+
+      `scheduleDatabaseBackup` (`apps/api/src/lib/database-backup.ts`,
+      around line 420) is only called once, from `index.ts`, but it runs
+      one pass immediately on every boot and then again every
+      `BACKUP_INTERVAL_HOURS` (24h) via `setInterval` — deliberate, per
+      its own doc comment, so a missing binary/unwritable directory/
+      version mismatch shows up in the boot log rather than a day later.
+      That means any container restart within the same day (a redeploy, a
+      crash-and-restart, a healthcheck-triggered restart) produces an
+      extra immediate dump on top of whatever the 24h timer already
+      produced, which would explain exactly this symptom if the container
+      is in fact restarting roughly once a day. Check `docker compose
+      logs` / container restart count on both dev and prod for a restart
+      cadence that lines up with the timing of the duplicate backups
+      before assuming the fix is in this file at all.
+
+      Distinct from the already-tracked no-concurrent-run-guard item
+      below (which is about two *overlapping* runs corrupting one
+      `.partial` file): this is two complete, individually valid dumps in
+      one day, most likely just retained as two separate files
+      (`dailyRetentionDays` keeps everything younger than its window, so
+      neither would even get pruned as a duplicate).
+
 ## Ratings
 
-- [ ] **Don't allow rating anything that hasn't aired/released yet** (2026-09-06 added)
+- [ ] **Don't allow rating anything that hasn't aired/released yet** (2026-09-06 added; M5)
 
       The 5-star `RatingPicker` currently renders and works regardless of
       air/release date. Hide it on the frontend for an episode
@@ -500,7 +590,7 @@ Format:
 
 ## Security
 
-- [ ] **Full structured request logging** (2026-08-29 added, re-homed here 2026-09-14)
+- [ ] **Full structured request logging** (2026-08-29 added, re-homed here 2026-09-14; M5)
 
       The M3 ASVS review (`docs/adr/0007-security-posture.md`,
       `docs/security/asvs-l1.md`) only ever added minimal
@@ -687,7 +777,7 @@ Format:
       `docs/security/asvs-l1.md` stays the durable record, updated in place
       per stage rather than replaced.
 
-- [ ] **URL-encode external ids interpolated into TMDB/TVDB request paths** (2026-09-14 added, Stage 1 of the M4 review)
+- [ ] **URL-encode external ids interpolated into TMDB/TVDB request paths** (2026-09-14 added, Stage 1 of the M4 review; M5)
 
       `providers/tmdb.ts` and `providers/tvdb.ts` build request paths like
       `` `/tv/${externalId}` `` and `` `/series/${externalId}/extended` ``
@@ -706,7 +796,7 @@ Format:
       ordinary search/browse, not just webhooks), so it's its own
       follow-up rather than a Stage 1 inline fix.
 
-- [ ] **`serializeCalendarFeed` still 500s on a since-rotated `ENCRYPTION_KEY`** (2026-09-14 added, Stage 5 of the M4 review)
+- [ ] **`serializeCalendarFeed` still 500s on a since-rotated `ENCRYPTION_KEY`** (2026-09-14 added, Stage 5 of the M4 review; M5)
 
       `apps/api/src/routes/tokens.ts`'s `serializeToken` and
       `apps/api/src/lib/calendar-feeds.ts`'s `serializeCalendarFeed` both
@@ -733,7 +823,7 @@ Format:
       folding into Stage 5's scope, which only covers the webhooks panel
       work.
 
-- [ ] **`trakt.ts`'s `ensureFreshAccessToken` gives a cryptic error on a rotated `ENCRYPTION_KEY`** (2026-09-15 added, M4 review's milestone-wide `/code-review high` pass)
+- [ ] **`trakt.ts`'s `ensureFreshAccessToken` gives a cryptic error on a rotated `ENCRYPTION_KEY`** (2026-09-15 added, M4 review's milestone-wide `/code-review high` pass; M5)
 
       Same unguarded-`decryptSecret` shape as the item above and the one
       the milestone-wide pass fixed elsewhere (`lib/totp.ts`'s
@@ -755,7 +845,7 @@ Every open item from [ROADMAP.md](ROADMAP.md) that doesn't already have a
 more specific TODO elsewhere in this file. Kept brief: ROADMAP.md is the
 source of truth for scope; this is just so a TODO listing is complete.
 
-- [ ] **Kodi webhook ingestion** (2026-08-24 16:25 added, un-M2'd 2026-08-24, M4'd 2026-08-28, scoped down 2026-09-11, Tautulli split off 2026-09-14; M4)
+- [ ] **Kodi webhook ingestion** (2026-08-24 16:25 added, un-M2'd 2026-08-24, M4'd 2026-08-28, scoped down 2026-09-11, Tautulli split off 2026-09-14, un-M4'd 2026-09-16; Not yet scheduled)
 
       Tautulli shipped 2026-09-14 (see `docs/TODO_ARCHIVE.md`), leaving
       Kodi as the only source left on what was originally "Tautulli/Kodi
@@ -764,17 +854,26 @@ source of truth for scope; this is just so a TODO listing is complete.
       parser, most likely a small service addon shipped and distributed
       from this repo rather than a config paste.
 
+      M4 closed `✅ done` 2026-09-15 without this item; the `M4` tag went
+      stale at that point and is corrected here rather than left pointing
+      at a closed milestone. Worth a deliberate call during M5 scoping on
+      whether Kodi belongs in M5 or stays unmilestoned again.
+
       James, 2026-08-24: not needed to close out M2. ROADMAP.md's own M2
       "Plex webhook ingestion" bullet only ever mentioned these in
       passing as future work, not as a separate required checkbox, so
       this was over-tagged M2 when first added. Left unmilestoned rather
       than reassigned to M3; no strong reason it belongs there either.
 
-- [ ] **Stats and insights** (2026-08-23 15:32 added, un-M3'd 2026-08-26; Not yet scheduled)
+- [ ] **Stats and insights** (2026-08-23 15:32 added, un-M3'd 2026-08-26, M6'd 2026-09-16; M6, tentative)
 
       The reason to log anything in the first place, but not essential to
       the core logging loop M3 was narrowed to (2026-08-26, see
       ROADMAP.md's M3 framing).
+
+      James, 2026-09-16: pencilled in as M6 while scoping M5, but not set
+      in stone, just how the milestones are shaping up in his head right
+      now.
 
 - [ ] **OIDC login** (2026-08-23 15:34 added, un-M3'd 2026-08-26; Not yet scheduled)
 

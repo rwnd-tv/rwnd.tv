@@ -59,6 +59,23 @@ genuinely production-ready.
 - [x] **An "owner" role, immune to demotion/removal by other admins**: the admin UI above stopped an instance reaching zero admins, but not a rogue or compromised admin demoting every _other_ admin down to `user` one at a time and ending up sole admin, fully within the rules as they stood. A third role, `owner`, exactly one at a time: `PATCH`/`DELETE /admin/users/{id}` both refuse to touch the owner regardless of who's asking, and the role only ever moves via a new self-service `POST /auth/me/transfer-ownership` (Account page, password re-proof, target must already be an admin), which demotes the outgoing owner to a plain admin in the same atomic step. The very first account (`POST /setup`) is now the owner; existing instances (dev and prod both already had an admin) got a one-time backfill promoting their oldest admin. See TODO_ARCHIVE.md and [ADR 0007](adr/0007-security-posture.md)'s addendum.
 - [x] **IMDb deep link on show/movie/episode pages**: a plain text "IMDb" link (not a logo, IMDb's terms forbid that without written permission, unlike TMDB/TVDB), no rating badge. Extended to episode pages during scoping, not just show/movie as originally scoped; see TODO_ARCHIVE.md.
 
+## M5: Mobile quality, defaults, and hardening follow-ups (working title)
+
+- [ ] **Mobile & responsive UI pass**: an audit of the whole app at real phone viewport widths (only 10 of the app's `.tsx` files use any responsive breakpoint today), fixing cramped/overflowing layouts and undersized touch targets as found. Bundled with the UI-polish items already identified as part of the same phone-usability push: sticky filter/sort bars on TV Shows, History, and a Watchlist's detail page; an inset dropdown arrow on `<select>` controls; only showing the tick on "Watched" buttons once actually watched; removing the calendar month grid's now-redundant selected-day panel; and making each Calendar feeds row collapsible (collapsed by default). See [TODO.md](TODO.md).
+- [ ] **Small correctness and default-behavior fixes**: default History's Filters > Type to "Watched" only; default the TV Shows and Films calendar feeds to "include everything I've ever watched" instead of "upcoming only"; block rating anything that hasn't aired/released yet (client and server); reconcile season/episode pages' live provider fetch back into the local `episodes` row instead of letting it drift; investigate and fix the two-backups-per-day bug. See [TODO.md](TODO.md).
+- [ ] **Security hardening follow-ups from the M4 review**: URL-encode external ids interpolated into TMDB/TVDB request paths; fix `serializeCalendarFeed` 500ing on a since-rotated `ENCRYPTION_KEY`; give `trakt.ts`'s token refresh a friendly reconnect message instead of a raw crypto error; add full structured request logging (the one gap the M3 ASVS review left deliberately open). See [TODO.md](TODO.md).
+- [ ] **Maintainability / tidy-up pass**: the six reuse/simplification cleanups logged from the M4 review's `/code-review high` pass (shared poster+text layout, `useCopyFeedback` hook, shared local-date parsing, config-driven calendar settings forms, a `CollapsiblePanel` component, consolidated `InstanceSettingsPanel` form state); showing what actually changed (not just counts) in the backup Diff dialog; a manual "back up now" button (restore automation stays separately deferred per [ADR 0008](adr/0008-database-backups.md)); a cross-process concurrent-run guard on the scheduled backup. See [TODO.md](TODO.md).
+
+## M6: Stats and insights (working title, tentative)
+
+Pencilled in while scoping M5, not set in stone: James, 2026-09-16, this is
+just how the milestones are shaping up in his head right now, not a
+committed scope.
+
+- [ ] **Stats and insights**: the reason to log anything in the first
+      place, per [TODO.md](TODO.md). Scope beyond the headline idea isn't
+      fleshed out yet.
+
 ## Not yet scheduled
 
-Ideas that are in scope for the project eventually but don't have a milestone yet: stats and insights, OIDC login (the `user_credentials` schema was designed for this from M1, see [ADR 0003](adr/0003-auth-model.md)), additional locales beyond English, mobile-friendly PWA installability, public/shareable profile pages.
+Ideas that are in scope for the project eventually but don't have a milestone yet: OIDC login (the `user_credentials` schema was designed for this from M1, see [ADR 0003](adr/0003-auth-model.md)), additional locales beyond English, mobile-friendly PWA installability, public/shareable profile pages.

@@ -25,10 +25,13 @@ updates:
         update-types: ['minor', 'patch']
     ignore:
       # typescript-eslint doesn't support TS 7 yet — see docs/TODO.md's
-      # "Hold TS 7 bump" item. Without this, Dependabot's dev-dependencies
-      # group bundles the TS 7 bump in with unrelated safe updates, so the
-      # whole group fails CI (typescript-eslint refuses to run under TS 7)
-      # until this ignore is removed.
+      # "Hold TS 7 bump" item. The dev-dependencies group above is
+      # restricted to minor/patch, so a TS 7 major no longer bundles with
+      # unrelated updates the way it once did (PR #38's vitest 4 -> 5 was
+      # the case that motivated that restriction); without this ignore,
+      # Dependabot would instead keep proposing/reopening TS 7 as its own
+      # PR, which fails CI on its own (typescript-eslint refuses to run
+      # under TS 7). Remove once typescript-eslint supports TS 7.
       - dependency-name: 'typescript'
         update-types: ['version-update:semver-major']
   - package-ecosystem: 'github-actions'

@@ -4,13 +4,8 @@ import { Link } from 'react-router'
 import type { CalendarEvent } from '@rwnd/shared'
 import { PosterGrid } from '../library/PosterGrid.js'
 import { CalendarEventTile } from './CalendarEventTile.js'
-import {
-  CALENDAR_KIND_DOT_CLASS,
-  calendarHref,
-  eventDayKey,
-  parseLocalDay,
-} from './calendar-shared.js'
-import { toDateInputValue, formatCalendarDayHeading } from '../../lib/date.js'
+import { CALENDAR_KIND_DOT_CLASS, calendarHref, eventDayKey } from './calendar-shared.js'
+import { toDateInputValue, formatCalendarDayHeading, parseLocalDay } from '../../lib/date.js'
 
 const GRID_CELLS = 42
 

@@ -3,13 +3,8 @@ import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router'
 import type { CalendarEvent } from '@rwnd/shared'
 import { Button } from '../ui/Button.js'
-import {
-  CALENDAR_KIND_DOT_CLASS,
-  calendarHref,
-  eventDayKey,
-  parseLocalDay,
-} from './calendar-shared.js'
-import { formatCalendarDayHeading, toDateInputValue } from '../../lib/date.js'
+import { CALENDAR_KIND_DOT_CLASS, calendarHref, eventDayKey } from './calendar-shared.js'
+import { formatCalendarDayHeading, toDateInputValue, parseLocalDay } from '../../lib/date.js'
 
 function EyeIcon() {
   return (

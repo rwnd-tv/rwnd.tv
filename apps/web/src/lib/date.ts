@@ -209,6 +209,19 @@ export function toTimeInputValue(date: Date): string {
 }
 
 /**
+ * Parses a bare 'YYYY-MM-DD' day from parts, not `new Date(str)` directly —
+ * the latter parses as UTC midnight, a day early for anyone west of UTC (a
+ * real bug elsewhere in this codebase, EpisodeDetailPage.tsx's own air date
+ * rendering — not fixed there by this change, just not copied here).
+ * Shared by localDayStartISO/localDayEndISO/formatReleaseDate below and by
+ * components/calendar/calendar-shared.ts's own day-grid parsing.
+ */
+export function parseLocalDay(dayString: string): Date {
+  const [year, month, day] = dayString.split('-').map(Number)
+  return new Date(year!, month! - 1, day)
+}
+
+/**
  * Inverse of toDateInputValue — the exact instant a "YYYY-MM-DD" day
  * (as picked from a native `<input type="date">`, see
  * DateRangeFilterPanel.tsx) starts/ends in the *browser's* local timezone,
@@ -224,25 +237,23 @@ export function toTimeInputValue(date: Date): string {
  * whenever the browser isn't in UTC.
  */
 export function localDayStartISO(dayString: string): string {
-  const [year, month, day] = dayString.split('-').map(Number)
-  return new Date(year!, month! - 1, day, 0, 0, 0, 0).toISOString()
+  const day = parseLocalDay(dayString)
+  day.setHours(0, 0, 0, 0)
+  return day.toISOString()
 }
 
 /** Inverse of toDateInputValue — see localDayStartISO's doc comment. */
 export function localDayEndISO(dayString: string): string {
-  const [year, month, day] = dayString.split('-').map(Number)
-  return new Date(year!, month! - 1, day, 23, 59, 59, 999).toISOString()
+  const day = parseLocalDay(dayString)
+  day.setHours(23, 59, 59, 999)
+  return day.toISOString()
 }
 
 /**
  * Formats a bare 'YYYY-MM-DD' release date (movieDetailSchema's
- * `releaseDate`) for display. Parses from parts like localDayStartISO
- * above, not `new Date(dateString)` directly — the latter parses a bare
- * date as UTC midnight, which renders a day early for anyone west of UTC
- * (a real bug elsewhere in this codebase, EpisodeDetailPage.tsx's own air
- * date rendering — not fixed there by this change, just not copied here).
+ * `releaseDate`) for display. Parses via parseLocalDay above, not
+ * `new Date(dateString)` directly — see that function's own doc comment.
  */
 export function formatReleaseDate(dayString: string, locale: string): string {
-  const [year, month, day] = dayString.split('-').map(Number)
-  return new Date(year!, month! - 1, day).toLocaleDateString(locale, { dateStyle: 'medium' })
+  return parseLocalDay(dayString).toLocaleDateString(locale, { dateStyle: 'medium' })
 }

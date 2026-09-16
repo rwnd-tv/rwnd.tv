@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatCalendarDayHeading } from './date.js'
+import { formatCalendarDayHeading, parseLocalDay } from './date.js'
 
 // A trivial stand-in for react-i18next's `t` — this is a lib-level unit
 // test, not a component render, so the real i18next instance (which
@@ -44,5 +44,27 @@ describe('formatCalendarDayHeading', () => {
     const date = daysFromNow(60)
     const expected = date.toLocaleDateString('en-GB', { dateStyle: 'full' })
     expect(formatCalendarDayHeading(date, 'en-GB', t)).toBe(expected)
+  })
+})
+
+describe('parseLocalDay', () => {
+  it('parses year/month/day as local midnight, matching new Date(y, m-1, d)', () => {
+    const parsed = parseLocalDay('2026-03-15')
+    const expected = new Date(2026, 2, 15)
+    expect(parsed.getTime()).toBe(expected.getTime())
+  })
+
+  it('does not shift a January 1st date to the previous day (the UTC-midnight bug this exists to avoid)', () => {
+    const parsed = parseLocalDay('2026-01-01')
+    expect(parsed.getFullYear()).toBe(2026)
+    expect(parsed.getMonth()).toBe(0)
+    expect(parsed.getDate()).toBe(1)
+  })
+
+  it('does not shift a December 31st date to the next day', () => {
+    const parsed = parseLocalDay('2025-12-31')
+    expect(parsed.getFullYear()).toBe(2025)
+    expect(parsed.getMonth()).toBe(11)
+    expect(parsed.getDate()).toBe(31)
   })
 })

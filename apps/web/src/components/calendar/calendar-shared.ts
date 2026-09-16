@@ -11,20 +11,12 @@ export const CALENDAR_KIND_DOT_CLASS: Record<CalendarEvent['kind'], string> = {
   release: 'bg-[var(--color-success)]',
 }
 
-/** Parses a bare 'YYYY-MM-DD' day from parts, not `new Date(str)` directly
- * — same reasoning as date.ts's formatReleaseDate/localDayStartISO: the
- * latter parses as UTC midnight, a day early for anyone west of UTC. */
-export function parseLocalDay(day: string): Date {
-  const [year, month, dayOfMonth] = day.split('-').map(Number)
-  return new Date(year!, month! - 1, dayOfMonth)
-}
-
 /** Which calendar day (local, 'YYYY-MM-DD') an event's tile groups under —
  * a `watch` event groups by the local day of `endsAt` (the canonical
  * `plays.watchedAt`; a late-night watch's derived start could fall on the
  * previous day, but it's still logged as watched *today*), an `episode`/
  * `release` event by its own bare `date` verbatim (never re-parsed through
- * `new Date`, for the same reason as parseLocalDay above). */
+ * `new Date`, for the same reason as lib/date.ts's parseLocalDay). */
 export function eventDayKey(event: CalendarEvent): string {
   return event.kind === 'watch' ? toDateInputValue(new Date(event.endsAt)) : event.date
 }

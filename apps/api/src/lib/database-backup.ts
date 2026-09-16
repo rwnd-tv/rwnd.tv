@@ -402,8 +402,10 @@ export const BACKUP_INTERVAL_HOURS = 24
  * `msUntilNextHourUtc`'s doc comment for why a fixed anchor, not
  * process-start time, matters). Low-traffic o'clock for a self-hosted app
  * with no configured timezone to reason about; not admin-editable, same
- * reasoning as BACKUP_INTERVAL_HOURS above. */
-export const BACKUP_HOUR_UTC = 3
+ * reasoning as BACKUP_INTERVAL_HOURS above. Not exported: nothing outside
+ * scheduleDatabaseBackup itself needs it (unlike BACKUP_INTERVAL_HOURS,
+ * which the admin status endpoint reports). */
+const BACKUP_HOUR_UTC = 3
 
 /**
  * Milliseconds from `now` until the next occurrence of `hourUtc` (00-23) on
@@ -479,8 +481,11 @@ export function scheduleDatabaseBackup(db: Database): void {
         lastRun = { at: new Date(), status: 'failed', message }
       })
   void run()
-  setTimeout(() => {
-    void run()
-    setInterval(() => void run(), DAY_MS)
-  }, msUntilNextHourUtc(BACKUP_HOUR_UTC, new Date()))
+  setTimeout(
+    () => {
+      void run()
+      setInterval(() => void run(), DAY_MS)
+    },
+    msUntilNextHourUtc(BACKUP_HOUR_UTC, new Date()),
+  )
 }

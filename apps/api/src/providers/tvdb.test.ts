@@ -317,6 +317,41 @@ describe('TvdbProvider.getMovie / getShow', () => {
   })
 })
 
+describe('TvdbProvider — attacker-controlled external ids stay inside their own path segment (M4 review Stage 1)', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('encodes a traversal id rather than letting new URL() normalize it onto a different endpoint', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(loginOk())
+      .mockResolvedValueOnce(apiResponse({ id: 603, name: 'The Matrix', genres: [] }))
+      .mockResolvedValueOnce(apiResponse({ name: 'The Matrix' }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await provider().getMovie('603/../../series/1396', 'en-GB')
+    const urls = fetchMock.mock.calls.map(([u]) => String(u))
+    expect(urls.some((u) => u.includes('/movies/603%2F..%2F..%2Fseries%2F1396/extended'))).toBe(
+      true,
+    )
+  })
+
+  it('encodes a `?` in a series lookup so an injected id cannot merge extra query parameters into the request', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(loginOk())
+      .mockResolvedValueOnce(apiResponse({ id: 1396, name: 'Breaking Bad', seasons: [] }))
+      .mockResolvedValueOnce(apiResponse({ name: 'Breaking Bad' }))
+      .mockResolvedValueOnce(apiResponse({ episodes: [] }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await provider()
+      .getShow('1396?short=false', 'en-GB')
+      .catch(() => {})
+    const urls = fetchMock.mock.calls.map(([u]) => String(u))
+    expect(urls.some((u) => u.includes('/series/1396%3Fshort%3Dfalse/extended'))).toBe(true)
+  })
+})
+
 describe('TvdbProvider.getEpisode', () => {
   afterEach(() => vi.unstubAllGlobals())
 

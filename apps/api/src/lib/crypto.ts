@@ -44,3 +44,29 @@ export function decryptSecret(stored: string, encryptionKey: string): string {
   ])
   return plaintext.toString('utf8')
 }
+
+/**
+ * `decryptSecret` for the "show it again if we still can" case: returns
+ * null instead of throwing when the stored ciphertext can't be read. That
+ * is a real scenario, not a theoretical one — rotating `ENCRYPTION_KEY` is
+ * itself a legitimate response to a suspected compromise, and GCM's auth
+ * tag then fails to verify against the new key. Without this, one
+ * undecryptable row 500s a whole list response rather than degrading to
+ * "regenerate to get a copyable URL" for that one row. Call sites:
+ * `serializeToken` (routes/tokens.ts), `serializeCalendarFeed`
+ * (lib/calendar-feeds.ts), and `verifyEncryptedTotp` (lib/totp.ts), which
+ * treats null as a wrong code. Deliberately swallows the error rather than
+ * logging it: the caller already surfaces the degraded state in the UI,
+ * and the row id it would log adds nothing actionable.
+ */
+export function tryDecryptSecret(
+  stored: string | null | undefined,
+  encryptionKey: string | undefined,
+): string | null {
+  if (!stored || !encryptionKey) return null
+  try {
+    return decryptSecret(stored, encryptionKey)
+  } catch {
+    return null
+  }
+}

@@ -3,7 +3,7 @@ import { createDatabase, traktConnections, users, userCredentials, type Database
 import { createApp } from '../app.js'
 import { hashPassword } from '../lib/password.js'
 import { encryptSecret } from '../lib/crypto.js'
-import { loadEnv } from '../env.js'
+import { loadEnv, type LogFormat } from '../env.js'
 import { resetRateLimits } from '../middleware/rate-limit.js'
 
 /** Tables that accumulate rows across tests, in FK-safe delete order. */
@@ -73,8 +73,8 @@ export async function resetDb(db: Database): Promise<void> {
  * reflect real browser behaviour; apps/api/src/test/hardening.test.ts's
  * CSRF tests explicitly override it to exercise the rejection path.
  */
-export function testApp() {
-  const app = createApp()
+export function testApp(options: { logFormat?: LogFormat } = {}) {
+  const app = createApp(undefined, options)
   return {
     request: async (input: string | Request, init?: RequestInit): Promise<Response> => {
       const headers = new Headers(init?.headers)
@@ -123,13 +123,22 @@ export async function createLocalUser(
  * dance — for tests that want to exercise import behaviour without also
  * re-testing pairing (which has its own dedicated test).
  */
-export async function createTraktConnection(db: Database, userId: string): Promise<void> {
-  const env = loadEnv()
+/** `encryptionKey` overrides the env's real `ENCRYPTION_KEY` for both
+ * tokens, simulating a connection encrypted before a since-rotated key —
+ * see apps/api/src/test/imports.test.ts's `TraktReconnectRequiredError`
+ * coverage, which needs a connection the current key genuinely can't
+ * decrypt. */
+export async function createTraktConnection(
+  db: Database,
+  userId: string,
+  opts: { encryptionKey?: string } = {},
+): Promise<void> {
+  const key = opts.encryptionKey ?? loadEnv().ENCRYPTION_KEY!
   await db.insert(traktConnections).values({
     userId,
     traktUsername: 'test-trakt-user',
-    accessTokenEncrypted: encryptSecret('test-access-token', env.ENCRYPTION_KEY!),
-    refreshTokenEncrypted: encryptSecret('test-refresh-token', env.ENCRYPTION_KEY!),
+    accessTokenEncrypted: encryptSecret('test-access-token', key),
+    refreshTokenEncrypted: encryptSecret('test-refresh-token', key),
     accessTokenExpiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
   })
 }

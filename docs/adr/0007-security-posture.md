@@ -487,3 +487,66 @@ Milestone close (flipping M4 to `✅ done` in `docs/ROADMAP.md`) and any
 eventual version cut both stay separate, later, explicit decisions, not
 automatic just because this review is now complete, same as M3's own
 close-out.
+
+## Update (2026-09-16): M5 security hardening follow-ups, and full request logging
+
+The four smaller follow-ups the M4 review logged rather than fixed inline
+(previous update) shipped as M5's first work: TMDB/TVDB request-path
+encoding (a new `apiPath` tagged-template helper,
+`apps/api/src/providers/api-path.ts`, applied at all 16 interpolation
+sites across both providers); the matching `serializeCalendarFeed`
+rotated-`ENCRYPTION_KEY` gap, closed by making `CalendarFeed.token`
+nullable and factoring a shared `tryDecryptSecret()` (`lib/crypto.ts`)
+that `serializeToken`, `serializeCalendarFeed`, and `verifyEncryptedTotp`
+all now use; a friendlier `trakt.ts` reconnect flow (a typed
+`TraktReconnectRequiredError`, caught in `runImportJob` to store a
+readable message and delete the stale `traktConnections` row so the UI
+prompts to reconnect); and full structured request logging, described
+below.
+
+**Full structured request logging** closes the gap this file's "Deferred
+items" section (`docs/security/asvs-l1.md`) named as genuinely open since
+the M3 review: `apps/api/src/lib/security-log.ts` only ever logged named
+security _events_, never a general per-request log. The design question
+this ADR is the right home for: the fix has to interact directly with
+this document's own accepted risk that a webhook token and a
+calendar-feed token travel as URL _path segments_, not headers, because
+neither a media server's webhook agent nor a calendar app can attach an
+`Authorization` header (see `routes/webhooks.ts`'s doc comment, and the
+"webhook URLs become durably recoverable" update above). That acceptance
+was always scoped to _transit, over TLS_ — never to a token sitting in a
+plaintext container log indefinitely. A naive logger printing `c.req.path`
+on every request would have silently turned an accepted risk into an
+unaccepted one.
+
+The fix: a new `apps/api/src/lib/redact-path.ts`, sibling to the existing
+outbound-query-param `redact-url.ts` but for inbound path segments, run
+before `apps/api/src/middleware/request-log.ts` logs anything. Two
+layers — exact route-shape patterns mirroring `middleware/auth.ts`'s
+`WEBHOOK_PATH`/`CALENDAR_FEED_PATH`, plus a sweep for this app's own
+`rwnd_`/`rwndcal_` token prefixes so a malformed or 404 request can't leak
+one either. The middleware itself is hand-rolled (~50 lines) rather than
+`hono/logger`, which formats to an opaque string with no hook to redact
+the path before it's concatenated — same "small in-house primitive over a
+dependency" precedent as `middleware/rate-limit.ts`. It logs on the way
+_out_ of the handler chain (after `next()` resolves) so it can read both
+the real response status and `c.get('user')?.id` (never the full row,
+which carries email — same F-17 rule `security-log.ts` already
+established), and wraps `next()` in try/catch so an `HTTPException` (every
+CSRF rejection, which `onError` above returns silently today) still gets
+logged before rethrowing to `onError` unchanged.
+
+A correlation/request id was considered and deliberately deferred, not
+built: `hono/request-id` ships free with the installed Hono version, but
+nothing in this codebase consumes one yet (single container, single
+process, no trace aggregation), and adding a field later breaks no
+existing log consumer. Tracked as a fresh `docs/TODO.md` bullet rather
+than silently dropped.
+
+`lib/security-log.ts` stays a deliberately separate stream rather than
+merging into this new pipeline — see that file's own updated doc comment.
+Full ASVS row detail (`V7.1.2`-`V7.1.4`, `V7.2.1`-`V7.2.2`, all newly
+added) is in `docs/security/asvs-l1.md`, which remains the durable
+per-requirement record; this ADR is where the _design decision_ (how the
+existing token-in-URL acceptance stays scoped to transit, not logs) is
+explained.

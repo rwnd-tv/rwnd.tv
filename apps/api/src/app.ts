@@ -13,9 +13,10 @@ import { serveStatic } from '@hono/node-server/serve-static'
 import { createDatabase, type Database } from '@rwnd/db'
 import type { AppEnv } from './types.js'
 import type { MetadataProvider } from './providers/types.js'
-import { loadEnv } from './env.js'
+import { loadEnv, type LogFormat } from './env.js'
 import { APP_VERSION } from './version.js'
 import { requireSession } from './middleware/auth.js'
+import { requestLog } from './middleware/request-log.js'
 import { jsonBodyLimit } from './lib/body-limit.js'
 import { createMetadataProviders } from './providers/index.js'
 import { healthRoutes } from './routes/health.js'
@@ -44,8 +45,17 @@ import { adminDatabaseBackupRoutes } from './routes/admin-database-backups.js'
  * instances it builds for import-job restart recovery, instead of this
  * function creating a second pool. Tests (testApp()) call createApp() with
  * no argument and get fresh ones, same as before.
+ *
+ * `options.logFormat` exists solely for
+ * apps/api/src/test/request-log.test.ts: the suite sets LOG_FORMAT=silent
+ * (vitest.config.ts) so the other 30+ test files don't emit a line per
+ * request, and loadEnv() caches on first call, so there's no per-test way
+ * to unset that afterwards. Production never passes this.
  */
-export function createApp(services?: { db: Database; metadataProviders: MetadataProvider[] }) {
+export function createApp(
+  services?: { db: Database; metadataProviders: MetadataProvider[] },
+  options: { logFormat?: LogFormat } = {},
+) {
   const env = loadEnv()
   const db = services?.db ?? createDatabase(env.DATABASE_URL, { ssl: env.DATABASE_SSL })
   const metadataProviders = services?.metadataProviders ?? createMetadataProviders(env)
@@ -109,6 +119,12 @@ export function createApp(services?: { db: Database; metadataProviders: Metadata
       },
     }),
   )
+
+  // Mounted right after secureHeaders — the outermost point that still
+  // sees the static SPA, 404s, and every error response, including a CSRF
+  // rejection below. See middleware/request-log.ts's own doc comment for
+  // why this logs on the way out rather than the way in.
+  app.use('*', requestLog(options.logFormat ?? env.LOG_FORMAT, env.TRUST_PROXY))
 
   if (env.CORS_ORIGINS.length > 0) {
     app.use('/api/*', cors({ origin: env.CORS_ORIGINS, credentials: true }))

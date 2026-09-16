@@ -7,6 +7,7 @@ import type {
   ProviderSeasonSummary,
   ProviderShow,
 } from './types.js'
+import { apiPath } from './api-path.js'
 
 // TVDB's episode list is paginated at 500 items/page (this endpoint's own
 // doc doesn't state a size, but it's TVDB's standard page size elsewhere in
@@ -287,7 +288,7 @@ export class TvdbProvider implements MetadataProvider {
   ): Promise<TvdbTranslation | null> {
     try {
       return await this.request<TvdbTranslation>(
-        `/${entity}/${id}/translations/${tvdbLanguage(locale)}`,
+        apiPath`/${entity}/${id}/translations/${tvdbLanguage(locale)}`,
       )
     } catch (err) {
       if (err instanceof TvdbHttpError && err.status === 404) return null
@@ -303,9 +304,12 @@ export class TvdbProvider implements MetadataProvider {
   private async allEpisodes(showId: string): Promise<TvdbEpisode[]> {
     const episodes: TvdbEpisode[] = []
     for (let page = 0; page < MAX_EPISODE_PAGES; page++) {
-      const data = await this.request<TvdbEpisodesPage>(`/series/${showId}/episodes/default`, {
-        page: String(page),
-      })
+      const data = await this.request<TvdbEpisodesPage>(
+        apiPath`/series/${showId}/episodes/default`,
+        {
+          page: String(page),
+        },
+      )
       const batch = data.episodes ?? []
       episodes.push(...batch)
       if (batch.length < TVDB_EPISODES_PAGE_SIZE) break
@@ -338,7 +342,7 @@ export class TvdbProvider implements MetadataProvider {
 
   async getMovie(externalId: string, locale: string): Promise<ProviderMovie> {
     const [movie, translation] = await Promise.all([
-      this.request<TvdbMovie>(`/movies/${externalId}/extended`, { short: 'true' }),
+      this.request<TvdbMovie>(apiPath`/movies/${externalId}/extended`, { short: 'true' }),
       this.translation('movies', externalId, locale),
     ])
     return {
@@ -373,16 +377,20 @@ export class TvdbProvider implements MetadataProvider {
    * foreign one, so neither of those already-fixed paths caught it. */
   private async getSeriesRecord(externalId: string): Promise<TvdbSeries> {
     try {
-      return await this.request<TvdbSeries>(`/series/${externalId}/extended`, { short: 'true' })
+      return await this.request<TvdbSeries>(apiPath`/series/${externalId}/extended`, {
+        short: 'true',
+      })
     } catch (err) {
       if (!(err instanceof TvdbHttpError && err.status === 404)) throw err
       let episode: TvdbEpisodeSeriesLookup
       try {
-        episode = await this.request<TvdbEpisodeSeriesLookup>(`/episodes/${externalId}`)
+        episode = await this.request<TvdbEpisodeSeriesLookup>(apiPath`/episodes/${externalId}`)
       } catch {
         throw err // not an episode either — surface the original series 404
       }
-      return this.request<TvdbSeries>(`/series/${episode.seriesId}/extended`, { short: 'true' })
+      return this.request<TvdbSeries>(apiPath`/series/${episode.seriesId}/extended`, {
+        short: 'true',
+      })
     }
   }
 
@@ -441,7 +449,7 @@ export class TvdbProvider implements MetadataProvider {
     _locale: string,
   ): Promise<ProviderEpisode> {
     const data = await this.request<TvdbEpisodesPage>(
-      `/series/${showExternalId}/episodes/default`,
+      apiPath`/series/${showExternalId}/episodes/default`,
       {
         season: String(seasonNumber),
         episodeNumber: String(episodeNumber),
@@ -484,9 +492,12 @@ export class TvdbProvider implements MetadataProvider {
    * degrades to no link rather than failing episode resolution itself. */
   private async episodeImdbId(episodeId: string): Promise<string | null> {
     try {
-      const extended = await this.request<TvdbEpisodeExtended>(`/episodes/${episodeId}/extended`, {
-        short: 'true',
-      })
+      const extended = await this.request<TvdbEpisodeExtended>(
+        apiPath`/episodes/${episodeId}/extended`,
+        {
+          short: 'true',
+        },
+      )
       return imdbIdFromRemoteIds(extended.remoteIds)
     } catch {
       return null
@@ -499,8 +510,8 @@ export class TvdbProvider implements MetadataProvider {
     locale: string,
   ): Promise<ProviderSeason> {
     const [show, episodesPage] = await Promise.all([
-      this.request<TvdbSeries>(`/series/${showExternalId}/extended`, { short: 'true' }),
-      this.request<TvdbEpisodesPage>(`/series/${showExternalId}/episodes/default`, {
+      this.request<TvdbSeries>(apiPath`/series/${showExternalId}/extended`, { short: 'true' }),
+      this.request<TvdbEpisodesPage>(apiPath`/series/${showExternalId}/episodes/default`, {
         season: String(seasonNumber),
         page: '0',
       }),
@@ -552,9 +563,8 @@ export class TvdbProvider implements MetadataProvider {
       // `?? []` guards a bare `for...of` from throwing "matches is not
       // iterable" on exactly that response.
       matches =
-        (await this.request<TvdbRemoteIdMatch[] | null>(
-          `/search/remoteid/${encodeURIComponent(externalId)}`,
-        )) ?? []
+        (await this.request<TvdbRemoteIdMatch[] | null>(apiPath`/search/remoteid/${externalId}`)) ??
+        []
     } catch (err) {
       // A malformed id may 404 rather than returning a null/empty result —
       // treated the same as TmdbProvider treats its own /find 404s: a

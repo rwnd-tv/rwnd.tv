@@ -821,6 +821,7 @@
       "subscribe": "Subscribe",
       "copy": "Copy",
       "copied": "Copied",
+      "urlUnavailable": "This feed's URL can no longer be shown here. Anything already subscribed keeps working; regenerate to get a new URL.",
       "save": "Save",
       "saved": "Saved",
       "lastSynced": "Last synced {{date}}",

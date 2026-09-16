@@ -46,6 +46,32 @@ describe('COOKIE_SECURE parsing', () => {
   })
 })
 
+describe('LOG_FORMAT parsing', () => {
+  it('defaults to pretty outside production when unset', () => {
+    expect(parseEnv({ ...base, NODE_ENV: 'development' }).LOG_FORMAT).toBe('pretty')
+  })
+
+  it('defaults to json in production when unset', () => {
+    expect(parseEnv({ ...base, NODE_ENV: 'production' }).LOG_FORMAT).toBe('json')
+  })
+
+  // Same docker-compose `.env` gotcha as COOKIE_SECURE above — a bare
+  // `LOG_FORMAT=` line is a defined empty string, not an absent variable.
+  it('treats an empty string the same as unset', () => {
+    expect(parseEnv({ ...base, NODE_ENV: 'production', LOG_FORMAT: '' }).LOG_FORMAT).toBe('json')
+  })
+
+  it('accepts an explicit silent, overriding the NODE_ENV default', () => {
+    expect(parseEnv({ ...base, NODE_ENV: 'production', LOG_FORMAT: 'silent' }).LOG_FORMAT).toBe(
+      'silent',
+    )
+  })
+
+  it('rejects a value that is not json, pretty, or silent', () => {
+    expect(() => parseEnv({ ...base, LOG_FORMAT: 'verbose' })).toThrow(/LOG_FORMAT must be one of/)
+  })
+})
+
 describe('APP_URL parsing', () => {
   // Regression test (M3 security review, found via the same real
   // end-to-end deploy as the COOKIE_SECURE one above): every self-hosted

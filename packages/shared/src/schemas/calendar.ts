@@ -48,6 +48,14 @@ export type MoviesFeedSettings = z.infer<typeof moviesFeedSettingsSchema>
  * every time its owner sets up another device. "Regenerate" is the
  * invalidation mechanism here, not one-time reveal.
  *
+ * `token` is nullable: null means this row's `tokenEncrypted` can no
+ * longer be decrypted — `ENCRYPTION_KEY` has been rotated since the feed
+ * was created. The feed itself keeps working for anything already
+ * subscribed (`tokenHash` is unaffected); only re-display is lost, and
+ * Regenerate is the recovery. Unlike `apiTokenSchema`'s nullable `token`,
+ * this can never mean "never encrypted": `calendarFeeds.tokenEncrypted`
+ * is `.notNull()`.
+ *
  * No `id`: exactly one feed of each type exists per user
  * (calendar_feeds_user_type_idx), so `feedType` is already the complete
  * key every route below addresses by.
@@ -55,21 +63,21 @@ export type MoviesFeedSettings = z.infer<typeof moviesFeedSettingsSchema>
 export const calendarFeedSchema = z.discriminatedUnion('feedType', [
   z.object({
     feedType: z.literal('history'),
-    token: z.string(),
+    token: z.string().nullable(),
     settings: historyFeedSettingsSchema,
     lastAccessedAt: z.string().datetime().nullable(),
     createdAt: z.string().datetime(),
   }),
   z.object({
     feedType: z.literal('shows'),
-    token: z.string(),
+    token: z.string().nullable(),
     settings: showsFeedSettingsSchema,
     lastAccessedAt: z.string().datetime().nullable(),
     createdAt: z.string().datetime(),
   }),
   z.object({
     feedType: z.literal('movies'),
-    token: z.string(),
+    token: z.string().nullable(),
     settings: moviesFeedSettingsSchema,
     lastAccessedAt: z.string().datetime().nullable(),
     createdAt: z.string().datetime(),

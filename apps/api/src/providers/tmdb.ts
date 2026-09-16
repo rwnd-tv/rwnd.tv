@@ -8,6 +8,7 @@ import type {
   ProviderShow,
 } from './types.js'
 import { redactUrl } from '../lib/redact-url.js'
+import { apiPath } from './api-path.js'
 
 const POSTER_SIZE = 'w342'
 // Episode stills are much smaller/wider than posters — TMDB's own web
@@ -316,7 +317,7 @@ export class TmdbProvider implements MetadataProvider {
     // it would double this endpoint's TMDB traffic and add a second
     // partial-failure mode (base OK, dates 429) refreshOneMovie has no
     // shape for; appending keeps one request, one retry path.
-    const m = await this.request<TmdbMovie>(`/movie/${externalId}`, locale, {
+    const m = await this.request<TmdbMovie>(apiPath`/movie/${externalId}`, locale, {
       append_to_response: 'release_dates',
     })
     return {
@@ -341,7 +342,7 @@ export class TmdbProvider implements MetadataProvider {
   async getShow(externalId: string, locale: string): Promise<ProviderShow> {
     // Unlike getMovie() above, the /tv endpoint has no top-level imdb_id —
     // append_to_response is the only way to get one (verified live).
-    const s = await this.request<TmdbShow>(`/tv/${externalId}`, locale, {
+    const s = await this.request<TmdbShow>(apiPath`/tv/${externalId}`, locale, {
       append_to_response: 'external_ids',
     })
     return {
@@ -374,7 +375,7 @@ export class TmdbProvider implements MetadataProvider {
     locale: string,
   ): Promise<ProviderEpisode> {
     const e = await this.request<TmdbEpisode>(
-      `/tv/${showExternalId}/season/${seasonNumber}/episode/${episodeNumber}`,
+      apiPath`/tv/${showExternalId}/season/${seasonNumber}/episode/${episodeNumber}`,
       locale,
       { append_to_response: 'external_ids' },
     )
@@ -403,7 +404,10 @@ export class TmdbProvider implements MetadataProvider {
     seasonNumber: number,
     locale: string,
   ): Promise<ProviderSeason> {
-    const s = await this.request<TmdbSeason>(`/tv/${showExternalId}/season/${seasonNumber}`, locale)
+    const s = await this.request<TmdbSeason>(
+      apiPath`/tv/${showExternalId}/season/${seasonNumber}`,
+      locale,
+    )
     return {
       overview: s.overview ?? null,
       voteAverage: s.vote_average ? s.vote_average : null,
@@ -444,7 +448,7 @@ export class TmdbProvider implements MetadataProvider {
   ): Promise<string | null> {
     let data: TmdbFindResponse
     try {
-      data = await this.request<TmdbFindResponse>(`/find/${externalId}`, locale, {
+      data = await this.request<TmdbFindResponse>(apiPath`/find/${externalId}`, locale, {
         external_source: source === 'imdb' ? 'imdb_id' : 'tvdb_id',
       })
     } catch (err) {

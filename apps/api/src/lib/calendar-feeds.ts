@@ -3,7 +3,7 @@ import type { Database } from '@rwnd/db'
 import { calendarFeeds, users } from '@rwnd/db'
 import type { CalendarFeed } from '@rwnd/shared'
 import { generateSecret, hashSecret } from './tokens.js'
-import { encryptSecret, decryptSecret } from './crypto.js'
+import { encryptSecret, tryDecryptSecret } from './crypto.js'
 
 // Distinct from API tokens' `rwnd_` prefix so a leaked string is
 // identifiable at a glance and can never be confused for one.
@@ -20,7 +20,11 @@ export function generateCalendarToken(encryptionKey: string): {
 
 /** Row -> wire shape, decrypting the token for re-display — see
  * `calendarFeeds`' doc comment (packages/db/src/schema.ts) for why this
- * one secret is recoverable rather than only hash-checkable. Only the
+ * one secret is recoverable rather than only hash-checkable. `token` is
+ * null when `ENCRYPTION_KEY` has been rotated since this row was
+ * encrypted (`tryDecryptSecret`, lib/crypto.ts) — the feed itself keeps
+ * working for anything already subscribed (`tokenHash` is unaffected),
+ * only re-display is lost, and Regenerate is the recovery. Only the
  * settings that apply to the row's own `feedType` are included. An
  * exhaustive switch, not a ternary — with three feed types a binary
  * ternary would silently mis-serialize the odd one out; this way a
@@ -30,7 +34,7 @@ export function serializeCalendarFeed(
   encryptionKey: string,
 ): CalendarFeed {
   const shared = {
-    token: decryptSecret(row.tokenEncrypted, encryptionKey),
+    token: tryDecryptSecret(row.tokenEncrypted, encryptionKey),
     lastAccessedAt: row.lastAccessedAt?.toISOString() ?? null,
     createdAt: row.createdAt.toISOString(),
   }

@@ -63,6 +63,36 @@ function describeUnexpectedError(err: unknown): string {
   return err instanceof Error ? `Unexpected error: ${err.message}` : 'Unexpected error'
 }
 
+/** Thrown when this user's stored Trakt tokens can't be decrypted at all —
+ * `ENCRYPTION_KEY` has been rotated since they connected, so GCM's auth
+ * tag no longer verifies. Distinct from every other failure
+ * `ensureFreshAccessToken` can raise (a missing connection, a Trakt API
+ * error during refresh), which must keep surfacing as themselves: this one
+ * is unrecoverable without the user re-authorising, and `runImportJob`'s
+ * catch below turns it into a reconnect prompt rather than a retry. Same
+ * unguarded-`decryptSecret` shape `lib/totp.ts`'s `verifyEncryptedTotp` and
+ * `lib/crypto.ts`'s `tryDecryptSecret` already close elsewhere — this one
+ * can't use `tryDecryptSecret` directly since a null token here needs to
+ * abort the whole job with a specific message, not silently fail one
+ * field. M5, docs/TODO.md. */
+class TraktReconnectRequiredError extends Error {}
+
+/** The exact text stored on the failed job and rendered verbatim to the
+ * user (apps/web/src/components/import/ImportProgress.tsx). Plain English,
+ * naming the one action that fixes it — the Trakt connection row is
+ * deleted alongside this, so the Import page's own connect card is already
+ * showing "connect your account" by the time they read it. */
+const RECONNECT_REQUIRED_MESSAGE =
+  "Your saved Trakt connection could no longer be read — this instance's ENCRYPTION_KEY has changed since you connected. Reconnect your Trakt account and start the import again."
+
+function decryptTraktToken(stored: string, encryptionKey: string): string {
+  try {
+    return decryptSecret(stored, encryptionKey)
+  } catch {
+    throw new TraktReconnectRequiredError(RECONNECT_REQUIRED_MESSAGE)
+  }
+}
+
 interface JobRow {
   id: string
   userId: string
@@ -108,10 +138,10 @@ async function ensureFreshAccessToken(db: Database, env: Env, userId: string): P
 
   const expiresInMs = connection.accessTokenExpiresAt.getTime() - Date.now()
   if (expiresInMs > REFRESH_MARGIN_MS) {
-    return decryptSecret(connection.accessTokenEncrypted, env.ENCRYPTION_KEY!)
+    return decryptTraktToken(connection.accessTokenEncrypted, env.ENCRYPTION_KEY!)
   }
 
-  const refreshToken = decryptSecret(connection.refreshTokenEncrypted, env.ENCRYPTION_KEY!)
+  const refreshToken = decryptTraktToken(connection.refreshTokenEncrypted, env.ENCRYPTION_KEY!)
   const token = await refreshAccessToken(
     {
       authBaseUrl: env.TRAKT_AUTH_BASE_URL,
@@ -439,6 +469,14 @@ async function runImportJob(
       .set({ status: 'completed', finishedAt: new Date(), cursor: null })
       .where(eq(importJobs.id, jobId))
   } catch (err) {
+    if (err instanceof TraktReconnectRequiredError) {
+      // Clearing the row is the whole UI fix: GET /import/trakt/connection
+      // (routes/imports.ts) reports `connected: false` on its next poll, so
+      // TraktConnectCard flips back to the connect flow with no new
+      // endpoint or component needed. Only reachable from runTraktImport
+      // below (runTraktZipImport never calls ensureFreshAccessToken).
+      await db.delete(traktConnections).where(eq(traktConnections.userId, userId))
+    }
     await db
       .update(importJobs)
       .set({

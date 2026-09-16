@@ -1,5 +1,5 @@
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
-import { decryptSecret } from './crypto.js'
+import { tryDecryptSecret } from './crypto.js'
 
 /**
  * RFC 6238 TOTP (M3 security review follow-up, ASVS V4.3.1, docs/TODO.md),
@@ -120,12 +120,8 @@ export function verifyEncryptedTotp(
   atMs: number = Date.now(),
 ): boolean {
   if (!/^\d{6}$/.test(code)) return false
-  let secret: string
-  try {
-    secret = decryptSecret(secretEncrypted, encryptionKey)
-  } catch {
-    return false
-  }
+  const secret = tryDecryptSecret(secretEncrypted, encryptionKey)
+  if (!secret) return false
   return verifyTotp(secret, code, atMs)
 }
 

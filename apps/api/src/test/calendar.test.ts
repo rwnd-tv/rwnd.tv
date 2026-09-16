@@ -1,12 +1,14 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { eq } from 'drizzle-orm'
-import { episodes, movies, plays, shows, users } from '@rwnd/db'
+import { calendarFeeds, episodes, movies, plays, shows, users } from '@rwnd/db'
 import type {
   CalendarFeed,
   ListCalendarEventsResponse,
   ListCalendarFeedsResponse,
   ListWatchlistsResponse,
 } from '@rwnd/shared'
+import { encryptSecret } from '../lib/crypto.js'
+import { hashSecret } from '../lib/tokens.js'
 import { createLocalUser, extractCookie, json, resetDb, testApp, testDb } from './helpers.js'
 
 const db = testDb()
@@ -222,6 +224,55 @@ describe('calendar feeds', () => {
         body: JSON.stringify({ includeMovies: false }),
       })
       expect(patchRes.status).toBe(404)
+    })
+
+    it('a feed encrypted under a since-rotated ENCRYPTION_KEY lists as token: null rather than 500ing the whole list, and the feed itself keeps working', async () => {
+      const cookie = await createUserAndCookie()
+      const userId = await meId(cookie)
+      // Encrypted under a different (but equally valid-shaped) key than the
+      // one vitest.config.ts sets for this whole test run, simulating a
+      // rotated ENCRYPTION_KEY — the GCM auth tag won't verify against the
+      // current key, so decryptSecret throws. serializeCalendarFeed must
+      // catch that per-row rather than let it crash the whole list response.
+      const staleKey = 'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA='
+      await db.insert(calendarFeeds).values({
+        userId,
+        feedType: 'history',
+        tokenHash: hashSecret('rwndcal_rotated'),
+        tokenEncrypted: encryptSecret('rwndcal_rotated', staleKey),
+      })
+
+      const res = await app.request('/api/v1/calendar-feeds', { headers: { cookie } })
+      expect(res.status).toBe(200)
+      const { feeds } = await json<ListCalendarFeedsResponse>(res)
+      expect(feeds[0]!.token).toBeNull()
+      // The feed itself is untouched by the key rotation — settings still
+      // round-trip, and the already-issued subscription URL still resolves,
+      // which is the whole point of not telling users a rotation kills
+      // their subscriptions.
+      expect(feeds[0]!.settings).toEqual({ includeMovies: true, includeShows: true })
+      const feedRes = await app.request('/api/v1/calendar/rwndcal_rotated/feed.ics')
+      expect(feedRes.status).toBe(200)
+    })
+
+    it('regenerating recovers a re-displayable token after a rotated ENCRYPTION_KEY', async () => {
+      const cookie = await createUserAndCookie()
+      const userId = await meId(cookie)
+      const staleKey = 'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA='
+      await db.insert(calendarFeeds).values({
+        userId,
+        feedType: 'history',
+        tokenHash: hashSecret('rwndcal_rotated'),
+        tokenEncrypted: encryptSecret('rwndcal_rotated', staleKey),
+      })
+
+      const res = await app.request('/api/v1/calendar-feeds/history/regenerate', {
+        method: 'POST',
+        headers: { cookie },
+      })
+      expect(res.status).toBe(200)
+      const regenerated = await json<CalendarFeed>(res)
+      expect(regenerated.token).not.toBeNull()
     })
   })
 

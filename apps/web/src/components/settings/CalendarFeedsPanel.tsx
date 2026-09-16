@@ -280,26 +280,43 @@ function FeedRow({
       ) : (
         <div className="flex flex-col gap-4">
           <div>
-            <div className="flex items-center gap-2">
-              <code className="block flex-1 truncate rounded-md bg-[var(--color-surface)] px-2 py-1 text-xs">
-                {feedUrl(feed.token)}
-              </code>
-              <Button type="button" variant="secondary" onClick={onCopy}>
-                {copied ? t('settings.calendarFeeds.copied') : t('settings.calendarFeeds.copy')}
-              </Button>
-            </div>
-            <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-              <a href={webcalUrl(feed.token)} className="text-sm underline hover:no-underline">
-                {t('settings.calendarFeeds.subscribe')}
-              </a>
-              <p className="text-xs text-[var(--color-fg-muted)]">
-                {feed.lastAccessedAt
-                  ? t('settings.calendarFeeds.lastSynced', {
-                      date: new Date(feed.lastAccessedAt).toLocaleString(locale),
-                    })
-                  : t('settings.calendarFeeds.neverSynced')}
-              </p>
-            </div>
+            {feed.token ? (
+              <>
+                <div className="flex items-center gap-2">
+                  <code className="block flex-1 truncate rounded-md bg-[var(--color-surface)] px-2 py-1 text-xs">
+                    {feedUrl(feed.token)}
+                  </code>
+                  <Button type="button" variant="secondary" onClick={onCopy}>
+                    {copied ? t('settings.calendarFeeds.copied') : t('settings.calendarFeeds.copy')}
+                  </Button>
+                </div>
+                <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+                  <a href={webcalUrl(feed.token)} className="text-sm underline hover:no-underline">
+                    {t('settings.calendarFeeds.subscribe')}
+                  </a>
+                  <p className="text-xs text-[var(--color-fg-muted)]">
+                    {feed.lastAccessedAt
+                      ? t('settings.calendarFeeds.lastSynced', {
+                          date: new Date(feed.lastAccessedAt).toLocaleString(locale),
+                        })
+                      : t('settings.calendarFeeds.neverSynced')}
+                  </p>
+                </div>
+              </>
+            ) : (
+              <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+                <p className="text-sm text-[var(--color-fg-muted)]">
+                  {t('settings.calendarFeeds.urlUnavailable')}
+                </p>
+                <p className="text-xs text-[var(--color-fg-muted)]">
+                  {feed.lastAccessedAt
+                    ? t('settings.calendarFeeds.lastSynced', {
+                        date: new Date(feed.lastAccessedAt).toLocaleString(locale),
+                      })
+                    : t('settings.calendarFeeds.neverSynced')}
+                </p>
+              </div>
+            )}
           </div>
 
           {children}
@@ -412,7 +429,7 @@ export function CalendarFeedsPanel() {
               onCreate={() => createFeed.mutate('history')}
               creating={createFeed.isPending && createFeed.variables === 'history'}
               copied={copiedFeedType === 'history'}
-              onCopy={() => historyFeed && copyToken('history', historyFeed.token)}
+              onCopy={() => historyFeed?.token && copyToken('history', historyFeed.token)}
               onRegenerate={() => setRegenerateTarget('history')}
               onDelete={() => setDeleteTarget('history')}
               locale={i18n.language}
@@ -427,7 +444,7 @@ export function CalendarFeedsPanel() {
               onCreate={() => createFeed.mutate('shows')}
               creating={createFeed.isPending && createFeed.variables === 'shows'}
               copied={copiedFeedType === 'shows'}
-              onCopy={() => showsFeed && copyToken('shows', showsFeed.token)}
+              onCopy={() => showsFeed?.token && copyToken('shows', showsFeed.token)}
               onRegenerate={() => setRegenerateTarget('shows')}
               onDelete={() => setDeleteTarget('shows')}
               locale={i18n.language}
@@ -442,7 +459,7 @@ export function CalendarFeedsPanel() {
               onCreate={() => createFeed.mutate('movies')}
               creating={createFeed.isPending && createFeed.variables === 'movies'}
               copied={copiedFeedType === 'movies'}
-              onCopy={() => moviesFeed && copyToken('movies', moviesFeed.token)}
+              onCopy={() => moviesFeed?.token && copyToken('movies', moviesFeed.token)}
               onRegenerate={() => setRegenerateTarget('movies')}
               onDelete={() => setDeleteTarget('movies')}
               locale={i18n.language}

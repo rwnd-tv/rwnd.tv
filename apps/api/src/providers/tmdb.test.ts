@@ -320,6 +320,33 @@ describe('TmdbProvider imdbId', () => {
   })
 })
 
+describe('TmdbProvider — attacker-controlled external ids stay inside their own path segment (M4 review Stage 1)', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('encodes a traversal id rather than letting new URL() normalize it onto a different endpoint', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(movieResponse())
+    vi.stubGlobal('fetch', fetchMock)
+
+    await provider().getMovie('603/../../tv/1396', 'en-GB')
+    const [url] = fetchMock.mock.calls[0] as [URL]
+    expect(url.pathname).toBe('/3/movie/603%2F..%2F..%2Ftv%2F1396')
+  })
+
+  it('encodes a `?` so an injected id cannot merge extra query parameters into the request', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify({ id: 1396, name: 'Breaking Bad' }), { status: 200 }),
+      )
+    vi.stubGlobal('fetch', fetchMock)
+
+    await provider().getShow('1396?append_to_response=account_states', 'en-GB')
+    const [url] = fetchMock.mock.calls[0] as [URL]
+    expect(url.pathname).toBe('/3/tv/1396%3Fappend_to_response%3Daccount_states')
+    expect(url.searchParams.get('append_to_response')).toBe('external_ids')
+  })
+})
+
 describe('TmdbProvider air dates', () => {
   afterEach(() => vi.unstubAllGlobals())
 

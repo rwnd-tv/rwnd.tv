@@ -590,7 +590,7 @@ Format:
 
 ## Security
 
-- [ ] **Full structured request logging** (2026-08-29 added, re-homed here 2026-09-14; M5)
+- [x] **Full structured request logging** (2026-08-29 added, re-homed here 2026-09-14, fixed 2026-09-16; M5)
 
       The M3 ASVS review (`docs/adr/0007-security-posture.md`,
       `docs/security/asvs-l1.md`) only ever added minimal
@@ -602,6 +602,31 @@ Format:
       items" section pointing at a section that no longer existed. Re-homed
       here 2026-09-14 while scoping the M4 milestone review, so the pointer
       resolves again.
+
+      Fixed 2026-09-16: a new `apps/api/src/middleware/request-log.ts`
+      logs one structured line per request (method, redacted path, status,
+      duration, user id, ip), hand-rolled rather than `hono/logger` (no
+      hook to redact the path before it's formatted). A new
+      `lib/redact-path.ts` scrubs webhook/calendar-feed tokens out of the
+      path before anything is logged, since those live as URL path
+      segments, not headers — see
+      [ADR 0007](adr/0007-security-posture.md)'s 2026-09-16 update for why
+      that's the load-bearing design constraint. `LOG_FORMAT` env var
+      (`json`/`pretty`/`silent`) controls output shape.
+      `docs/security/asvs-l1.md` gained V7.1.2-V7.1.4 and V7.2.1-V7.2.2
+      rows for this. `lib/security-log.ts` stays a deliberately separate
+      stream — see its own updated doc comment.
+
+- [ ] **Add a request/correlation id to the structured request log** (2026-09-16 added; Not yet scheduled)
+
+      Deliberately deferred while building full structured request logging
+      (above): `hono/request-id` and `hono/context-storage` are both
+      already bundled with the installed Hono version (zero new
+      dependency), but nothing in this codebase consumes a correlation id
+      today — single container, single process, no trace aggregation. A
+      new field is purely additive later (breaks no existing log
+      consumer), so there was no reason to build the plumbing ahead of an
+      actual need.
 
 - [x] **M4 milestone code + security review** (2026-09-14 21:02 added, all 7 stages + milestone-wide pass completed 2026-09-15; M4)
 
@@ -796,7 +821,7 @@ Format:
       ordinary search/browse, not just webhooks), so it's its own
       follow-up rather than a Stage 1 inline fix.
 
-- [ ] **`serializeCalendarFeed` still 500s on a since-rotated `ENCRYPTION_KEY`** (2026-09-14 added, Stage 5 of the M4 review; M5)
+- [x] **`serializeCalendarFeed` still 500s on a since-rotated `ENCRYPTION_KEY`** (2026-09-14 added, Stage 5 of the M4 review, fixed 2026-09-16; M5)
 
       `apps/api/src/routes/tokens.ts`'s `serializeToken` and
       `apps/api/src/lib/calendar-feeds.ts`'s `serializeCalendarFeed` both
@@ -823,7 +848,18 @@ Format:
       folding into Stage 5's scope, which only covers the webhooks panel
       work.
 
-- [ ] **`trakt.ts`'s `ensureFreshAccessToken` gives a cryptic error on a rotated `ENCRYPTION_KEY`** (2026-09-15 added, M4 review's milestone-wide `/code-review high` pass; M5)
+      Fixed 2026-09-16: chose the nullable-wire-type fork, not the
+      operational stance. Rotating `ENCRYPTION_KEY` doesn't affect
+      `tokenHash`, so every already-subscribed calendar app keeps working
+      regardless; only re-display breaks, and the existing Regenerate
+      button already recovers that. `CalendarFeed.token` is now
+      `z.string().nullable()`, `serializeCalendarFeed` and `serializeToken`
+      both now go through a new shared `tryDecryptSecret` (lib/crypto.ts),
+      and `FeedRow` (`CalendarFeedsPanel.tsx`) shows a "regenerate to get a
+      new URL" message in place of the URL/Copy/Subscribe block when
+      `token` is null, mirroring `WebhookCard.tsx`'s existing precedent.
+
+- [x] **`trakt.ts`'s `ensureFreshAccessToken` gives a cryptic error on a rotated `ENCRYPTION_KEY`** (2026-09-15 added, M4 review's milestone-wide `/code-review high` pass, fixed 2026-09-16; M5)
 
       Same unguarded-`decryptSecret` shape as the item above and the one
       the milestone-wide pass fixed elsewhere (`lib/totp.ts`'s
@@ -838,6 +874,14 @@ Format:
       to reconnect their Trakt account. Worth a friendlier error message
       (and maybe clearing the connection so the UI prompts to reconnect)
       but not a correctness bug.
+
+      Fixed 2026-09-16: did both. A new `TraktReconnectRequiredError`
+      wraps the two unguarded decrypts, caught in `runImportJob`'s
+      existing catch to store a friendly reconnect message on the job
+      **and** delete the `traktConnections` row, so the Import page's
+      connect card flips back to "connect your account" on its next poll
+      with no new endpoint needed. A genuine Trakt API error during
+      refresh still surfaces as itself, unaffected.
 
 ## Roadmap
 

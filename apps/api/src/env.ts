@@ -1,5 +1,8 @@
 import { z } from 'zod'
 
+const VALID_LOG_FORMATS = ['json', 'pretty', 'silent'] as const
+export type LogFormat = (typeof VALID_LOG_FORMATS)[number]
+
 const rawEnvSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().int().positive().default(3000),
@@ -36,6 +39,18 @@ const rawEnvSchema = z.object({
   // dev.rwnd.tv) don't get confused for one another. Unset by default —
   // a normal single-instance deployment shows nothing.
   ENVIRONMENT_LABEL: z.string().optional(),
+  // One structured line per HTTP request (middleware/request-log.ts):
+  // 'json' for a log aggregator (one JSON object per line), 'pretty' for a
+  // human reading `docker compose logs`, 'silent' to turn request logging
+  // off entirely (what apps/api/vitest.config.ts sets, so the test suite
+  // doesn't emit thousands of lines). Deliberately a format, not a level:
+  // this is one fixed event type, not a verbosity spectrum. Same
+  // empty-string-means-unset handling as COOKIE_SECURE below — a bare
+  // `LOG_FORMAT=` line in a docker-compose `.env` passes a defined empty
+  // string, not an absent variable. Shape validated in parseEnv() below,
+  // same as ENCRYPTION_KEY's base64/length check, rather than on this raw
+  // field.
+  LOG_FORMAT: z.string().optional(),
   // Which metadata providers are available is derived from which of these
   // credentials are actually set (apps/api/src/providers/index.ts) rather
   // than a separate explicit-choice env var — see docs/adr/0006. At least
@@ -155,6 +170,16 @@ const envSchema = rawEnvSchema.transform((data) => ({
   // Same "default false, no NODE_ENV-derived default" reasoning as
   // TRUST_PROXY — see the DATABASE_SSL field comment above.
   DATABASE_SSL: data.DATABASE_SSL === 'true',
+  // Defaults off NODE_ENV like COOKIE_SECURE above (json for a real
+  // deployment's log aggregator, pretty for a human running dev locally).
+  // An actually-invalid value (not one of VALID_LOG_FORMATS) passes
+  // through unchanged here and is rejected in parseEnv() below, the same
+  // split ENCRYPTION_KEY uses.
+  LOG_FORMAT: (data.LOG_FORMAT === undefined || data.LOG_FORMAT === ''
+    ? data.NODE_ENV === 'production'
+      ? 'json'
+      : 'pretty'
+    : data.LOG_FORMAT) as LogFormat,
 }))
 
 export type Env = z.infer<typeof envSchema>
@@ -198,6 +223,9 @@ export function parseEnv(source: NodeJS.ProcessEnv): Env {
         'ENCRYPTION_KEY must decode to exactly 32 bytes (e.g. `openssl rand -base64 32`)',
       )
     }
+  }
+  if (!VALID_LOG_FORMATS.includes(parsed.data.LOG_FORMAT)) {
+    throw new Error(`LOG_FORMAT must be one of ${VALID_LOG_FORMATS.join(', ')}`)
   }
   if (parsed.data.SMTP_HOST) {
     const missing = (['SMTP_USER', 'SMTP_PASS', 'SMTP_FROM', 'APP_URL'] as const).filter(

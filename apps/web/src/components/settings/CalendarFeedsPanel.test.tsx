@@ -223,6 +223,19 @@ describe('CalendarFeedsPanel', () => {
     expect(api.calendarFeeds.delete).toHaveBeenCalledWith('history')
   })
 
+  it('shows a regenerate hint instead of the URL when the token can no longer be decrypted', async () => {
+    renderPanel([{ ...historyFeed, token: null }])
+
+    await screen.findByText(
+      /URL can no longer be shown here.*Anything already subscribed keeps working/,
+    )
+    expect(screen.queryByRole('button', { name: 'Copy' })).toBeNull()
+    expect(screen.queryByRole('link', { name: 'Subscribe' })).toBeNull()
+    // The row is still manageable — this is a degraded state, not a dead feed.
+    expect(screen.getByRole('button', { name: 'Regenerate' })).toBeInTheDocument()
+    expect(screen.getByRole('checkbox', { name: 'Include movies' })).toBeInTheDocument()
+  })
+
   it('creates a feed with server defaults via its own Create feed button', async () => {
     renderPanel([])
     vi.mocked(api.calendarFeeds.create).mockResolvedValue(historyFeed)

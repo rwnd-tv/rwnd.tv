@@ -33,6 +33,13 @@ export default defineConfig({
       // literal per test, wiped in src/test/admin-database-backups.test.ts's
       // own beforeEach.
       DATABASE_BACKUP_DIR: join(tmpdir(), 'rwnd-tv-test-database-backups'),
+      // middleware/request-log.ts logs one line per request; unsilenced,
+      // that's a line per request across all 30+ files in this suite.
+      // src/test/request-log.test.ts overrides this per-instance via
+      // testApp({ logFormat: ... }) — see createApp()'s own doc comment
+      // for why that override exists at all (loadEnv() caches, so this
+      // env var can't be toggled per test otherwise).
+      LOG_FORMAT: 'silent',
     },
   },
 })

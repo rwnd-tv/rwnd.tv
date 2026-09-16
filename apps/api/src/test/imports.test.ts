@@ -293,6 +293,35 @@ describe('Trakt import', () => {
     expect(row?.accessTokenEncrypted.split(':')).toHaveLength(3)
   }, 10_000)
 
+  it('a connection encrypted under a since-rotated ENCRYPTION_KEY fails the job with a reconnect message and clears the connection', async () => {
+    vi.stubGlobal('fetch', createFetchStub({ historyItems: [fx.matrixHistoryItem] }))
+    const cookie = await createUserAndCookie()
+    const me = await json<User>(await app.request('/api/v1/auth/me', { headers: { cookie } }))
+    await createTraktConnection(db, me.id, {
+      encryptionKey: 'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA=',
+    })
+
+    const [job] = await db
+      .insert(importJobs)
+      .values({ userId: me.id, includeRatings: false, includeWatchlist: false })
+      .returning()
+    await runTraktImport(db, providers, env, job!.id)
+
+    const [finished] = await db.select().from(importJobs).where(eq(importJobs.id, job!.id)).limit(1)
+    expect(finished?.status).toBe('failed')
+    expect(finished?.error).toMatch(/Reconnect your Trakt account/)
+    // Never the raw GCM text the user used to see.
+    expect(finished?.error).not.toMatch(/unable to authenticate data/i)
+
+    // The row is gone, so the status poll reports disconnected and the UI
+    // flips back to the connect flow with no extra endpoint.
+    const status = await json<TraktConnectionStatus>(
+      await app.request('/api/v1/import/trakt/connection', { headers: { cookie } }),
+    )
+    expect(status.connected).toBe(false)
+    expect(await db.select().from(traktConnections)).toHaveLength(0)
+  })
+
   it('imports history into local records, resolving a whole season in one TMDB call, and is idempotent on re-run', async () => {
     const seasonCalls = { count: 0 }
     vi.stubGlobal(

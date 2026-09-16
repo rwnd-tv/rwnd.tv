@@ -17,7 +17,7 @@ import type { Database, Tx } from '@rwnd/db'
 import type { AppEnv, UserRecord } from '../types.js'
 import { loadEnv } from '../env.js'
 import { generateApiToken, generateSecret, hashSecret } from '../lib/tokens.js'
-import { decryptSecret } from '../lib/crypto.js'
+import { tryDecryptSecret } from '../lib/crypto.js'
 import { replayPendingWebhookEvents } from '../lib/webhook-plays.js'
 import {
   hasLinkedSource,
@@ -58,37 +58,18 @@ const WEBHOOK_LINK_TTL_MS = 7 * 24 * 60 * 60 * 1000
 /** `encryptionKey` is only needed to redisplay an *existing* row's URL
  * (GET /tokens) — create and regenerate below always know the plaintext
  * already, from generating it in the same request, and overwrite `token`
- * themselves rather than passing a key in here. Null `token` means this
- * row's `tokenEncrypted` is null: either this instance had no
- * `ENCRYPTION_KEY` when the token was last (re)generated, or it predates
- * this column entirely — either way, Settings falls back to "regenerate
- * to get a copyable URL" for that one token.
- *
- * `decryptSecret` is wrapped in try/catch rather than called bare: it
- * throws (GCM auth-tag mismatch) if `ENCRYPTION_KEY` has changed since
- * this row was encrypted — a real scenario, not just theoretical, since
- * rotating the key is itself a legitimate response to a suspected
- * compromise. Without this, one undecryptable row would 500 the whole
- * GET /tokens list (every token, not just the affected one) instead of
- * falling back to the same "regenerate to get a copyable URL" treatment
- * a never-encrypted row already gets. Found in the M4 review
- * (docs/TODO.md) — the same gap exists in `calendar-feeds.ts`'s
- * `serializeCalendarFeed`, logged there separately since that field
- * isn't nullable, so the fix shape differs. */
+ * themselves rather than passing a key in here. Null `token` means either
+ * this row's `tokenEncrypted` is null (no `ENCRYPTION_KEY` when the token
+ * was last (re)generated, or it predates this column entirely) or it
+ * couldn't be decrypted under the current key (`tryDecryptSecret`,
+ * lib/crypto.ts — a rotated `ENCRYPTION_KEY`) — either way, Settings falls
+ * back to "regenerate to get a copyable URL" for that one token. */
 function serializeToken(row: typeof apiTokens.$inferSelect, encryptionKey?: string) {
-  let token: string | null = null
-  if (row.tokenEncrypted && encryptionKey) {
-    try {
-      token = decryptSecret(row.tokenEncrypted, encryptionKey)
-    } catch {
-      token = null
-    }
-  }
   return {
     id: row.id,
     name: row.name,
     source: row.source,
-    token,
+    token: tryDecryptSecret(row.tokenEncrypted, encryptionKey),
     lastUsedAt: row.lastUsedAt?.toISOString() ?? null,
     createdAt: row.createdAt.toISOString(),
   }

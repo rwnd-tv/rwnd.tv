@@ -530,7 +530,7 @@ Format:
       once, covering both the scheduled job and any future manual-trigger
       route, rather than solving it twice.
 
-- [ ] **Investigate: two database backups being written per day, not one** (2026-09-16 added, root-caused 2026-09-16, fixed 2026-09-16, pending dev deploy verification; M5)
+- [ ] **Investigate: two database backups being written per day, not one** (2026-09-16 added, root-caused 2026-09-16, fixed and deployed to dev 2026-09-16, pending multi-day verification; M5)
 
       James, 2026-09-16: seeing two backup dumps land per calendar day
       instead of the expected one. Not yet root-caused; needs
@@ -605,8 +605,17 @@ Format:
       is idempotent, so a same-day double run there is harmless, unlike a
       backup producing an extra retained file.
 
-      Not yet deployed/verified against dev's real restart pattern; do
-      that before archiving this item.
+      **Deployed to dev 2026-09-16** and restarted twice back to back
+      (19:44 and 19:47 UTC) to check for boot-time regressions: both came
+      up clean, each still taking its own immediate on-boot dump as
+      designed (unchanged behavior, not the bug). That only confirms the
+      new scheduling code runs without error in the real deployed
+      environment, not that the fix itself holds: the bug was the
+      *recurring* schedule's anchor drifting across days, which needs
+      dev's backup directory (`/pool/docker/rwnd-tv-dev/db-backups/` on
+      home-server) watched over the next few days to confirm dumps keep
+      landing at 03:00 UTC regardless of any restart in between, before
+      archiving this item.
 
 ## Ratings
 

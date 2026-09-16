@@ -802,7 +802,7 @@ Format:
       `docs/security/asvs-l1.md` stays the durable record, updated in place
       per stage rather than replaced.
 
-- [ ] **URL-encode external ids interpolated into TMDB/TVDB request paths** (2026-09-14 added, Stage 1 of the M4 review; M5)
+- [x] **URL-encode external ids interpolated into TMDB/TVDB request paths** (2026-09-14 added, Stage 1 of the M4 review, fixed 2026-09-16; M5)
 
       `providers/tmdb.ts` and `providers/tvdb.ts` build request paths like
       `` `/tv/${externalId}` `` and `` `/series/${externalId}/extended` ``
@@ -820,6 +820,13 @@ Format:
       site. Touches the shared provider-client layer (also used by
       ordinary search/browse, not just webhooks), so it's its own
       follow-up rather than a Stage 1 inline fix.
+
+      Fixed 2026-09-16: a new `apps/api/src/providers/api-path.ts` tagged
+      template (`` apiPath`/tv/${externalId}` ``) encodes every
+      interpolated value while leaving the template's own `/` separators
+      alone, applied uniformly at all 16 interpolation sites across both
+      provider files (including two already-provider-trusted numeric ids,
+      for consistency rather than a per-site judgement call).
 
 - [x] **`serializeCalendarFeed` still 500s on a since-rotated `ENCRYPTION_KEY`** (2026-09-14 added, Stage 5 of the M4 review, fixed 2026-09-16; M5)
 

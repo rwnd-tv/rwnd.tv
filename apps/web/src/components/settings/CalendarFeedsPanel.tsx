@@ -24,84 +24,43 @@ function webcalUrl(token: string): string {
   return feedUrl(token).replace(/^https?:/, 'webcal:')
 }
 
-// Save stays disabled until a checkbox actually differs from the saved
-// row — a feed is already fully functional at its server-defaulted
-// settings the moment it's created (see CalendarFeedsPanel.tsx's own doc
-// comment), so an always-enabled Save wrongly implied a required step.
-function HistorySettingsForm({ feed }: { feed: Extract<CalendarFeed, { feedType: 'history' }> }) {
-  const { t } = useTranslation()
-  const queryClient = useQueryClient()
-  const [includeMovies, setIncludeMovies] = useState(feed.settings.includeMovies)
-  const [includeShows, setIncludeShows] = useState(feed.settings.includeShows)
-  const dirty =
-    includeMovies !== feed.settings.includeMovies || includeShows !== feed.settings.includeShows
-
-  const updateSettings = useMutation({
-    mutationFn: () => api.calendarFeeds.update('history', { includeMovies, includeShows }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['calendarFeeds'] }),
-  })
-
-  function handleSubmit(e: FormEvent) {
-    e.preventDefault()
-    updateSettings.mutate()
-  }
-
-  return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-3">
-      <div className="flex flex-col gap-1">
-        <label className="flex items-center gap-2 text-sm font-medium">
-          <input
-            type="checkbox"
-            checked={includeMovies}
-            onChange={(e) => setIncludeMovies(e.target.checked)}
-          />
-          {t('settings.calendarFeeds.history.includeMovies')}
-        </label>
-        <p className="text-xs text-[var(--color-fg-muted)]">
-          {t('settings.calendarFeeds.history.includeMoviesDescription')}
-        </p>
-      </div>
-      <div className="flex flex-col gap-1">
-        <label className="flex items-center gap-2 text-sm font-medium">
-          <input
-            type="checkbox"
-            checked={includeShows}
-            onChange={(e) => setIncludeShows(e.target.checked)}
-          />
-          {t('settings.calendarFeeds.history.includeShows')}
-        </label>
-        <p className="text-xs text-[var(--color-fg-muted)]">
-          {t('settings.calendarFeeds.history.includeShowsDescription')}
-        </p>
-      </div>
-      <div className="flex items-center gap-3">
-        <Button type="submit" disabled={!dirty} isLoading={updateSettings.isPending}>
-          {t('settings.calendarFeeds.save')}
-        </Button>
-        {!dirty && updateSettings.isSuccess && (
-          <span className="text-sm text-[var(--color-fg-muted)]">
-            {t('settings.calendarFeeds.saved')}
-          </span>
-        )}
-      </div>
-    </form>
-  )
+/** Which settings fields exist per feed type, in display order — the only
+ * thing that actually differs between the three settings forms below
+ * (feedType and i18n namespace are both already implied by `feed.feedType`
+ * itself). Movies is exactly Shows minus `includeDropped` — dropping is a
+ * shows-only concept, there is no droppedMovies table. Typed as plain
+ * strings, not `keyof CalendarFeed['settings']`: that computes to the
+ * *intersection* of the three settings shapes' keys (empty, since no field
+ * is common to all three), not their union — TypeScript can't statically
+ * verify field access across a discriminated union's branches generically,
+ * which is exactly why `values`/`feed.settings` below are treated as a
+ * plain string-keyed bag rather than fought into typing. */
+const FEED_FIELDS: Record<CalendarFeedType, readonly string[]> = {
+  history: ['includeMovies', 'includeShows'],
+  shows: ['includeDropped', 'futureOnly', 'includeAllWatched'],
+  movies: ['futureOnly', 'includeAllWatched'],
 }
 
-function ShowsSettingsForm({ feed }: { feed: Extract<CalendarFeed, { feedType: 'shows' }> }) {
+/** Save stays disabled until a checkbox actually differs from the saved
+ * row — a feed is already fully functional at its server-defaulted
+ * settings the moment it's created (see CalendarFeedsPanel.tsx's own doc
+ * comment), so an always-enabled Save wrongly implied a required step.
+ * One config-driven form for all three feed types (M4 review's
+ * `/code-review high` pass, docs/TODO.md) — `values` is seeded from
+ * `feed.settings` and only ever iterated over `FEED_FIELDS[feed.feedType]`,
+ * so by construction it can never carry a key outside that feed type's own
+ * schema (e.g. movies can't accidentally send `includeDropped`), even
+ * though the cast below stops TypeScript verifying that statically. */
+function FeedSettingsForm({ feed }: { feed: CalendarFeed }) {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
-  const [includeDropped, setIncludeDropped] = useState(feed.settings.includeDropped)
-  const [futureOnly, setFutureOnly] = useState(feed.settings.futureOnly)
-  const [includeAllWatched, setIncludeAllWatched] = useState(feed.settings.includeAllWatched)
-  const dirty =
-    includeDropped !== feed.settings.includeDropped ||
-    futureOnly !== feed.settings.futureOnly ||
-    includeAllWatched !== feed.settings.includeAllWatched
+  const settings = feed.settings as Record<string, boolean>
+  const [values, setValues] = useState(settings)
+  const fields = FEED_FIELDS[feed.feedType]
+  const dirty = fields.some((field) => values[field] !== settings[field])
 
   const updateSettings = useMutation({
-    mutationFn: () =>
-      api.calendarFeeds.update('shows', { includeDropped, futureOnly, includeAllWatched }),
+    mutationFn: () => api.calendarFeeds.update(feed.feedType, values),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['calendarFeeds'] }),
   })
 
@@ -112,107 +71,21 @@ function ShowsSettingsForm({ feed }: { feed: Extract<CalendarFeed, { feedType: '
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-3">
-      <div className="flex flex-col gap-1">
-        <label className="flex items-center gap-2 text-sm font-medium">
-          <input
-            type="checkbox"
-            checked={includeDropped}
-            onChange={(e) => setIncludeDropped(e.target.checked)}
-          />
-          {t('settings.calendarFeeds.shows.includeDropped')}
-        </label>
-        <p className="text-xs text-[var(--color-fg-muted)]">
-          {t('settings.calendarFeeds.shows.includeDroppedDescription')}
-        </p>
-      </div>
-      <div className="flex flex-col gap-1">
-        <label className="flex items-center gap-2 text-sm font-medium">
-          <input
-            type="checkbox"
-            checked={futureOnly}
-            onChange={(e) => setFutureOnly(e.target.checked)}
-          />
-          {t('settings.calendarFeeds.shows.futureOnly')}
-        </label>
-        <p className="text-xs text-[var(--color-fg-muted)]">
-          {t('settings.calendarFeeds.shows.futureOnlyDescription')}
-        </p>
-      </div>
-      <div className="flex flex-col gap-1">
-        <label className="flex items-center gap-2 text-sm font-medium">
-          <input
-            type="checkbox"
-            checked={includeAllWatched}
-            onChange={(e) => setIncludeAllWatched(e.target.checked)}
-          />
-          {t('settings.calendarFeeds.shows.includeAllWatched')}
-        </label>
-        <p className="text-xs text-[var(--color-fg-muted)]">
-          {t('settings.calendarFeeds.shows.includeAllWatchedDescription')}
-        </p>
-      </div>
-      <div className="flex items-center gap-3">
-        <Button type="submit" disabled={!dirty} isLoading={updateSettings.isPending}>
-          {t('settings.calendarFeeds.save')}
-        </Button>
-        {!dirty && updateSettings.isSuccess && (
-          <span className="text-sm text-[var(--color-fg-muted)]">
-            {t('settings.calendarFeeds.saved')}
-          </span>
-        )}
-      </div>
-    </form>
-  )
-}
-
-/** Same shape as ShowsSettingsForm above, minus includeDropped — movies
- * have no dropped concept. */
-function MoviesSettingsForm({ feed }: { feed: Extract<CalendarFeed, { feedType: 'movies' }> }) {
-  const { t } = useTranslation()
-  const queryClient = useQueryClient()
-  const [futureOnly, setFutureOnly] = useState(feed.settings.futureOnly)
-  const [includeAllWatched, setIncludeAllWatched] = useState(feed.settings.includeAllWatched)
-  const dirty =
-    futureOnly !== feed.settings.futureOnly || includeAllWatched !== feed.settings.includeAllWatched
-
-  const updateSettings = useMutation({
-    mutationFn: () => api.calendarFeeds.update('movies', { futureOnly, includeAllWatched }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['calendarFeeds'] }),
-  })
-
-  function handleSubmit(e: FormEvent) {
-    e.preventDefault()
-    updateSettings.mutate()
-  }
-
-  return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-3">
-      <div className="flex flex-col gap-1">
-        <label className="flex items-center gap-2 text-sm font-medium">
-          <input
-            type="checkbox"
-            checked={futureOnly}
-            onChange={(e) => setFutureOnly(e.target.checked)}
-          />
-          {t('settings.calendarFeeds.movies.futureOnly')}
-        </label>
-        <p className="text-xs text-[var(--color-fg-muted)]">
-          {t('settings.calendarFeeds.movies.futureOnlyDescription')}
-        </p>
-      </div>
-      <div className="flex flex-col gap-1">
-        <label className="flex items-center gap-2 text-sm font-medium">
-          <input
-            type="checkbox"
-            checked={includeAllWatched}
-            onChange={(e) => setIncludeAllWatched(e.target.checked)}
-          />
-          {t('settings.calendarFeeds.movies.includeAllWatched')}
-        </label>
-        <p className="text-xs text-[var(--color-fg-muted)]">
-          {t('settings.calendarFeeds.movies.includeAllWatchedDescription')}
-        </p>
-      </div>
+      {fields.map((field) => (
+        <div key={field} className="flex flex-col gap-1">
+          <label className="flex items-center gap-2 text-sm font-medium">
+            <input
+              type="checkbox"
+              checked={values[field]}
+              onChange={(e) => setValues((v) => ({ ...v, [field]: e.target.checked }))}
+            />
+            {t(`settings.calendarFeeds.${feed.feedType}.${field}`)}
+          </label>
+          <p className="text-xs text-[var(--color-fg-muted)]">
+            {t(`settings.calendarFeeds.${feed.feedType}.${field}Description`)}
+          </p>
+        </div>
+      ))}
       <div className="flex items-center gap-3">
         <Button type="submit" disabled={!dirty} isLoading={updateSettings.isPending}>
           {t('settings.calendarFeeds.save')}
@@ -426,7 +299,7 @@ export function CalendarFeedsPanel() {
               onDelete={() => setDeleteTarget('history')}
               locale={i18n.language}
             >
-              {historyFeed && <HistorySettingsForm feed={historyFeed} />}
+              {historyFeed && <FeedSettingsForm feed={historyFeed} />}
             </FeedRow>
 
             <FeedRow
@@ -441,7 +314,7 @@ export function CalendarFeedsPanel() {
               onDelete={() => setDeleteTarget('shows')}
               locale={i18n.language}
             >
-              {showsFeed && <ShowsSettingsForm feed={showsFeed} />}
+              {showsFeed && <FeedSettingsForm feed={showsFeed} />}
             </FeedRow>
 
             <FeedRow
@@ -456,7 +329,7 @@ export function CalendarFeedsPanel() {
               onDelete={() => setDeleteTarget('movies')}
               locale={i18n.language}
             >
-              {moviesFeed && <MoviesSettingsForm feed={moviesFeed} />}
+              {moviesFeed && <FeedSettingsForm feed={moviesFeed} />}
             </FeedRow>
           </div>
         )}

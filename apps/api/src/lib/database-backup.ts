@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process'
 import { createWriteStream, existsSync } from 'node:fs'
-import { mkdir, readdir, rename, stat, unlink } from 'node:fs/promises'
+import { mkdir, open, readdir, rename, stat, unlink, type FileHandle } from 'node:fs/promises'
 import { join } from 'node:path'
 import { pipeline } from 'node:stream/promises'
 import { createGzip } from 'node:zlib'
@@ -30,6 +30,76 @@ const PARTIAL_DUMP_RE = /^rwnd-\d{8}T\d{6}Z\.sql\.gz\.partial$/
  * it's safe to clear. Generous relative to how long a dump of a
  * self-hosted instance actually takes. */
 const STALE_PARTIAL_MS = 6 * 60 * 60 * 1000
+
+/** Name of the cross-process lock file guarding runDatabaseBackup (see
+ * acquireBackupLock below). Deliberately doesn't match DUMP_RE or
+ * PARTIAL_DUMP_RE, so prune()'s sweep and listDatabaseBackups() never see
+ * it. */
+const LOCK_FILE_NAME = 'rwnd-backup.lock'
+
+/** A lock this old is from a crashed run, not one in flight - same margin
+ * as STALE_PARTIAL_MS, since a real run never legitimately holds it
+ * anywhere near this long. */
+const STALE_LOCK_MS = STALE_PARTIAL_MS
+
+/** Thrown by runDatabaseBackup when another run already holds the lock.
+ * Distinct from a failed dump: nothing went wrong, a backup is just
+ * already in progress elsewhere. Exported so callers (the scheduler
+ * below, and eventually a manual "back up now" route) can report
+ * "already running" instead of treating it as a failure. */
+export class BackupAlreadyRunningError extends Error {
+  constructor() {
+    super('A database backup is already running.')
+    this.name = 'BackupAlreadyRunningError'
+  }
+}
+
+/**
+ * Cross-process mutual exclusion for runDatabaseBackup: `open(path, 'wx')`
+ * fails with EEXIST if the file already exists, and that check-and-create is
+ * atomic at the filesystem level (unlike a separate exists-check followed by
+ * a write), so it holds even against two processes racing to acquire the
+ * lock at the exact same instant - e.g. a botched deploy briefly running two
+ * containers against the same DATABASE_BACKUP_DIR, or a manual "back up now"
+ * trigger racing the scheduled job.
+ *
+ * A lock found older than STALE_LOCK_MS is assumed left over from a run that
+ * crashed before releasing it, and is cleared before retrying; bounded to a
+ * handful of attempts rather than retried forever, since a lock that keeps
+ * reappearing means something else is wrong and should surface as "already
+ * running" rather than loop silently.
+ */
+async function acquireBackupLock(dir: string): Promise<FileHandle> {
+  const lockPath = join(dir, LOCK_FILE_NAME)
+  for (let attempt = 0; attempt < 5; attempt++) {
+    try {
+      const handle = await open(lockPath, 'wx')
+      await handle.writeFile(String(process.pid))
+      return handle
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== 'EEXIST') throw err
+    }
+    const info = await stat(lockPath).catch(() => null)
+    // Vanished between our failed open() and this stat - another run just
+    // released it, so loop straight back to acquiring rather than treating
+    // that as staleness.
+    if (info !== null && Date.now() - info.mtimeMs > STALE_LOCK_MS) {
+      await unlink(lockPath).catch(() => {})
+    } else if (info !== null) {
+      throw new BackupAlreadyRunningError()
+    }
+  }
+  throw new BackupAlreadyRunningError()
+}
+
+/** Releases a lock acquired by acquireBackupLock. Best-effort: a failure to
+ * unlink here would otherwise mask the real result of the run it guarded,
+ * and a lock left behind is simply treated as stale (STALE_LOCK_MS) by the
+ * next run anyway. */
+async function releaseBackupLock(handle: FileHandle, dir: string): Promise<void> {
+  await handle.close().catch(() => {})
+  await unlink(join(dir, LOCK_FILE_NAME)).catch(() => {})
+}
 
 export interface DatabaseBackupResult {
   file: string
@@ -322,52 +392,57 @@ export async function runDatabaseBackup({
   const startedAt = Date.now()
   await mkdir(dir, { recursive: true })
 
-  const name = timestampName(now)
-  const finalPath = join(dir, name)
-  // Written under .partial and renamed only once pg_dump has exited 0 AND
-  // the gzip pipeline has resolved. Rename within one filesystem is atomic,
-  // so a container killed mid-dump can never leave a truncated file that
-  // looks like a valid backup.
-  const partialPath = `${finalPath}.partial`
-
-  const { args, password } = connectionArgs(databaseUrl)
-  const binary = await pgDumpBinary(db)
-  const child = spawn(binary, [...args, '--format=plain', '--no-password'], {
-    shell: false,
-    env: password === undefined ? process.env : { ...process.env, PGPASSWORD: password },
-  })
-
-  let stderr = ''
-  child.stderr.setEncoding('utf8')
-  child.stderr.on('data', (chunk: string) => {
-    // Bounded: a pathological failure shouldn't hold the whole of stderr in
-    // memory. The first 8KB carries the actual error every time.
-    if (stderr.length < 8192) stderr += chunk
-  })
-
-  const exited = new Promise<number>((resolve, reject) => {
-    child.on('error', reject)
-    child.on('close', (code) => resolve(code ?? 1))
-  })
-
+  const lock = await acquireBackupLock(dir)
   try {
-    await pipeline(child.stdout, createGzip(), createWriteStream(partialPath))
-    // A resolved pipeline does NOT imply a successful dump: pg_dump can fail
-    // after writing some output, and gzip will happily compress a truncated
-    // stream. The exit code is the only real signal.
-    const code = await exited
-    if (code !== 0) throw new Error(`pg_dump exited ${code}: ${stderr.trim() || 'no output'}`)
+    const name = timestampName(now)
+    const finalPath = join(dir, name)
+    // Written under .partial and renamed only once pg_dump has exited 0 AND
+    // the gzip pipeline has resolved. Rename within one filesystem is atomic,
+    // so a container killed mid-dump can never leave a truncated file that
+    // looks like a valid backup.
+    const partialPath = `${finalPath}.partial`
 
-    await rename(partialPath, finalPath)
-  } catch (err) {
-    await unlink(partialPath).catch(() => {})
-    throw err
+    const { args, password } = connectionArgs(databaseUrl)
+    const binary = await pgDumpBinary(db)
+    const child = spawn(binary, [...args, '--format=plain', '--no-password'], {
+      shell: false,
+      env: password === undefined ? process.env : { ...process.env, PGPASSWORD: password },
+    })
+
+    let stderr = ''
+    child.stderr.setEncoding('utf8')
+    child.stderr.on('data', (chunk: string) => {
+      // Bounded: a pathological failure shouldn't hold the whole of stderr in
+      // memory. The first 8KB carries the actual error every time.
+      if (stderr.length < 8192) stderr += chunk
+    })
+
+    const exited = new Promise<number>((resolve, reject) => {
+      child.on('error', reject)
+      child.on('close', (code) => resolve(code ?? 1))
+    })
+
+    try {
+      await pipeline(child.stdout, createGzip(), createWriteStream(partialPath))
+      // A resolved pipeline does NOT imply a successful dump: pg_dump can fail
+      // after writing some output, and gzip will happily compress a truncated
+      // stream. The exit code is the only real signal.
+      const code = await exited
+      if (code !== 0) throw new Error(`pg_dump exited ${code}: ${stderr.trim() || 'no output'}`)
+
+      await rename(partialPath, finalPath)
+    } catch (err) {
+      await unlink(partialPath).catch(() => {})
+      throw err
+    }
+
+    const { size } = await stat(finalPath)
+    const tiers = await getRetentionTiers(db)
+    const pruned = await prune(dir, Date.now(), tiers)
+    return { file: name, bytes: size, durationMs: Date.now() - startedAt, pruned }
+  } finally {
+    await releaseBackupLock(lock, dir)
   }
-
-  const { size } = await stat(finalPath)
-  const tiers = await getRetentionTiers(db)
-  const pruned = await prune(dir, Date.now(), tiers)
-  return { file: name, bytes: size, durationMs: Date.now() - startedAt, pruned }
 }
 
 /** pg_dump refuses a server major newer than its own, and says so in a way
@@ -472,6 +547,14 @@ export function scheduleDatabaseBackup(db: Database): void {
         lastRun = { at: new Date(), status: 'ok', message: null }
       })
       .catch((err: unknown) => {
+        // Not a failure: another run (a different container during a
+        // deploy, or eventually a manual "back up now" trigger) already
+        // holds the lock, and lastRun is per-process anyway so there is
+        // nothing useful to record here about that other run's outcome.
+        if (err instanceof BackupAlreadyRunningError) {
+          console.log('Database backup: skipped, another run already in progress.')
+          return
+        }
         const message = describeFailure(err)
         if (isVersionMismatch(err)) {
           console.error(`Database backup failed: ${message}`)

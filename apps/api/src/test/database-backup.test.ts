@@ -8,7 +8,7 @@ import { createGunzip } from 'node:zlib'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { eq } from 'drizzle-orm'
 import { movies, users, watchlistItems, watchlists } from '@rwnd/db'
-import { runDatabaseBackup } from '../lib/database-backup.js'
+import { BackupAlreadyRunningError, runDatabaseBackup } from '../lib/database-backup.js'
 import { createLocalUser, resetDb, testDb } from './helpers.js'
 
 /**
@@ -279,5 +279,46 @@ describe.skipIf(!hasPgDump())('database backup', () => {
     const raw = await readFile(join(DIR, file))
     expect(raw[0]).toBe(0x1f)
     expect(raw[1]).toBe(0x8b)
+  })
+
+  it('refuses to run while another run holds the lock', async () => {
+    await writeFile(join(DIR, 'rwnd-backup.lock'), '999999')
+
+    await expect(
+      runDatabaseBackup({ db, dir: DIR, databaseUrl: databaseUrl() }),
+    ).rejects.toBeInstanceOf(BackupAlreadyRunningError)
+
+    // Nothing was dumped, and the other run's lock is left untouched for it
+    // to release itself.
+    const left = await readdir(DIR)
+    expect(left.filter((n) => /^rwnd-\d{8}T\d{6}Z\.sql\.gz$/.test(n))).toHaveLength(0)
+    expect(left).toContain('rwnd-backup.lock')
+  })
+
+  it('clears a stale lock left by a crashed run and proceeds', async () => {
+    const lockPath = join(DIR, 'rwnd-backup.lock')
+    await writeFile(lockPath, '999999')
+    const old = new Date(Date.now() - 7 * 60 * 60 * 1000) // past STALE_LOCK_MS (6h)
+    await utimes(lockPath, old, old)
+
+    const result = await runDatabaseBackup({ db, dir: DIR, databaseUrl: databaseUrl() })
+
+    expect(result.file).toMatch(/^rwnd-\d{8}T\d{6}Z\.sql\.gz$/)
+  })
+
+  it('releases the lock after a successful run', async () => {
+    await runDatabaseBackup({ db, dir: DIR, databaseUrl: databaseUrl() })
+    const left = await readdir(DIR)
+    expect(left).not.toContain('rwnd-backup.lock')
+  })
+
+  it('releases the lock after a failed run', async () => {
+    const url = new URL(databaseUrl())
+    url.hostname = 'no-such-host.invalid'
+
+    await expect(runDatabaseBackup({ db, dir: DIR, databaseUrl: url.toString() })).rejects.toThrow()
+
+    const left = await readdir(DIR).catch(() => [])
+    expect(left).not.toContain('rwnd-backup.lock')
   })
 })

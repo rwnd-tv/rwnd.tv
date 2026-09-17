@@ -343,14 +343,46 @@ describe('backups', () => {
         watchHistory: {
           added: 1,
           removed: 1,
-          addedTitles: ['Breaking Bad S01E01 · watched 2026-01-05'],
-          removedTitles: ['The Matrix (1999) · watched 2026-01-01'],
+          addedTitles: ['2026-01-05 00:00 Breaking Bad S01E01'],
+          removedTitles: ['2026-01-01 00:00 The Matrix (1999)'],
         },
         ratings: { added: 0, removed: 0, addedTitles: [], removedTitles: [] },
         watchlist: { added: 0, removed: 0, addedTitles: [], removedTitles: [] },
         droppedShows: { added: 0, removed: 0, addedTitles: [], removedTitles: [] },
       },
     })
+  })
+
+  it("sorts each category's added/removed items newest to oldest", async () => {
+    const cookie = await createUserAndCookie('sorter@example.com')
+    const userId = await meId(cookie)
+    const { movie } = await seedMetadata(db)
+
+    const createRes = await app.request('/api/v1/backups', {
+      method: 'POST',
+      headers: { cookie, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ description: 'Empty' }),
+    })
+    const backup = await json<BackupSummary>(createRes)
+
+    // Three watches of the same movie (a genuine duplicate down to the
+    // title, distinguished only by watchedAt) - inserted out of order, so a
+    // passing test can't be an accident of insertion order.
+    await db.insert(plays).values([
+      { userId, movieId: movie.id, watchedAt: new Date('2026-02-01T00:00:00.000Z') },
+      { userId, movieId: movie.id, watchedAt: new Date('2026-03-01T00:00:00.000Z') },
+      { userId, movieId: movie.id, watchedAt: new Date('2026-01-01T00:00:00.000Z') },
+    ])
+
+    const diffRes = await app.request(`/api/v1/backups/${backup.id}/diff`, {
+      headers: { cookie },
+    })
+    const body = await json<DiffBackupResponse>(diffRes)
+    expect(body.diff.watchHistory.addedTitles).toEqual([
+      '2026-03-01 00:00 The Matrix (1999)',
+      '2026-02-01 00:00 The Matrix (1999)',
+      '2026-01-01 00:00 The Matrix (1999)',
+    ])
   })
 
   it('represents a TVDB-only show in a backup and its diff (regression: a show with no tmdb id showed no added/removed)', async () => {
@@ -425,7 +457,7 @@ describe('backups', () => {
         watchHistory: {
           added: 1,
           removed: 0,
-          addedTitles: ['Formula 1 S2026E02 · watched 2026-03-08'],
+          addedTitles: ['2026-03-08 00:00 Formula 1 S2026E02'],
           removedTitles: [],
         },
         ratings: { added: 0, removed: 0, addedTitles: [], removedTitles: [] },
@@ -528,8 +560,8 @@ describe('backups', () => {
         watchHistory: {
           added: 1,
           removed: 1,
-          addedTitles: ['Breaking Bad S01E01 · watched 2026-02-01'],
-          removedTitles: ['The Matrix (1999) · watched 2026-01-01'],
+          addedTitles: ['2026-02-01 00:00 Breaking Bad S01E01'],
+          removedTitles: ['2026-01-01 00:00 The Matrix (1999)'],
         },
         ratings: { added: 0, removed: 0, addedTitles: [], removedTitles: [] },
         watchlist: { added: 0, removed: 0, addedTitles: [], removedTitles: [] },

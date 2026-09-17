@@ -94,31 +94,55 @@ function describeMediaRef(
   return `${show.title} ${episodeLabel(ref.season, ref.episode!)}`
 }
 
-/** `2026-01-05`, the local convention (see database-backup.ts's UTC-day-key
- * usage elsewhere) for a compact, locale-independent date in
+/** `2026-01-05 14:32`, the local convention (see database-backup.ts's
+ * UTC-day-key usage elsewhere) for a compact, locale-independent date in
  * server-generated diagnostic text — this is API response content, not
- * translated UI chrome, so it isn't run through i18n date formatting. */
-function shortDate(isoDatetime: string): string {
-  return isoDatetime.slice(0, 10)
+ * translated UI chrome, so it isn't run through i18n date formatting. Also
+ * doubles as the sort key for newest-first ordering: ISO 8601 sorts
+ * lexicographically the same as chronologically, so entries can be sorted
+ * on the raw `Zzzz` datetime string directly, without parsing a `Date`. */
+function formatDateTime(isoDatetime: string): string {
+  return `${isoDatetime.slice(0, 10)} ${isoDatetime.slice(11, 16)}`
+}
+
+/** Newest-first, by whatever ISO datetime string `dateOf` returns — used to
+ * sort each category's added/removed entries before describing them, so the
+ * Diff dialog reads like a timeline rather than the arbitrary order
+ * `buildBackupFile`'s queries (or an old backup file's own array order)
+ * happened to produce. */
+function byDateDesc<T>(dateOf: (entry: T) => string): (a: T, b: T) => number {
+  return (a, b) => dateOf(b).localeCompare(dateOf(a))
+}
+
+/** The later of a dropped-show entry's two independent timestamps (Trakt's
+ * own drop, and this instance's manual one - either, both or neither can be
+ * set). Empty string when neither is set, which sorts oldest under
+ * `byDateDesc` rather than throwing off the ordering of entries that do
+ * have one. */
+function droppedAt(entry: BackupDroppedShow): string {
+  const dates = [entry.traktDroppedAt, entry.manualDroppedAt].filter((d): d is string => d !== null)
+  return dates.length > 0 ? dates.sort().at(-1)! : ''
 }
 
 function describeWatch(file: BackupFile, entry: BackupWatch): string {
-  return `${describeMediaRef(file, entry)} · watched ${shortDate(entry.watchedAt)}`
+  return `${formatDateTime(entry.watchedAt)} ${describeMediaRef(file, entry)}`
 }
 
 function describeRating(file: BackupFile, entry: BackupRating): string {
-  return `${describeMediaRef(file, entry)} · rated ${entry.rating}`
+  return `${formatDateTime(entry.ratedAt)} ${describeMediaRef(file, entry)} · rated ${entry.rating}`
 }
 
 function describeWatchlistItem(file: BackupFile, entry: BackupWatchlistItem): string {
-  return `${describeMediaRef(file, entry)} · ${entry.list}`
+  return `${formatDateTime(entry.listedAt)} ${describeMediaRef(file, entry)} · ${entry.list}`
 }
 
 function describeDroppedShow(file: BackupFile, entry: BackupDroppedShow): string {
   const show = findByRef<BackupShow>(file.shows, entry.show)
   const title = show?.title ?? 'Unknown show'
   const reasons = [entry.traktDropped && 'Trakt', entry.manualDropped && 'manual'].filter(Boolean)
-  return reasons.length > 0 ? `${title} (${reasons.join(', ')})` : title
+  const when = droppedAt(entry)
+  const prefix = when ? `${formatDateTime(when)} ` : ''
+  return reasons.length > 0 ? `${prefix}${title} (${reasons.join(', ')})` : `${prefix}${title}`
 }
 
 /** Counts entries added/removed per category between a backup file and the
@@ -137,7 +161,9 @@ function describeDroppedShow(file: BackupFile, entry: BackupDroppedShow): string
  * Each surviving entry also gets a one-line description (`addedTitles`/
  * `removedTitles`) for the Diff dialog's "what changed" section — an added
  * entry is described against the `current` snapshot's own movies/shows,
- * a removed one against `backup`'s. */
+ * a removed one against `backup`'s. Sorted newest first within each list
+ * before describing, by whichever date field that category's own entries
+ * carry. */
 export async function computeBackupDiff(
   db: Database,
   userId: string,
@@ -148,9 +174,20 @@ export async function computeBackupDiff(
   const stringify = <T>(entry: T) => JSON.stringify(entry)
 
   const watchHistory = multisetDiff(current.watchHistory, backup.watchHistory, stringify)
+  watchHistory.added.sort(byDateDesc((e) => e.watchedAt))
+  watchHistory.removed.sort(byDateDesc((e) => e.watchedAt))
+
   const ratings = multisetDiff(current.ratings, backup.ratings, stringify)
+  ratings.added.sort(byDateDesc((e) => e.ratedAt))
+  ratings.removed.sort(byDateDesc((e) => e.ratedAt))
+
   const watchlist = multisetDiff(current.watchlist, backup.watchlist, stringify)
+  watchlist.added.sort(byDateDesc((e) => e.listedAt))
+  watchlist.removed.sort(byDateDesc((e) => e.listedAt))
+
   const droppedShows = multisetDiff(current.droppedShows, backup.droppedShows, stringify)
+  droppedShows.added.sort(byDateDesc(droppedAt))
+  droppedShows.removed.sort(byDateDesc(droppedAt))
 
   return {
     watchHistory: {

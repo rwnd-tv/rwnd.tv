@@ -283,10 +283,17 @@ export type RestoreBackupResponse = z.infer<typeof restoreBackupResponseSchema>
 
 /** Entries present now but not in the backup ("added" since the backup was
  * taken) vs. entries present in the backup but not now ("removed" since).
- * Counted per category, same four as backupCountsSchema. */
+ * Counted per category, same four as backupCountsSchema. `addedTitles`/
+ * `removedTitles` carry a one-line description of each surviving entry
+ * (apps/api/src/backup/diff.ts builds these), for the Diff dialog's
+ * expandable "what changed" section - a changed rating/note still shows up
+ * as one entry in each list rather than a paired "changed" case, per this
+ * module's own "removed, then added" comparison model. */
 export const backupDiffCategorySchema = z.object({
   added: z.number().int(),
   removed: z.number().int(),
+  addedTitles: z.array(z.string()),
+  removedTitles: z.array(z.string()),
 })
 export type BackupDiffCategory = z.infer<typeof backupDiffCategorySchema>
 

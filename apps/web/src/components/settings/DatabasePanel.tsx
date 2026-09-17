@@ -401,16 +401,66 @@ export function DatabasePanel() {
         ) : diffError ? (
           <p className="text-sm text-[var(--color-danger)]">{t('common.somethingWentWrong')}</p>
         ) : diffData ? (
-          <ul className="flex flex-col gap-1 text-sm">
-            {categories.map(({ key, label }) => (
-              <li key={key} className="flex items-center justify-between gap-4">
-                <span>{label}</span>
-                <span className="text-[var(--color-fg-muted)]">
-                  {t('settings.database.backup.diffLine', diffData.diff[key])}
-                </span>
-              </li>
-            ))}
-          </ul>
+          <>
+            <ul className="flex flex-col gap-1 text-sm">
+              {categories.map(({ key, label }) => (
+                <li key={key} className="flex items-center justify-between gap-4">
+                  <span>{label}</span>
+                  <span className="text-[var(--color-fg-muted)]">
+                    {t('settings.database.backup.diffLine', {
+                      added: diffData.diff[key].added,
+                      removed: diffData.diff[key].removed,
+                    })}
+                  </span>
+                </li>
+              ))}
+            </ul>
+
+            {categories.some(
+              ({ key }) => diffData.diff[key].added > 0 || diffData.diff[key].removed > 0,
+            ) && (
+              <details className="mt-3">
+                <summary className="cursor-pointer text-sm font-medium">
+                  {t('settings.database.backup.diffDetailsSummary')}
+                </summary>
+                <div className="mt-2 flex flex-col gap-3 text-sm text-[var(--color-fg-muted)]">
+                  {categories.map(({ key, label }) => {
+                    const { addedTitles, removedTitles } = diffData.diff[key]
+                    if (addedTitles.length === 0 && removedTitles.length === 0) return null
+                    return (
+                      <div key={key}>
+                        <p className="font-medium text-[var(--color-fg)]">{label}</p>
+                        {addedTitles.length > 0 && (
+                          <div className="mt-1">
+                            <p className="text-xs uppercase">
+                              {t('settings.database.backup.diffAdded')}
+                            </p>
+                            <ul className="flex flex-col gap-0.5 pl-4">
+                              {addedTitles.map((title, i) => (
+                                <li key={i}>{title}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                        {removedTitles.length > 0 && (
+                          <div className="mt-1">
+                            <p className="text-xs uppercase">
+                              {t('settings.database.backup.diffRemoved')}
+                            </p>
+                            <ul className="flex flex-col gap-0.5 pl-4">
+                              {removedTitles.map((title, i) => (
+                                <li key={i}>{title}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              </details>
+            )}
+          </>
         ) : null}
 
         <div className="mt-6 flex justify-end">

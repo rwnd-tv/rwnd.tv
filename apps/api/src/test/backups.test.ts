@@ -340,10 +340,15 @@ describe('backups', () => {
     expect(diffRes.status).toBe(200)
     expect(await json<DiffBackupResponse>(diffRes)).toEqual({
       diff: {
-        watchHistory: { added: 1, removed: 1 },
-        ratings: { added: 0, removed: 0 },
-        watchlist: { added: 0, removed: 0 },
-        droppedShows: { added: 0, removed: 0 },
+        watchHistory: {
+          added: 1,
+          removed: 1,
+          addedTitles: ['Breaking Bad S01E01 — Pilot · watched 2026-01-05'],
+          removedTitles: ['The Matrix (1999) · watched 2026-01-01'],
+        },
+        ratings: { added: 0, removed: 0, addedTitles: [], removedTitles: [] },
+        watchlist: { added: 0, removed: 0, addedTitles: [], removedTitles: [] },
+        droppedShows: { added: 0, removed: 0, addedTitles: [], removedTitles: [] },
       },
     })
   })
@@ -401,10 +406,10 @@ describe('backups', () => {
     })
     expect(await json<DiffBackupResponse>(diffRes)).toEqual({
       diff: {
-        watchHistory: { added: 0, removed: 0 },
-        ratings: { added: 0, removed: 0 },
-        watchlist: { added: 0, removed: 0 },
-        droppedShows: { added: 0, removed: 0 },
+        watchHistory: { added: 0, removed: 0, addedTitles: [], removedTitles: [] },
+        ratings: { added: 0, removed: 0, addedTitles: [], removedTitles: [] },
+        watchlist: { added: 0, removed: 0, addedTitles: [], removedTitles: [] },
+        droppedShows: { added: 0, removed: 0, addedTitles: [], removedTitles: [] },
       },
     })
 
@@ -417,10 +422,15 @@ describe('backups', () => {
     })
     expect(await json<DiffBackupResponse>(diffRes2)).toEqual({
       diff: {
-        watchHistory: { added: 1, removed: 0 },
-        ratings: { added: 0, removed: 0 },
-        watchlist: { added: 0, removed: 0 },
-        droppedShows: { added: 0, removed: 0 },
+        watchHistory: {
+          added: 1,
+          removed: 0,
+          addedTitles: ['Formula 1 S2026E02 — Saudi Grand Prix · watched 2026-03-08'],
+          removedTitles: [],
+        },
+        ratings: { added: 0, removed: 0, addedTitles: [], removedTitles: [] },
+        watchlist: { added: 0, removed: 0, addedTitles: [], removedTitles: [] },
+        droppedShows: { added: 0, removed: 0, addedTitles: [], removedTitles: [] },
       },
     })
   })
@@ -515,10 +525,15 @@ describe('backups', () => {
     expect(diffRes.status).toBe(200)
     expect(await json<DiffBackupResponse>(diffRes)).toEqual({
       diff: {
-        watchHistory: { added: 1, removed: 1 },
-        ratings: { added: 0, removed: 0 },
-        watchlist: { added: 0, removed: 0 },
-        droppedShows: { added: 0, removed: 0 },
+        watchHistory: {
+          added: 1,
+          removed: 1,
+          addedTitles: ['Breaking Bad S01E01 — Pilot · watched 2026-02-01'],
+          removedTitles: ['The Matrix (1999) · watched 2026-01-01'],
+        },
+        ratings: { added: 0, removed: 0, addedTitles: [], removedTitles: [] },
+        watchlist: { added: 0, removed: 0, addedTitles: [], removedTitles: [] },
+        droppedShows: { added: 0, removed: 0, addedTitles: [], removedTitles: [] },
       },
     })
 

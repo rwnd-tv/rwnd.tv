@@ -895,7 +895,10 @@
         "confirmDeleteTitle": "Are you sure you want to delete this backup?",
         "confirmDeleteBody": "This permanently deletes \"{{description}}\" ({{date}}). This can't be undone.",
         "diffTitle": "Changes since \"{{description}}\"",
-        "diffLine": "{{added}} added, {{removed}} removed"
+        "diffLine": "{{added}} added, {{removed}} removed",
+        "diffDetailsSummary": "Show what changed",
+        "diffAdded": "Added",
+        "diffRemoved": "Removed"
       },
       "export": {
         "title": "Export data",

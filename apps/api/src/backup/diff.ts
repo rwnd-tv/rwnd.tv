@@ -1,6 +1,7 @@
 import type { Database } from '@rwnd/db'
 import type {
   BackupDiff,
+  BackupDiffEntry,
   BackupDroppedShow,
   BackupFile,
   BackupMovie,
@@ -68,41 +69,44 @@ function episodeLabel(season: number, episode: number): string {
   return `S${String(season).padStart(2, '0')}E${String(episode).padStart(2, '0')}`
 }
 
-/** The movie/show(+episode) title a watch/rating/watchlist entry points
- * at, resolved against `file`'s own `movies`/`shows` (the `current`
- * snapshot's arrays for an added entry, the loaded backup's for a removed
- * one — each side resolves against itself). Falls back to a plain label
- * when a ref can't be found (see findByRef's doc comment for why that's a
- * defensive fallback, not an expected path). Deliberately just "Show
- * S01E01", not the episode's own title too - there's little room for it in
- * this dialog, and the season/episode number alone is enough to identify
- * which one. */
-function describeMediaRef(
+/** The movie/show(+episode) title and episode label a watch/rating/
+ * watchlist entry points at, resolved against `file`'s own `movies`/
+ * `shows` (the `current` snapshot's arrays for an added entry, the loaded
+ * backup's for a removed one — each side resolves against itself). `title`
+ * falls back to a plain label when a ref can't be found (see findByRef's
+ * doc comment for why that's a defensive fallback, not an expected path).
+ * `episode` is deliberately just "S01E01", not the episode's own title too
+ * - there's little room for it in this dialog, and the season/episode
+ * number alone is enough to identify which one. Kept separate from `title`
+ * (rather than one combined string) so the frontend can truncate a long
+ * title with an ellipsis while the episode number - the part that actually
+ * disambiguates - always stays visible. */
+function mediaRefParts(
   file: BackupFile,
   ref: { movie?: ExternalRef; show?: ExternalRef; season?: number; episode?: number },
-): string {
+): { title: string; episode: string | null } {
   if (ref.movie) {
     const movie = findByRef<BackupMovie>(file.movies, ref.movie)
-    if (!movie) return 'Unknown movie'
-    return movie.year ? `${movie.title} (${movie.year})` : movie.title
+    if (!movie) return { title: 'Unknown movie', episode: null }
+    return { title: movie.year ? `${movie.title} (${movie.year})` : movie.title, episode: null }
   }
 
   const show = findByRef<BackupShow>(file.shows, ref.show!)
-  if (!show) return 'Unknown show'
-  if (ref.season === undefined) return show.title
+  if (!show) return { title: 'Unknown show', episode: null }
+  if (ref.season === undefined) return { title: show.title, episode: null }
 
-  return `${show.title} ${episodeLabel(ref.season, ref.episode!)}`
+  return { title: show.title, episode: episodeLabel(ref.season, ref.episode!) }
 }
 
-/** `2026-01-05 14:32`, the local convention (see database-backup.ts's
- * UTC-day-key usage elsewhere) for a compact, locale-independent date in
- * server-generated diagnostic text — this is API response content, not
- * translated UI chrome, so it isn't run through i18n date formatting. Also
- * doubles as the sort key for newest-first ordering: ISO 8601 sorts
- * lexicographically the same as chronologically, so entries can be sorted
- * on the raw `Zzzz` datetime string directly, without parsing a `Date`. */
-function formatDateTime(isoDatetime: string): string {
-  return `${isoDatetime.slice(0, 10)} ${isoDatetime.slice(11, 16)}`
+/** `{ date: '2026-01-05', time: '14:32' }`, the local convention (see
+ * database-backup.ts's UTC-day-key usage elsewhere) for a compact,
+ * locale-independent date in server-generated diagnostic text — this is API
+ * response content, not translated UI chrome, so it isn't run through i18n
+ * date formatting. Split rather than one combined string so the frontend
+ * can lay them out as their own fixed-width column next to a truncating
+ * title. */
+function splitDateTime(isoDatetime: string): { date: string; time: string } {
+  return { date: isoDatetime.slice(0, 10), time: isoDatetime.slice(11, 16) }
 }
 
 /** Newest-first, by whatever ISO datetime string `dateOf` returns — used to
@@ -124,25 +128,33 @@ function droppedAt(entry: BackupDroppedShow): string {
   return dates.length > 0 ? dates.sort().at(-1)! : ''
 }
 
-function describeWatch(file: BackupFile, entry: BackupWatch): string {
-  return `${formatDateTime(entry.watchedAt)} ${describeMediaRef(file, entry)}`
+function describeWatch(file: BackupFile, entry: BackupWatch): BackupDiffEntry {
+  return { ...splitDateTime(entry.watchedAt), ...mediaRefParts(file, entry), suffix: null }
 }
 
-function describeRating(file: BackupFile, entry: BackupRating): string {
-  return `${formatDateTime(entry.ratedAt)} ${describeMediaRef(file, entry)} · rated ${entry.rating}`
+function describeRating(file: BackupFile, entry: BackupRating): BackupDiffEntry {
+  return {
+    ...splitDateTime(entry.ratedAt),
+    ...mediaRefParts(file, entry),
+    suffix: `rated ${entry.rating}`,
+  }
 }
 
-function describeWatchlistItem(file: BackupFile, entry: BackupWatchlistItem): string {
-  return `${formatDateTime(entry.listedAt)} ${describeMediaRef(file, entry)} · ${entry.list}`
+function describeWatchlistItem(file: BackupFile, entry: BackupWatchlistItem): BackupDiffEntry {
+  return { ...splitDateTime(entry.listedAt), ...mediaRefParts(file, entry), suffix: entry.list }
 }
 
-function describeDroppedShow(file: BackupFile, entry: BackupDroppedShow): string {
+function describeDroppedShow(file: BackupFile, entry: BackupDroppedShow): BackupDiffEntry {
   const show = findByRef<BackupShow>(file.shows, entry.show)
   const title = show?.title ?? 'Unknown show'
   const reasons = [entry.traktDropped && 'Trakt', entry.manualDropped && 'manual'].filter(Boolean)
   const when = droppedAt(entry)
-  const prefix = when ? `${formatDateTime(when)} ` : ''
-  return reasons.length > 0 ? `${prefix}${title} (${reasons.join(', ')})` : `${prefix}${title}`
+  return {
+    ...(when ? splitDateTime(when) : { date: '', time: '' }),
+    title,
+    episode: null,
+    suffix: reasons.length > 0 ? reasons.join(', ') : null,
+  }
 }
 
 /** Counts entries added/removed per category between a backup file and the
@@ -158,8 +170,8 @@ function describeDroppedShow(file: BackupFile, entry: BackupDroppedShow): string
  * provider it's tagged with (e.g. a priority reorder) reads as "removed,
  * then added", same as any other ref change.
  *
- * Each surviving entry also gets a one-line description (`addedTitles`/
- * `removedTitles`) for the Diff dialog's "what changed" section — an added
+ * Each surviving entry also gets a structured description (`addedItems`/
+ * `removedItems`) for the Diff dialog's "what changed" section — an added
  * entry is described against the `current` snapshot's own movies/shows,
  * a removed one against `backup`'s. Sorted newest first within each list
  * before describing, by whichever date field that category's own entries
@@ -193,26 +205,26 @@ export async function computeBackupDiff(
     watchHistory: {
       added: watchHistory.added.length,
       removed: watchHistory.removed.length,
-      addedTitles: watchHistory.added.map((entry) => describeWatch(current, entry)),
-      removedTitles: watchHistory.removed.map((entry) => describeWatch(backup, entry)),
+      addedItems: watchHistory.added.map((entry) => describeWatch(current, entry)),
+      removedItems: watchHistory.removed.map((entry) => describeWatch(backup, entry)),
     },
     ratings: {
       added: ratings.added.length,
       removed: ratings.removed.length,
-      addedTitles: ratings.added.map((entry) => describeRating(current, entry)),
-      removedTitles: ratings.removed.map((entry) => describeRating(backup, entry)),
+      addedItems: ratings.added.map((entry) => describeRating(current, entry)),
+      removedItems: ratings.removed.map((entry) => describeRating(backup, entry)),
     },
     watchlist: {
       added: watchlist.added.length,
       removed: watchlist.removed.length,
-      addedTitles: watchlist.added.map((entry) => describeWatchlistItem(current, entry)),
-      removedTitles: watchlist.removed.map((entry) => describeWatchlistItem(backup, entry)),
+      addedItems: watchlist.added.map((entry) => describeWatchlistItem(current, entry)),
+      removedItems: watchlist.removed.map((entry) => describeWatchlistItem(backup, entry)),
     },
     droppedShows: {
       added: droppedShows.added.length,
       removed: droppedShows.removed.length,
-      addedTitles: droppedShows.added.map((entry) => describeDroppedShow(current, entry)),
-      removedTitles: droppedShows.removed.map((entry) => describeDroppedShow(backup, entry)),
+      addedItems: droppedShows.added.map((entry) => describeDroppedShow(current, entry)),
+      removedItems: droppedShows.removed.map((entry) => describeDroppedShow(backup, entry)),
     },
   }
 }

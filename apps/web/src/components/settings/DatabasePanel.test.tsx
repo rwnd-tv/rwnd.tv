@@ -52,7 +52,7 @@ const backup: BackupSummary = {
   skipped: 0,
 }
 
-const EMPTY_CATEGORY = { added: 0, removed: 0, addedTitles: [], removedTitles: [] }
+const EMPTY_CATEGORY = { added: 0, removed: 0, addedItems: [], removedItems: [] }
 
 function renderPanel(diff: DiffBackupResponse['diff']) {
   vi.mocked(api.settings.get).mockResolvedValue(baseSettings)
@@ -91,14 +91,30 @@ describe('DatabasePanel diff dialog', () => {
     expect(screen.queryByText('Show what changed')).not.toBeInTheDocument()
   })
 
-  it('lists the added and removed item titles when something changed', async () => {
+  it('lists the added and removed items, split into separate fields', async () => {
     const user = userEvent.setup()
     renderPanel({
       watchHistory: {
         added: 1,
         removed: 1,
-        addedTitles: ['2026-01-05 00:00 Breaking Bad S01E01'],
-        removedTitles: ['2026-01-01 00:00 The Matrix (1999)'],
+        addedItems: [
+          {
+            date: '2026-01-05',
+            time: '00:00',
+            title: 'Breaking Bad',
+            episode: 'S01E01',
+            suffix: null,
+          },
+        ],
+        removedItems: [
+          {
+            date: '2026-01-01',
+            time: '00:00',
+            title: 'The Matrix (1999)',
+            episode: null,
+            suffix: null,
+          },
+        ],
       },
       ratings: EMPTY_CATEGORY,
       watchlist: EMPTY_CATEGORY,
@@ -108,7 +124,13 @@ describe('DatabasePanel diff dialog', () => {
     await user.click(await screen.findByRole('button', { name: 'Diff' }))
 
     expect(await screen.findByText('Show what changed')).toBeInTheDocument()
-    expect(screen.getByText('2026-01-05 00:00 Breaking Bad S01E01')).toBeInTheDocument()
-    expect(screen.getByText('2026-01-01 00:00 The Matrix (1999)')).toBeInTheDocument()
+    // date/time, title and episode render as separate elements (so the
+    // title alone can truncate without ever hiding the episode number) -
+    // check each part rather than one combined string.
+    expect(screen.getByText('2026-01-05 00:00')).toBeInTheDocument()
+    expect(screen.getByText('Breaking Bad')).toBeInTheDocument()
+    expect(screen.getByText('S01E01')).toBeInTheDocument()
+    expect(screen.getByText('2026-01-01 00:00')).toBeInTheDocument()
+    expect(screen.getByText('The Matrix (1999)')).toBeInTheDocument()
   })
 })

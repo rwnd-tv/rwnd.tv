@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import type { BackupSummary } from '@rwnd/shared'
+import type { BackupDiffEntry, BackupSummary } from '@rwnd/shared'
 import { api } from '../../lib/api-client.js'
 import { usePublicSettings } from '../../lib/use-public-settings.js'
 import { CollapsiblePanel } from '../ui/CollapsiblePanel.js'
@@ -94,6 +94,36 @@ const CATEGORY_ICONS: Record<Category, (props: { className?: string }) => React.
   ratings: StarIcon,
   watchlist: BookmarkIcon,
   droppedShows: DroppedIcon,
+}
+
+/**
+ * One added/removed line in the Diff dialog's expandable "what changed"
+ * section. `title` is the only part that can be long enough to wrap, so
+ * it's the only part that truncates (`min-w-0 flex-1 truncate` on a plain
+ * flex row) - `date`/`time` and `episode` (the part that actually tells two
+ * similar entries apart) stay `shrink-0`, always fully visible, same
+ * reasoning as the icon's own `shrink-0` fix above.
+ */
+function DiffEntryRow({
+  entry,
+  Icon,
+}: {
+  entry: BackupDiffEntry
+  Icon: (props: { className?: string }) => React.JSX.Element
+}) {
+  return (
+    <li className="flex items-center gap-1.5">
+      <Icon className="shrink-0" />
+      <span className="shrink-0 text-[var(--color-fg-muted)] tabular-nums">
+        {entry.date} {entry.time}
+      </span>
+      <span className="min-w-0 flex-1 truncate text-[var(--color-fg)]">{entry.title}</span>
+      {entry.episode && <span className="shrink-0 text-[var(--color-fg)]">{entry.episode}</span>}
+      {entry.suffix && (
+        <span className="shrink-0 text-[var(--color-fg-muted)]">· {entry.suffix}</span>
+      )}
+    </li>
+  )
 }
 
 const EMPTY_SELECTION: Record<Category, boolean> = {
@@ -507,38 +537,32 @@ export function DatabasePanel() {
                 </summary>
                 <div className="mt-2 flex flex-col gap-3 text-sm text-[var(--color-fg-muted)]">
                   {categories.map(({ key, label }) => {
-                    const { addedTitles, removedTitles } = diffData.diff[key]
-                    if (addedTitles.length === 0 && removedTitles.length === 0) return null
+                    const { addedItems, removedItems } = diffData.diff[key]
+                    if (addedItems.length === 0 && removedItems.length === 0) return null
                     const Icon = CATEGORY_ICONS[key]
                     return (
                       <div key={key}>
                         <p className="font-medium text-[var(--color-fg)]">{label}</p>
-                        {addedTitles.length > 0 && (
+                        {addedItems.length > 0 && (
                           <div className="mt-1">
                             <p className="text-xs uppercase">
                               {t('settings.database.backup.diffAdded')}
                             </p>
                             <ul className="flex flex-col gap-1">
-                              {addedTitles.map((title, i) => (
-                                <li key={i} className="flex items-start gap-1.5">
-                                  <Icon className="shrink-0" />
-                                  <span>{title}</span>
-                                </li>
+                              {addedItems.map((entry, i) => (
+                                <DiffEntryRow key={i} entry={entry} Icon={Icon} />
                               ))}
                             </ul>
                           </div>
                         )}
-                        {removedTitles.length > 0 && (
+                        {removedItems.length > 0 && (
                           <div className="mt-1">
                             <p className="text-xs uppercase">
                               {t('settings.database.backup.diffRemoved')}
                             </p>
                             <ul className="flex flex-col gap-1">
-                              {removedTitles.map((title, i) => (
-                                <li key={i} className="flex items-start gap-1.5">
-                                  <Icon className="shrink-0" />
-                                  <span>{title}</span>
-                                </li>
+                              {removedItems.map((entry, i) => (
+                                <DiffEntryRow key={i} entry={entry} Icon={Icon} />
                               ))}
                             </ul>
                           </div>

@@ -343,12 +343,28 @@ describe('backups', () => {
         watchHistory: {
           added: 1,
           removed: 1,
-          addedTitles: ['2026-01-05 00:00 Breaking Bad S01E01'],
-          removedTitles: ['2026-01-01 00:00 The Matrix (1999)'],
+          addedItems: [
+            {
+              date: '2026-01-05',
+              time: '00:00',
+              title: 'Breaking Bad',
+              episode: 'S01E01',
+              suffix: null,
+            },
+          ],
+          removedItems: [
+            {
+              date: '2026-01-01',
+              time: '00:00',
+              title: 'The Matrix (1999)',
+              episode: null,
+              suffix: null,
+            },
+          ],
         },
-        ratings: { added: 0, removed: 0, addedTitles: [], removedTitles: [] },
-        watchlist: { added: 0, removed: 0, addedTitles: [], removedTitles: [] },
-        droppedShows: { added: 0, removed: 0, addedTitles: [], removedTitles: [] },
+        ratings: { added: 0, removed: 0, addedItems: [], removedItems: [] },
+        watchlist: { added: 0, removed: 0, addedItems: [], removedItems: [] },
+        droppedShows: { added: 0, removed: 0, addedItems: [], removedItems: [] },
       },
     })
   })
@@ -378,10 +394,28 @@ describe('backups', () => {
       headers: { cookie },
     })
     const body = await json<DiffBackupResponse>(diffRes)
-    expect(body.diff.watchHistory.addedTitles).toEqual([
-      '2026-03-01 00:00 The Matrix (1999)',
-      '2026-02-01 00:00 The Matrix (1999)',
-      '2026-01-01 00:00 The Matrix (1999)',
+    expect(body.diff.watchHistory.addedItems).toEqual([
+      {
+        date: '2026-03-01',
+        time: '00:00',
+        title: 'The Matrix (1999)',
+        episode: null,
+        suffix: null,
+      },
+      {
+        date: '2026-02-01',
+        time: '00:00',
+        title: 'The Matrix (1999)',
+        episode: null,
+        suffix: null,
+      },
+      {
+        date: '2026-01-01',
+        time: '00:00',
+        title: 'The Matrix (1999)',
+        episode: null,
+        suffix: null,
+      },
     ])
   })
 
@@ -438,10 +472,10 @@ describe('backups', () => {
     })
     expect(await json<DiffBackupResponse>(diffRes)).toEqual({
       diff: {
-        watchHistory: { added: 0, removed: 0, addedTitles: [], removedTitles: [] },
-        ratings: { added: 0, removed: 0, addedTitles: [], removedTitles: [] },
-        watchlist: { added: 0, removed: 0, addedTitles: [], removedTitles: [] },
-        droppedShows: { added: 0, removed: 0, addedTitles: [], removedTitles: [] },
+        watchHistory: { added: 0, removed: 0, addedItems: [], removedItems: [] },
+        ratings: { added: 0, removed: 0, addedItems: [], removedItems: [] },
+        watchlist: { added: 0, removed: 0, addedItems: [], removedItems: [] },
+        droppedShows: { added: 0, removed: 0, addedItems: [], removedItems: [] },
       },
     })
 
@@ -457,12 +491,20 @@ describe('backups', () => {
         watchHistory: {
           added: 1,
           removed: 0,
-          addedTitles: ['2026-03-08 00:00 Formula 1 S2026E02'],
-          removedTitles: [],
+          addedItems: [
+            {
+              date: '2026-03-08',
+              time: '00:00',
+              title: 'Formula 1',
+              episode: 'S2026E02',
+              suffix: null,
+            },
+          ],
+          removedItems: [],
         },
-        ratings: { added: 0, removed: 0, addedTitles: [], removedTitles: [] },
-        watchlist: { added: 0, removed: 0, addedTitles: [], removedTitles: [] },
-        droppedShows: { added: 0, removed: 0, addedTitles: [], removedTitles: [] },
+        ratings: { added: 0, removed: 0, addedItems: [], removedItems: [] },
+        watchlist: { added: 0, removed: 0, addedItems: [], removedItems: [] },
+        droppedShows: { added: 0, removed: 0, addedItems: [], removedItems: [] },
       },
     })
   })
@@ -560,12 +602,28 @@ describe('backups', () => {
         watchHistory: {
           added: 1,
           removed: 1,
-          addedTitles: ['2026-02-01 00:00 Breaking Bad S01E01'],
-          removedTitles: ['2026-01-01 00:00 The Matrix (1999)'],
+          addedItems: [
+            {
+              date: '2026-02-01',
+              time: '00:00',
+              title: 'Breaking Bad',
+              episode: 'S01E01',
+              suffix: null,
+            },
+          ],
+          removedItems: [
+            {
+              date: '2026-01-01',
+              time: '00:00',
+              title: 'The Matrix (1999)',
+              episode: null,
+              suffix: null,
+            },
+          ],
         },
-        ratings: { added: 0, removed: 0, addedTitles: [], removedTitles: [] },
-        watchlist: { added: 0, removed: 0, addedTitles: [], removedTitles: [] },
-        droppedShows: { added: 0, removed: 0, addedTitles: [], removedTitles: [] },
+        ratings: { added: 0, removed: 0, addedItems: [], removedItems: [] },
+        watchlist: { added: 0, removed: 0, addedItems: [], removedItems: [] },
+        droppedShows: { added: 0, removed: 0, addedItems: [], removedItems: [] },
       },
     })
 

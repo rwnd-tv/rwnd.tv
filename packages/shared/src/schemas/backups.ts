@@ -281,19 +281,44 @@ export const restoreBackupResponseSchema = z.object({
 })
 export type RestoreBackupResponse = z.infer<typeof restoreBackupResponseSchema>
 
+/**
+ * One added/removed line in the Diff dialog's expandable "what changed"
+ * section (apps/api/src/backup/diff.ts builds these) - split into fields
+ * rather than one pre-formatted string so the frontend can truncate just
+ * `title` with an ellipsis when it's too long to fit, while `date`/`time`
+ * and `episode` (the part that actually identifies *which* entry this is)
+ * always stay fully visible.
+ *
+ * `date`/`time` are already-split, locale-independent strings (`2026-01-05`/
+ * `14:32`), not a single ISO datetime - this is server-generated diagnostic
+ * text, not translated UI chrome, so it isn't run through i18n date
+ * formatting on either side. `episode` is `S01E01`-shaped, present only for
+ * a show/episode entry. `suffix` carries whatever else disambiguates a
+ * category's own entries beyond title+episode+date (a rating value, a
+ * watchlist's name, or which of Trakt/manual dropped it) - `null` when a
+ * category has nothing more to add (watch history).
+ */
+export const backupDiffEntrySchema = z.object({
+  date: z.string(),
+  time: z.string(),
+  title: z.string(),
+  episode: z.string().nullable(),
+  suffix: z.string().nullable(),
+})
+export type BackupDiffEntry = z.infer<typeof backupDiffEntrySchema>
+
 /** Entries present now but not in the backup ("added" since the backup was
  * taken) vs. entries present in the backup but not now ("removed" since).
- * Counted per category, same four as backupCountsSchema. `addedTitles`/
- * `removedTitles` carry a one-line description of each surviving entry
- * (apps/api/src/backup/diff.ts builds these), for the Diff dialog's
- * expandable "what changed" section - a changed rating/note still shows up
- * as one entry in each list rather than a paired "changed" case, per this
- * module's own "removed, then added" comparison model. */
+ * Counted per category, same four as backupCountsSchema. `addedItems`/
+ * `removedItems` carry each surviving entry, sorted newest first, for the
+ * Diff dialog's expandable "what changed" section - a changed rating/note
+ * still shows up as one entry in each list rather than a paired "changed"
+ * case, per this module's own "removed, then added" comparison model. */
 export const backupDiffCategorySchema = z.object({
   added: z.number().int(),
   removed: z.number().int(),
-  addedTitles: z.array(z.string()),
-  removedTitles: z.array(z.string()),
+  addedItems: z.array(backupDiffEntrySchema),
+  removedItems: z.array(backupDiffEntrySchema),
 })
 export type BackupDiffCategory = z.infer<typeof backupDiffCategorySchema>
 

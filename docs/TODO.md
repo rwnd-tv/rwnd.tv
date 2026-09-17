@@ -118,25 +118,36 @@ Format:
       files), since a `FeedRow` header collapsing would be a 24th
       near-identical copy otherwise.
 
-- [ ] **Reword the landing page's "young, single-maintainer project" line** (2026-09-17 10:36 added)
+- [ ] **Rewrite the landing page's "Honestly:" callout, not just its "young" wording** (2026-09-17 10:36 added, expanded in scope 2026-09-17, M5'd 2026-09-17; M5)
 
-      The landing page's honesty callout (`landing.strip.honest.body` in
-      `common.json`, both `en-US` and `en-GB`) reads "this is a young,
-      single-maintainer project, so expect the occasional rough edge, and
-      please file an issue when you hit one." James, 2026-09-17: drop
-      "young" from that sentence, since it reads as ambiguously describing
-      the maintainer's age rather than the project's, which isn't accurate
-      (he isn't young).
+      The landing page's status strip ends with a callout
+      (`landing.strip.honest.*` in `common.json`, both `en-US` and
+      `en-GB`): label "Honestly:", body "this is a young, single-
+      maintainer project, so expect the occasional rough edge, and please
+      file an issue when you hit one," link "See where things stand."
 
-      Wants an actual reword that keeps the same honest, low-key tone
-      without "young" (e.g. leaning on "new" or dropping the adjective
-      entirely and restructuring the clause), not a bare deletion that'd
-      leave "this is a, single-maintainer project." Both locale files
+      James, 2026-09-17: originally just wanted "young" dropped (reads as
+      ambiguously describing the maintainer's age rather than the
+      project's, which isn't accurate - he isn't young), but on reflection
+      wants the whole label and sentence rewritten, not just that one
+      word. The "Honestly:" framing itself reads as apologizing or
+      ashamed of the project's condition, which isn't the tone wanted -
+      being upfront that it's a single-maintainer project with occasional
+      rough edges is fine and worth keeping, but it should read as a
+      plain statement of fact, not a confession.
+
+      Needs an actual rewrite of the label and body together (not a
+      word-swap): something that keeps the same honest, low-key
+      disclosure - single maintainer, expect occasional rough edges,
+      file an issue - without "young" and without the apologetic
+      "Honestly:" framing. The "See where things stand" link and its
+      target (`#status`) can likely stay as-is; this is about the label
+      and body text. Both locale files
       (`apps/web/src/i18n/locales/en-US/common.json` and
-      `.../en-GB/common.json`) carry the identical wording today, so update
-      both together.
+      `.../en-GB/common.json`) carry the identical wording today, so
+      update both together.
 
-- [ ] **Drop the landing page's Kodi mention** (2026-09-17 added)
+- [ ] **Drop the landing page's Kodi mention** (2026-09-17 added, M5'd 2026-09-17; M5)
 
       The FAQ's "Jellyfin, Emby, Tautulli or Kodi?" entry
       (`landing.faq.players.q`/`.a` in `common.json`, both `en-US` and
@@ -156,7 +167,7 @@ Format:
       landing page (hero copy, feature list, other FAQ entries) for any
       other Kodi mentions while touching this.
 
-- [ ] **Add M5 to the landing page's status section** (2026-09-17 added)
+- [ ] **Add M5 to the landing page's status section** (2026-09-17 added, M5'd 2026-09-17; M5)
 
       The landing page's "Where the project actually is" section
       (`landing.status.*` in `common.json`, rendered by the `MILESTONES`
@@ -192,7 +203,7 @@ Format:
       as cleanly. Worth a status pass close to when M5 actually ships
       rather than guessing the wording now while it's still moving.
 
-- [ ] **Retitle and re-pick the landing page's "What works today" section** (2026-09-17 added)
+- [ ] **Retitle and re-pick the landing page's "What works today" section** (2026-09-17 added, M5'd 2026-09-17; M5)
 
       `landing.features.title` (`common.json`, both locales) reads "What
       works today," with a subtitle "Everything listed here is shipped and
@@ -1056,4 +1067,25 @@ source of truth for scope; this is just so a TODO listing is complete.
 - [ ] **Public/shareable profile pages** (2026-08-23 15:38 added; Not yet scheduled)
 
       A public view of a user's watch history/stats.
+
+- [ ] **Configurable or optional landing page for self-hosted instances** (2026-09-17 added; Not yet scheduled)
+
+      `LandingPage.tsx` (route `/`) is deliberately rwnd.tv's own marketing
+      page: the self-host CTA, GitHub/vision.md links, the M1-M4 status
+      strip, the "Built with Claude Code" note, all specific to this
+      project's own identity and positioning (see CLAUDE.md's "Public-
+      facing design surfaces" section). James, 2026-09-17: that's right
+      for rwnd.tv itself, but a self-hoster running their own instance
+      (e.g. for family/friends) might want something else entirely, or
+      nothing at all - just landing straight on Sign In / Create an
+      account, skipping the marketing content altogether.
+
+      Genuinely open on the shape of a fix, worth exploring rather than
+      just picking one: an admin-editable instance setting (same pattern
+      as `instanceName`/`registrationMode`) that swaps `/` for a minimal
+      auth-only screen; a setting that lets an admin write their own
+      hero/features copy in place of rwnd.tv's; or something else. Any of
+      these needs a decision on how much stays fixed (layout, self-host
+      messaging that assumes this is *the* rwnd.tv project) versus
+      genuinely swappable per instance.
 

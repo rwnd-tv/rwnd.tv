@@ -196,6 +196,7 @@ export const api = {
     databaseBackupStatus: () => get<DatabaseBackupStatus>('/admin/database-backups'),
     updateDatabaseBackupRetention: (body: UpdateDatabaseBackupRetentionRequest) =>
       patch<DatabaseBackupStatus>('/admin/database-backups', body),
+    runDatabaseBackupNow: () => post<DatabaseBackupStatus>('/admin/database-backups/run'),
   },
   auth: {
     login: (body: LoginRequest) => post<User | MfaRequiredResponse>('/auth/login', body),

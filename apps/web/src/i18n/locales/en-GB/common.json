@@ -1068,6 +1068,8 @@
       "lastBackupNone": "No backup written yet since this instance last started.",
       "schedule": "Schedule",
       "scheduleValue": "Every {{hours}}h",
+      "runNow": "Back up now",
+      "runNowSucceeded": "Backup complete.",
       "restorePrompt": "Restoring from one of these is a manual step, on purpose. See",
       "restoreLinkText": "the self-hosting guide's Restoring instructions",
       "lastRunFailed": "The backup run at {{date}} failed: {{message}}",

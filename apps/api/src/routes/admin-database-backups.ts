@@ -8,11 +8,14 @@ import {
 import type { AppEnv } from '../types.js'
 import { loadEnv } from '../env.js'
 import { requireAdmin } from '../middleware/auth.js'
+import { rateLimit } from '../middleware/rate-limit.js'
 import {
   BACKUP_INTERVAL_HOURS,
+  BackupAlreadyRunningError,
   getLastDatabaseBackupRun,
   getRetentionTiers,
   listDatabaseBackups,
+  runAndRecordDatabaseBackup,
   type RetentionTiers,
 } from '../lib/database-backup.js'
 
@@ -27,6 +30,12 @@ import {
  *
  * `configured: false` short-circuits before touching the filesystem at
  * all, same reasoning as backups.ts's own `backupsConfigured` gate.
+ *
+ * `POST .../run` (below) triggers an immediate pass on request rather than
+ * on the timer `scheduleDatabaseBackup` runs — deliberately a separate
+ * route from the two above, not a flag on either, since spawning a process
+ * on request is a different security shape (its own rate limit, on top of
+ * the concurrent-run guard the scheduled job already needed).
  */
 export const adminDatabaseBackupRoutes = new OpenAPIHono<AppEnv>()
 
@@ -153,6 +162,60 @@ adminDatabaseBackupRoutes.openapi(
           target: instanceSettings.id,
           set: { ...changed, updatedAt: new Date() },
         })
+    }
+
+    return c.json(await buildStatus(c))
+  },
+)
+
+adminDatabaseBackupRoutes.openapi(
+  createRoute({
+    method: 'post',
+    path: '/admin/database-backups/run',
+    summary: 'Trigger an immediate whole-database backup (admin only)',
+    // A route that spawns a process on request, unlike the timer-driven
+    // scheduler — its own security shape, per docs/TODO.md: rate-limited
+    // per admin (same budget class as setup/register's 5/hour) on top of
+    // runAndRecordDatabaseBackup's own cross-process concurrent-run guard,
+    // rather than relying on the guard alone to stop an admin mashing the
+    // button.
+    middleware: [
+      requireAdmin,
+      rateLimit({
+        name: 'admin:database-backups:run',
+        limit: 5,
+        windowMs: 60 * 60 * 1000,
+        key: (c) => c.get('user')!.id,
+      }),
+    ] as const,
+    responses: {
+      200: {
+        description: 'Updated database backup status',
+        content: { 'application/json': { schema: databaseBackupStatusSchema } },
+      },
+      403: { description: 'Admin only' },
+      409: { description: 'Backups are not configured, or one is already running' },
+      429: { description: 'Too many manual runs — see the rate limit window' },
+    },
+  }),
+  async (c) => {
+    const db = c.get('db')
+    const env = loadEnv()
+    const dir = env.DATABASE_BACKUP_DIR
+    if (!dir) {
+      return c.json({ error: 'Automatic database backups are not configured.' }, 409)
+    }
+
+    try {
+      await runAndRecordDatabaseBackup({ db, dir, databaseUrl: env.DATABASE_URL })
+    } catch (err) {
+      if (err instanceof BackupAlreadyRunningError) {
+        return c.json({ error: 'A backup is already running. Try again shortly.' }, 409)
+      }
+      // Any other failure is already recorded in lastRun by
+      // runAndRecordDatabaseBackup and surfaces via buildStatus below, the
+      // same way a scheduled run's failure does — no separate error
+      // response needed here.
     }
 
     return c.json(await buildStatus(c))

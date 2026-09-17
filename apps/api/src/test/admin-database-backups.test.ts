@@ -1,8 +1,17 @@
-import { mkdir, rm, writeFile } from 'node:fs/promises'
+import { mkdir, rm, utimes, writeFile } from 'node:fs/promises'
+import { join } from 'node:path'
 import { beforeEach, describe, expect, it } from 'vitest'
 import type { DatabaseBackupStatus } from '@rwnd/shared'
 import { loadEnv } from '../env.js'
-import { createLocalUser, extractCookie, json, resetDb, testApp, testDb } from './helpers.js'
+import {
+  createLocalUser,
+  extractCookie,
+  hasPgDump,
+  json,
+  resetDb,
+  testApp,
+  testDb,
+} from './helpers.js'
 
 const db = testDb()
 const app = testApp()
@@ -151,5 +160,94 @@ describe('PATCH /admin/database-backups', () => {
       body: JSON.stringify({ dailyRetentionDays: 0 }),
     })
     expect(res.status).toBe(400)
+  })
+})
+
+describe('POST /admin/database-backups/run', () => {
+  beforeEach(() => Promise.all([resetDb(db), rm(dir, { recursive: true, force: true })]))
+
+  it('rejects an unauthenticated request', async () => {
+    const res = await app.request('/api/v1/admin/database-backups/run', { method: 'POST' })
+    expect(res.status).toBe(401)
+  })
+
+  it('rejects a non-admin', async () => {
+    const user = await createUserAndCookie('plain@example.com')
+    const res = await app.request('/api/v1/admin/database-backups/run', {
+      method: 'POST',
+      headers: { cookie: user.cookie },
+    })
+    expect(res.status).toBe(403)
+  })
+
+  it('returns 409 when another run already holds the lock', async () => {
+    // Doesn't need a real pg_dump: acquireBackupLock (database-backup.ts)
+    // rejects before the child process is ever spawned, so this exercises
+    // the same path on Windows/CI alike.
+    const admin = await createAdminAndCookie()
+    await mkdir(dir, { recursive: true })
+    await writeFile(join(dir, 'rwnd-backup.lock'), '999999')
+
+    const res = await app.request('/api/v1/admin/database-backups/run', {
+      method: 'POST',
+      headers: { cookie: admin.cookie },
+    })
+    expect(res.status).toBe(409)
+    const body = await json<{ error: string }>(res)
+    expect(body.error).toMatch(/already running/i)
+  })
+
+  it('treats a stale lock as clearable rather than permanently stuck', async () => {
+    const admin = await createAdminAndCookie()
+    await mkdir(dir, { recursive: true })
+    const lockPath = join(dir, 'rwnd-backup.lock')
+    await writeFile(lockPath, '999999')
+    const old = new Date(Date.now() - 7 * 60 * 60 * 1000) // past the 6h staleness window
+    await utimes(lockPath, old, old)
+
+    const res = await app.request('/api/v1/admin/database-backups/run', {
+      method: 'POST',
+      headers: { cookie: admin.cookie },
+    })
+    // Whether or not pg_dump is actually available here, a stale lock must
+    // never produce the "already running" 409 - it's cleared and the run
+    // (successful or not) proceeds, always coming back as 200 either way
+    // (see the route's own comment on why a generic failure isn't a 409).
+    expect(res.status).toBe(200)
+  })
+
+  it('rate-limits repeated manual triggers', async () => {
+    const admin = await createAdminAndCookie()
+
+    // Whether or not pg_dump is installed here, each of the first 5 calls
+    // consumes a rate-limit token in the request middleware before the
+    // handler ever runs (real success or a recorded failure both count),
+    // so this is a reliable cross-platform check of the limit itself.
+    for (let i = 0; i < 5; i++) {
+      const res = await app.request('/api/v1/admin/database-backups/run', {
+        method: 'POST',
+        headers: { cookie: admin.cookie },
+      })
+      expect(res.status).toBe(200)
+    }
+
+    const sixth = await app.request('/api/v1/admin/database-backups/run', {
+      method: 'POST',
+      headers: { cookie: admin.cookie },
+    })
+    expect(sixth.status).toBe(429)
+  })
+
+  it.skipIf(!hasPgDump())('writes a real dump and reflects it in the returned status', async () => {
+    const admin = await createAdminAndCookie()
+    const res = await app.request('/api/v1/admin/database-backups/run', {
+      method: 'POST',
+      headers: { cookie: admin.cookie },
+    })
+    expect(res.status).toBe(200)
+    const body = await json<DatabaseBackupStatus>(res)
+    expect(body.files).toHaveLength(1)
+    expect(body.files[0]!.name).toMatch(/^rwnd-\d{8}T\d{6}Z\.sql\.gz$/)
+    expect(body.lastRun).toEqual({ at: expect.any(String), status: 'ok', message: null })
   })
 })

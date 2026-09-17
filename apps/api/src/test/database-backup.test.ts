@@ -9,23 +9,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { eq } from 'drizzle-orm'
 import { movies, users, watchlistItems, watchlists } from '@rwnd/db'
 import { BackupAlreadyRunningError, runDatabaseBackup } from '../lib/database-backup.js'
-import { createLocalUser, resetDb, testDb } from './helpers.js'
-
-/**
- * `pg_dump` is bundled into the runtime image (see Dockerfile) but is not
- * necessarily on a contributor's PATH. Skipping keeps `pnpm test` usable
- * locally without it; `.github/workflows/ci.yml` installs it explicitly so
- * this suite can never silently stop running in CI, which for a
- * disaster-recovery feature would be worse than having no tests at all.
- */
-function hasPgDump(): boolean {
-  try {
-    execFileSync('pg_dump', ['--version'], { stdio: 'ignore' })
-    return true
-  } catch {
-    return false
-  }
-}
+import { createLocalUser, hasPgDump, resetDb, testDb } from './helpers.js'
 
 const db = testDb()
 let DIR: string

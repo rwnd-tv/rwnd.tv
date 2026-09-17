@@ -3865,6 +3865,72 @@ DATABASE` ×2) — zero residue.\
       out to the Restoring section of `docs/self-hosting.md` rather than
       building restore automation, which stays open as its own follow-up.
 
+- [x] **Cross-process concurrent-run guard on the scheduled database backup**
+      (2026-09-14 added, M4 review Stage 3, done 2026-09-17)
+
+      `runDatabaseBackup` (`apps/api/src/lib/database-backup.ts`) now takes
+      an exclusive lock (`rwnd-backup.lock`, `open(path, 'wx')`, atomic at
+      the filesystem level) before dumping and releases it in a `finally`,
+      closing the narrow-but-real corruption window two overlapping runs
+      could hit: identical same-second `.partial` filenames
+      (`timestampName`'s per-second resolution) racing on
+      `createWriteStream`'s default truncating `'w'` flag. A lock found
+      older than 6 hours is treated as left over from a crashed run and
+      cleared before retrying (bounded to 5 attempts, then treated as
+      genuinely still running). A new `BackupAlreadyRunningError` lets
+      callers distinguish "already running" from a real failure;
+      `scheduleDatabaseBackup` logs it as a skip rather than an error.
+
+      Chose the lock-file approach over the other option the TODO item
+      named (a randomized `.partial` suffix): that would only have stopped
+      two runs corrupting each other, not stopped them both running at
+      all, which would have reintroduced something close to the
+      two-backups-per-day symptom fixed the same week and given the manual
+      "back up now" button below no way to say "a backup is already
+      running."
+
+      Verified against a real `pg_dump` in a Linux container (the whole
+      suite skips `pg_dump`-dependent tests on Windows): refuses a
+      concurrent run, clears a stale lock, and releases the lock on both
+      success and failure paths.
+
+- [x] **Manual "back up now" button for the automatic database backup**
+      (2026-09-09 added, narrowed 2026-09-10 x2, split from restore
+      automation 2026-09-16, done 2026-09-17)
+
+      `POST /admin/database-backups/run` (admin only) triggers an immediate
+      pass via the same `runAndRecordDatabaseBackup` helper the scheduler
+      now shares (extracted so both paths write the same `lastRun`/console
+      log shape), reusing the concurrent-run guard above rather than
+      needing its own. Rate-limited separately from that guard, 5/hour per
+      admin (`rateLimit`, keyed by user id rather than IP, since two admins
+      behind the same IP shouldn't share one budget) - the guard alone
+      stops two runs *overlapping*, not an admin mashing the button in
+      quick succession.
+
+      A generic failure (e.g. a `pg_dump` version mismatch) still comes
+      back as `200` with `lastRun.status: 'failed'`, the same shape a
+      scheduled failure produces, rather than a distinct error response;
+      only "already running" (409, from the guard) and "not configured"
+      (409, `DATABASE_BACKUP_DIR` unset) get their own status codes.
+      `DatabaseBackupsPanel.tsx` gained a "Back up now" button (same
+      transient-confirmation pattern as `AdminUserPage.tsx`'s
+      "Send password reset").
+
+      Caught a real, pre-existing bug while adding tests that (unlike
+      `database-backup.test.ts`) aren't gated behind a real `pg_dump` being
+      installed: `runDatabaseBackup`'s `exited` promise could become an
+      unhandled rejection when `spawn()` failed outright (e.g. `pg_dump`
+      missing entirely) and the `pipeline()` branch threw first, orphaning
+      `exited`'s own rejection. Never exercised before on a machine without
+      `pg_dump`, since the entire backup suite skips there. Fixed with an
+      immediate no-op `.catch()` on creation.
+
+      Restore automation stays a separate, unscheduled item (see
+      `docs/TODO.md`) - not a quick follow-on to this button, per
+      [ADR 0008](adr/0008-database-backups.md) and James's recorded
+      disagreement with it.
+
 ## Self-hosting & deployment
 
 - [x] **`docker-compose.yml` never passes through `TVDB_API_KEY`/`TVDB_PIN`/`ENVIRONMENT_LABEL`** (2026-08-26 added, done 2026-08-26) — M3\

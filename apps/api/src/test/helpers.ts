@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process'
 import { sql } from 'drizzle-orm'
 import { createDatabase, traktConnections, users, userCredentials, type Database } from '@rwnd/db'
 import { createApp } from '../app.js'
@@ -35,6 +36,24 @@ const TABLES = [
   'users',
   'instance_settings',
 ] as const
+
+/**
+ * `pg_dump` is bundled into the runtime image (see Dockerfile) but is not
+ * necessarily on a contributor's PATH. Shared by any suite that shells out
+ * to a real `pg_dump` (database-backup.test.ts, admin-database-backups.test.ts)
+ * so `pnpm test` stays usable locally without it; `.github/workflows/ci.yml`
+ * installs it explicitly so those suites can never silently stop running in
+ * CI, which for a disaster-recovery feature would be worse than having no
+ * tests at all.
+ */
+export function hasPgDump(): boolean {
+  try {
+    execFileSync('pg_dump', ['--version'], { stdio: 'ignore' })
+    return true
+  } catch {
+    return false
+  }
+}
 
 export function testDb(): Database {
   const url = process.env.DATABASE_URL

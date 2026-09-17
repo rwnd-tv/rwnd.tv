@@ -492,34 +492,6 @@ Format:
 
 ## Backups
 
-- [ ] **Manual "back up now" button for the automatic database backup** (2026-09-09 added, narrowed 2026-09-10, narrowed again 2026-09-10, split from restore automation 2026-09-16; M5)
-
-      The admin status/retention view for the automatic whole-database backup
-      job shipped 2026-09-10 (`docs/TODO_ARCHIVE.md`, `DatabaseBackupsPanel.tsx`,
-      `GET`/`PATCH /admin/database-backups`): last backup time and size, the
-      currently retained dumps, an editable daily/weekly/monthly retention
-      policy (James asked for this to be genuinely configurable, including a
-      tier set to 0 to skip it entirely, e.g. "daily backups kept for a year,
-      nothing else"), last-run outcome, and a link to the Restoring section
-      of `docs/self-hosting.md`.
-
-      A manual "back up now" button is a bigger step than that panel: it
-      needs a route that spawns a process on request rather than on a timer,
-      which is a different security shape from a scheduled job (a
-      concurrent-run guard, its own rate limiting) and wanted its own
-      decision, deliberately left out of scope at the time. Worth building
-      alongside the already-planned M5 cross-process concurrent-run guard on
-      the scheduled job (see below), since a manual-trigger route needs the
-      same guard for the same reason.
-
-      The backup cadence itself (24h) stayed a fixed constant, not editable,
-      even once retention became admin-editable: the tiers only make sense
-      against a steady daily cadence, so there was nothing to open up there.
-
-      Restore automation was originally bundled with this item; split off
-      2026-09-16 as its own item below, since only the button is in M5's
-      scope.
-
 - [ ] **Restore automation for the automatic database backup** (2026-09-09 added, narrowed 2026-09-10 x2, split from the "back up now" button 2026-09-16; Not yet scheduled)
 
       [ADR 0008](adr/0008-database-backups.md) decided restore stays a
@@ -530,7 +502,8 @@ Format:
       (`DatabaseBackupsPanel.tsx`, shipped 2026-09-10) links out to the
       documented procedure for now; whether to build an actual in-app
       restore path is still open and wants its own decision, not a quick
-      follow-on to the manual "back up now" button above.
+      follow-on to the manual "back up now" button (shipped 2026-09-17,
+      see `docs/TODO_ARCHIVE.md`).
 
 - [ ] **Show what actually changed in the backup Diff dialog** (2026-09-06 added; M5)
 
@@ -563,37 +536,6 @@ Format:
       removed lists rather than paired together; worth confirming that's
       clear enough in the UI once real entries (not just counts) are on
       screen.
-
-- [ ] **No cross-process concurrent-run guard on the scheduled database backup** (2026-09-14 added, M4 review Stage 3; M5)
-
-      `scheduleDatabaseBackup` (`apps/api/src/lib/database-backup.ts`) has
-      no protection against two `runDatabaseBackup()` calls overlapping
-      across processes — e.g. a botched deploy briefly running two
-      containers against the same `DATABASE_BACKUP_DIR`, or a tight
-      restart loop. Within one process this is effectively impossible
-      (`setInterval` only fires again after 24h regardless of how long the
-      previous run took, and a dump never takes anywhere near that long),
-      so no fix was applied there.
-
-      The real risk is narrow but not nothing: two runs starting in the
-      same second compute the identical `rwnd-<timestamp>.sql.gz.partial`
-      name (`timestampName`'s resolution is per-second) and both open a
-      write stream to it. `createWriteStream`'s default truncating `'w'`
-      flag means the second opener can truncate the file out from under
-      the first mid-write, producing an interleaved/corrupt dump that
-      still renames successfully and looks like a valid backup — exactly
-      the failure class the `.partial` + atomic-rename design
-      ([ADR 0008](adr/0008-database-backups.md)) exists to prevent, just
-      not for this particular collision.
-
-      Same shape as the concurrent-run guard already named as needed for
-      the manual "back up now" button above, but applies to the scheduled
-      job today, independent of whether that button ever gets built. A
-      real fix needs cross-process coordination (a lock file via exclusive
-      `open()`, or including a random suffix in the partial filename so
-      two concurrent runs can never collide on one path) - worth deciding
-      once, covering both the scheduled job and any future manual-trigger
-      route, rather than solving it twice.
 
 - [ ] **Investigate: two database backups being written per day, not one** (2026-09-16 added, root-caused 2026-09-16, fixed and deployed to dev 2026-09-16, pending multi-day verification; M5)
 

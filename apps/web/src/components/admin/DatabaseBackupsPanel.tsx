@@ -29,9 +29,10 @@ function formatBytes(bytes: number): string {
  * Read-only status for, plus the editable retention policy of, the
  * automatic whole-database backup job (apps/api/src/lib/database-backup.ts,
  * ADR 0008, docs/TODO.md's "Admin interface for the instance's automatic
- * database backups") — `GET`/`PATCH /admin/database-backups`. No manual
- * "back up now" trigger here, deliberately: that needs its own route shape
- * (a process spawned on request rather than a timer) and its own decision.
+ * database backups") — `GET`/`PATCH /admin/database-backups`. Also a manual
+ * "back up now" trigger (`POST .../run`), which shares the same
+ * concurrent-run guard and lastRun bookkeeping as the scheduled job, so a
+ * 409 or a failed run surfaces the same way either path produced it.
  *
  * Stays visible and explains itself when DATABASE_BACKUP_DIR isn't set,
  * rather than hiding — same convention as the Role/Delete-account panels on
@@ -58,6 +59,8 @@ export function DatabaseBackupsPanel() {
   const [weeklyRetentionWeeks, setWeeklyRetentionWeeks] = useState('')
   const [monthlyRetentionMonths, setMonthlyRetentionMonths] = useState('')
   const [saveError, setSaveError] = useState<string>()
+  const [runSucceeded, setRunSucceeded] = useState(false)
+  const [runError, setRunError] = useState<string>()
 
   // Seeds the editable fields from the query once it loads, same "sync
   // during render on identity change" technique as InstanceSettingsPanel.tsx
@@ -85,6 +88,25 @@ export function DatabaseBackupsPanel() {
     },
     onError: (err) =>
       setSaveError(err instanceof ApiError ? err.message : t('common.somethingWentWrong')),
+  })
+
+  const runNow = useMutation({
+    mutationFn: () => api.admin.runDatabaseBackupNow(),
+    onSuccess: (updated) => {
+      // Same status shape PATCH's onSuccess writes straight into the
+      // cache — a failed run (e.g. a version mismatch) still comes back as
+      // a 200 with lastRun.status === 'failed', surfaced by the
+      // lastRunFailed banner below rather than as a mutation error here.
+      queryClient.setQueryData(QUERY_KEY, updated)
+      setRunError(undefined)
+      setRunSucceeded(true)
+    },
+    onError: (err) => {
+      // A 409 (already running / not configured) or 429 (rate limited)
+      // lands here instead, with the server's own message.
+      setRunSucceeded(false)
+      setRunError(err instanceof ApiError ? err.message : t('common.somethingWentWrong'))
+    },
   })
 
   const dirty =
@@ -126,6 +148,30 @@ export function DatabaseBackupsPanel() {
             <dt className="text-right font-medium">{t('admin.databaseBackups.schedule')}</dt>
             <dd>{t('admin.databaseBackups.scheduleValue', { hours: data.intervalHours })}</dd>
           </dl>
+
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => {
+                setRunSucceeded(false)
+                runNow.mutate()
+              }}
+              isLoading={runNow.isPending}
+            >
+              {t('admin.databaseBackups.runNow')}
+            </Button>
+            {runSucceeded && (
+              <span role="status" className="text-sm text-[var(--color-fg-muted)]">
+                {t('admin.databaseBackups.runNowSucceeded')}
+              </span>
+            )}
+            {runError && (
+              <span role="alert" className="text-sm text-[var(--color-danger)]">
+                {runError}
+              </span>
+            )}
+          </div>
 
           <p className="text-sm text-[var(--color-fg-muted)]">
             {t('admin.databaseBackups.restorePrompt')}{' '}

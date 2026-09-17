@@ -421,6 +421,12 @@ export async function runDatabaseBackup({
       child.on('error', reject)
       child.on('close', (code) => resolve(code ?? 1))
     })
+    // A spawn failure (e.g. pg_dump missing entirely) rejects both this and
+    // child.stdout around the same time. When the pipeline below throws
+    // first, `exited` is never awaited - without this, its rejection would
+    // otherwise surface as an unhandled promise rejection rather than the
+    // error this function actually throws.
+    exited.catch(() => {})
 
     try {
       await pipeline(child.stdout, createGzip(), createWriteStream(partialPath))
@@ -464,6 +470,48 @@ function describeFailure(err: unknown): string {
   if (isVersionMismatch(err)) return VERSION_MISMATCH_MESSAGE
   const text = err instanceof Error ? err.message : String(err)
   return text.length > RUN_MESSAGE_MAX ? `${text.slice(0, RUN_MESSAGE_MAX)}...` : text
+}
+
+/**
+ * Runs one backup pass and records its outcome (`lastRun`, plus the same
+ * console logging) — shared by the recurring schedule below and the manual
+ * "back up now" route (`POST /admin/database-backups/run`,
+ * routes/admin-database-backups.ts), so the admin panel and `docker compose
+ * logs` report the same shape regardless of which path triggered a given
+ * dump. Rethrows every error (including BackupAlreadyRunningError) after
+ * recording it, so each caller can still react to "already running"
+ * specifically (a log line for the scheduler, a 409 for the manual route)
+ * without duplicating the run-and-record logic itself.
+ */
+export async function runAndRecordDatabaseBackup(opts: {
+  db: Database
+  dir: string
+  databaseUrl: string
+}): Promise<DatabaseBackupResult> {
+  try {
+    const result = await runDatabaseBackup(opts)
+    // Logged unconditionally, unlike the other two schedulers' "only when
+    // there's something to report" convention: a completed dump IS the
+    // thing to report, and this line is the only evidence in
+    // `docker compose logs app` that the feature works at all.
+    const mb = (result.bytes / 1024 / 1024).toFixed(1)
+    console.log(
+      `Database backup: wrote ${result.file} (${mb} MB) in ${(result.durationMs / 1000).toFixed(1)}s` +
+        (result.pruned > 0 ? `, pruned ${result.pruned} older dump(s).` : '.'),
+    )
+    lastRun = { at: new Date(), status: 'ok', message: null }
+    return result
+  } catch (err) {
+    if (err instanceof BackupAlreadyRunningError) throw err
+    const message = describeFailure(err)
+    if (isVersionMismatch(err)) {
+      console.error(`Database backup failed: ${message}`)
+    } else {
+      console.error('Database backup failed:', err)
+    }
+    lastRun = { at: new Date(), status: 'failed', message }
+    throw err
+  }
 }
 
 /** How often scheduleDatabaseBackup's recurring run repeats — fixed, not
@@ -533,36 +581,16 @@ export function scheduleDatabaseBackup(db: Database): void {
 
   const DAY_MS = BACKUP_INTERVAL_HOURS * 60 * 60 * 1000
   const run = () =>
-    runDatabaseBackup({ db, dir, databaseUrl: env.DATABASE_URL })
-      .then(({ file, bytes, durationMs, pruned }) => {
-        // Logged unconditionally, unlike the other two schedulers' "only when
-        // there's something to report" convention: a completed dump IS the
-        // thing to report, and this line is the only evidence in
-        // `docker compose logs app` that the feature works at all.
-        const mb = (bytes / 1024 / 1024).toFixed(1)
-        console.log(
-          `Database backup: wrote ${file} (${mb} MB) in ${(durationMs / 1000).toFixed(1)}s` +
-            (pruned > 0 ? `, pruned ${pruned} older dump(s).` : '.'),
-        )
-        lastRun = { at: new Date(), status: 'ok', message: null }
-      })
-      .catch((err: unknown) => {
-        // Not a failure: another run (a different container during a
-        // deploy, or eventually a manual "back up now" trigger) already
-        // holds the lock, and lastRun is per-process anyway so there is
-        // nothing useful to record here about that other run's outcome.
-        if (err instanceof BackupAlreadyRunningError) {
-          console.log('Database backup: skipped, another run already in progress.')
-          return
-        }
-        const message = describeFailure(err)
-        if (isVersionMismatch(err)) {
-          console.error(`Database backup failed: ${message}`)
-        } else {
-          console.error('Database backup failed:', err)
-        }
-        lastRun = { at: new Date(), status: 'failed', message }
-      })
+    runAndRecordDatabaseBackup({ db, dir, databaseUrl: env.DATABASE_URL }).catch((err: unknown) => {
+      // Not a failure: another run (a different container during a
+      // deploy, or a manual "back up now" trigger) already holds the
+      // lock. Any other error was already logged and recorded by
+      // runAndRecordDatabaseBackup itself, so there's nothing left to do
+      // here beyond swallowing the rejection.
+      if (err instanceof BackupAlreadyRunningError) {
+        console.log('Database backup: skipped, another run already in progress.')
+      }
+    })
   void run()
   setTimeout(
     () => {

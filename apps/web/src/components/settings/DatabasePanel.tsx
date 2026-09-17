@@ -96,25 +96,39 @@ const CATEGORY_ICONS: Record<Category, (props: { className?: string }) => React.
   droppedShows: DroppedIcon,
 }
 
+/** One entry in the Diff dialog's unified timeline, tagged with which
+ * category it came from and which side of the diff it's on - both needed
+ * once every category's added/removed entries share one list instead of
+ * their own per-category grouping. */
+type UnifiedDiffEntry = BackupDiffEntry & {
+  category: Category
+  direction: 'added' | 'removed'
+}
+
 /**
- * One added/removed line in the Diff dialog's expandable "what changed"
- * section. `title` is the only part that can be long enough to wrap, so
- * it's the only part that truncates (`min-w-0 truncate` on a plain flex
- * row - deliberately not `flex-1` too, which would grow the title to fill
- * the row and shove the episode/suffix out to the far right instead of
- * sitting right after a short title). `date`/`time` and `episode` (the part
- * that actually tells two similar entries apart) stay `shrink-0`, always
- * fully visible, same reasoning as the icon's own `shrink-0` fix above.
+ * One line in the Diff dialog's unified "what changed" timeline, across
+ * every category, sorted newest first. Leads with a colored `+`/`-` (which
+ * side of the diff) and the category's own icon (which kind of entry) -
+ * both load-bearing here, not decorative, since nothing else on the row
+ * groups entries by category or direction anymore. `title` is the only
+ * part that can be long enough to wrap, so it's the only part that
+ * truncates (`min-w-0 truncate` on a plain flex row - deliberately not
+ * `flex-1` too, which would grow the title to fill the row and shove the
+ * episode/suffix out to the far right instead of sitting right after a
+ * short title). Every other part stays `shrink-0`, always fully visible,
+ * same reasoning as the icon's own `shrink-0` fix.
  */
-function DiffEntryRow({
-  entry,
-  Icon,
-}: {
-  entry: BackupDiffEntry
-  Icon: (props: { className?: string }) => React.JSX.Element
-}) {
+function DiffEntryRow({ entry }: { entry: UnifiedDiffEntry }) {
+  const Icon = CATEGORY_ICONS[entry.category]
   return (
     <li className="flex items-center gap-1.5">
+      <span
+        className={`shrink-0 font-mono font-bold ${
+          entry.direction === 'added' ? 'text-[var(--color-success)]' : 'text-[var(--color-danger)]'
+        }`}
+      >
+        {entry.direction === 'added' ? '+' : '−'}
+      </span>
       <Icon className="shrink-0" />
       <span className="shrink-0 text-[var(--color-fg-muted)] tabular-nums">
         {entry.date} {entry.time}
@@ -248,6 +262,27 @@ export function DatabasePanel() {
     queryFn: () => api.backups.diff(diffTarget!.id),
     enabled: Boolean(diffTarget),
   })
+
+  // Every category's added/removed entries, merged into one timeline and
+  // sorted newest first - `date`/`time` are fixed-width zero-padded
+  // strings, so concatenating and comparing them lexicographically sorts
+  // chronologically too, same trick the API's own sort relies on.
+  const unifiedDiffEntries: UnifiedDiffEntry[] = diffData
+    ? categories
+        .flatMap(({ key }) => [
+          ...diffData.diff[key].addedItems.map((entry): UnifiedDiffEntry => ({
+            ...entry,
+            category: key,
+            direction: 'added',
+          })),
+          ...diffData.diff[key].removedItems.map((entry): UnifiedDiffEntry => ({
+            ...entry,
+            category: key,
+            direction: 'removed',
+          })),
+        ])
+        .sort((a, b) => `${b.date} ${b.time}`.localeCompare(`${a.date} ${a.time}`))
+    : []
 
   return (
     <CollapsiblePanel title={t('settings.database.title')} open={open} onOpenChange={setOpen}>
@@ -530,49 +565,21 @@ export function DatabasePanel() {
               ))}
             </ul>
 
-            {categories.some(
-              ({ key }) => diffData.diff[key].added > 0 || diffData.diff[key].removed > 0,
-            ) && (
+            {unifiedDiffEntries.length > 0 && (
               <details className="mt-3">
                 <summary className="cursor-pointer text-sm font-medium">
                   {t('settings.database.backup.diffDetailsSummary')}
                 </summary>
-                <div className="mt-2 flex flex-col gap-3 text-sm text-[var(--color-fg-muted)]">
-                  {categories.map(({ key, label }) => {
-                    const { addedItems, removedItems } = diffData.diff[key]
-                    if (addedItems.length === 0 && removedItems.length === 0) return null
-                    const Icon = CATEGORY_ICONS[key]
-                    return (
-                      <div key={key}>
-                        <p className="font-medium text-[var(--color-fg)]">{label}</p>
-                        {addedItems.length > 0 && (
-                          <div className="mt-1">
-                            <p className="text-xs uppercase">
-                              {t('settings.database.backup.diffAdded')}
-                            </p>
-                            <ul className="flex flex-col gap-1">
-                              {addedItems.map((entry, i) => (
-                                <DiffEntryRow key={i} entry={entry} Icon={Icon} />
-                              ))}
-                            </ul>
-                          </div>
-                        )}
-                        {removedItems.length > 0 && (
-                          <div className="mt-1">
-                            <p className="text-xs uppercase">
-                              {t('settings.database.backup.diffRemoved')}
-                            </p>
-                            <ul className="flex flex-col gap-1">
-                              {removedItems.map((entry, i) => (
-                                <DiffEntryRow key={i} entry={entry} Icon={Icon} />
-                              ))}
-                            </ul>
-                          </div>
-                        )}
-                      </div>
-                    )
-                  })}
-                </div>
+                {/* Bounded and independently scrollable, so a long list
+                    scrolls in place rather than pushing the Close button
+                    below the fold - the Dialog's own max-h-[85vh] is a
+                    backstop, not something a user should have to rely on
+                    to find Close again. */}
+                <ul className="mt-2 flex max-h-64 flex-col gap-1 overflow-y-auto text-sm">
+                  {unifiedDiffEntries.map((entry, i) => (
+                    <DiffEntryRow key={i} entry={entry} />
+                  ))}
+                </ul>
               </details>
             )}
           </>

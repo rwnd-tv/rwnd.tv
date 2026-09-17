@@ -133,4 +133,54 @@ describe('DatabasePanel diff dialog', () => {
     expect(screen.getByText('2026-01-01 00:00')).toBeInTheDocument()
     expect(screen.getByText('The Matrix (1999)')).toBeInTheDocument()
   })
+
+  it('merges every category into one newest-first list with a +/- marker per row', async () => {
+    const user = userEvent.setup()
+    renderPanel({
+      watchHistory: {
+        added: 1,
+        removed: 0,
+        addedItems: [
+          {
+            date: '2026-01-01',
+            time: '00:00',
+            title: 'The Matrix (1999)',
+            episode: null,
+            suffix: null,
+          },
+        ],
+        removedItems: [],
+      },
+      ratings: {
+        added: 0,
+        removed: 1,
+        addedItems: [],
+        removedItems: [
+          {
+            date: '2026-01-05',
+            time: '00:00',
+            title: 'Breaking Bad',
+            episode: 'S01E01',
+            suffix: '5/10',
+          },
+        ],
+      },
+      watchlist: EMPTY_CATEGORY,
+      droppedShows: EMPTY_CATEGORY,
+    })
+
+    await user.click(await screen.findByRole('button', { name: 'Diff' }))
+    await user.click(await screen.findByText('Show what changed'))
+
+    const rows = screen
+      .getAllByRole('listitem')
+      .filter((li) => li.textContent?.includes('+') || li.textContent?.includes('−'))
+    // Newest first: the rating removal (2026-01-05) before the watch addition (2026-01-01).
+    expect(rows).toHaveLength(2)
+    const [newest, oldest] = rows
+    expect(newest!.textContent).toContain('−')
+    expect(newest!.textContent).toContain('Breaking Bad')
+    expect(oldest!.textContent).toContain('+')
+    expect(oldest!.textContent).toContain('The Matrix (1999)')
+  })
 })

@@ -119,7 +119,7 @@ describe('calendar feeds', () => {
       const feed = await createFeed(cookie, 'shows')
       expect(feed).toMatchObject({
         feedType: 'shows',
-        settings: { includeDropped: false, futureOnly: true },
+        settings: { includeDropped: false, futureOnly: false, includeAllWatched: true },
       })
     })
 
@@ -169,8 +169,8 @@ describe('calendar feeds', () => {
       expect(regenerated.token).not.toBe(original.token)
       expect(regenerated.settings).toEqual({
         includeDropped: true,
-        futureOnly: true,
-        includeAllWatched: false,
+        futureOnly: false,
+        includeAllWatched: true,
       })
       expect(regenerated.lastAccessedAt).toBeNull()
 
@@ -580,7 +580,7 @@ describe('calendar feeds', () => {
   })
 
   describe('shows feed content', () => {
-    it('respects futureOnly, defaulting to true', async () => {
+    it('respects futureOnly, defaulting to false', async () => {
       const cookie = await createUserAndCookie()
       const userId = await meId(cookie)
       const show = await seedShow('a-show', 'A Show')
@@ -597,20 +597,20 @@ describe('calendar feeds', () => {
       await db.insert(plays).values({ userId, episodeId: watched!.id, watchedAt: new Date() })
 
       const feed = await createFeed(cookie, 'shows')
+      const allBody = await (await app.request(`/api/v1/calendar/${feed.token}/feed.ics`)).text()
+      expect(allBody).toContain(`UID:episode-${future!.id}@rwnd.tv`)
+      expect(allBody).toContain(`UID:episode-${past!.id}@rwnd.tv`)
+
+      await app.request('/api/v1/calendar-feeds/shows', {
+        method: 'PATCH',
+        headers: { cookie, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ futureOnly: true }),
+      })
       const futureOnlyBody = await (
         await app.request(`/api/v1/calendar/${feed.token}/feed.ics`)
       ).text()
       expect(futureOnlyBody).toContain(`UID:episode-${future!.id}@rwnd.tv`)
       expect(futureOnlyBody).not.toContain(`UID:episode-${past!.id}@rwnd.tv`)
-
-      await app.request('/api/v1/calendar-feeds/shows', {
-        method: 'PATCH',
-        headers: { cookie, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ futureOnly: false }),
-      })
-      const allBody = await (await app.request(`/api/v1/calendar/${feed.token}/feed.ics`)).text()
-      expect(allBody).toContain(`UID:episode-${future!.id}@rwnd.tv`)
-      expect(allBody).toContain(`UID:episode-${past!.id}@rwnd.tv`)
     })
 
     it('includes a watchlisted show with no watch history at all', async () => {
@@ -686,10 +686,11 @@ describe('calendar feeds', () => {
       expect(after).not.toContain(`UID:episode-${ep!.id}@rwnd.tv`)
     })
 
-    it('excludes a show last watched over 30 days ago by default, and includes it when includeAllWatched is set', async () => {
+    it('includes a show last watched over 30 days ago by default, and excludes it when includeAllWatched is turned off', async () => {
       // Reproduces a real report: a show watched to completion months
       // ago, never watchlisted, silently vanished from its own feed
-      // once the 30-day "recently watched" window passed.
+      // once the 30-day "recently watched" window passed - the reason
+      // includeAllWatched now defaults to true.
       const cookie = await createUserAndCookie()
       const userId = await meId(cookie)
       const show = await seedShow('a-show', 'A Show')
@@ -701,20 +702,20 @@ describe('calendar feeds', () => {
       await db.insert(plays).values({ userId, episodeId: ep!.id, watchedAt: oldWatch })
 
       const feed = await createFeed(cookie, 'shows')
-      const withoutAllWatched = await (
-        await app.request(`/api/v1/calendar/${feed.token}/feed.ics`)
-      ).text()
-      expect(withoutAllWatched).not.toContain(`UID:episode-${ep!.id}@rwnd.tv`)
-
-      await app.request('/api/v1/calendar-feeds/shows', {
-        method: 'PATCH',
-        headers: { cookie, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ includeAllWatched: true }),
-      })
       const withAllWatched = await (
         await app.request(`/api/v1/calendar/${feed.token}/feed.ics`)
       ).text()
       expect(withAllWatched).toContain(`UID:episode-${ep!.id}@rwnd.tv`)
+
+      await app.request('/api/v1/calendar-feeds/shows', {
+        method: 'PATCH',
+        headers: { cookie, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ includeAllWatched: false }),
+      })
+      const withoutAllWatched = await (
+        await app.request(`/api/v1/calendar/${feed.token}/feed.ics`)
+      ).text()
+      expect(withoutAllWatched).not.toContain(`UID:episode-${ep!.id}@rwnd.tv`)
     })
 
     it('never includes an episode with no firstAired', async () => {
@@ -911,7 +912,7 @@ describe('calendar feeds', () => {
       expect(usBody).toContain('DTSTART;VALUE=DATE:20990105')
     })
 
-    it('respects futureOnly, defaulting to true', async () => {
+    it('respects futureOnly, defaulting to false', async () => {
       const cookie = await createUserAndCookie()
       const [past, future] = await db
         .insert(movies)
@@ -924,20 +925,20 @@ describe('calendar feeds', () => {
       await addToDefaultWatchlist(cookie, 'future-movie', 'movies')
 
       const feed = await createFeed(cookie, 'movies')
+      const allBody = await (await app.request(`/api/v1/calendar/${feed.token}/feed.ics`)).text()
+      expect(allBody).toContain(`UID:movie-${future!.id}@rwnd.tv`)
+      expect(allBody).toContain(`UID:movie-${past!.id}@rwnd.tv`)
+
+      await app.request('/api/v1/calendar-feeds/movies', {
+        method: 'PATCH',
+        headers: { cookie, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ futureOnly: true }),
+      })
       const futureOnlyBody = await (
         await app.request(`/api/v1/calendar/${feed.token}/feed.ics`)
       ).text()
       expect(futureOnlyBody).toContain(`UID:movie-${future!.id}@rwnd.tv`)
       expect(futureOnlyBody).not.toContain(`UID:movie-${past!.id}@rwnd.tv`)
-
-      await app.request('/api/v1/calendar-feeds/movies', {
-        method: 'PATCH',
-        headers: { cookie, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ futureOnly: false }),
-      })
-      const allBody = await (await app.request(`/api/v1/calendar/${feed.token}/feed.ics`)).text()
-      expect(allBody).toContain(`UID:movie-${future!.id}@rwnd.tv`)
-      expect(allBody).toContain(`UID:movie-${past!.id}@rwnd.tv`)
     })
 
     it('includes a watchlisted movie with no watch history at all', async () => {
@@ -953,7 +954,7 @@ describe('calendar feeds', () => {
       expect(body).toContain(`UID:movie-${movie!.id}@rwnd.tv`)
     })
 
-    it('excludes a movie last watched over 30 days ago by default, and includes it when includeAllWatched is set', async () => {
+    it('includes a movie last watched over 30 days ago by default, and excludes it when includeAllWatched is turned off', async () => {
       const cookie = await createUserAndCookie()
       const userId = await meId(cookie)
       const [movie] = await db
@@ -963,28 +964,23 @@ describe('calendar feeds', () => {
       const oldWatch = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000)
       await db.insert(plays).values({ userId, movieId: movie!.id, watchedAt: oldWatch })
 
-      // futureOnly is on by default, and this movie already released — turn
-      // it off so watch-recency, not futureOnly, is what's under test.
+      // futureOnly defaults to false, and this movie already released, so
+      // no need to touch it — includeAllWatched is what's under test.
       const feed = await createFeed(cookie, 'movies')
+      const withAllWatched = await (
+        await app.request(`/api/v1/calendar/${feed.token}/feed.ics`)
+      ).text()
+      expect(withAllWatched).toContain(`UID:movie-${movie!.id}@rwnd.tv`)
+
       await app.request('/api/v1/calendar-feeds/movies', {
         method: 'PATCH',
         headers: { cookie, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ futureOnly: false }),
+        body: JSON.stringify({ includeAllWatched: false }),
       })
       const withoutAllWatched = await (
         await app.request(`/api/v1/calendar/${feed.token}/feed.ics`)
       ).text()
       expect(withoutAllWatched).not.toContain(`UID:movie-${movie!.id}@rwnd.tv`)
-
-      await app.request('/api/v1/calendar-feeds/movies', {
-        method: 'PATCH',
-        headers: { cookie, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ includeAllWatched: true }),
-      })
-      const withAllWatched = await (
-        await app.request(`/api/v1/calendar/${feed.token}/feed.ics`)
-      ).text()
-      expect(withAllWatched).toContain(`UID:movie-${movie!.id}@rwnd.tv`)
     })
 
     it('never includes a movie with no release date at all', async () => {
@@ -1053,7 +1049,7 @@ describe('calendar feeds', () => {
       })
       expect(res.status).toBe(200)
       const updated = await json<CalendarFeed>(res)
-      expect(updated.settings).toEqual({ futureOnly: false, includeAllWatched: false })
+      expect(updated.settings).toEqual({ futureOnly: false, includeAllWatched: true })
     })
   })
 

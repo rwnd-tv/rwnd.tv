@@ -842,21 +842,21 @@
       },
       "shows": {
         "title": "TV Shows",
-        "description": "One event per upcoming episode air date, for shows you're following: recently watched, or on your watchlist.",
+        "description": "One event per episode air date, for shows you're following: recently watched, or on your watchlist.",
         "includeDropped": "Include dropped shows",
         "includeDroppedDescription": "Off by default — a show you've dropped is excluded from this feed too.",
         "futureOnly": "Only upcoming episodes",
-        "futureOnlyDescription": "On by default. Turn off to also include episodes that have already aired.",
+        "futureOnlyDescription": "Off by default, so already-aired episodes are included too. Turn on to only show episodes that haven't aired yet.",
         "includeAllWatched": "Include every show I've ever watched",
-        "includeAllWatchedDescription": "Off by default — a show only counts as followed if you've watched it in the last 30 days, or it's on a watchlist. Turn this on to keep a show in this feed indefinitely once you've watched any of it, even years later."
+        "includeAllWatchedDescription": "On by default, so a show stays in this feed indefinitely once you've watched any of it, even years later. Turn this off to only count a show as followed if you've watched it in the last 30 days, or it's on a watchlist."
       },
       "movies": {
         "title": "Films",
         "description": "One event per film release date, for films you're following: recently watched, or on your watchlist.",
         "futureOnly": "Only upcoming films",
-        "futureOnlyDescription": "On by default. Turn off to also include films that have already released.",
+        "futureOnlyDescription": "Off by default, so already-released films are included too. Turn on to only show films that haven't released yet.",
         "includeAllWatched": "Include every film I've ever watched",
-        "includeAllWatchedDescription": "Off by default — a film only counts as followed if you've watched it in the last 30 days, or it's on a watchlist. Turn this on to keep a film in this feed indefinitely once you've watched it, even years later."
+        "includeAllWatchedDescription": "On by default, so a film stays in this feed indefinitely once you've watched it, even years later. Turn this off to only count a film as followed if you've watched it in the last 30 days, or it's on a watchlist."
       }
     },
     "linkedAccounts": {

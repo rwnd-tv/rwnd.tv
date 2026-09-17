@@ -358,19 +358,20 @@ export const calendarFeeds = pgTable(
      * no droppedMovies table. */
     includeDropped: boolean('include_dropped').notNull().default(false),
     /** 'shows' and 'movies' — only episodes/movies airing/releasing today
-     * or later, in the user's own timezone. False means no lower bound
-     * at all. */
-    futureOnly: boolean('future_only').notNull().default(true),
-    /** 'shows' and 'movies' — false (default) means "followed" is the
-     * normal rule (watched in the last 30 days, or watchlisted); true
-     * drops the recency window entirely, so anything ever watched counts
-     * as followed too (still subject to includeDropped for shows).
-     * Added after a real report: a show watched to completion months
-     * ago, never watchlisted, silently vanished from its own feed once
-     * the 30-day window passed. See getFollowedShows's/
-     * getFollowedMovies's `windowDays` option (apps/api/src/lib/
-     * followed-shows.ts, followed-movies.ts). */
-    includeAllWatched: boolean('include_all_watched').notNull().default(false),
+     * or later, in the user's own timezone. False (default) means no
+     * lower bound at all. */
+    futureOnly: boolean('future_only').notNull().default(false),
+    /** 'shows' and 'movies' — true (default) drops the 30-day recency
+     * window entirely, so anything ever watched counts as followed
+     * (still subject to includeDropped for shows); false means
+     * "followed" is the narrower rule (watched in the last 30 days, or
+     * watchlisted). Added after a real report: a show watched to
+     * completion months ago, never watchlisted, silently vanished from
+     * its own feed once the 30-day window passed — defaulting to true
+     * avoids that surprise for a newly created feed. See
+     * getFollowedShows's/getFollowedMovies's `windowDays` option
+     * (apps/api/src/lib/followed-shows.ts, followed-movies.ts). */
+    includeAllWatched: boolean('include_all_watched').notNull().default(true),
     /** Backs the "Last synced" hint in Settings. Null until the feed
      * has actually been fetched once. Written on a throttle, not on
      * every GET — see resolveCalendarFeed. */
@@ -934,8 +935,9 @@ export const episodes = pgTable(
     // query across many shows at once, unlike every existing episode
     // lookup (all of which are one specific show+season+episode). The
     // index above already serves the show_id half; this makes the date
-    // bound itself selective too, which is what matters in the default
-    // futureOnly case where only a sliver of rows qualify.
+    // bound itself selective too, which is what matters whenever
+    // futureOnly is on (opt-in since the default flipped to off) or for
+    // the merged JSON timeline's own hardcoded futureOnly: true half.
     index('episodes_first_aired_idx').on(table.firstAired),
   ],
 )

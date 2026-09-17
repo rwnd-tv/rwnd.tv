@@ -17,7 +17,7 @@ import { usePanelOpen } from '../../lib/use-panel-open.js'
 // import, matching this codebase's existing one-icon-per-file precedent
 // (see e.g. the CheckIcon duplicated across MovieDetailPage.tsx and
 // friends) for a icon this specific to one feature's own list.
-function EyeIcon() {
+function EyeIcon({ className }: { className?: string }) {
   return (
     <svg
       viewBox="0 0 24 24"
@@ -27,6 +27,7 @@ function EyeIcon() {
       stroke="currentColor"
       strokeWidth={2}
       aria-hidden="true"
+      className={className}
     >
       <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" />
       <circle cx="12" cy="12" r="3" />
@@ -34,7 +35,7 @@ function EyeIcon() {
   )
 }
 
-function StarIcon() {
+function StarIcon({ className }: { className?: string }) {
   return (
     <svg
       viewBox="0 0 24 24"
@@ -44,13 +45,14 @@ function StarIcon() {
       stroke="currentColor"
       strokeWidth={2}
       aria-hidden="true"
+      className={className}
     >
       <path d="M12 2l2.9 6.6 7.1.6-5.4 4.8 1.7 7-6.3-3.9-6.3 3.9 1.7-7-5.4-4.8 7.1-.6L12 2Z" />
     </svg>
   )
 }
 
-function BookmarkIcon() {
+function BookmarkIcon({ className }: { className?: string }) {
   return (
     <svg
       viewBox="0 0 24 24"
@@ -60,13 +62,14 @@ function BookmarkIcon() {
       stroke="currentColor"
       strokeWidth={2}
       aria-hidden="true"
+      className={className}
     >
       <path d="M6 3h12v18l-6-4-6 4V3Z" />
     </svg>
   )
 }
 
-function DroppedIcon() {
+function DroppedIcon({ className }: { className?: string }) {
   return (
     <svg
       viewBox="0 0 24 24"
@@ -76,6 +79,7 @@ function DroppedIcon() {
       stroke="currentColor"
       strokeWidth={2}
       aria-hidden="true"
+      className={className}
     >
       <circle cx="12" cy="12" r="9" />
       <path d="M8 8l8 8M16 8l-8 8" />
@@ -85,7 +89,7 @@ function DroppedIcon() {
 
 type Category = 'watchHistory' | 'ratings' | 'watchlist' | 'droppedShows'
 
-const CATEGORY_ICONS: Record<Category, () => React.JSX.Element> = {
+const CATEGORY_ICONS: Record<Category, (props: { className?: string }) => React.JSX.Element> = {
   watchHistory: EyeIcon,
   ratings: StarIcon,
   watchlist: BookmarkIcon,
@@ -517,7 +521,7 @@ export function DatabasePanel() {
                             <ul className="flex flex-col gap-1">
                               {addedTitles.map((title, i) => (
                                 <li key={i} className="flex items-start gap-1.5">
-                                  <Icon />
+                                  <Icon className="shrink-0" />
                                   <span>{title}</span>
                                 </li>
                               ))}
@@ -532,7 +536,7 @@ export function DatabasePanel() {
                             <ul className="flex flex-col gap-1">
                               {removedTitles.map((title, i) => (
                                 <li key={i} className="flex items-start gap-1.5">
-                                  <Icon />
+                                  <Icon className="shrink-0" />
                                   <span>{title}</span>
                                 </li>
                               ))}

@@ -73,7 +73,10 @@ function episodeLabel(season: number, episode: number): string {
  * snapshot's arrays for an added entry, the loaded backup's for a removed
  * one — each side resolves against itself). Falls back to a plain label
  * when a ref can't be found (see findByRef's doc comment for why that's a
- * defensive fallback, not an expected path). */
+ * defensive fallback, not an expected path). Deliberately just "Show
+ * S01E01", not the episode's own title too - there's little room for it in
+ * this dialog, and the season/episode number alone is enough to identify
+ * which one. */
 function describeMediaRef(
   file: BackupFile,
   ref: { movie?: ExternalRef; show?: ExternalRef; season?: number; episode?: number },
@@ -88,11 +91,7 @@ function describeMediaRef(
   if (!show) return 'Unknown show'
   if (ref.season === undefined) return show.title
 
-  const label = episodeLabel(ref.season, ref.episode!)
-  const episodeTitle = show.episodes.find(
-    (e) => e.seasonNumber === ref.season && e.episodeNumber === ref.episode,
-  )?.title
-  return episodeTitle ? `${show.title} ${label}: ${episodeTitle}` : `${show.title} ${label}`
+  return `${show.title} ${episodeLabel(ref.season, ref.episode!)}`
 }
 
 /** `2026-01-05`, the local convention (see database-backup.ts's UTC-day-key

@@ -99,10 +99,12 @@ const CATEGORY_ICONS: Record<Category, (props: { className?: string }) => React.
 /**
  * One added/removed line in the Diff dialog's expandable "what changed"
  * section. `title` is the only part that can be long enough to wrap, so
- * it's the only part that truncates (`min-w-0 flex-1 truncate` on a plain
- * flex row) - `date`/`time` and `episode` (the part that actually tells two
- * similar entries apart) stay `shrink-0`, always fully visible, same
- * reasoning as the icon's own `shrink-0` fix above.
+ * it's the only part that truncates (`min-w-0 truncate` on a plain flex
+ * row - deliberately not `flex-1` too, which would grow the title to fill
+ * the row and shove the episode/suffix out to the far right instead of
+ * sitting right after a short title). `date`/`time` and `episode` (the part
+ * that actually tells two similar entries apart) stay `shrink-0`, always
+ * fully visible, same reasoning as the icon's own `shrink-0` fix above.
  */
 function DiffEntryRow({
   entry,
@@ -117,7 +119,7 @@ function DiffEntryRow({
       <span className="shrink-0 text-[var(--color-fg-muted)] tabular-nums">
         {entry.date} {entry.time}
       </span>
-      <span className="min-w-0 flex-1 truncate text-[var(--color-fg)]">{entry.title}</span>
+      <span className="min-w-0 truncate text-[var(--color-fg)]">{entry.title}</span>
       {entry.episode && <span className="shrink-0 text-[var(--color-fg)]">{entry.episode}</span>}
       {entry.suffix && (
         <span className="shrink-0 text-[var(--color-fg-muted)]">· {entry.suffix}</span>

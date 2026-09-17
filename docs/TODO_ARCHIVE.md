@@ -3931,6 +3931,39 @@ DATABASE` ×2) — zero residue.\
       [ADR 0008](adr/0008-database-backups.md) and James's recorded
       disagreement with it.
 
+- [x] **Reword the daily retention field to "Keep one backup per day for
+      (days)", and make the daily tier actually behave that way**
+      (2026-09-17 added, done 2026-09-17)
+
+      `admin.databaseBackups.dailyRetentionDays` previously read "Keep every
+      backup for (days)" - literally accurate, since `selectDumpsToKeep`'s
+      daily tier (`apps/api/src/lib/database-backup.ts`) kept every dump
+      younger than `dailyRetentionDays` outright, unlike the weekly/monthly
+      tiers in the same function, which already bucketed by period and kept
+      only the newest per bucket. Surfaced same-day as a real gap, not just
+      a wording nit: both dev and prod had accumulated several same-day
+      duplicate backups each (restarts, and the new manual "back up now"
+      button) that this tier was retaining every one of, pruned by hand
+      (see the two archive entries above) rather than by the policy itself.
+
+      James confirmed (asked rather than assumed, given the TODO explicitly
+      flagged it as a decision) he wanted the label change paired with a
+      matching behavior fix, not a cosmetic-only rename. `selectDumpsToKeep`
+      now buckets the daily tier the same way as the weekly/monthly ones,
+      keyed by UTC calendar day (`createdAt.toISOString().slice(0, 10)`,
+      this codebase's existing idiom for a UTC day key) instead of a
+      week/month index - only the newest dump per day survives within the
+      window. Confirmed live in a real test run: two manual triggers landing
+      in the same second both wrote real dumps, and the second one's log
+      line reported pruning the first (`pruned 1 older dump(s)`).
+
+      Labels updated in both locale files; `docs/self-hosting.md` and
+      [ADR 0008](adr/0008-database-backups.md) updated to match (an
+      addendum, not a rewrite of the 2026-09-10 record). New unit test
+      covers the same-UTC-day-duplicate case directly; all other
+      `selectDumpsToKeep` cases were already on distinct UTC days and were
+      unaffected.
+
 ## Self-hosting & deployment
 
 - [x] **`docker-compose.yml` never passes through `TVDB_API_KEY`/`TVDB_PIN`/`ENVIRONMENT_LABEL`** (2026-08-26 added, done 2026-08-26) — M3\

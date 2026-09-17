@@ -221,7 +221,7 @@ Everything that matters lives in the `db-data` volume (the Postgres data directo
 
 ### Automatic (recommended)
 
-Set `DATABASE_BACKUP_DIR` and the app takes a full `pg_dump` once a day, gzipped, under a tiered retention policy: recent dumps are kept every day, then thinned to one a week, then one a month, then deleted. Off by default. Uncomment the environment variable and the matching `volumes:` line under the `app` service in `docker-compose.yml`:
+Set `DATABASE_BACKUP_DIR` and the app takes a full `pg_dump` once a day, gzipped, under a tiered retention policy: recent dumps are kept one per day, then thinned to one a week, then one a month, then deleted. Off by default. Uncomment the environment variable and the matching `volumes:` line under the `app` service in `docker-compose.yml`:
 
 ```yaml
 environment:

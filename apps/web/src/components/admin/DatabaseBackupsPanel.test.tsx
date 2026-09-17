@@ -76,7 +76,7 @@ describe('DatabaseBackupsPanel', () => {
     expect(screen.getByText('Every 24h')).toBeInTheDocument()
     expect(screen.getByText('rwnd-20260909T030000Z.sql.gz')).toBeInTheDocument()
 
-    expect(screen.getByLabelText('Keep every backup for (days)')).toHaveValue(7)
+    expect(screen.getByLabelText('Keep one backup per day for (days)')).toHaveValue(7)
     expect(screen.getByLabelText('Then keep one per week for (weeks)')).toHaveValue(4)
     expect(screen.getByLabelText('Then keep one per month for (months)')).toHaveValue(12)
     expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled()
@@ -111,7 +111,7 @@ describe('DatabaseBackupsPanel', () => {
       directoryError: null,
     })
 
-    const dailyField = await screen.findByLabelText('Keep every backup for (days)')
+    const dailyField = await screen.findByLabelText('Keep one backup per day for (days)')
     await user.clear(dailyField)
     await user.type(dailyField, '365')
     await user.clear(screen.getByLabelText('Then keep one per week for (weeks)'))
@@ -126,7 +126,7 @@ describe('DatabaseBackupsPanel', () => {
       weeklyRetentionWeeks: 0,
       monthlyRetentionMonths: 0,
     })
-    expect(await screen.findByLabelText('Keep every backup for (days)')).toHaveValue(365)
+    expect(await screen.findByLabelText('Keep one backup per day for (days)')).toHaveValue(365)
   })
 
   it('surfaces a failed last run even with no files written yet', async () => {

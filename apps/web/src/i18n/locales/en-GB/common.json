@@ -1076,7 +1076,7 @@
       "directoryError": "The backup directory couldn't be read: {{message}}",
       "retentionTitle": "Retention policy",
       "retentionDescription": "Backups are taken once a day. Set how long each of the three fields below keeps them before it hands off to the next, or the backup is deleted. Set a field to 0 to skip that stage entirely.",
-      "dailyRetentionDays": "Keep every backup for (days)",
+      "dailyRetentionDays": "Keep one backup per day for (days)",
       "weeklyRetentionWeeks": "Then keep one per week for (weeks)",
       "monthlyRetentionMonths": "Then keep one per month for (months)",
       "retentionSave": "Save"

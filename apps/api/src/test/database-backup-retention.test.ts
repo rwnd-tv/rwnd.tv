@@ -21,10 +21,24 @@ function dumpAgedDays(days: number): { name: string; createdAt: Date } {
 }
 
 describe('selectDumpsToKeep', () => {
-  it('keeps every dump within the daily window outright', () => {
+  it('keeps one dump per UTC calendar day within the daily window', () => {
     const dumps = [0, 1, 2, 3, 4, 5, 6].map(dumpAgedDays)
     const keep = selectDumpsToKeep(dumps, NOW, DEFAULT_RETENTION_TIERS)
     expect(keep).toEqual(new Set(dumps.map((d) => d.name)))
+  })
+
+  it('collapses same-UTC-day duplicates within the daily window to the newest one', () => {
+    // A restart, or a manual "back up now" trigger, can produce more than
+    // one dump on the same UTC calendar day - only the newest of the day
+    // should survive, the same way the weekly/monthly tiers below already
+    // keep only the newest per period. Found the hard way 2026-09-17: both
+    // dev and prod had several of these that this tier was keeping every
+    // one of (docs/TODO_ARCHIVE.md).
+    const earlier = { name: 'earlier', createdAt: new Date('2026-09-10T08:00:00Z') }
+    const later = { name: 'later', createdAt: new Date('2026-09-10T11:00:00Z') }
+    // Newest first, matching sortedDumpNames' contract that selectDumpsToKeep relies on.
+    const keep = selectDumpsToKeep([later, earlier], NOW, DEFAULT_RETENTION_TIERS)
+    expect(keep).toEqual(new Set(['later']))
   })
 
   it('thins the weekly window to one dump per 7-day bucket', () => {

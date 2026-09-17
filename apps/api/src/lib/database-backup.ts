@@ -166,13 +166,17 @@ const DAY_MS = 24 * 60 * 60 * 1000
  * relative to `now`. `dumps` must be newest first (sortedDumpNames' order).
  *
  * Boundaries are cumulative: a dump younger than `dailyRetentionDays` is
- * always kept outright (this is what gives daily granularity — the job
- * itself only ever runs once a day, so this tier isn't really thinning
- * anything). Between the daily and weekly boundaries, dumps are bucketed
- * into 7-day periods and only the newest per bucket survives. Between the
- * weekly and monthly boundaries, the same happens in 30-day buckets (an
- * approximation, not calendar months — fine for a coarse retention window).
- * At or past the monthly boundary, nothing survives.
+ * bucketed by UTC calendar day and only the newest per day survives. Under
+ * normal operation this is a no-op (the job only runs once a day), but it's
+ * what actually caps a restart's or a manual "back up now" trigger's extra
+ * same-day dump from surviving forever within the window — found the hard
+ * way 2026-09-17, when both dev and prod had several same-day duplicates
+ * this tier was keeping every one of, pruned by hand rather than by the
+ * retention policy itself. Between the daily and weekly boundaries, dumps
+ * are bucketed into 7-day periods and only the newest per bucket survives.
+ * Between the weekly and monthly boundaries, the same happens in 30-day
+ * buckets (an approximation, not calendar months — fine for a coarse
+ * retention window). At or past the monthly boundary, nothing survives.
  *
  * Setting `weeklyRetentionWeeks`/`monthlyRetentionMonths` to 0 collapses
  * that tier's boundary width to zero, so no dump ever falls inside it —
@@ -193,14 +197,21 @@ export function selectDumpsToKeep(
   const keep = new Set<string>()
   // First dump seen per bucket wins — `dumps` is newest first, so that's
   // the newest dump in that period, matching "keep the most recent
-  // snapshot representing this week/month."
+  // snapshot representing this day/week/month."
+  const dailyBuckets = new Map<string, string>()
   const weeklyBuckets = new Map<number, string>()
   const monthlyBuckets = new Map<number, string>()
 
   for (const dump of dumps) {
     const ageMs = now.getTime() - dump.createdAt.getTime()
     if (ageMs < dailyBoundaryMs) {
-      keep.add(dump.name)
+      // toISOString().slice(0, 10) is this codebase's existing idiom for a
+      // UTC calendar-day key (apps/api/src/calendar/build.ts,
+      // metadata/refresh.ts, lib/ics.ts, routes/account.ts all do the
+      // same) - createdAt is already a real UTC instant (parseTimestampName),
+      // so no separate UTC handling is needed here.
+      const day = dump.createdAt.toISOString().slice(0, 10)
+      if (!dailyBuckets.has(day)) dailyBuckets.set(day, dump.name)
     } else if (ageMs < weeklyBoundaryMs) {
       const bucket = Math.floor((ageMs - dailyBoundaryMs) / (7 * DAY_MS))
       if (!weeklyBuckets.has(bucket)) weeklyBuckets.set(bucket, dump.name)
@@ -210,6 +221,7 @@ export function selectDumpsToKeep(
     }
     // else: at or past every tier — not kept, pruned.
   }
+  for (const name of dailyBuckets.values()) keep.add(name)
   for (const name of weeklyBuckets.values()) keep.add(name)
   for (const name of monthlyBuckets.values()) keep.add(name)
   return keep

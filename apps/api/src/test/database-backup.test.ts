@@ -174,9 +174,10 @@ describe.skipIf(!hasPgDump())('database backup', () => {
 
   it('prunes under the default retention policy and never touches anything else', async () => {
     // Well within the default policy's 7-day daily window
-    // (DEFAULT_RETENTION_TIERS, database-backup.ts) — must all survive
-    // regardless of count, since that tier keeps every dump by age, not a
-    // fixed count the way the old flat "keep newest 7" did.
+    // (DEFAULT_RETENTION_TIERS, database-backup.ts) — must all survive,
+    // not pruned to a fixed count the way the old flat "keep newest 7" did.
+    // One per distinct UTC day, so the daily tier's same-day dedup
+    // (database-backup-retention.test.ts) doesn't collapse any of these.
     const recentAgeDays = [1, 2, 3, 4, 5]
     for (const days of recentAgeDays) {
       await writeFile(join(DIR, dumpNameAgedDays(days)), 'old')

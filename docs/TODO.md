@@ -118,6 +118,115 @@ Format:
       files), since a `FeedRow` header collapsing would be a 24th
       near-identical copy otherwise.
 
+- [ ] **Reword the landing page's "young, single-maintainer project" line** (2026-09-17 10:36 added)
+
+      The landing page's honesty callout (`landing.strip.honest.body` in
+      `common.json`, both `en-US` and `en-GB`) reads "this is a young,
+      single-maintainer project, so expect the occasional rough edge, and
+      please file an issue when you hit one." James, 2026-09-17: drop
+      "young" from that sentence, since it reads as ambiguously describing
+      the maintainer's age rather than the project's, which isn't accurate
+      (he isn't young).
+
+      Wants an actual reword that keeps the same honest, low-key tone
+      without "young" (e.g. leaning on "new" or dropping the adjective
+      entirely and restructuring the clause), not a bare deletion that'd
+      leave "this is a, single-maintainer project." Both locale files
+      (`apps/web/src/i18n/locales/en-US/common.json` and
+      `.../en-GB/common.json`) carry the identical wording today, so update
+      both together.
+
+- [ ] **Drop the landing page's Kodi mention** (2026-09-17 added)
+
+      The FAQ's "Jellyfin, Emby, Tautulli or Kodi?" entry
+      (`landing.faq.players.q`/`.a` in `common.json`, both `en-US` and
+      `en-GB`) names Kodi as a planned-but-not-yet-built source: "Kodi
+      isn't yet: it has no native webhook support, so it needs an
+      addon-based approach the ingestion core doesn't cover yet." James,
+      2026-09-17: increasingly unsure Kodi ingestion (see TODO.md's
+      "Kodi webhook ingestion" item, still open and unscheduled) will
+      actually get built, so would rather the public-facing FAQ stop
+      naming it as a coming feature.
+
+      This is about the landing page copy only, not a decision to cancel
+      the "Kodi webhook ingestion" TODO item itself, which stays open.
+      Reword the question to drop Kodi (e.g. "Jellyfin, Emby or
+      Tautulli?") and adjust the answer to stop describing Kodi's gap,
+      without implying it'll never happen either. Check the rest of the
+      landing page (hero copy, feature list, other FAQ entries) for any
+      other Kodi mentions while touching this.
+
+- [ ] **Add M5 to the landing page's status section** (2026-09-17 added)
+
+      The landing page's "Where the project actually is" section
+      (`landing.status.*` in `common.json`, rendered by the `MILESTONES`
+      array around line 45 of `LandingPage.tsx`) only lists M1-M4, all
+      `status: 'done'`. M5 is in progress (see `docs/ROADMAP.md`) and isn't
+      represented anywhere on the page yet.
+
+      Mechanically straightforward: add `{ key: 'm5', status: 'inProgress'
+      }` to `MILESTONES`, then `landing.status.m5.title` and four
+      `landing.status.m5.items` bullets in both `en-US` and `en-GB`
+      `common.json` (the layout hardcodes exactly four bullet slots per
+      milestone, `[0, 1, 2, 3]` around line 467). The `inProgress` status
+      label and its muted (non-success-green) styling already exist and
+      already work, unused until now since every milestone so far has been
+      `done` by the time it was added here.
+
+      Only touches the status section, not the top proof strip above it
+      (`MILESTONES.filter(({ status }) => status === 'done')` around line
+      249): that strip is deliberately done-only ("an in-progress one
+      belongs in the more nuanced STATUS section below instead," per its
+      own comment), so M5 should not appear there while still in progress.
+
+      Also update `landing.status.body`'s "The first four milestones are
+      done, and v{{version}} is out" line, which will read oddly once a
+      fifth, non-done milestone is visible right below it.
+
+      Picking four bullets to represent M5 needs a judgement call: M5 (see
+      ROADMAP.md, still marked "working title" there) spans four sub-groups
+      of quite different sizes and states (security hardening, done;
+      maintainability, mostly done; small correctness/default fixes and a
+      mobile/responsive pass, both not started) that don't compress onto
+      the M1-M4 bullets' "one shipped headline feature per line" pattern
+      as cleanly. Worth a status pass close to when M5 actually ships
+      rather than guessing the wording now while it's still moving.
+
+- [ ] **Retitle and re-pick the landing page's "What works today" section** (2026-09-17 added)
+
+      `landing.features.title` (`common.json`, both locales) reads "What
+      works today," with a subtitle "Everything listed here is shipped and
+      running on the live instance. Nothing below is a plan." James,
+      2026-09-17: that framing dates from when the project had much less
+      to show and needed to prove it wasn't vapourware; the project's
+      moved well past that point (M4 done, M5 under way), so change the
+      title to "Features" (the nav already labels this section's link
+      "Features" - `landing.nav.features` - just the `<h2>` itself still
+      says the old thing).
+
+      Also worth re-picking which seven features fill the section, not
+      just the heading. `FEATURE_KEYS` in `LandingPage.tsx` (line 36:
+      `log`, `plex`, `trakt`, `galleries`, `lists`, `export`, `calendar`)
+      leans toward table-stakes tracking-app basics (search and log,
+      poster galleries, watchlists/ratings, CSV export). James, 2026-09-17:
+      wants a better set, i.e. ones that say more about what makes this
+      project specifically worth self-hosting now that there's more to
+      choose from. Candidates worth weighing that aren't in the current
+      seven: the breadth of webhook sources (Plex/Jellyfin/Emby/Tautulli,
+      multi-user aware); automatic scheduled database backups with
+      admin-editable tiered retention; the admin UI (user management,
+      owner role, bulk actions); the full ASVS security review behind
+      v1.0.0; the calendar's webcal-feed half, not just its in-app page
+      (partially covered by the existing `calendar` entry already).
+
+      This is a content/positioning call, not a mechanical rename - needs
+      an actual decision on which features best represent the project
+      today, not just swapping the section title and leaving the same
+      seven cards under it. Revisit `landing.features.body`'s subtitle too
+      once the title changes, since "shipped and running on the live
+      instance, nothing below is a plan" was written to answer the same
+      not-yet-proven-real doubt the old title was hedging against.
+
 ## Mobile / responsive
 
 - [ ] **Quality pass on the whole interface at phone width** (2026-09-06 added; M5)

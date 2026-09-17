@@ -209,43 +209,51 @@ export function EpisodeCard({
             <PlusIcon />
           </button>
         )}
-        <button
-          type="button"
-          aria-pressed={episode.watched}
-          aria-label={toggleTitle}
-          title={toggleTitle}
-          disabled={toggleDisabled}
-          onClick={() => (episode.watched ? setUnwatchConfirmOpen(true) : setDialogOpen(true))}
-          className={`absolute top-2 right-2 flex h-7 w-7 items-center justify-center rounded-full border transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
-            episode.watched
-              ? 'border-[var(--color-primary)] bg-[var(--color-primary)] text-[var(--color-primary-fg)]'
-              : 'border-white/70 bg-black/40 text-white/90 hover:bg-black/60'
-          }`}
-        >
-          {episode.watchedCount > 1 ? (
-            <span className="text-xs font-semibold" aria-hidden="true">
-              {episode.watchedCount}
-            </span>
-          ) : (
-            <CheckIcon />
-          )}
-        </button>
-        <RatingPicker
-          size="sm"
-          value={episode.myRating}
-          onRate={(rating) => setRating.mutate(rating)}
-          onClear={() => setRating.mutate(null)}
-          disabled={ratingDisabled}
-          filledClassName="text-white"
-          mutedClassName="text-white/70 hover:text-white"
-          className={`absolute bottom-2 left-2 rounded-full border border-white/70 bg-black/40 px-1.5 py-1 transition-opacity group-hover:opacity-100 focus-within:opacity-100 hover:bg-black/60 ${
-            // Same "always shown once it has something to show" treatment
-            // as the watched checkmark button above — only an *unrated*
-            // episode stays hover-only, the same way the "log an additional
-            // watch" + button only appears once there's a watch to add to.
-            episode.myRating !== null ? 'opacity-100' : 'opacity-0'
-          }`}
-        />
+        {/* Hidden rather than disabled for an unwatched, unaired episode -
+            same reasoning as ShowDetailPage.tsx's Watched button. Once
+            watched, the toggle stays visible/clickable to unwatch (an
+            already-watched episode must have aired). */}
+        {!(notAiredYet && !episode.watched) && (
+          <button
+            type="button"
+            aria-pressed={episode.watched}
+            aria-label={toggleTitle}
+            title={toggleTitle}
+            disabled={toggleDisabled}
+            onClick={() => (episode.watched ? setUnwatchConfirmOpen(true) : setDialogOpen(true))}
+            className={`absolute top-2 right-2 flex h-7 w-7 items-center justify-center rounded-full border transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
+              episode.watched
+                ? 'border-[var(--color-primary)] bg-[var(--color-primary)] text-[var(--color-primary-fg)]'
+                : 'border-white/70 bg-black/40 text-white/90 hover:bg-black/60'
+            }`}
+          >
+            {episode.watchedCount > 1 ? (
+              <span className="text-xs font-semibold" aria-hidden="true">
+                {episode.watchedCount}
+              </span>
+            ) : (
+              <CheckIcon />
+            )}
+          </button>
+        )}
+        {!notAiredYet && (
+          <RatingPicker
+            size="sm"
+            value={episode.myRating}
+            onRate={(rating) => setRating.mutate(rating)}
+            onClear={() => setRating.mutate(null)}
+            disabled={ratingDisabled}
+            filledClassName="text-white"
+            mutedClassName="text-white/70 hover:text-white"
+            className={`absolute bottom-2 left-2 rounded-full border border-white/70 bg-black/40 px-1.5 py-1 transition-opacity group-hover:opacity-100 focus-within:opacity-100 hover:bg-black/60 ${
+              // Same "always shown once it has something to show" treatment
+              // as the watched checkmark button above — only an *unrated*
+              // episode stays hover-only, the same way the "log an additional
+              // watch" + button only appears once there's a watch to add to.
+              episode.myRating !== null ? 'opacity-100' : 'opacity-0'
+            }`}
+          />
+        )}
       </div>
       <div>
         <h3 className="truncate text-sm font-medium">

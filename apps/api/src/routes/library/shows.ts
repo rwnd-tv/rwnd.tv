@@ -808,7 +808,9 @@ showRoutes.openapi(
         description: 'Watches logged',
         content: { 'application/json': { schema: markShowWatchedResponseSchema } },
       },
-      400: { description: 'watchedAt is in the future' },
+      400: {
+        description: 'watchedAt is in the future, or the show has not aired any episodes yet',
+      },
       404: { description: 'Show not found' },
     },
   }),
@@ -841,6 +843,18 @@ showRoutes.openapi(
       target.externalId,
       user.locale,
     )
+
+    // Distinct from "already fully watched" (which still 201s with
+    // count: 0, logMissingWatches's own no-op case) — this is "there is
+    // nothing to mark watched yet, at all", the same rule
+    // logMissingWatches itself applies per-episode when silently skipping
+    // unaired ones for a partially-aired show.
+    const now = new Date()
+    const hasAired = (e: { firstAired: string | null }) =>
+      e.firstAired !== null && new Date(e.firstAired) <= now
+    if (!resolvedEpisodes.some(hasAired)) {
+      return c.json({ error: 'This show has not aired any episodes yet' }, 400)
+    }
 
     const count = await logMissingWatches(db, user.id, resolvedEpisodes, body)
     return c.json({ count }, 201)

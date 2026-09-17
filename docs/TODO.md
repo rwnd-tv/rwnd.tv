@@ -72,6 +72,39 @@ Format:
       an empty circle. Confirm with James whether that one should change
       too, or only the four labeled buttons above.
 
+- [ ] **Investigate: show page's Watched button can silently no-op when the show is actually fully watched** (2026-09-17 added; M5)
+
+      Found live on `hanaori-san-still-wants-to-fight-in-the-next-life-2026`
+      (a currently-airing show): all 10 episodes that have aired so far
+      were already watched, but clicking "Watched" still opened the "When
+      did you watch" dialog rather than treating the show as fully
+      watched. Confirming the dialog does log the request
+      (`POST /library/shows/{slug}/watched`), which correctly finds
+      nothing left to add and returns `201 { count: 0 }` - a harmless
+      no-op, same as the existing "already fully watched" case - but the
+      dialog and button give no indication anything happened, reading as
+      a silent failure.
+
+      Root cause: `ShowDetailPage.tsx`'s `fullyWatched` (and the new
+      `notAiredYet`, see the ratings/watch-blocking TODOs above) both key
+      off `show.airedEpisodes`, which stays `null` until the metadata
+      refresher has cached an `airedEpisodeCount` for every one of the
+      show's regular seasons (`apps/api/src/routes/library/shows.ts`).
+      For a recently-added or currently-airing show that hasn't been
+      refreshed yet, `airedEpisodes` can stay `null` well after every
+      episode that's actually aired has been watched, so the button never
+      renders as "fully watched" even when it genuinely is.
+
+      Two candidate directions, not decided yet:
+      - Cheap: when a non-`additional` watched submission comes back with
+        `count: 0`, show something (e.g. "Nothing new to log") instead of
+        silently closing the dialog.
+      - More correct: stop depending on the possibly-stale cached
+        `airedEpisodes` aggregate for the show page's fully-watched state,
+        checking real per-episode aired status the way the season page
+        already does instead - bigger change, touches how the show page
+        fetches data.
+
 - [ ] **Remove the calendar month grid's selected-day panel** (2026-09-06 13:37 added, redirected to removal 2026-09-10; M5)
 
       James, 2026-09-10: doesn't serve a purpose any more, remove it
@@ -352,6 +385,24 @@ Format:
       authorized rather than a bare yes/no.
 
 ## Metadata & matching
+
+- [ ] **`resolveSeason`'s runtime upsert only ever fills a null, never corrects a stale one** (2026-09-17 added, not on any milestone)
+
+      Found while fixing the season/episode drift item above (see
+      TODO_ARCHIVE.md): `resolveSeason`'s upsert (`apps/api/src/lib/
+      media.ts`) writes `runtimeMinutes: coalesce(existing, excluded)` -
+      deliberately fill-only, to protect a cross-provider-backfilled value
+      from being clobbered by a primary provider that still returns null.
+      That reasoning only covers "live value is null"; it doesn't cover
+      "live value is non-null but disagrees with what's stored" (a
+      provider correcting its own data after the fact), which is exactly
+      the case the season route's own new reconciliation step (this
+      session) now handles by overwriting only when the live value is
+      non-null and different. `resolveSeason`'s callers (the season/show
+      "Watched" buttons, Trakt import, `refreshOneShow`'s current/upcoming
+      season refresh) could plausibly want the same treatment, but that's
+      a separate call site and a separate judgment call from what the
+      season-route fix asked for - not changed as part of it.
 
 - [ ] **IMDb ratings on Movies (and maybe TV Shows)** (2026-09-01 13:35 added, shelved 2026-09-01, not on any milestone)
 

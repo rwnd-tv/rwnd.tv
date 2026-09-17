@@ -277,6 +277,12 @@ export function ShowDetailPage() {
     show.airedEpisodes > 0 &&
     show.watchedEpisodes === show.airedEpisodes
 
+  // A show with zero aired (non-special) episodes yet can't be rated —
+  // `null` (not yet cached by the metadata refresher) is deliberately
+  // *not* blocked, so a show whose season data hasn't refreshed yet
+  // doesn't lose its rating control.
+  const notAiredYet = show.airedEpisodes === 0
+
   return (
     <div className="flex flex-col gap-8">
       <DetailHeader
@@ -425,26 +431,33 @@ export function ShowDetailPage() {
         )}
 
         <div className="flex gap-2">
-          <Button
-            variant={fullyWatched ? 'primary' : 'secondary'}
-            type="button"
-            disabled={!fullyWatched && !show.tmdbId}
-            title={
-              !fullyWatched && !show.tmdbId
-                ? t('showDetail.watchedButtonDisabled')
-                : t(
-                    fullyWatched
-                      ? 'showDetail.watchedButtonTooltip.removeShow'
-                      : 'showDetail.watchedButtonTooltip.addShow',
-                  )
-            }
-            onClick={() =>
-              fullyWatched ? setRemoveWatchesConfirmOpen(true) : setWatchDialogOpen(true)
-            }
-          >
-            <CheckIcon />
-            {t('showDetail.watchedButton')}
-          </Button>
+          {/* Hidden rather than disabled when nothing's aired yet - there's
+              no plausible click that unblocks this from the same page (the
+              button only reappears once the metadata refresher or a new
+              episode actually airs), so a disabled state with a tooltip
+              would just be a dead end rather than useful context. */}
+          {!notAiredYet && (
+            <Button
+              variant={fullyWatched ? 'primary' : 'secondary'}
+              type="button"
+              disabled={!fullyWatched && !show.tmdbId}
+              title={
+                !fullyWatched && !show.tmdbId
+                  ? t('showDetail.watchedButtonDisabled')
+                  : t(
+                      fullyWatched
+                        ? 'showDetail.watchedButtonTooltip.removeShow'
+                        : 'showDetail.watchedButtonTooltip.addShow',
+                    )
+              }
+              onClick={() =>
+                fullyWatched ? setRemoveWatchesConfirmOpen(true) : setWatchDialogOpen(true)
+              }
+            >
+              <CheckIcon />
+              {t('showDetail.watchedButton')}
+            </Button>
+          )}
           {show.firstWatchedAt && (
             <Button
               variant="secondary"
@@ -485,12 +498,14 @@ export function ShowDetailPage() {
           </Button>
         </div>
 
-        <RatingPicker
-          value={show.myRating}
-          onRate={(rating) => setRating.mutate(rating)}
-          onClear={() => setRating.mutate(null)}
-          disabled={setRating.isPending}
-        />
+        {!notAiredYet && (
+          <RatingPicker
+            value={show.myRating}
+            onRate={(rating) => setRating.mutate(rating)}
+            onClear={() => setRating.mutate(null)}
+            disabled={setRating.isPending}
+          />
+        )}
 
         {refreshMetadata.isSuccess && (
           <p className="text-xs text-[var(--color-fg-muted)]">

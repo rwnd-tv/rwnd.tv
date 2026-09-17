@@ -73,10 +73,12 @@ export function useMovieWatchActions(
   })
 
   // Can only mark watched once the movie has a TMDB id on record (POST
-  // /plays needs it) — no air-date guard, unlike the episode hook's
-  // notAiredYet, since a movie has no equivalent unaired state to check
-  // here (see plays.ts's doc comment on why POST /plays doesn't gate movies
-  // on a release date). Unwatching needs neither, so only guarded here.
+  // /plays needs it). Unwatching needs neither, so only guarded here. No
+  // release-date term here despite POST /plays now rejecting an unreleased
+  // movie (apps/api/src/routes/plays.ts) - MovieDetailPage.tsx hides the
+  // Watched button entirely instead, using its own already-computed
+  // `notReleasedYet`, the same "hide, don't disable" treatment as the
+  // episode hook's own notAiredYet gets at its call sites.
   const toggleDisabled =
     !movie || unwatch.isPending || markWatched.isPending || (!movie.watched && !tmdbId)
 

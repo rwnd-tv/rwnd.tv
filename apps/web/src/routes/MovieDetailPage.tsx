@@ -174,6 +174,13 @@ export function MovieDetailPage() {
   }
   if (!movie) return null
 
+  // A movie with no known release date, or one still in the future, can't
+  // be rated yet — same predicate shape as useEpisodeWatchActions'
+  // notAiredYet, new for movies specifically (use-movie-watch-actions.ts's
+  // own lack of an equivalent guard is about POST /plays policy, not
+  // ratings, so this doesn't contradict it).
+  const notReleasedYet = movie.releaseDate === null || new Date(movie.releaseDate) > new Date()
+
   return (
     <div className="flex flex-col gap-8">
       <DetailHeader
@@ -307,24 +314,28 @@ export function MovieDetailPage() {
         )}
 
         <div className="flex gap-2">
-          <Button
-            variant={movie.watched ? 'primary' : 'secondary'}
-            type="button"
-            disabled={!movie.watched && !movie.tmdbId}
-            title={
-              !movie.watched && !movie.tmdbId
-                ? t('movieDetail.watchedButtonDisabled')
-                : t(
-                    movie.watched
-                      ? 'movieDetail.watchedButtonTooltip.remove'
-                      : 'movieDetail.watchedButtonTooltip.add',
-                  )
-            }
-            onClick={() => (movie.watched ? setUnwatchConfirmOpen(true) : setDialogOpen(true))}
-          >
-            <CheckIcon />
-            {t('movieDetail.watchedButton')}
-          </Button>
+          {/* Hidden rather than disabled for an unwatched, unreleased movie -
+              same reasoning as ShowDetailPage.tsx's Watched button. */}
+          {!(notReleasedYet && !movie.watched) && (
+            <Button
+              variant={movie.watched ? 'primary' : 'secondary'}
+              type="button"
+              disabled={!movie.watched && !movie.tmdbId}
+              title={
+                !movie.watched && !movie.tmdbId
+                  ? t('movieDetail.watchedButtonDisabled')
+                  : t(
+                      movie.watched
+                        ? 'movieDetail.watchedButtonTooltip.remove'
+                        : 'movieDetail.watchedButtonTooltip.add',
+                    )
+              }
+              onClick={() => (movie.watched ? setUnwatchConfirmOpen(true) : setDialogOpen(true))}
+            >
+              <CheckIcon />
+              {t('movieDetail.watchedButton')}
+            </Button>
+          )}
           {movie.watched && (
             <Button
               variant="secondary"
@@ -360,12 +371,14 @@ export function MovieDetailPage() {
           </Button>
         </div>
 
-        <RatingPicker
-          value={movie.myRating}
-          onRate={(rating) => setRating.mutate(rating)}
-          onClear={() => setRating.mutate(null)}
-          disabled={setRating.isPending}
-        />
+        {!notReleasedYet && (
+          <RatingPicker
+            value={movie.myRating}
+            onRate={(rating) => setRating.mutate(rating)}
+            onClear={() => setRating.mutate(null)}
+            disabled={setRating.isPending}
+          />
+        )}
 
         {refreshMetadata.isSuccess && (
           <p className="text-xs text-[var(--color-fg-muted)]">

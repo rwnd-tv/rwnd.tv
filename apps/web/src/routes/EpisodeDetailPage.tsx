@@ -409,21 +409,25 @@ export function EpisodeDetailPage() {
         )}
 
         <div className="flex gap-2">
-          <Button
-            variant={episode.watched ? 'primary' : 'secondary'}
-            type="button"
-            disabled={watchActions.toggleDisabled}
-            title={toggleTitle}
-            aria-pressed={episode.watched}
-            onClick={() =>
-              episode.watched
-                ? watchActions.setUnwatchConfirmOpen(true)
-                : watchActions.setDialogOpen(true)
-            }
-          >
-            <CheckIcon />
-            {toggleLabel}
-          </Button>
+          {/* Hidden rather than disabled for an unwatched, unaired episode -
+              same reasoning as ShowDetailPage.tsx's Watched button. */}
+          {!(watchActions.notAiredYet && !episode.watched) && (
+            <Button
+              variant={episode.watched ? 'primary' : 'secondary'}
+              type="button"
+              disabled={watchActions.toggleDisabled}
+              title={toggleTitle}
+              aria-pressed={episode.watched}
+              onClick={() =>
+                episode.watched
+                  ? watchActions.setUnwatchConfirmOpen(true)
+                  : watchActions.setDialogOpen(true)
+              }
+            >
+              <CheckIcon />
+              {toggleLabel}
+            </Button>
+          )}
           {episode.watched && (
             <Button
               variant="secondary"
@@ -439,12 +443,14 @@ export function EpisodeDetailPage() {
           )}
         </div>
 
-        <RatingPicker
-          value={episode.myRating}
-          onRate={(rating) => ratingActions.setRating.mutate(rating)}
-          onClear={() => ratingActions.setRating.mutate(null)}
-          disabled={ratingActions.ratingDisabled}
-        />
+        {!watchActions.notAiredYet && (
+          <RatingPicker
+            value={episode.myRating}
+            onRate={(rating) => ratingActions.setRating.mutate(rating)}
+            onClear={() => ratingActions.setRating.mutate(null)}
+            disabled={ratingActions.ratingDisabled}
+          />
+        )}
       </DetailHeader>
 
       {episode.watchedCount > 0 && (

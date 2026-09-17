@@ -267,6 +267,9 @@ export function SeasonDetailPage() {
   )
   const watchedAiredEpisodes = airedEpisodes.filter((episode) => episode.watched).length
   const fullyWatched = airedEpisodes.length > 0 && watchedAiredEpisodes === airedEpisodes.length
+  // Same "nothing to mark watched yet" gate as ShowDetailPage.tsx's own
+  // notAiredYet, scoped to this one season.
+  const notAiredYet = airedEpisodes.length === 0
 
   // Read-only — this page has no rate-the-season action of its own (there's
   // no season-level entityType, only show/movie/episode — see
@@ -465,26 +468,31 @@ export function SeasonDetailPage() {
         </div>
 
         <div className="flex gap-2">
-          <Button
-            variant={fullyWatched ? 'primary' : 'secondary'}
-            type="button"
-            disabled={!fullyWatched && !show?.tmdbId}
-            title={
-              !fullyWatched && !show?.tmdbId
-                ? t('showDetail.watchedButtonDisabled')
-                : t(
-                    fullyWatched
-                      ? 'showDetail.watchedButtonTooltip.removeSeason'
-                      : 'showDetail.watchedButtonTooltip.addSeason',
-                  )
-            }
-            onClick={() =>
-              fullyWatched ? setRemoveWatchesConfirmOpen(true) : setWatchDialogOpen(true)
-            }
-          >
-            <CheckIcon />
-            {t('showDetail.watchedButton')}
-          </Button>
+          {/* Hidden rather than disabled when nothing in this season has
+              aired yet - see ShowDetailPage.tsx's identical treatment of
+              its own Watched button for the reasoning. */}
+          {!notAiredYet && (
+            <Button
+              variant={fullyWatched ? 'primary' : 'secondary'}
+              type="button"
+              disabled={!fullyWatched && !show?.tmdbId}
+              title={
+                !fullyWatched && !show?.tmdbId
+                  ? t('showDetail.watchedButtonDisabled')
+                  : t(
+                      fullyWatched
+                        ? 'showDetail.watchedButtonTooltip.removeSeason'
+                        : 'showDetail.watchedButtonTooltip.addSeason',
+                    )
+              }
+              onClick={() =>
+                fullyWatched ? setRemoveWatchesConfirmOpen(true) : setWatchDialogOpen(true)
+              }
+            >
+              <CheckIcon />
+              {t('showDetail.watchedButton')}
+            </Button>
+          )}
           {watchedEpisodes > 0 && (
             <Button
               variant="secondary"

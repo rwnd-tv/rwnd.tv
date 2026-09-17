@@ -1,11 +1,12 @@
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi'
 import { and, eq } from 'drizzle-orm'
 import { ratingStatusSchema, setRatingRequestSchema } from '@rwnd/shared'
-import { ratings } from '@rwnd/db'
+import { ratings, seasons } from '@rwnd/db'
 import type { AppEnv } from '../../types.js'
 import { resolveEpisode } from '../../lib/media.js'
 import { pickRefreshTarget } from '../../metadata/refresh.js'
 import { orderedProviders } from '../../providers/priority.js'
+import { localeRegion, resolveReleaseDate } from '../../lib/release-date.js'
 import { getEpisodeIdByNumbers, getMovieBySlug, getShowBySlug } from './shared.js'
 
 export const ratingRoutes = new OpenAPIHono<AppEnv>()
@@ -42,6 +43,7 @@ ratingRoutes.openapi(
         description: 'Rating set',
         content: { 'application/json': { schema: ratingStatusSchema } },
       },
+      400: { description: 'Episode has not aired yet' },
       404: { description: 'Show or episode not found' },
     },
   }),
@@ -58,7 +60,7 @@ ratingRoutes.openapi(
     const target = await pickRefreshTarget(db, 'show', show.id, providers)
     if (!target) return c.json({ error: 'Show or episode not found' }, 404)
 
-    let episode: { id: string }
+    let episode: { id: string; firstAired: string | null }
     try {
       episode = await resolveEpisode(
         db,
@@ -70,6 +72,14 @@ ratingRoutes.openapi(
       )
     } catch {
       return c.json({ error: 'Show or episode not found' }, 404)
+    }
+
+    // Same "no unaired episode" rule as POST /plays (apps/api/src/routes/
+    // plays.ts) and the bulk "Watched" button's logMissingWatches
+    // (apps/api/src/routes/library/shared.ts) — an episode that hasn't
+    // aired yet can't be rated either.
+    if (episode.firstAired === null || new Date(episode.firstAired) > new Date()) {
+      return c.json({ error: 'This episode has not aired yet' }, 400)
     }
 
     const ratedAt = new Date()
@@ -167,6 +177,7 @@ ratingRoutes.openapi(
         description: 'Rating set',
         content: { 'application/json': { schema: ratingStatusSchema } },
       },
+      400: { description: 'Show has not aired any episodes yet' },
       404: { description: 'Show not found' },
     },
   }),
@@ -178,6 +189,24 @@ ratingRoutes.openapi(
 
     const show = await getShowBySlug(db, slug)
     if (!show) return c.json({ error: 'Show not found' }, 404)
+
+    // Same "airedEpisodes === 0" rule the show detail route computes for
+    // its own `fullyWatched` calculation (routes/library/shows.ts) - null
+    // (not yet cached by the metadata refresher) is deliberately *not*
+    // blocked, so a show whose season data hasn't refreshed yet doesn't
+    // lose its rating control.
+    const seasonRows = await db
+      .select({ seasonNumber: seasons.seasonNumber, airedEpisodeCount: seasons.airedEpisodeCount })
+      .from(seasons)
+      .where(eq(seasons.showId, show.id))
+    const regularSeasons = seasonRows.filter((s) => s.seasonNumber > 0)
+    const airedEpisodes =
+      regularSeasons.length > 0 && regularSeasons.every((s) => s.airedEpisodeCount !== null)
+        ? regularSeasons.reduce((sum, s) => sum + (s.airedEpisodeCount ?? 0), 0)
+        : null
+    if (airedEpisodes === 0) {
+      return c.json({ error: 'This show has not aired any episodes yet' }, 400)
+    }
 
     const ratedAt = new Date()
     const [row] = await db
@@ -254,17 +283,27 @@ ratingRoutes.openapi(
         description: 'Rating set',
         content: { 'application/json': { schema: ratingStatusSchema } },
       },
+      400: { description: 'Movie has not released yet' },
       404: { description: 'Movie not found' },
     },
   }),
   async (c) => {
     const { slug } = c.req.valid('param')
     const { rating } = c.req.valid('json')
-    const userId = c.get('user')!.id
+    const user = c.get('user')!
+    const userId = user.id
     const db = c.get('db')
 
     const movie = await getMovieBySlug(db, slug)
     if (!movie) return c.json({ error: 'Movie not found' }, 404)
+
+    // Region-resolved the same way the movie detail route displays it
+    // (routes/library/movies.ts), so the server's check agrees with what
+    // the user actually sees on the page.
+    const releaseDate = resolveReleaseDate(movie, localeRegion(user.locale)).date
+    if (releaseDate === null || new Date(releaseDate) > new Date()) {
+      return c.json({ error: 'This movie has not released yet' }, 400)
+    }
 
     const ratedAt = new Date()
     const [row] = await db

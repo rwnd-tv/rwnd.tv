@@ -8,9 +8,13 @@ import { invalidateWatchData } from './query-client.js'
  * EpisodeCard and EpisodeDetailPage, same "one hook, two consumers" shape
  * as useEpisodeWatchActions for the watched toggle. A separate hook rather
  * than folded into that one: rating shares none of its state (no date
- * dialog, no aired-date guard — rating is independent of watched status)
- * and adding four more fields to that hook's return would make both call
- * sites' destructuring unreadable.
+ * dialog, no watched-status guard — rating is independent of watched
+ * status) and adding four more fields to that hook's return would make
+ * both call sites' destructuring unreadable. This hook has no aired-date
+ * check of its own, but both call sites still hide `RatingPicker` entirely
+ * for an unaired episode using `useEpisodeWatchActions`' own `notAiredYet`
+ * — an unaired episode can't be rated at all, which is a different rule
+ * from the watched-status decoupling this comment used to describe alone.
  */
 export function useEpisodeRatingActions(
   slug: string,

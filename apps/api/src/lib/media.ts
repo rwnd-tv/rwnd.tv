@@ -78,6 +78,8 @@ export async function resolveMovie(
   title: string
   posterPath: string | null
   runtimeMinutes: number | null
+  releaseDate: string | null
+  releaseDates: Record<string, string> | null
 }> {
   const [existing] = await db
     .select({ id: externalIds.entityId })
@@ -100,6 +102,8 @@ export async function resolveMovie(
         title: movie.title,
         posterPath: movie.posterPath,
         runtimeMinutes: movie.runtimeMinutes,
+        releaseDate: movie.releaseDate,
+        releaseDates: movie.releaseDates,
       }
   }
 
@@ -148,6 +152,8 @@ export async function resolveMovie(
     title: movie.title,
     posterPath: movie.posterPath,
     runtimeMinutes: movie.runtimeMinutes,
+    releaseDate: movie.releaseDate,
+    releaseDates: movie.releaseDates,
   }
 }
 

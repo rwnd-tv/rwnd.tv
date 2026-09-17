@@ -120,6 +120,51 @@ seasonRoutes.openapi(
       episodes: providerEpisodes,
     } = await target.provider.getSeason(target.externalId, seasonNumber, user.locale)
 
+    // Reconcile any already-resolved local episode row (created by a play,
+    // a bulk "Watched" action, or a Trakt import - see this route's own
+    // doc comment for why an *unwatched* episode has no local row to
+    // reconcile at all) against the live values just fetched above, so the
+    // two can't silently drift apart as a provider corrects its own data.
+    // Found live 2026-09-11: TMDB's runtime for a watched episode changed
+    // after the fact, the page correctly showed the new value, but the
+    // stale local `runtimeMinutes` then wrongly rejected an otherwise-
+    // legitimate `watchedAt` in POST /plays (maxWatchedAt). Only
+    // `runtimeMinutes`/`firstAired` are reconciled - both locale-neutral,
+    // unlike `title`/`overview`, which resolveSeason's own upsert
+    // (lib/media.ts) already deliberately never overwrites once set, to
+    // avoid a single user's locale clobbering the stored copy. Never
+    // writes a live `null` over a real stored value, same protection
+    // resolveSeason's fill-only runtime policy gives a cross-provider-
+    // backfilled value - but unlike that fill-only policy, this *does*
+    // correct an already-set-but-now-stale value, which is the bug above.
+    // No "last checked" timestamp is written: the provider call above
+    // already happens on every page load regardless, so there's no rate-
+    // limiting concern the way there is for the IMDb id lookup below.
+    const localEpisodeRows = await db
+      .select({
+        id: episodes.id,
+        episodeNumber: episodes.episodeNumber,
+        runtimeMinutes: episodes.runtimeMinutes,
+        firstAired: episodes.firstAired,
+      })
+      .from(episodes)
+      .where(and(eq(episodes.showId, show.id), eq(episodes.seasonNumber, seasonNumber)))
+    const providerEpisodeByNumber = new Map(providerEpisodes.map((e) => [e.episodeNumber, e]))
+    for (const local of localEpisodeRows) {
+      const live = providerEpisodeByNumber.get(local.episodeNumber)
+      if (!live) continue
+      const patch: Partial<{ runtimeMinutes: number; firstAired: string }> = {}
+      if (live.runtimeMinutes !== null && live.runtimeMinutes !== local.runtimeMinutes) {
+        patch.runtimeMinutes = live.runtimeMinutes
+      }
+      if (live.firstAired !== null && live.firstAired !== local.firstAired) {
+        patch.firstAired = live.firstAired
+      }
+      if (Object.keys(patch).length > 0) {
+        await db.update(episodes).set(patch).where(eq(episodes.id, local.id))
+      }
+    }
+
     // Scoped to the current user in the join condition (not a WHERE
     // clause) so an episode with no plays from this user still gets a row
     // — same reasoning as the droppedShows join in the gallery query
@@ -575,7 +620,9 @@ seasonRoutes.openapi(
         description: 'Watches logged',
         content: { 'application/json': { schema: markShowWatchedResponseSchema } },
       },
-      400: { description: 'watchedAt is in the future' },
+      400: {
+        description: 'watchedAt is in the future, or this season has not aired any episodes yet',
+      },
       404: { description: 'Show not found' },
     },
   }),
@@ -608,6 +655,15 @@ seasonRoutes.openapi(
       seasonNumber,
       user.locale,
     )
+
+    // Same distinction as the show-level route's own "already fully
+    // watched" vs "nothing has aired yet" - see its doc comment.
+    const now = new Date()
+    const hasAired = (e: { firstAired: string | null }) =>
+      e.firstAired !== null && new Date(e.firstAired) <= now
+    if (!resolvedEpisodes.some(hasAired)) {
+      return c.json({ error: 'This season has not aired any episodes yet' }, 400)
+    }
 
     const count = await logMissingWatches(db, user.id, resolvedEpisodes, body)
     return c.json({ count }, 201)

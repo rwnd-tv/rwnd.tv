@@ -85,6 +85,19 @@ describe('plays', () => {
               { status: 200 },
             )
           }
+          // No release_date at all — announced but not yet scheduled.
+          if (url.pathname === '/3/movie/900') {
+            return new Response(JSON.stringify({ id: 900, title: 'No Release Date' }), {
+              status: 200,
+            })
+          }
+          // A future release_date — announced but not yet released.
+          if (url.pathname === '/3/movie/901') {
+            return new Response(
+              JSON.stringify({ id: 901, title: 'Unreleased Movie', release_date: '2099-01-01' }),
+              { status: 200 },
+            )
+          }
           throw new Error(`Unexpected fetch in test: ${url}`)
         }),
       )
@@ -244,6 +257,31 @@ describe('plays', () => {
         body: JSON.stringify({ movie: { source: 'tmdb', externalId: '603' }, watchedAt }),
       })
       expect(res.status).toBe(400)
+    })
+
+    it('rejects logging a watch for a movie with no known release date', async () => {
+      const cookie = await createUserAndCookie()
+
+      const res = await app.request('/api/v1/plays', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', cookie },
+        body: JSON.stringify({ movie: { source: 'tmdb', externalId: '900' } }),
+      })
+      expect(res.status).toBe(400)
+    })
+
+    it('rejects logging a watch for a movie that has not released yet', async () => {
+      const cookie = await createUserAndCookie()
+
+      const res = await app.request('/api/v1/plays', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', cookie },
+        body: JSON.stringify({ movie: { source: 'tmdb', externalId: '901' } }),
+      })
+      expect(res.status).toBe(400)
+
+      const list = await app.request('/api/v1/plays', { headers: { cookie } })
+      expect((await json<ListPlaysResponse>(list)).plays).toHaveLength(0)
     })
 
     it('rejects logging a watch for an episode with no known air date', async () => {

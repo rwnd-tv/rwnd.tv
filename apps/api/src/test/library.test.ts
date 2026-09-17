@@ -964,6 +964,113 @@ describe('library', () => {
       expect((await json<SeasonDetail>(res)).episodes[0]?.hasUnknownWatch).toBe(false)
     })
 
+    it('reconciles a watched episode’s stale local runtime/air date against a corrected live value (regression: 2026-09-11 Severance runtime drift)', async () => {
+      const cookie = await createUserAndCookie()
+      const userId = await meId(cookie)
+      const show = await insertShowWithSeason('2020-01-01')
+      const [episode] = await db
+        .insert(episodes)
+        .values({
+          showId: show.id,
+          seasonNumber: 1,
+          episodeNumber: 1,
+          title: 'Ep 1',
+          runtimeMinutes: 57,
+          firstAired: '2020-01-01',
+        })
+        .returning()
+      if (!episode) throw new Error('failed to insert episode')
+      await db.insert(plays).values({ userId, episodeId: episode.id, watchedAt: new Date() })
+
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (input: string | URL) => {
+          const url = new URL(input)
+          if (url.pathname === '/3/tv/70001/season/1') {
+            return new Response(
+              JSON.stringify({
+                overview: null,
+                episodes: [
+                  {
+                    name: 'Ep 1',
+                    season_number: 1,
+                    episode_number: 1,
+                    air_date: '2020-01-02',
+                    runtime: 59,
+                  },
+                ],
+              }),
+              { status: 200 },
+            )
+          }
+          throw new Error(`Unexpected TMDB fetch in test: ${url}`)
+        }),
+      )
+
+      const res = await app.request(`/api/v1/library/shows/${show.slug}/seasons/1`, {
+        headers: { cookie },
+      })
+      const body = (await json<SeasonDetail>(res)).episodes[0]
+      // Response was always live (unchanged behavior) - the reconciliation
+      // under test is the local row write-back, not this response.
+      expect(body?.runtimeMinutes).toBe(59)
+      expect(body?.firstAired).toBe('2020-01-02')
+
+      const [updated] = await db.select().from(episodes).where(eq(episodes.id, episode.id))
+      expect(updated?.runtimeMinutes).toBe(59)
+      expect(updated?.firstAired).toBe('2020-01-02')
+    })
+
+    it('never overwrites a stored runtime/air date with a live null (protects a cross-provider-backfilled value)', async () => {
+      const cookie = await createUserAndCookie()
+      const userId = await meId(cookie)
+      const show = await insertShowWithSeason('2020-01-01')
+      const [episode] = await db
+        .insert(episodes)
+        .values({
+          showId: show.id,
+          seasonNumber: 1,
+          episodeNumber: 1,
+          title: 'Ep 1',
+          runtimeMinutes: 45,
+          firstAired: '2020-01-01',
+        })
+        .returning()
+      if (!episode) throw new Error('failed to insert episode')
+      await db.insert(plays).values({ userId, episodeId: episode.id, watchedAt: new Date() })
+
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (input: string | URL) => {
+          const url = new URL(input)
+          if (url.pathname === '/3/tv/70001/season/1') {
+            return new Response(
+              JSON.stringify({
+                overview: null,
+                episodes: [
+                  {
+                    name: 'Ep 1',
+                    season_number: 1,
+                    episode_number: 1,
+                    air_date: null,
+                    runtime: null,
+                  },
+                ],
+              }),
+              { status: 200 },
+            )
+          }
+          throw new Error(`Unexpected TMDB fetch in test: ${url}`)
+        }),
+      )
+
+      await app.request(`/api/v1/library/shows/${show.slug}/seasons/1`, { headers: { cookie } })
+
+      const [updated] = await db.select().from(episodes).where(eq(episodes.id, episode.id))
+      expect(updated?.runtimeMinutes).toBe(45)
+      expect(updated?.firstAired).toBe('2020-01-01')
+    })
+
     it('resolves tvdbSeasonId/tvdbEpisodeId via a live TVDB side-lookup, independent of the primary provider', async () => {
       const cookie = await createUserAndCookie()
       const [show] = await db
@@ -1815,7 +1922,13 @@ describe('library', () => {
       const show = await insertShowWithTmdbId('breaking-bad-rate-2')
       const [episode] = await db
         .insert(episodes)
-        .values({ showId: show.id, seasonNumber: 1, episodeNumber: 1, title: 'Pilot' })
+        .values({
+          showId: show.id,
+          seasonNumber: 1,
+          episodeNumber: 1,
+          title: 'Pilot',
+          firstAired: '2008-01-20',
+        })
         .returning()
       if (!episode) throw new Error('failed to insert episode')
       vi.stubGlobal(
@@ -1834,6 +1947,40 @@ describe('library', () => {
         },
       )
       expect(res.status).toBe(200)
+    })
+
+    it('400s for an episode that has not aired yet', async () => {
+      const cookie = await createUserAndCookie()
+      const show = await insertShowWithTmdbId('breaking-bad-rate-unaired')
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (input: string | URL) => {
+          const url = new URL(input)
+          if (url.pathname === `/3/tv/${BREAKING_BAD_SHOW_TMDB_ID}/season/1/episode/1`) {
+            return new Response(
+              JSON.stringify({
+                name: 'Unaired Episode',
+                season_number: 1,
+                episode_number: 1,
+                air_date: '2099-01-01',
+              }),
+              { status: 200 },
+            )
+          }
+          throw new Error(`Unexpected fetch in test: ${url}`)
+        }),
+      )
+
+      const res = await app.request(
+        `/api/v1/library/shows/${show.slug}/seasons/1/episodes/1/rating`,
+        {
+          method: 'PUT',
+          headers: { cookie, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ rating: 8 }),
+        },
+      )
+      expect(res.status).toBe(400)
+      expect(await db.select().from(ratings)).toHaveLength(0)
     })
 
     it('re-rating replaces rather than duplicates', async () => {
@@ -2160,6 +2307,37 @@ describe('library', () => {
       expect(res.status).toBe(404)
     })
 
+    it('400s for a show with zero aired episodes, but allows rating once one season has aired episodes', async () => {
+      const cookie = await createUserAndCookie()
+      const [show] = await db
+        .insert(shows)
+        .values({ title: 'Unaired Show', slug: 'unaired-show' })
+        .returning()
+      if (!show) throw new Error('failed to insert show')
+      await db
+        .insert(seasons)
+        .values({ showId: show.id, seasonNumber: 1, episodeCount: 10, airedEpisodeCount: 0 })
+
+      const blocked = await app.request(`/api/v1/library/shows/${show.slug}/rating`, {
+        method: 'PUT',
+        headers: { cookie, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rating: 8 }),
+      })
+      expect(blocked.status).toBe(400)
+      expect(await db.select().from(ratings)).toHaveLength(0)
+
+      await db
+        .update(seasons)
+        .set({ airedEpisodeCount: 3 })
+        .where(and(eq(seasons.showId, show.id), eq(seasons.seasonNumber, 1)))
+      const allowed = await app.request(`/api/v1/library/shows/${show.slug}/rating`, {
+        method: 'PUT',
+        headers: { cookie, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rating: 8 }),
+      })
+      expect(allowed.status).toBe(200)
+    })
+
     it('clears a rating, and clearing a never-rated show is a harmless no-op', async () => {
       const cookie = await createUserAndCookie()
       const [show] = await db
@@ -2339,6 +2517,40 @@ describe('library', () => {
       expect(
         totalPlays.every((p) => p.watchedAt.toISOString() === '2026-01-01T00:00:00.000Z'),
       ).toBe(true)
+    })
+
+    it('400s for a show with no aired episodes at all', async () => {
+      const cookie = await createUserAndCookie()
+      const [show] = await db
+        .insert(shows)
+        .values({ title: 'Unaired Show', slug: 'unaired-watch-show' })
+        .returning()
+      if (!show) throw new Error('failed to insert show')
+      await db
+        .insert(externalIds)
+        .values({ entityType: 'show', entityId: show.id, source: 'tmdb', externalId: '50002' })
+      await db.insert(seasons).values({ showId: show.id, seasonNumber: 1, episodeCount: 1 })
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (input: string | URL) => {
+          const url = new URL(input)
+          if (url.pathname === '/3/tv/50002/season/1') {
+            return jsonResponse({
+              episodes: [
+                { name: 'Ep 1', season_number: 1, episode_number: 1, air_date: '2099-01-01' },
+              ],
+            })
+          }
+          throw new Error(`Unexpected TMDB fetch in test: ${url}`)
+        }),
+      )
+
+      const res = await app.request(`/api/v1/library/shows/${show.slug}/watched`, {
+        method: 'POST',
+        headers: { cookie, 'Content-Type': 'application/json' },
+      })
+      expect(res.status).toBe(400)
+      expect(await db.select().from(plays)).toHaveLength(0)
     })
 
     it('logs a new watch for every aired episode again when additional is set, even if already watched', async () => {
@@ -2794,6 +3006,33 @@ describe('library', () => {
 
       const playRows = await db.select().from(plays).where(eq(plays.userId, userId))
       expect(playRows).toHaveLength(4)
+    })
+
+    it('400s for a season with no aired episodes at all', async () => {
+      const cookie = await createUserAndCookie()
+      const show = await insertShowWithSeason0And1()
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (input: string | URL) => {
+          const url = new URL(input)
+          if (url.pathname === '/3/tv/60001/season/1') {
+            return jsonResponse({
+              episodes: [
+                { name: 'Ep 1', season_number: 1, episode_number: 1, air_date: '2099-01-01' },
+                { name: 'Ep 2', season_number: 1, episode_number: 2, air_date: '2099-01-08' },
+              ],
+            })
+          }
+          throw new Error(`Unexpected TMDB fetch in test: ${url}`)
+        }),
+      )
+
+      const res = await app.request(`/api/v1/library/shows/${show.slug}/seasons/1/watched`, {
+        method: 'POST',
+        headers: { cookie, 'Content-Type': 'application/json' },
+      })
+      expect(res.status).toBe(400)
+      expect(await db.select().from(plays)).toHaveLength(0)
     })
 
     it('works for specials (season 0), unlike the show-level route', async () => {
@@ -3412,7 +3651,7 @@ describe('library', () => {
       const cookie = await createUserAndCookie()
       const [movie] = await db
         .insert(movies)
-        .values({ title: 'Rated Movie', slug: 'rated-movie' })
+        .values({ title: 'Rated Movie', slug: 'rated-movie', releaseDate: '2020-01-01' })
         .returning()
       if (!movie) throw new Error('failed to insert movie')
 
@@ -3441,7 +3680,7 @@ describe('library', () => {
       const userId = await meId(cookie)
       const [movie] = await db
         .insert(movies)
-        .values({ title: 'Rated Rewatch', slug: 'rated-rewatch' })
+        .values({ title: 'Rated Rewatch', slug: 'rated-rewatch', releaseDate: '2020-01-01' })
         .returning()
       if (!movie) throw new Error('failed to insert movie')
       await db.insert(plays).values([
@@ -3469,7 +3708,7 @@ describe('library', () => {
       const cookie = await createUserAndCookie()
       const [movie] = await db
         .insert(movies)
-        .values({ title: 'Re-rated Movie', slug: 're-rated-movie' })
+        .values({ title: 'Re-rated Movie', slug: 're-rated-movie', releaseDate: '2020-01-01' })
         .returning()
       if (!movie) throw new Error('failed to insert movie')
 
@@ -3498,7 +3737,11 @@ describe('library', () => {
       const cookie = await createUserAndCookie()
       const [movie] = await db
         .insert(movies)
-        .values({ title: 'Clear Rating Movie', slug: 'clear-rating-movie' })
+        .values({
+          title: 'Clear Rating Movie',
+          slug: 'clear-rating-movie',
+          releaseDate: '2020-01-01',
+        })
         .returning()
       if (!movie) throw new Error('failed to insert movie')
 
@@ -3529,6 +3772,35 @@ describe('library', () => {
         body: JSON.stringify({ rating: 5 }),
       })
       expect(res.status).toBe(404)
+    })
+
+    it('400s for a movie with no release date, and for one releasing in the future', async () => {
+      const cookie = await createUserAndCookie()
+      const [noDateMovie] = await db
+        .insert(movies)
+        .values({ title: 'No Release Date', slug: 'no-release-date-movie' })
+        .returning()
+      if (!noDateMovie) throw new Error('failed to insert movie')
+      const [futureMovie] = await db
+        .insert(movies)
+        .values({ title: 'Future Movie', slug: 'future-movie', releaseDate: '2099-01-01' })
+        .returning()
+      if (!futureMovie) throw new Error('failed to insert movie')
+
+      const noDateRes = await app.request(`/api/v1/library/movies/${noDateMovie.slug}/rating`, {
+        method: 'PUT',
+        headers: { cookie, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rating: 8 }),
+      })
+      expect(noDateRes.status).toBe(400)
+
+      const futureRes = await app.request(`/api/v1/library/movies/${futureMovie.slug}/rating`, {
+        method: 'PUT',
+        headers: { cookie, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rating: 8 }),
+      })
+      expect(futureRes.status).toBe(400)
+      expect(await db.select().from(ratings)).toHaveLength(0)
     })
 
     it('rejects an out-of-range rating', async () => {

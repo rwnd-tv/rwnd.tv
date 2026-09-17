@@ -14,6 +14,7 @@ import { episodes, movies, plays, shows } from '@rwnd/db'
 import type { AppEnv } from '../types.js'
 import { episodeDisplayTitle, resolveEpisode, resolveMovie } from '../lib/media.js'
 import { type ConflictingPlay, isOrigin, reconcilePlayDuplicates } from '../lib/plays.js'
+import { localeRegion, resolveReleaseDate } from '../lib/release-date.js'
 
 export const playRoutes = new OpenAPIHono<AppEnv>()
 
@@ -167,7 +168,7 @@ playRoutes.openapi(
       201: { description: 'Play logged', content: { 'application/json': { schema: playSchema } } },
       400: {
         description:
-          'watchedAt is in the future, the episode has not aired yet, or the movie/episode already has an unknown-date watch logged',
+          'watchedAt is in the future, the movie has not released yet, the episode has not aired yet, or the movie/episode already has an unknown-date watch logged',
       },
     },
   }),
@@ -180,6 +181,15 @@ playRoutes.openapi(
 
     if (body.movie) {
       const movie = await resolveMovie(db, provider, body.movie.externalId, user.locale)
+
+      // Same "no unreleased movie" rule as PUT .../rating
+      // (apps/api/src/routes/library/ratings.ts) — region-resolved the same
+      // way the movie detail page displays it, so the server's check agrees
+      // with what the user actually sees.
+      const releaseDate = resolveReleaseDate(movie, localeRegion(user.locale)).date
+      if (releaseDate === null || new Date(releaseDate) > new Date()) {
+        return c.json({ error: 'This movie has not released yet' }, 400)
+      }
 
       // Never guess a watch into the future — the client already clamps
       // its own date pickers to maxWatchedAt (WatchDateDialog.tsx), but

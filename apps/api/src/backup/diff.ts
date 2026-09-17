@@ -118,14 +118,27 @@ function byDateDesc<T>(dateOf: (entry: T) => string): (a: T, b: T) => number {
   return (a, b) => dateOf(b).localeCompare(dateOf(a))
 }
 
-/** The later of a dropped-show entry's two independent timestamps (Trakt's
- * own drop, and this instance's manual one - either, both or neither can be
- * set). Empty string when neither is set, which sorts oldest under
- * `byDateDesc` rather than throwing off the ordering of entries that do
- * have one. */
-function droppedAt(entry: BackupDroppedShow): string {
-  const dates = [entry.traktDroppedAt, entry.manualDroppedAt].filter((d): d is string => d !== null)
-  return dates.length > 0 ? dates.sort().at(-1)! : ''
+/** A dropped-show row's *effective* state - `manualDropped` (an explicit
+ * override, set independently of Trakt) wins whenever it's non-null, else
+ * fall back to `traktDropped`; the same "manualDropped wins" rule as
+ * `effectiveDroppedExpr()`/`effectiveDroppedAtExpr()`
+ * (apps/api/src/lib/dropped.ts) and every other place this table is read
+ * (the shows gallery, ShowDetailPage). Null when the show isn't currently,
+ * effectively dropped at all - notably `manualDropped: false` (a "keep
+ * watching" override that disagrees with Trakt) is *not* dropped, even
+ * though `traktDropped`/`traktDroppedAt` are still sitting there true. This
+ * matters here specifically because `manualDroppedAt` gets re-stamped every
+ * time that override is (re-)applied, even when neither `manualDropped`
+ * itself nor the effective state actually changed - diffing the raw row
+ * (as this used to) would surface that internal timestamp churn as a
+ * spurious drop/undrop pair. */
+function effectiveDrop(
+  entry: BackupDroppedShow,
+): { at: string; reason: 'Trakt' | 'manual' } | null {
+  if (entry.manualDropped !== null) {
+    return entry.manualDropped ? { at: entry.manualDroppedAt!, reason: 'manual' } : null
+  }
+  return entry.traktDropped ? { at: entry.traktDroppedAt!, reason: 'Trakt' } : null
 }
 
 function describeWatch(file: BackupFile, entry: BackupWatch): BackupDiffEntry {
@@ -147,13 +160,15 @@ function describeWatchlistItem(file: BackupFile, entry: BackupWatchlistItem): Ba
 function describeDroppedShow(file: BackupFile, entry: BackupDroppedShow): BackupDiffEntry {
   const show = findByRef<BackupShow>(file.shows, entry.show)
   const title = show?.title ?? 'Unknown show'
-  const reasons = [entry.traktDropped && 'Trakt', entry.manualDropped && 'manual'].filter(Boolean)
-  const when = droppedAt(entry)
+  // Only ever called on an entry that survived computeBackupDiff's
+  // effectiveDrop() filter below, so this is never actually null - the
+  // fallback is just defensive, same spirit as findByRef's.
+  const effective = effectiveDrop(entry)
   return {
-    ...(when ? splitDateTime(when) : { date: '', time: '' }),
+    ...(effective ? splitDateTime(effective.at) : { date: '', time: '' }),
     title,
     episode: null,
-    suffix: reasons.length > 0 ? reasons.join(', ') : null,
+    suffix: effective?.reason ?? null,
   }
 }
 
@@ -197,9 +212,22 @@ export async function computeBackupDiff(
   watchlist.added.sort(byDateDesc((e) => e.listedAt))
   watchlist.removed.sort(byDateDesc((e) => e.listedAt))
 
-  const droppedShows = multisetDiff(current.droppedShows, backup.droppedShows, stringify)
-  droppedShows.added.sort(byDateDesc(droppedAt))
-  droppedShows.removed.sort(byDateDesc(droppedAt))
+  // Filtered to rows that are effectively dropped *first* - a show whose
+  // manual override was refreshed without changing its effective state
+  // (see effectiveDrop()'s doc comment) never enters either list, so it
+  // can't appear as a diff entry at all, matching the activity feed's own
+  // droppedBranch() (apps/api/src/routes/activity.ts) filtering on the same
+  // effective state rather than the raw row. Keyed on the effective
+  // {show, at, reason} rather than the full row, so an irrelevant raw-field
+  // change (e.g. traktDroppedAt updating while a manual override still
+  // wins) doesn't read as a change either.
+  const droppedShows = multisetDiff(
+    current.droppedShows.filter((e) => effectiveDrop(e) !== null),
+    backup.droppedShows.filter((e) => effectiveDrop(e) !== null),
+    (entry) => JSON.stringify({ show: entry.show, ...effectiveDrop(entry) }),
+  )
+  droppedShows.added.sort(byDateDesc((e) => effectiveDrop(e)!.at))
+  droppedShows.removed.sort(byDateDesc((e) => effectiveDrop(e)!.at))
 
   return {
     watchHistory: {

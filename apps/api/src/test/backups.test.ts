@@ -419,6 +419,128 @@ describe('backups', () => {
     ])
   })
 
+  it('ignores a dropped-show row whose manual override was refreshed without changing its effective state (regression: manualDropped: false churn read as a spurious drop/undrop pair)', async () => {
+    // manualDropped: false is an active "keep watching" override (Trakt
+    // still thinks it's dropped, the user disagrees) - it gets re-stamped
+    // with a fresh manualDroppedAt every time that override is (re-)applied,
+    // even when it was already false. Diffing the raw row treated that as
+    // the whole row changing (one full entry removed, a new one added),
+    // even though the show's *effective* dropped state (not dropped, the
+    // whole time) never changed at all.
+    const cookie = await createUserAndCookie('drop-noop@example.com')
+    const userId = await meId(cookie)
+    const { show } = await seedMetadata(db)
+
+    await db.insert(droppedShows).values({
+      userId,
+      showId: show.id,
+      traktDropped: true,
+      traktDroppedAt: new Date('2026-06-25T22:00:00.000Z'),
+      manualDropped: false,
+      manualDroppedAt: new Date('2026-08-21T20:55:00.000Z'),
+    })
+
+    const createRes = await app.request('/api/v1/backups', {
+      method: 'POST',
+      headers: { cookie, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ description: 'Before the override refreshes' }),
+    })
+    const backup = await json<BackupSummary>(createRes)
+
+    // The override is re-applied - same manualDropped: false, only the
+    // timestamp moves.
+    await db
+      .update(droppedShows)
+      .set({ manualDroppedAt: new Date('2026-09-17T14:00:00.000Z') })
+      .where(eq(droppedShows.userId, userId))
+
+    const diffRes = await app.request(`/api/v1/backups/${backup.id}/diff`, {
+      headers: { cookie },
+    })
+    expect(await json<DiffBackupResponse>(diffRes)).toEqual({
+      diff: {
+        watchHistory: { added: 0, removed: 0, addedItems: [], removedItems: [] },
+        ratings: { added: 0, removed: 0, addedItems: [], removedItems: [] },
+        watchlist: { added: 0, removed: 0, addedItems: [], removedItems: [] },
+        droppedShows: { added: 0, removed: 0, addedItems: [], removedItems: [] },
+      },
+    })
+  })
+
+  it('records a genuine drop as added and a genuine undrop as removed, by effective state', async () => {
+    const cookie = await createUserAndCookie('drop-real@example.com')
+    const userId = await meId(cookie)
+    const { show } = await seedMetadata(db)
+
+    const [show2] = await db.insert(shows).values({ title: 'Silo', slug: 'silo' }).returning()
+    if (!show2) throw new Error('failed to insert show')
+    await db
+      .insert(externalIds)
+      .values({ entityType: 'show', entityId: show2.id, source: 'tmdb', externalId: '2861' })
+
+    // At backup time: Breaking Bad isn't dropped at all; Silo is dropped via
+    // a manual override (Trakt has no opinion on it).
+    await db.insert(droppedShows).values({
+      userId,
+      showId: show2.id,
+      traktDropped: null,
+      traktDroppedAt: null,
+      manualDropped: true,
+      manualDroppedAt: new Date('2026-02-01T00:00:00.000Z'),
+    })
+
+    const createRes = await app.request('/api/v1/backups', {
+      method: 'POST',
+      headers: { cookie, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ description: 'Before drop changes' }),
+    })
+    const backup = await json<BackupSummary>(createRes)
+
+    // Since the backup: Breaking Bad became dropped via Trakt; Silo was
+    // manually undropped (Trakt still disagrees, but the override clears
+    // back to null once Trakt itself no longer says it's dropped - see
+    // undropShow's doc comment, apps/api/src/lib/dropped.ts).
+    await db.insert(droppedShows).values({
+      userId,
+      showId: show.id,
+      traktDropped: true,
+      traktDroppedAt: new Date('2026-03-01T00:00:00.000Z'),
+      manualDropped: null,
+      manualDroppedAt: null,
+    })
+    await db
+      .update(droppedShows)
+      .set({ manualDropped: null, manualDroppedAt: null })
+      .where(eq(droppedShows.showId, show2.id))
+
+    const diffRes = await app.request(`/api/v1/backups/${backup.id}/diff`, {
+      headers: { cookie },
+    })
+    expect(await json<DiffBackupResponse>(diffRes)).toEqual({
+      diff: {
+        watchHistory: { added: 0, removed: 0, addedItems: [], removedItems: [] },
+        ratings: { added: 0, removed: 0, addedItems: [], removedItems: [] },
+        watchlist: { added: 0, removed: 0, addedItems: [], removedItems: [] },
+        droppedShows: {
+          added: 1,
+          removed: 1,
+          addedItems: [
+            {
+              date: '2026-03-01',
+              time: '00:00',
+              title: 'Breaking Bad',
+              episode: null,
+              suffix: 'Trakt',
+            },
+          ],
+          removedItems: [
+            { date: '2026-02-01', time: '00:00', title: 'Silo', episode: null, suffix: 'manual' },
+          ],
+        },
+      },
+    })
+  })
+
   it('represents a TVDB-only show in a backup and its diff (regression: a show with no tmdb id showed no added/removed)', async () => {
     // Before build.ts learned to pick *any* configured provider's id
     // (pickRefreshTargets) instead of always querying for `source: 'tmdb'`,

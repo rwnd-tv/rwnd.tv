@@ -505,38 +505,6 @@ Format:
       follow-on to the manual "back up now" button (shipped 2026-09-17,
       see `docs/TODO_ARCHIVE.md`).
 
-- [ ] **Show what actually changed in the backup Diff dialog** (2026-09-06 added; M5)
-
-      Settings > Database panel > Backups > the Diff button
-      (`DatabasePanel.tsx`, the `diffTarget` dialog around line 417)
-      currently only shows a per-category added/removed count (e.g.
-      "3 added, 1 removed") via `settings.database.backup.diffLine`. Add
-      an expandable section below the category list and above the Close
-      button, shown only when at least one category actually has a
-      nonzero added/removed count, that lists the specific items added
-      and/or removed.
-
-      This needs API work first, not just a UI change: `computeBackupDiff`
-      (`apps/api/src/backup/diff.ts`) currently reduces each category to a
-      `{ added, removed }` count via `multisetDiff`, comparing entries as
-      opaque `JSON.stringify`'d strings and discarding which specific
-      entries they were. Its own doc comment notes this was a deliberate
-      choice ("not a third 'changed' bucket the UI doesn't ask for") back
-      when the UI only needed counts; showing the actual list of
-      added/removed items means `BackupDiff`
-      (`packages/shared/src/schemas/backups.ts`) needs to carry enough
-      per-entry identifying detail (title, and whatever disambiguates
-      duplicates, e.g. watched date for `watchHistory`) alongside the
-      counts, and `computeBackupDiff` needs to keep the unmatched entries
-      themselves rather than only tallying them.
-
-      A changed rating/note still reads as "old entry removed, new one
-      added" under this model, same as today, not a separate "changed"
-      case, so both entries would show up in their respective added/
-      removed lists rather than paired together; worth confirming that's
-      clear enough in the UI once real entries (not just counts) are on
-      screen.
-
 - [ ] **Investigate: two database backups being written per day, not one** (2026-09-16 added, root-caused 2026-09-16, fixed and deployed to dev 2026-09-16, pending multi-day verification; M5)
 
       James, 2026-09-16: seeing two backup dumps land per calendar day

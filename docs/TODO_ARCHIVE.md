@@ -3964,6 +3964,39 @@ DATABASE` ×2) — zero residue.\
       `selectDumpsToKeep` cases were already on distinct UTC days and were
       unaffected.
 
+- [x] **Show what actually changed in the backup Diff dialog**
+      (2026-09-06 added, done 2026-09-17)
+
+      The per-user JSON backup/restore feature (`BACKUP_DIR`, Settings >
+      Database panel), not the whole-database `pg_dump` feature the rest of
+      this section covers. Its Diff dialog previously showed only a
+      per-category count ("1 added, 1 removed"); `computeBackupDiff`
+      (`apps/api/src/backup/diff.ts`) already knew exactly which entries
+      changed via `multisetDiff`'s internal multiset matching but discarded
+      the entries themselves, keeping only counts.
+
+      `multisetDiff` now returns the surviving entry objects instead of
+      just counts (same matching logic, a queue per key instead of a
+      count per key), and `computeBackupDiff` describes each one as a
+      one-line title - movie/show(+episode) name resolved against the
+      relevant file's own `movies`/`shows` arrays (the `current` snapshot's
+      for an added entry, the loaded backup's for a removed one), plus
+      whatever disambiguates duplicates per category: watch date for
+      watch history, rating value for ratings, list name for watchlist
+      items, which of Trakt/manual for dropped shows. `BackupDiff`
+      (`packages/shared/src/schemas/backups.ts`) gained `addedTitles`/
+      `removedTitles` string arrays alongside the existing counts.
+
+      `DatabasePanel.tsx`'s Diff dialog gained one expandable `<details>`
+      section (the plain `<details>`/`<summary>` pattern already used for
+      this exact kind of inline list elsewhere, e.g. `UserBulkActions.tsx`,
+      not `CollapsiblePanel` - a whole-panel Card shell, wrong fit inside a
+      `Dialog`), shown only when at least one category actually changed,
+      listing only the categories that did. New `DatabasePanel.test.tsx`
+      (the component had no test coverage at all before this, scoped
+      narrowly to the diff dialog) and a new `apps/api/src/backup/
+      diff.test.ts` for `multisetDiff`'s matching logic directly.
+
 ## Self-hosting & deployment
 
 - [x] **`docker-compose.yml` never passes through `TVDB_API_KEY`/`TVDB_PIN`/`ENVIRONMENT_LABEL`** (2026-08-26 added, done 2026-08-26) — M3\

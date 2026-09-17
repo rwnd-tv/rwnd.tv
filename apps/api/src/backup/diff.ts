@@ -92,7 +92,7 @@ function describeMediaRef(
   const episodeTitle = show.episodes.find(
     (e) => e.seasonNumber === ref.season && e.episodeNumber === ref.episode,
   )?.title
-  return episodeTitle ? `${show.title} ${label} — ${episodeTitle}` : `${show.title} ${label}`
+  return episodeTitle ? `${show.title} ${label}: ${episodeTitle}` : `${show.title} ${label}`
 }
 
 /** `2026-01-05`, the local convention (see database-backup.ts's UTC-day-key

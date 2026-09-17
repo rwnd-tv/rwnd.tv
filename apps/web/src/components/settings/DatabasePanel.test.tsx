@@ -97,7 +97,7 @@ describe('DatabasePanel diff dialog', () => {
       watchHistory: {
         added: 1,
         removed: 1,
-        addedTitles: ['Breaking Bad S01E01 — Pilot · watched 2026-01-05'],
+        addedTitles: ['Breaking Bad S01E01: Pilot · watched 2026-01-05'],
         removedTitles: ['The Matrix (1999) · watched 2026-01-01'],
       },
       ratings: EMPTY_CATEGORY,
@@ -108,7 +108,7 @@ describe('DatabasePanel diff dialog', () => {
     await user.click(await screen.findByRole('button', { name: 'Diff' }))
 
     expect(await screen.findByText('Show what changed')).toBeInTheDocument()
-    expect(screen.getByText('Breaking Bad S01E01 — Pilot · watched 2026-01-05')).toBeInTheDocument()
+    expect(screen.getByText('Breaking Bad S01E01: Pilot · watched 2026-01-05')).toBeInTheDocument()
     expect(screen.getByText('The Matrix (1999) · watched 2026-01-01')).toBeInTheDocument()
   })
 })

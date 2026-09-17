@@ -12,7 +12,85 @@ import { Field } from '../ui/Field.js'
 import { Spinner } from '../ui/Spinner.js'
 import { usePanelOpen } from '../../lib/use-panel-open.js'
 
+// Same path data as ActivityTile.tsx's KIND_ICONS (the History page's own
+// per-kind markers) — kept as its own small copy rather than a shared
+// import, matching this codebase's existing one-icon-per-file precedent
+// (see e.g. the CheckIcon duplicated across MovieDetailPage.tsx and
+// friends) for a icon this specific to one feature's own list.
+function EyeIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width={14}
+      height={14}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      aria-hidden="true"
+    >
+      <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  )
+}
+
+function StarIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width={14}
+      height={14}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      aria-hidden="true"
+    >
+      <path d="M12 2l2.9 6.6 7.1.6-5.4 4.8 1.7 7-6.3-3.9-6.3 3.9 1.7-7-5.4-4.8 7.1-.6L12 2Z" />
+    </svg>
+  )
+}
+
+function BookmarkIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width={14}
+      height={14}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      aria-hidden="true"
+    >
+      <path d="M6 3h12v18l-6-4-6 4V3Z" />
+    </svg>
+  )
+}
+
+function DroppedIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width={14}
+      height={14}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      aria-hidden="true"
+    >
+      <circle cx="12" cy="12" r="9" />
+      <path d="M8 8l8 8M16 8l-8 8" />
+    </svg>
+  )
+}
+
 type Category = 'watchHistory' | 'ratings' | 'watchlist' | 'droppedShows'
+
+const CATEGORY_ICONS: Record<Category, () => React.JSX.Element> = {
+  watchHistory: EyeIcon,
+  ratings: StarIcon,
+  watchlist: BookmarkIcon,
+  droppedShows: DroppedIcon,
+}
 
 const EMPTY_SELECTION: Record<Category, boolean> = {
   watchHistory: false,
@@ -427,6 +505,7 @@ export function DatabasePanel() {
                   {categories.map(({ key, label }) => {
                     const { addedTitles, removedTitles } = diffData.diff[key]
                     if (addedTitles.length === 0 && removedTitles.length === 0) return null
+                    const Icon = CATEGORY_ICONS[key]
                     return (
                       <div key={key}>
                         <p className="font-medium text-[var(--color-fg)]">{label}</p>
@@ -435,9 +514,12 @@ export function DatabasePanel() {
                             <p className="text-xs uppercase">
                               {t('settings.database.backup.diffAdded')}
                             </p>
-                            <ul className="flex flex-col gap-0.5 pl-4">
+                            <ul className="flex flex-col gap-1">
                               {addedTitles.map((title, i) => (
-                                <li key={i}>{title}</li>
+                                <li key={i} className="flex items-start gap-1.5">
+                                  <Icon />
+                                  <span>{title}</span>
+                                </li>
                               ))}
                             </ul>
                           </div>
@@ -447,9 +529,12 @@ export function DatabasePanel() {
                             <p className="text-xs uppercase">
                               {t('settings.database.backup.diffRemoved')}
                             </p>
-                            <ul className="flex flex-col gap-0.5 pl-4">
+                            <ul className="flex flex-col gap-1">
                               {removedTitles.map((title, i) => (
-                                <li key={i}>{title}</li>
+                                <li key={i} className="flex items-start gap-1.5">
+                                  <Icon />
+                                  <span>{title}</span>
+                                </li>
                               ))}
                             </ul>
                           </div>

@@ -2490,6 +2490,45 @@ episodes.imdb_checked_at IS NOT NULL`, run against dev (0 rows — nothing
       touched). Full local suite green (849 tests, 61 files) before and
       after every round of fixes.
 
+- [x] **Season/episode pages can drift from the runtime (and other fields) a play was actually logged against** (2026-09-11 23:50 added, done 2026-09-17)
+
+      `routes/library/seasons.ts` fetches episode metadata live from the
+      provider on every request rather than from the local `episodes`
+      table, by design - there's no local row for an unwatched episode at
+      all. But once a local row *does* exist (a play, a bulk "Watched", or
+      a Trakt import created one), the route never reconciled it against
+      the live value it just fetched, so the two could silently drift
+      apart as a provider corrected its own data. Found live 2026-09-11:
+      TMDB's Severance S1E1 runtime changed from 57 to 59 minutes; the
+      page showed 59, the stored `episodes.runtime_minutes` stayed 57, and
+      `POST /plays`'s runtime-aware `maxWatchedAt` bound then wrongly
+      rejected an otherwise-legitimate "now watching" submission.
+
+      Fixed by reconciling `runtimeMinutes`/`firstAired` back into the
+      local row whenever the live fetch disagrees - only when the live
+      value is non-null and different, so a live `null` never overwrites a
+      real stored value (the same protection `resolveSeason`'s own
+      fill-only runtime upsert gives a cross-provider-backfilled value,
+      but this *does* correct an already-set-but-stale value, which that
+      fill-only policy never would). `title`/`overview` are deliberately
+      left alone (locale-dependent, same judgment call `resolveSeason`
+      already made). The original TODO's "likely direction" suggested
+      reusing `runtime_checked_at` for this - investigated and dropped:
+      that column has a narrower, pre-existing meaning (marks episodes the
+      cross-provider runtime *backfill job* already tried and gave up on),
+      and writing to it here would have silently hidden reconciled
+      episodes from that job's own candidate query forever. No column is
+      touched for "last reconciled" at all - unlike the IMDb id lookup's
+      30-day recheck guard, there's no rate-limiting need since the
+      provider call already happens on every page load regardless.
+      Flagged `resolveSeason`'s own fill-only-only policy as a separate,
+      not-taken-here follow-up (see Metadata & matching in TODO.md).
+
+      Two new tests in `apps/api/src/test/library.test.ts` cover the
+      reconciliation and the never-overwrite-with-null guard directly;
+      full `apps/api` suite (901+ tests) green; confirmed live on
+      dev.rwnd.tv.
+
 ## Webhooks & scrobbling
 
 - [x] **Plex webhook ingestion** (2026-08-23 15:30 added, done 2026-08-24) — M2\
@@ -4257,6 +4296,43 @@ DATABASE` ×2) — zero residue.\
       exercised. `pnpm lint`/`format:check`/`typecheck` clean, full
       `apps/web` test suite (109 tests) run.
 
+- [x] **Don't allow rating anything that hasn't aired/released yet** (2026-09-06 added, done 2026-09-17)
+
+      The 5-star `RatingPicker` used to render and work regardless of
+      air/release date. Now hidden entirely (per James: not disabled with
+      an explanation, despite that being the usual house style for a
+      blocked control - a star picker for something that can't be rated at
+      all has no plausible next click) for an unaired episode
+      (`EpisodeDetailPage.tsx`, `EpisodeCard.tsx`, reusing
+      `useEpisodeWatchActions`' existing `notAiredYet`), an unreleased
+      movie (`MovieDetailPage.tsx`, new `notReleasedYet`), and a show with
+      zero aired episodes (`ShowDetailPage.tsx`; James: block on
+      `airedEpisodes === 0` specifically, treating `null` - not yet cached
+      by the metadata refresher - as *not* blocked, so an uncached show
+      doesn't lose its rating control).
+
+      Enforced server-side too, all three PUT routes in
+      `apps/api/src/routes/library/ratings.ts`: the episode route widens
+      `resolveEpisode`'s narrowed local type to check the `firstAired` it
+      already fetches; the movie route computes the region-resolved
+      release date the same way the movie detail page displays it
+      (`resolveReleaseDate`/`localeRegion`); the show route adds the same
+      `airedEpisodeCount` aggregate query the detail route already builds.
+      All three 400 with a plain-sentence error on failure.
+
+      `use-episode-rating-actions.ts`'s old comment ("no aired-date
+      guard... rating is independent of watched status") was about
+      decoupling from the watched toggle specifically, not a decision that
+      unaired content should be ratable - reworded rather than reversed.
+
+      This work directly led to a follow-up request to apply the same
+      "hidden, not disabled" treatment to the show/season/episode/movie
+      *watched* controls too (block marking anything watched before it
+      airs/releases) - see the Sensible defaults section below, done the
+      same day. Live testing of that follow-up also surfaced a related,
+      separate bug in the show page's own fully-watched detection, logged
+      in TODO.md rather than fixed here.
+
 ## Security
 
 - [x] **Full security review before M3 closes** (2026-08-26 added, done 2026-08-29) — M3\
@@ -4797,3 +4873,41 @@ up -d` pull-based quick start test (no local Docker CLI reachable
       oversight being corrected — the page's shape changed under it (two
       more panels arrived) and the "still want this changed?" gut-check the
       original TODO item asked for came back yes.
+
+- [x] **Default History's Filters > Type to "Watched" only** (2026-09-06 added, done 2026-09-17)
+
+      `HistoryPage.tsx`'s Filters panel used to default to all four
+      activity kinds on a first visit or cleared cookie. The fallback
+      logic had since moved into the shared `use-kind-filter-cookie.ts`
+      (also backing `CalendarPage.tsx`'s own filter, which needed to keep
+      its existing all-on default), so it gained an optional third
+      `defaultKinds` parameter (falling back to the existing "every known
+      kind" behaviour when omitted) rather than hard-coding a narrower
+      default into the shared hook itself.
+      `use-activity-kind-filter-cookie.ts` now passes `['watch']` as that
+      argument; `CalendarPage.tsx`'s direct call to the generic hook is
+      untouched. The other three kinds (Rated, Watchlist, Dropped) stay
+      one click away in the Filters panel, confirmed live on dev.rwnd.tv.
+
+- [x] **Default the TV Shows and Films calendar feeds to "Include every show/film I've ever watched" only** (2026-09-06 added, done 2026-09-17)
+
+      Both feeds' `futureOnly`/`includeAllWatched` checkboxes come
+      straight from the `calendar_feeds` table's own column defaults (the
+      create route inserts a new feed row without specifying either
+      field) - confirmed sufficient to flip both column defaults once in
+      `schema.ts` (`futureOnly` to `false`, `includeAllWatched` to `true`)
+      rather than branching per feed type, matching the two items'
+      shared-column relationship the original TODO already called out. A
+      generated migration (`0045_optimal_ezekiel.sql`) carries the two
+      `ALTER COLUMN ... SET DEFAULT` statements - new-row-only, no
+      backfill, so an already-existing feed keeps whatever it was already
+      set to.
+
+      Updated the i18n copy that stated the old defaults verbatim (both
+      locales) and the existing tests that asserted the old defaults or
+      relied on the old default while testing something else
+      (`apps/api/src/test/calendar.test.ts`) - several of those tests
+      actually got simpler once "everything ever watched" became the
+      default being tested against, rather than something to explicitly
+      opt into first. Confirmed live on dev.rwnd.tv: both feeds show the
+      new defaults and the updated description text.

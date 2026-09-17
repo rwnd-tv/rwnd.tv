@@ -3977,25 +3977,37 @@ DATABASE` ×2) — zero residue.\
 
       `multisetDiff` now returns the surviving entry objects instead of
       just counts (same matching logic, a queue per key instead of a
-      count per key), and `computeBackupDiff` describes each one as a
-      one-line title - movie/show(+episode) name resolved against the
-      relevant file's own `movies`/`shows` arrays (the `current` snapshot's
-      for an added entry, the loaded backup's for a removed one), plus
-      whatever disambiguates duplicates per category: watch date for
-      watch history, rating value for ratings, list name for watchlist
-      items, which of Trakt/manual for dropped shows. `BackupDiff`
-      (`packages/shared/src/schemas/backups.ts`) gained `addedTitles`/
-      `removedTitles` string arrays alongside the existing counts.
+      count per key). Each category's added/removed entries are described
+      as structured `{date, time, title, episode, suffix}` objects
+      (`BackupDiff` in `packages/shared/src/schemas/backups.ts` gained
+      `addedItems`/`removedItems`) rather than one pre-formatted string, so
+      the frontend can truncate a long title with an ellipsis without ever
+      hiding the season/episode number that actually disambiguates it.
 
-      `DatabasePanel.tsx`'s Diff dialog gained one expandable `<details>`
-      section (the plain `<details>`/`<summary>` pattern already used for
-      this exact kind of inline list elsewhere, e.g. `UserBulkActions.tsx`,
-      not `CollapsiblePanel` - a whole-panel Card shell, wrong fit inside a
-      `Dialog`), shown only when at least one category actually changed,
-      listing only the categories that did. New `DatabasePanel.test.tsx`
-      (the component had no test coverage at all before this, scoped
-      narrowly to the diff dialog) and a new `apps/api/src/backup/
-      diff.test.ts` for `multisetDiff`'s matching logic directly.
+      `DatabasePanel.tsx`'s Diff dialog went through several follow-up
+      rounds after the initial per-category `<details>` list: a
+      per-category icon (duplicated from `ActivityTile.tsx`'s
+      `KIND_ICONS`), dropping episode titles (`S01E01` alone is enough to
+      identify one), then a full redesign merging every category's
+      added/removed entries into one chronologically-sorted,
+      independently-scrollable list, each row led by a colored `+`/`-` and
+      its category icon, so the dialog's title, summary counts, and Close
+      button stay visible regardless of how long the list gets. New
+      `DatabasePanel.test.tsx` (the component had no test coverage at all
+      before this) and a new `apps/api/src/backup/diff.test.ts` for
+      `multisetDiff`'s matching logic directly.
+
+      Live verification on dev.rwnd.tv after the redesign surfaced a real,
+      separate bug: the dropped-shows category diffed the raw
+      `dropped_shows` row rather than its *effective* dropped state
+      (`manualDropped ?? traktDropped ?? false`), so a manual "keep
+      watching" override being reapplied - re-stamping its own timestamp
+      with no actual change to whether the show was dropped - showed up as
+      a spurious drop/undrop pair with a misleading Trakt-drop-looking
+      date. Fixed by filtering both sides to effectively-dropped rows and
+      keying/describing each entry by that effective state instead of the
+      raw row, matching the same rule the activity feed's `droppedBranch()`
+      already used.
 
 ## Self-hosting & deployment
 

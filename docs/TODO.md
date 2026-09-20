@@ -929,3 +929,32 @@ source of truth for scope; this is just so a TODO listing is complete.
       messaging that assumes this is *the* rwnd.tv project) versus
       genuinely swappable per instance.
 
+- [ ] **Consider federation (ActivityPub/AT Protocol) for cross-instance social features** (2026-09-20 added; Not yet scheduled)
+
+      Surfaced from an r/TraktRejects thread ("Self-hosted federated
+      alternatives?",
+      reddit.com/r/TraktRejects/comments/1wldavj/selfhosted_federated_alternatives)
+      asking whether any self-hosted Trakt alternative also federates, so
+      reviews/ratings/lists could be shared across independently-run
+      instances rather than staying siloed to each instance's own users.
+      rwnd.tv already covers the per-instance social basics (lists,
+      ratings) but has no cross-instance story, the same gap the OP called
+      out in every self-hosted option they'd tried.
+
+      Two projects came up in the thread as prior art, both built on the
+      AT Protocol (the protocol behind Bluesky) rather than ActivityPub:
+      Popfeed.social and Opnshelf.xyz, both described by a commenter (who
+      is themselves building on the same protocol) as MVP-stage. A
+      separate commenter mentioned building their own scrobbling-focused
+      alternative, "Scrob." The OP specifically noted neither Popfeed nor
+      Opnshelf mentions scrobbling through media servers, which is exactly
+      rwnd.tv's core strength already shipped (the multi-user-aware
+      Plex/Jellyfin/Emby/Tautulli webhook ingestion work, see
+      `docs/TODO_ARCHIVE.md`).
+
+      No decision made here, just capturing the idea and the competitive
+      landscape context: worth a deliberate look at ActivityPub vs. AT
+      Protocol tradeoffs if/when federation is seriously considered, and
+      worth keeping an eye on how Popfeed/Opnshelf/Scrob develop given the
+      overlap.
+

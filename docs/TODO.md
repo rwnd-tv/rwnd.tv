@@ -105,6 +105,161 @@ Format:
       "Mobile-friendly PWA installability" roadmap item below, which is
       about add-to-home-screen support, not layout quality.
 
+      **Audit pass done 2026-09-20**: walked every distinct page template
+      against dev.rwnd.tv, logged in, at the narrowest viewport this
+      environment's browser automation could actually reach (a hard
+      resize floor around 501px wide rather than a true 375px phone,
+      still narrow enough to trigger the app's only real breakpoint,
+      `sm:` at 640px, so anything flagged here is a floor on the real
+      severity, not a ceiling). Findings logged as their own items below
+      rather than folded into this one, since each needs its own fix.
+      This item itself stays open until those are actually fixed, not
+      just found.
+
+- [ ] **Mobile sidebar overlay opens by default, covering the page, on a
+      phone-width first visit** (2026-09-20 added; M5)
+
+      `Layout.tsx`'s `collapsed` state reads `sidebar-collapsed` from a
+      cookie, defaulting to `false` (expanded) when the cookie is unset,
+      which is true for any first-time visitor. `Sidebar.tsx`'s expanded
+      state renders as a `fixed … z-30` overlay below the `sm` (640px)
+      breakpoint. Confirmed live with the cookie genuinely absent: a
+      brand new phone visitor lands with the sidebar overlay open,
+      covering roughly half the page (more at a true 375px width than
+      the ~501px this pass could test at), with no indication anything
+      is behind it besides the dimmed edge. `closeSidebarIfMobile()`
+      already exists and correctly auto-closes the sidebar after a
+      nav-link click below the mobile breakpoint; it just never runs on
+      initial mount. Fix direction: run the same check (or an equivalent
+      `matchMedia` read) once when `Layout.tsx` first mounts with no
+      cookie present, not only after a click.
+
+- [ ] **Icon-only touch targets across filter/watchlist controls are
+      well under the usual ~44px minimum, several only 4px apart**
+      (2026-09-20 added; M5)
+
+      `GenreFilterPanel.tsx`'s include/exclude buttons
+      (`GenreModeButton`): a 16x16 `PlusIcon`/`MinusIcon` inside `p-1`
+      padding is a 24x24px tap target, with the two buttons `gap-1`
+      (4px) apart. Confirmed by reading the component's own classes, not
+      just visually. The same plus/minus icon-button pattern is reused
+      by `StatusFilterPanel.tsx` and the unrated/unknown toggles in
+      `MyRatingFilterPanel.tsx`/`WatchedYearFilterPanel.tsx` (per their
+      own TODO_ARCHIVE.md entries, which describe them as sharing this
+      exact UI), and the pin/remove icon buttons on
+      `WatchlistDetailPage.tsx`'s poster tiles use the same `p-1` sizing
+      around a 14x14 icon, smaller still. None of these are unusable,
+      but all are meaningfully below Apple's/WCAG's commonly cited 44x44
+      guidance for a touch target, on controls that sit right next to
+      each other. Fix direction: a shared minimum hit-area (e.g. `p-2`
+      instead of `p-1`, or an invisible padding expansion via
+      `::before`) on whichever base icon-button component these end up
+      sharing, rather than a one-off fix per file.
+
+- [ ] **Show detail page's action row doesn't wrap and clips off-screen
+      at phone width** (2026-09-20 added; M5)
+
+      `ShowDetailPage.tsx`'s action row (Watched, `+`, Drop, Watchlist,
+      sort-order icon, refresh icon; six controls in a plain `flex
+      gap-2`, no `flex-wrap`) overflows its container at phone width.
+      Confirmed live and by measuring the DOM: at a ~501px viewport (the
+      narrowest this pass could reach) the refresh button's right edge
+      sits past the viewport edge, visibly clipped, and the whole page
+      picks up an unwanted horizontal scrollbar as a result; a true
+      375px phone would clip further. `SeasonDetailPage.tsx` (three
+      controls, no Drop), `MovieDetailPage.tsx` and `EpisodeDetailPage.tsx`
+      (both missing Drop too) all share the identical non-wrapping `flex
+      gap-2` shape but happened to fit at the width tested here, purely
+      because they have one or two fewer buttons: the same fix belongs
+      on whichever shared pattern these four rows follow, not just
+      `ShowDetailPage.tsx`, since a longer localized button label could
+      push any of them over the same edge. Fix direction: `flex-wrap` at
+      minimum, or a two-row layout (primary action, then a secondary
+      row of icon-only controls) below `sm`.
+
+- [ ] **Calendar's Month view is unreadable at phone width**
+      (2026-09-20 added; M5)
+
+      `CalendarMonthGrid.tsx` renders a `table-fixed` 7-column grid
+      regardless of viewport width. Confirmed live: at a ~501px
+      viewport each day column is roughly 68px wide (an actual 375px
+      phone would be closer to 50px), so every event title truncates to
+      4-5 characters ("Saga…", "Smok…", "Kenji…") and the grid is
+      effectively unreadable, let alone tappable. The single worst,
+      clearest finding of this pass. `CalendarAgenda.tsx` (the
+      day-grouped list view) has no such problem and already reads
+      comfortably at this width, so this isn't blocking; James may want
+      to default new mobile visitors to Agenda, or the fix is a
+      genuinely different Month layout below `sm` (a vertical
+      day-by-day list rather than a grid, or a compact grid that shows
+      only a dot/count per day and opens a day's events in a sheet on
+      tap) rather than a tweak to the current table.
+
+- [ ] **Admin Users list hides role/verified/MFA status entirely below
+      640px, with no mobile alternative** (2026-09-20 added; M5)
+
+      `UserRow.tsx`'s right-hand metadata column (role badge, verified,
+      MFA status) is `hidden … sm:flex`, so it disappears completely
+      below the `sm` breakpoint rather than reflowing anywhere else.
+      Confirmed live: at phone width each row shows only avatar, name,
+      and email, nothing else, until an admin taps into the per-user
+      detail page. Not broken (the detail page still has everything),
+      but it's a real loss of the at-a-glance view the desktop layout
+      gives an admin scanning for, say, unverified accounts. Fix
+      direction: a compact inline badge or two next to the name instead
+      of hiding the column outright, rather than a straight `hidden`.
+
+- [ ] **Sticky toolbars wrap to several rows at phone width, eating a
+      large share of the viewport** (2026-09-20 added; M5)
+
+      Both `LibraryControls.tsx`'s sticky bar (Shows/Films/History,
+      shipped 2026-09-20, see TODO_ARCHIVE.md) and `CalendarPage.tsx`'s
+      own sticky toolbar rely on `flex-wrap` to avoid overflowing at
+      narrow widths, and both do avoid it: confirmed live, nothing
+      clips or overlaps. But Calendar's Month view wraps its toolbar
+      (view toggle, kind filters, month navigator) to four rows, which
+      combined with the sticky `top-16` offset can eat a large fraction
+      of a phone screen's height before any actual content is visible.
+      Lower priority than the items above since nothing is broken, just
+      cramped: worth a more compact stacked mobile layout for these
+      toolbars specifically (e.g. the month navigator and kind filters
+      sharing a row, or the view toggle moving inline with the page
+      title) rather than leaving `flex-wrap` to fall back to one row
+      per group.
+
+- [ ] **`WatchDateDialog`'s side-by-side date and time fields are tight
+      enough at true phone width to need real-device confirmation**
+      (2026-09-20 added; M5)
+
+      `WatchDateDialog.tsx`'s "Other date" option shows a native
+      `type="date"` field and a native `type="time"` field side by side
+      in a `flex gap-3` row, inside `Dialog.tsx`'s `w-[min(90vw,28rem)]`
+      shell: at a true 375px viewport that's roughly a 289px content
+      box after padding. Rendered cleanly with comfortable margin at
+      the ~501px width this pass could reach, so not a confirmed bug,
+      but the two native inputs measured close enough to that 289px
+      budget that it's worth checking on an actual phone rather than
+      assuming it holds: native date/time picker widths vary by
+      browser/OS and can render wider on mobile Safari than desktop
+      Chrome.
+
+- [ ] **`LandingPage.tsx`'s hardcoded `min-w-[320px]` row (and its other
+      hardcoded-px styling) not live-verified this pass** (2026-09-20
+      added; M5)
+
+      Flagged by a code survey (not this pass's live walkthrough, since
+      checking it would have meant logging out of the account used for
+      every other page in this audit): a `flex` row around line 484
+      with `min-w-[320px] flex-1` on one of its children, the most
+      likely genuine horizontal-scroll trigger in the app, on the one
+      public page most self-hosters and prospective users will actually
+      see first. The same file also has the most hardcoded pixel
+      sizing anywhere in the codebase (`w-[46px]`, `text-[50px]`,
+      `rounded-[10px]`, etc. throughout), alongside real `md:`/`lg:`
+      breakpoint work elsewhere on the page. Worth a follow-up pass
+      logged out (or in a private window) to confirm this one live
+      before fixing it.
+
 ## TV Shows / Movies gallery follow-ups
 
 - [ ] **Virtualize the gallery grid if libraries grow** (2026-08-19 15:25)

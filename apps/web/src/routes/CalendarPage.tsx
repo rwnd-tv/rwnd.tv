@@ -93,7 +93,6 @@ export function CalendarPage() {
   const effectiveView: CalendarView = AGENDA_VIEW_ENABLED ? view : 'month'
   const [agendaForwardDays, setAgendaForwardDays] = useState(AGENDA_DEFAULT_DAYS_FORWARD)
   const [monthAnchor, setMonthAnchor] = useState(() => startOfMonth(new Date()))
-  const [selectedDay, setSelectedDay] = useState<string | null>(null)
   const [shownKinds, setShownKinds] = useKindFilterCookie<CalendarEventKind>(
     'rwnd_calendar_filter',
     CALENDAR_EVENT_KINDS,
@@ -256,13 +255,7 @@ export function CalendarPage() {
             canLoadLater={!nearWindowCap}
           />
         ) : (
-          <CalendarMonthGrid
-            monthAnchor={monthAnchor}
-            events={events}
-            locale={locale}
-            selectedDay={selectedDay}
-            onSelectDay={setSelectedDay}
-          />
+          <CalendarMonthGrid monthAnchor={monthAnchor} events={events} locale={locale} />
         ))}
     </div>
   )

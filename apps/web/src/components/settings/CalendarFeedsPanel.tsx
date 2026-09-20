@@ -8,6 +8,7 @@ import { CollapsiblePanel } from '../ui/CollapsiblePanel.js'
 import { Button } from '../ui/Button.js'
 import { Dialog } from '../ui/Dialog.js'
 import { Spinner } from '../ui/Spinner.js'
+import { ChevronDownIcon } from '../icons.js'
 import { usePanelOpen } from '../../lib/use-panel-open.js'
 import { useCopyFeedback } from '../../lib/use-copy-feedback.js'
 
@@ -101,7 +102,14 @@ function FeedSettingsForm({ feed }: { feed: CalendarFeed }) {
 
 /**
  * Shared shell for one feed type's row: the create button before a feed
- * exists, or the URL/settings/regenerate/delete block once it does.
+ * exists, or the URL/settings/regenerate/delete block once it does. A
+ * `<details>` in its own right (title/description as the always-visible
+ * summary, everything else collapsed), not built on `CollapsiblePanel` —
+ * see that component's own doc comment for why this row's shape (a real
+ * heading, a description, and right-hand action buttons) doesn't fit its
+ * single-line `title` slot. Collapsed by default, same as the outer
+ * panel (`usePanelOpen`'s own default), so three fully-expanded rows
+ * don't pile up under it.
  *
  * Deliberately shows the subscription URL unconditionally, with no
  * `justCreated`-style one-time reveal — this URL has to be re-copyable
@@ -118,6 +126,8 @@ function FeedRow({
   feed,
   title,
   description,
+  open,
+  onOpenChange,
   onCreate,
   creating,
   copied,
@@ -130,6 +140,8 @@ function FeedRow({
   feed: CalendarFeed | undefined
   title: string
   description: string
+  open: boolean
+  onOpenChange: (open: boolean) => void
   onCreate: () => void
   creating: boolean
   copied: boolean
@@ -142,31 +154,60 @@ function FeedRow({
   const { t } = useTranslation()
 
   return (
-    <div className="rounded-md border border-[var(--color-border)] p-4">
-      <h3 className="mb-1 text-base font-semibold">{title}</h3>
-      <p className="mb-3 text-sm text-[var(--color-fg-muted)]">{description}</p>
+    <details
+      className="group rounded-md border border-[var(--color-border)]"
+      open={open}
+      onToggle={(e) => onOpenChange(e.currentTarget.open)}
+    >
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-4 [&::-webkit-details-marker]:hidden">
+        <div>
+          <h3 className="text-base font-semibold">{title}</h3>
+          <p className="text-sm text-[var(--color-fg-muted)]">{description}</p>
+        </div>
+        <ChevronDownIcon className="h-5 w-5 flex-shrink-0 transition-transform group-open:rotate-180" />
+      </summary>
 
-      {!feed ? (
-        <Button type="button" onClick={onCreate} isLoading={creating}>
-          {t('settings.calendarFeeds.create')}
-        </Button>
-      ) : (
-        <div className="flex flex-col gap-4">
-          <div>
-            {feed.token ? (
-              <>
-                <div className="flex items-center gap-2">
-                  <code className="block flex-1 truncate rounded-md bg-[var(--color-surface)] px-2 py-1 text-xs">
-                    {feedUrl(feed.token)}
-                  </code>
-                  <Button type="button" variant="secondary" onClick={onCopy}>
-                    {copied ? t('settings.calendarFeeds.copied') : t('settings.calendarFeeds.copy')}
-                  </Button>
-                </div>
+      <div className="border-t border-[var(--color-border)] p-4">
+        {!feed ? (
+          <Button type="button" onClick={onCreate} isLoading={creating}>
+            {t('settings.calendarFeeds.create')}
+          </Button>
+        ) : (
+          <div className="flex flex-col gap-4">
+            <div>
+              {feed.token ? (
+                <>
+                  <div className="flex items-center gap-2">
+                    <code className="block flex-1 truncate rounded-md bg-[var(--color-surface)] px-2 py-1 text-xs">
+                      {feedUrl(feed.token)}
+                    </code>
+                    <Button type="button" variant="secondary" onClick={onCopy}>
+                      {copied
+                        ? t('settings.calendarFeeds.copied')
+                        : t('settings.calendarFeeds.copy')}
+                    </Button>
+                  </div>
+                  <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+                    <a
+                      href={webcalUrl(feed.token)}
+                      className="text-sm underline hover:no-underline"
+                    >
+                      {t('settings.calendarFeeds.subscribe')}
+                    </a>
+                    <p className="text-xs text-[var(--color-fg-muted)]">
+                      {feed.lastAccessedAt
+                        ? t('settings.calendarFeeds.lastSynced', {
+                            date: new Date(feed.lastAccessedAt).toLocaleString(locale),
+                          })
+                        : t('settings.calendarFeeds.neverSynced')}
+                    </p>
+                  </div>
+                </>
+              ) : (
                 <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-                  <a href={webcalUrl(feed.token)} className="text-sm underline hover:no-underline">
-                    {t('settings.calendarFeeds.subscribe')}
-                  </a>
+                  <p className="text-sm text-[var(--color-fg-muted)]">
+                    {t('settings.calendarFeeds.urlUnavailable')}
+                  </p>
                   <p className="text-xs text-[var(--color-fg-muted)]">
                     {feed.lastAccessedAt
                       ? t('settings.calendarFeeds.lastSynced', {
@@ -175,36 +216,23 @@ function FeedRow({
                       : t('settings.calendarFeeds.neverSynced')}
                   </p>
                 </div>
-              </>
-            ) : (
-              <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-                <p className="text-sm text-[var(--color-fg-muted)]">
-                  {t('settings.calendarFeeds.urlUnavailable')}
-                </p>
-                <p className="text-xs text-[var(--color-fg-muted)]">
-                  {feed.lastAccessedAt
-                    ? t('settings.calendarFeeds.lastSynced', {
-                        date: new Date(feed.lastAccessedAt).toLocaleString(locale),
-                      })
-                    : t('settings.calendarFeeds.neverSynced')}
-                </p>
-              </div>
-            )}
-          </div>
+              )}
+            </div>
 
-          {children}
+            {children}
 
-          <div className="flex gap-2 border-t border-[var(--color-border)] pt-3">
-            <Button type="button" variant="secondary" onClick={onRegenerate}>
-              {t('settings.calendarFeeds.regenerate')}
-            </Button>
-            <Button type="button" variant="danger" onClick={onDelete}>
-              {t('settings.calendarFeeds.delete')}
-            </Button>
+            <div className="flex gap-2 border-t border-[var(--color-border)] pt-3">
+              <Button type="button" variant="secondary" onClick={onRegenerate}>
+                {t('settings.calendarFeeds.regenerate')}
+              </Button>
+              <Button type="button" variant="danger" onClick={onDelete}>
+                {t('settings.calendarFeeds.delete')}
+              </Button>
+            </div>
           </div>
-        </div>
-      )}
-    </div>
+        )}
+      </div>
+    </details>
   )
 }
 
@@ -224,6 +252,9 @@ export function CalendarFeedsPanel() {
   const { t, i18n } = useTranslation()
   const queryClient = useQueryClient()
   const [open, setOpen] = usePanelOpen('panelSettingsCalendarFeeds')
+  const [historyRowOpen, setHistoryRowOpen] = usePanelOpen('panelCalendarFeedRowHistory')
+  const [showsRowOpen, setShowsRowOpen] = usePanelOpen('panelCalendarFeedRowShows')
+  const [moviesRowOpen, setMoviesRowOpen] = usePanelOpen('panelCalendarFeedRowMovies')
   const { data: publicSettings } = usePublicSettings()
   const { isCopied: isFeedTypeCopied, copy: copyToken } = useCopyFeedback<CalendarFeedType>()
   const [regenerateTarget, setRegenerateTarget] = useState<CalendarFeedType>()
@@ -289,6 +320,8 @@ export function CalendarFeedsPanel() {
               feed={historyFeed}
               title={t('settings.calendarFeeds.history.title')}
               description={t('settings.calendarFeeds.history.description')}
+              open={historyRowOpen}
+              onOpenChange={setHistoryRowOpen}
               onCreate={() => createFeed.mutate('history')}
               creating={createFeed.isPending && createFeed.variables === 'history'}
               copied={isFeedTypeCopied('history')}
@@ -304,6 +337,8 @@ export function CalendarFeedsPanel() {
               feed={showsFeed}
               title={t('settings.calendarFeeds.shows.title')}
               description={t('settings.calendarFeeds.shows.description')}
+              open={showsRowOpen}
+              onOpenChange={setShowsRowOpen}
               onCreate={() => createFeed.mutate('shows')}
               creating={createFeed.isPending && createFeed.variables === 'shows'}
               copied={isFeedTypeCopied('shows')}
@@ -319,6 +354,8 @@ export function CalendarFeedsPanel() {
               feed={moviesFeed}
               title={t('settings.calendarFeeds.movies.title')}
               description={t('settings.calendarFeeds.movies.description')}
+              open={moviesRowOpen}
+              onOpenChange={setMoviesRowOpen}
               onCreate={() => createFeed.mutate('movies')}
               creating={createFeed.isPending && createFeed.variables === 'movies'}
               copied={isFeedTypeCopied('movies')}

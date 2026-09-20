@@ -6,6 +6,7 @@ import { api } from '../../lib/api-client.js'
 import { useAuth } from '../../lib/use-auth.js'
 import { CollapsiblePanel } from '../ui/CollapsiblePanel.js'
 import { Button } from '../ui/Button.js'
+import { Select } from '../ui/Select.js'
 import { usePanelOpen } from '../../lib/use-panel-open.js'
 
 /** Language + theme — see ProfileCard.tsx's doc comment on why this is a
@@ -34,23 +35,18 @@ export function PreferencesCard() {
   return (
     <CollapsiblePanel title={t('account.preferencesTitle')} open={open} onOpenChange={setOpen}>
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-        <div className="flex flex-col gap-1">
-          <label htmlFor="locale-select" className="text-sm font-medium">
-            {t('account.locale')}
-          </label>
-          <select
-            id="locale-select"
-            value={locale}
-            onChange={(e) => setLocale(e.target.value as (typeof SUPPORTED_LOCALES)[number])}
-            className="rounded-md border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2 text-sm"
-          >
-            {SUPPORTED_LOCALES.map((l) => (
-              <option key={l} value={l}>
-                {l}
-              </option>
-            ))}
-          </select>
-        </div>
+        <Select
+          id="locale-select"
+          label={t('account.locale')}
+          value={locale}
+          onChange={(e) => setLocale(e.target.value as (typeof SUPPORTED_LOCALES)[number])}
+        >
+          {SUPPORTED_LOCALES.map((l) => (
+            <option key={l} value={l}>
+              {l}
+            </option>
+          ))}
+        </Select>
 
         <fieldset className="flex flex-col gap-1">
           <legend className="text-sm font-medium">{t('account.theme')}</legend>

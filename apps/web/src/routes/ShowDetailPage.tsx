@@ -454,7 +454,7 @@ export function ShowDetailPage() {
                 fullyWatched ? setRemoveWatchesConfirmOpen(true) : setWatchDialogOpen(true)
               }
             >
-              <CheckIcon />
+              {fullyWatched && <CheckIcon />}
               {t('showDetail.watchedButton')}
             </Button>
           )}

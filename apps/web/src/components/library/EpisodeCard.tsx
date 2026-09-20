@@ -232,7 +232,7 @@ export function EpisodeCard({
                 {episode.watchedCount}
               </span>
             ) : (
-              <CheckIcon />
+              episode.watched && <CheckIcon />
             )}
           </button>
         )}

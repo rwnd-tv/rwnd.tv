@@ -39,14 +39,14 @@
         "body": "Jellyfin/Emby/Tautulli webhooks, scheduled backups, calendar feeds, admin roles"
       },
       "honest": {
-        "label": "Honestly:",
-        "body": "this is a young, single-maintainer project, so expect the occasional rough edge, and please file an issue when you hit one.",
+        "label": "Worth knowing:",
+        "body": "this is a single-maintainer project, so expect the occasional rough edge, and please file an issue when you hit one.",
         "link": "See where things stand"
       }
     },
     "features": {
-      "title": "What works today",
-      "body": "Everything listed here is shipped and running on the live instance. Nothing below is a plan.",
+      "title": "Features",
+      "body": "What rwnd.tv does today, running live on this instance.",
       "log": {
         "title": "Search and log",
         "body": "Find a film or a specific episode, log that you watched it, and browse your History: every watch, rating, watchlist add and drop in one place."
@@ -59,21 +59,21 @@
         "title": "Bring your Trakt data",
         "body": "Import history, ratings and watchlist, either over OAuth or from the ZIP that Trakt's own \"Export now\" gives you, so the one-connected-app cap isn't in your way."
       },
-      "galleries": {
-        "title": "Poster galleries",
-        "body": "TV Shows and Films each get a poster wall, with per-show watch progress, genre include/exclude and release-year filters, and twelve sort orders."
-      },
       "lists": {
         "title": "Watchlists and ratings",
         "body": "Any number of named lists plus a one-click default, and a 5-star rating for shows, films and individual episodes, independent of whether you've watched them."
       },
-      "export": {
-        "title": "Your data stays yours",
-        "body": "Export a CSV file per category (history, ratings, watchlist, dropped shows), zipped and downloadable from Settings. Open formats, no lock-in, by design."
-      },
       "calendar": {
         "title": "Your calendar, in the app and out of it",
         "body": "An in-app Calendar page with a forward-looking Agenda of what's still to come and a Month grid at a glance. The same data is also served as personal History, TV Shows and Films webcal:// feeds to paste into Google Calendar, Apple Calendar or any other app that supports it. Both link back to the episode or film, and respect your spoiler-protection setting."
+      },
+      "backups": {
+        "title": "Backups that just happen",
+        "body": "A scheduled database backup every day, with admin-editable tiered retention (daily, weekly, monthly) and status visible right in the admin panel — nothing to wire up yourself."
+      },
+      "admin": {
+        "title": "A real admin panel",
+        "body": "User management with an owner role, invite-only or open registration, and bulk actions — so running rwnd.tv for family or friends isn't an afterthought."
       }
     },
     "selfHost": {
@@ -183,8 +183,8 @@
         "a": "Docker, a PostgreSQL database and a TMDB or TheTVDB API key. To work on it: Node.js 22 or newer and pnpm."
       },
       "players": {
-        "q": "Jellyfin, Emby, Tautulli or Kodi?",
-        "a": "Jellyfin and Emby are both supported via their own webhook features. Plex users without Plex Pass can get the same automatic logging through Tautulli instead. Kodi isn't yet: it has no native webhook support, so it needs an addon-based approach the ingestion core doesn't cover yet."
+        "q": "Jellyfin, Emby or Tautulli?",
+        "a": "Jellyfin and Emby are both supported via their own webhook features. Plex users without Plex Pass can get the same automatic logging through Tautulli instead."
       }
     },
     "cta": {

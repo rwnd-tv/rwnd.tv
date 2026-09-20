@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import type { CalendarEvent } from '@rwnd/shared'
@@ -27,13 +27,7 @@ function episodeEvent(uid: string, date: string): Extract<CalendarEvent, { kind:
 function renderGrid(monthAnchor: Date, events: CalendarEvent[] = [], locale = 'en-GB') {
   return render(
     <MemoryRouter>
-      <CalendarMonthGrid
-        monthAnchor={monthAnchor}
-        events={events}
-        locale={locale}
-        selectedDay={null}
-        onSelectDay={vi.fn()}
-      />
+      <CalendarMonthGrid monthAnchor={monthAnchor} events={events} locale={locale} />
     </MemoryRouter>,
   )
 }

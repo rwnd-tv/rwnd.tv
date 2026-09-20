@@ -225,11 +225,14 @@ export const showDetailSchema = z.object({
   /** How many of `totalEpisodes` have actually aired so far, season 0
    * excluded — distinct from `totalEpisodes` itself, which is the
    * eventual/planned count and includes episodes of a still-airing season
-   * that haven't come out yet. Null until the metadata refresher has
-   * computed it for every regular season (see
-   * apps/api/src/metadata/refresh.ts); the "Watched" button only turns
-   * purple once `watchedEpisodes` reaches this, not `totalEpisodes` — see
-   * ShowDetailPage.tsx's `fullyWatched`. */
+   * that haven't come out yet. Null only when a regular season's count is
+   * missing and can't be safely inferred either — normally self-healed
+   * inline by the show route itself the moment it's requested (see
+   * apps/api/src/routes/library/shows.ts's `seasonsMissingAiredCount`),
+   * with the background metadata refresher (apps/api/src/metadata/
+   * refresh.ts) as the second line of defence; the "Watched" button only
+   * turns purple once `watchedEpisodes` reaches this, not `totalEpisodes`
+   * — see ShowDetailPage.tsx's `fullyWatched`. */
   airedEpisodes: z.number().int().nullable(),
   /** When the current user watched their first/most recent episode of this
    * show — across every season, specials included. Both null if they

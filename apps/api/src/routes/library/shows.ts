@@ -16,7 +16,7 @@ import {
 } from '@rwnd/shared'
 import { droppedShows, episodes, plays, ratings, seasons, shows } from '@rwnd/db'
 import type { AppEnv } from '../../types.js'
-import { resolveShow, resolveShowEpisodes } from '../../lib/media.js'
+import { resolveSeason, resolveShow, resolveShowEpisodes } from '../../lib/media.js'
 import {
   backfillShowEpisodeRuntimes,
   pickRefreshTarget,
@@ -244,7 +244,8 @@ showRoutes.openapi(
   }),
   async (c) => {
     const { slug } = c.req.valid('param')
-    const userId = c.get('user')!.id
+    const user = c.get('user')!
+    const userId = user.id
     const db = c.get('db')
 
     const show = await getShowBySlug(db, slug)
@@ -358,6 +359,61 @@ showRoutes.openapi(
     // cached yet) so it reads consistently with the gallery card the user
     // likely just clicked through from.
     const regularSeasons = seasonRows.filter((season) => season.seasonNumber > 0)
+
+    // Self-heal a still-null aired-episode count rather than trusting the
+    // cache to catch up on its own — found live 2026-09-17 (docs/TODO.md):
+    // a currently-airing show whose seasons hadn't reached their first
+    // background sweep pass yet (apps/api/src/metadata/refresh.ts) showed
+    // its "Watched" button as unwatched even though every episode that had
+    // actually aired already was, because `airedEpisodes` below stayed
+    // null. A season that's been superseded by a later one starting has
+    // necessarily aired in full (backfilled from its own `episodeCount`,
+    // no provider call needed, same fallback refreshOneShow itself uses
+    // for a past season); one with no air date yet, or a future one, has
+    // necessarily aired nothing (backfilled as 0). Only the single
+    // most-recently-started season can genuinely still be mid-run, so
+    // that's the only one worth an actual live check — the same
+    // resolveSeason call the season page and the background sweep both
+    // already make, bounded to at most one provider call per view
+    // regardless of how many seasons are still uncached.
+    const seasonsMissingAiredCount = regularSeasons.filter((s) => s.airedEpisodeCount === null)
+    if (seasonsMissingAiredCount.length > 0) {
+      const today = new Date().toISOString().slice(0, 10)
+      const startedSeasonNumbers = regularSeasons
+        .filter((s) => s.airDate !== null && s.airDate <= today)
+        .map((s) => s.seasonNumber)
+      const latestStartedSeasonNumber =
+        startedSeasonNumbers.length > 0 ? Math.max(...startedSeasonNumbers) : null
+
+      for (const season of seasonsMissingAiredCount) {
+        let healedCount: number
+        if (season.seasonNumber === latestStartedSeasonNumber) {
+          const providers = await orderedProviders(db, c.get('metadataProviders'))
+          const target = await pickRefreshTarget(db, 'show', show.id, providers)
+          if (!target) continue
+          const resolved = await resolveSeason(
+            db,
+            target.provider,
+            show.id,
+            target.externalId,
+            season.seasonNumber,
+            user.locale,
+          )
+          const now = new Date()
+          healedCount = resolved.filter(
+            (e) => e.firstAired !== null && new Date(e.firstAired) <= now,
+          ).length
+        } else {
+          healedCount = season.airDate !== null && season.airDate <= today ? season.episodeCount : 0
+        }
+        await db
+          .update(seasons)
+          .set({ airedEpisodeCount: healedCount })
+          .where(and(eq(seasons.showId, show.id), eq(seasons.seasonNumber, season.seasonNumber)))
+        season.airedEpisodeCount = healedCount
+      }
+    }
+
     const totalEpisodes =
       regularSeasons.length > 0
         ? regularSeasons.reduce((sum, season) => sum + season.episodeCount, 0)

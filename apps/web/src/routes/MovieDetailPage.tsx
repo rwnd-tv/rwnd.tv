@@ -332,7 +332,7 @@ export function MovieDetailPage() {
               }
               onClick={() => (movie.watched ? setUnwatchConfirmOpen(true) : setDialogOpen(true))}
             >
-              <CheckIcon />
+              {movie.watched && <CheckIcon />}
               {t('movieDetail.watchedButton')}
             </Button>
           )}

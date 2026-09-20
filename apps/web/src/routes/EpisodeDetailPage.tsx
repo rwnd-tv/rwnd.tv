@@ -424,7 +424,7 @@ export function EpisodeDetailPage() {
                   : watchActions.setDialogOpen(true)
               }
             >
-              <CheckIcon />
+              {episode.watched && <CheckIcon />}
               {toggleLabel}
             </Button>
           )}

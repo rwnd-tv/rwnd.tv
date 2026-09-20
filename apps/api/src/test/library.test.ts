@@ -405,6 +405,79 @@ describe('library', () => {
       ])
     })
 
+    it('self-heals a still-null aired-episode count instead of leaving the Watched button stuck unwatched (regression)', async () => {
+      // Found live 2026-09-17 (docs/TODO.md): a currently-airing show whose
+      // season hadn't reached its first background sweep pass yet
+      // (apps/api/src/metadata/refresh.ts) kept `airedEpisodes` null even
+      // though every episode that had actually aired was already watched —
+      // the show page's "Watched" button silently stayed in its unwatched
+      // state. `airedEpisodeCount` is deliberately left unset below (null),
+      // same as a freshly-created show, to reproduce that gap.
+      const cookie = await createUserAndCookie()
+      const userId = await meId(cookie)
+
+      const [show] = await db
+        .insert(shows)
+        .values({ title: 'Currently Airing', slug: 'currently-airing' })
+        .returning()
+      if (!show) throw new Error('failed to insert show')
+      await db
+        .insert(externalIds)
+        .values({ entityType: 'show', entityId: show.id, source: 'tmdb', externalId: '80001' })
+      await db
+        .insert(seasons)
+        .values({ showId: show.id, seasonNumber: 1, episodeCount: 2, airDate: '2026-09-01' })
+
+      const [ep1, ep2] = await db
+        .insert(episodes)
+        .values([
+          { showId: show.id, seasonNumber: 1, episodeNumber: 1, firstAired: '2026-09-01' },
+          { showId: show.id, seasonNumber: 1, episodeNumber: 2, firstAired: '2026-09-08' },
+        ])
+        .returning()
+      if (!ep1 || !ep2) throw new Error('failed to insert episodes')
+      await db.insert(plays).values([
+        { userId, episodeId: ep1.id, watchedAt: new Date('2026-09-01') },
+        { userId, episodeId: ep2.id, watchedAt: new Date('2026-09-08') },
+      ])
+
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (input: string | URL) => {
+          const url = new URL(input)
+          if (url.pathname === '/3/tv/80001/season/1') {
+            return new Response(
+              JSON.stringify({
+                overview: null,
+                episodes: [
+                  { name: 'Ep 1', season_number: 1, episode_number: 1, air_date: '2026-09-01' },
+                  { name: 'Ep 2', season_number: 1, episode_number: 2, air_date: '2026-09-08' },
+                ],
+              }),
+              { status: 200 },
+            )
+          }
+          throw new Error(`Unexpected TMDB fetch in test: ${url}`)
+        }),
+      )
+
+      const res = await app.request(`/api/v1/library/shows/${show.slug}`, { headers: { cookie } })
+      expect(res.status).toBe(200)
+      const detail = await json<ShowDetail>(res)
+      expect(detail.watchedEpisodes).toBe(2)
+      // The regression: this used to stay null here, so the button never
+      // read as fully watched no matter how much had actually aired.
+      expect(detail.airedEpisodes).toBe(2)
+
+      // Healed value is persisted, not just returned once — a second
+      // request makes no further live provider call.
+      const fetchSpy = vi.mocked(fetch)
+      fetchSpy.mockClear()
+      const res2 = await app.request(`/api/v1/library/shows/${show.slug}`, { headers: { cookie } })
+      expect((await json<ShowDetail>(res2)).airedEpisodes).toBe(2)
+      expect(fetchSpy).not.toHaveBeenCalled()
+    })
+
     it('reports a null total and zero watched counts for a show with no plays or cached seasons', async () => {
       const cookie = await createUserAndCookie()
       const [show] = await db

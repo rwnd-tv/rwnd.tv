@@ -33,7 +33,7 @@ import { Spinner } from '../components/ui/Spinner.js'
 const SHOTS = '/landing'
 const GRADIENT = 'linear-gradient(135deg, #d946ef 0%, #f59e0b 100%)'
 
-const FEATURE_KEYS = ['log', 'plex', 'trakt', 'galleries', 'lists', 'export', 'calendar'] as const
+const FEATURE_KEYS = ['log', 'plex', 'trakt', 'lists', 'calendar', 'backups', 'admin'] as const
 const STEP_KEYS = ['run', 'import', 'current'] as const
 const GALLERY_SHOTS = {
   films: 'movies',
@@ -255,12 +255,12 @@ export function LandingPage() {
             </span>
           ))}
           <span className="hidden h-4 w-px bg-[var(--color-border)] sm:block" />
-          <span className="text-[13px] text-[var(--color-fg-muted)]">
+          <span className="text-[14.5px] text-[var(--color-fg-muted)]">
             <strong className="font-semibold text-[var(--color-fg)]">
               {t('landing.strip.honest.label')}
             </strong>{' '}
             {t('landing.strip.honest.body')}{' '}
-            <a href="#status" className="text-[13px] text-[var(--color-primary)] underline">
+            <a href="#status" className="text-[14.5px] text-[var(--color-primary)] underline">
               {t('landing.strip.honest.link')}
             </a>
           </span>

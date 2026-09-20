@@ -206,6 +206,155 @@ grouping, sorted oldest to newest.
 
 ## UI polish
 
+- [x] **Inset the dropdown arrow on `<select>` controls** (2026-09-06 added, done 2026-09-20)
+
+      The shared `Select.tsx`'s native browser arrow sat flush against the
+      control's right edge, tighter than the `px-3` text padding used
+      elsewhere. Fixed with `appearance-none` plus an absolutely-positioned
+      `ChevronDownIcon` overlay (`pointer-events-none`, `right-3`, matching
+      the text padding) rather than a CSS background-image data URI —
+      reuses the existing shared icon (theme-correct via `currentColor`)
+      instead of duplicating it as an inline SVG background that can't pick
+      up CSS custom properties. The one-off `<select>` in
+      `PreferencesCard.tsx` (locale picker) was folded into `Select.tsx` at
+      the same time rather than getting its own fix, closing the TODO's
+      "worth folding the latter in" note. Confirmed live on dev.rwnd.tv.
+
+- [x] **Only show the tick on "Watched" buttons once the item is watched** (2026-09-06 added, done 2026-09-20)
+
+      The four labeled Watched buttons (Movie/Show/Season/Episode detail
+      pages) rendered their `CheckIcon` unconditionally next to the label;
+      only the button's variant (primary vs. secondary) reflected watched
+      state. Each now only renders the icon when the item is actually
+      watched. Extended to `EpisodeCard.tsx`'s circular per-episode toggle
+      too, on confirming with James: unlike the labeled buttons, the icon
+      there is the button's only content when unwatched, so this leaves an
+      empty circle in that state rather than the tick/count it showed
+      before — an accepted tradeoff, not an oversight. Confirmed live on
+      dev.rwnd.tv.
+
+- [x] **Investigate: show page's Watched button can silently no-op when the show is actually fully watched** (2026-09-17 added, done 2026-09-20)
+
+      Root cause (already found when this was logged): `ShowDetailPage.tsx`'s
+      `fullyWatched`/`notAiredYet` keyed off `show.airedEpisodes`, a
+      per-season aggregate (`seasons.airedEpisodeCount`) only ever
+      populated by the background metadata refresher
+      (`apps/api/src/metadata/refresh.ts`) — so a recently-added or
+      currently-airing show could sit with every actually-aired episode
+      watched but still read as "not fully watched" until the sweep caught
+      up.
+
+      Took the "more correct" of the two candidate directions logged at
+      the time (checking real per-episode aired status, not the possibly-
+      stale cache) rather than the cheaper UI-only fallback, with a bound
+      on cost: `GET /library/shows/{slug}` (`apps/api/src/routes/library/
+      shows.ts`) now self-heals any regular season still missing an
+      aired-episode count at read time. A season superseded by a later one
+      starting is inferred fully aired from its own `episodeCount` (no
+      provider call); one with no air date yet, or a future one, is
+      inferred as zero aired (also no call); only the single
+      most-recently-started season — the one that might genuinely still be
+      mid-run — gets an actual live `resolveSeason` call, the same one the
+      season page and the background sweep already make. This bounds the
+      fix to at most one provider call per show-detail view regardless of
+      how many seasons are still uncached, rather than a full per-season
+      live fetch on every view. Persisted back to `seasons.airedEpisodeCount`
+      so it's a one-time heal, not a per-request cost.
+
+      Regression test added (`apps/api/src/test/library.test.ts`)
+      reproducing the exact stale-null scenario and confirming both the
+      healed value and that it's persisted (a second request makes no
+      further provider call). Full local suite green (906 passed, 12
+      skipped) and confirmed live on dev.rwnd.tv.
+
+- [x] **Remove the calendar month grid's selected-day panel** (2026-09-06 13:37 added, redirected to removal 2026-09-10, done 2026-09-20)
+
+      James, 2026-09-10: doesn't serve a purpose any more, remove rather
+      than fix (see TODO.md's own note on the bug this used to track — a
+      `selectedDay` gone stale after navigating months). Removed
+      `selectedDay`/`onSelectDay` and the day-number button's click handler
+      from `CalendarMonthGrid.tsx` (the day number is now a plain,
+      non-interactive `<span>`), along with the `<section>` panel below the
+      grid and its `PosterGrid`/`CalendarEventTile` usage; matching
+      `selectedDay` state and prop wiring dropped from `CalendarPage.tsx`.
+      `CalendarMonthCellEntry`'s doc comment updated to point at the
+      underlying episode/movie page instead of "the selected-day panel
+      below."
+
+      `CalendarMonthGrid.test.tsx` and `CalendarPage.test.tsx` both had
+      tests exercising the removed panel (a click-to-open-then-check-
+      empty-state test, and a click-to-reveal-a-spoiler test) — the former
+      deleted outright, the latter rewritten to assert the month-grid cell
+      shows the fallback title with no reveal control, since a real reveal
+      now only happens on the underlying page. Confirmed live on
+      dev.rwnd.tv.
+
+- [x] **Make each Calendar feeds row collapsible, collapsed by default** (2026-09-16 added, done 2026-09-20)
+
+      `FeedRow` (`CalendarFeedsPanel.tsx`) always rendered its full body —
+      URL, copy/subscribe/regenerate/delete controls, last-synced text, and
+      the settings form — for all three rows whenever a feed existed. Each
+      row is now its own `<details>`/`<summary>` (title/description as the
+      always-visible summary, everything else collapsed), collapsed by
+      default via three new `usePanelOpen` keys
+      (`panelCalendarFeedRow{History,Shows,Movies}`), matching the outer
+      panel's own already-collapsed default. Deliberately not built on the
+      shared `CollapsiblePanel` component — its own doc comment already
+      flagged that a row's shape (a real heading, a description, *and*
+      right-hand action buttons) doesn't fit that component's single-line
+      `title` slot, so this reuses the same `<details>` + `ChevronDownIcon`
+      pattern inline instead. Confirmed live on dev.rwnd.tv.
+
+- [x] **Rewrite the landing page's "Honestly:" callout, not just its "young" wording** (2026-09-17 10:36 added, expanded in scope 2026-09-17, done 2026-09-20)
+
+      Replaced "Honestly: this is a young, single-maintainer project, so
+      expect the occasional rough edge, and please file an issue when you
+      hit one" with "Worth knowing: this is a single-maintainer project, so
+      expect the occasional rough edge, and please file an issue when you
+      hit one" in both `en-US`/`en-GB` `common.json` — drops "young" (read
+      as describing the maintainer, not the project, which isn't accurate)
+      and the apologetic "Honestly:" framing, while keeping the same
+      honest disclosure. Chosen from three drafted options James picked
+      between.
+
+      A follow-up round of review caught that the callout's existing
+      `text-[13px]` sizing (present before this change, not introduced by
+      it) read as small print for a statement no longer meant to be
+      downplayed — bumped to `text-[14.5px]`, matching this page's other
+      body copy (e.g. the Features section's paragraph text). Confirmed
+      live on dev.rwnd.tv.
+
+- [x] **Drop the landing page's Kodi mention** (2026-09-17 added, done 2026-09-20)
+
+      The FAQ's "Jellyfin, Emby, Tautulli or Kodi?" entry named Kodi as a
+      planned-but-not-yet-built source; James increasingly unsure it'll
+      actually get built, so the public FAQ no longer names it. Reworded
+      to "Jellyfin, Emby or Tautulli?" with the answer's Kodi sentence
+      dropped entirely (in both `en-US`/`en-GB` `common.json`) — this is
+      about the landing copy only, the "Kodi webhook ingestion" TODO item
+      itself stays open. Checked the rest of the landing page for other
+      Kodi mentions; found none outside this one FAQ entry (a few remain
+      in source comments/docs elsewhere, out of scope for this item).
+      Confirmed live on dev.rwnd.tv.
+
+- [x] **Retitle and re-pick the landing page's "What works today" section** (2026-09-17 added, done 2026-09-20)
+
+      "What works today" (with its "nothing below is a plan" subtitle,
+      written to answer an earlier not-yet-proven-real doubt the project's
+      since moved past) retitled to "Features", with a plainer subtitle
+      ("What rwnd.tv does today, running live on this instance"). The
+      seven featured cards also re-picked, not just the heading: dropped
+      Poster galleries and Your data stays yours (CSV export) — the two
+      closest to generic tracking-app table stakes — in favor of two
+      differentiators not previously featured: automatic scheduled backups
+      with admin-editable tiered retention, and the admin panel (user
+      management, roles, bulk actions). Final lineup, in order: Search and
+      log, media-server webhooks (Plex/Jellyfin/Emby/Tautulli), Trakt
+      import, watchlists and ratings, calendar (in-app + webcal feeds),
+      backups, admin. Chosen from three candidate lineups presented (keep-
+      as-is; backups+security; backups+admin — the last one picked).
+      Confirmed live on dev.rwnd.tv.
+
 - [x] **Explore text size/wrapping and grid sizing on the calendar's Month
       view** (2026-09-06 13:36 added, done 2026-09-09)      `CalendarMonthGrid.tsx`'s per-day entries were a fixed 10px, single
       line, `truncate`-clipped, inside a flat `h-28` cell with

@@ -150,18 +150,6 @@ describe('CalendarPage', () => {
     expect(screen.getByRole('button', { name: 'Agenda', pressed: false })).toBeInTheDocument()
   })
 
-  it('selecting a day with no events shows the empty state in its panel', async () => {
-    const user = userEvent.setup()
-    document.cookie = 'rwnd_calendar_view=month; path=/'
-    renderPage([])
-    await user.click(await screen.findByRole('button', { current: 'date' }))
-    // Not the exact locale-specific string (film/movie) — the rendered
-    // string here comes from i18next's own active language, detected
-    // independently of `user.locale` (which only drives date/number
-    // formatting elsewhere on this page), and defaults to en-US in tests.
-    await screen.findByText(/Nothing to show yet/)
-  })
-
   it('shows an error message when the request fails', async () => {
     vi.mocked(api.calendar.events).mockRejectedValue(new ApiError(500, 'boom'))
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
@@ -179,22 +167,17 @@ describe('CalendarPage', () => {
     await screen.findByRole('alert')
   })
 
-  it('hides an unwatched, spoiler-protected episode title until revealed', async () => {
-    const user = userEvent.setup()
+  it('substitutes the fallback title for an unwatched, spoiler-protected episode, with no reveal control', async () => {
     document.cookie = 'rwnd_calendar_view=month; path=/'
     renderPage([episodeEvent()])
 
-    // The compact month-grid cell substitutes the fallback outright (no
-    // reveal control at that size) — the real reveal happens in the
-    // selected-day panel below, opened by picking the day.
-    await screen.findByText('A Show · Episode 2')
-    await user.click(screen.getByRole('button', { current: 'date' }))
-
-    expect(await screen.findByText('S1 E2 · Episode 2')).toBeInTheDocument()
+    // The compact month-grid cell substitutes the fallback outright, with
+    // no reveal control at that size — the real reveal happens one click
+    // away, on the underlying episode page (see CalendarMonthGrid.tsx's
+    // own doc comment).
+    expect(await screen.findByText('A Show · Episode 2')).toBeInTheDocument()
     expect(screen.queryByText(/The Reveal/)).not.toBeInTheDocument()
-
-    await user.click(screen.getByRole('button', { name: 'Reveal spoiler' }))
-    expect(await screen.findByText(/The Reveal/)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Reveal spoiler' })).not.toBeInTheDocument()
   })
 
   it('never hides an already-watched episode title', async () => {

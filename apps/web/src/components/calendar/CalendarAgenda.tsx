@@ -27,13 +27,12 @@ function EyeIcon() {
  * One event row: kind dot, a small poster thumbnail, the title, and a
  * right-aligned meta column (episode code, watch time, or "Releases").
  *
- * Owns its own spoiler-reveal state for the same reason CalendarEventTile
- * does — an `episode` event's own title needs a per-row click-to-reveal
- * that only this component can hold. Same substitution as EpisodeCard.tsx
- * and CalendarEventTile rather than SpoilerGuard.tsx's blur: a generic
- * "Episode N" label swapped in, plus a small reveal button. The show
- * title, the episode code and the thumbnail are never guarded, only the
- * episode's own title.
+ * Owns its own spoiler-reveal state — an `episode` event's own title needs
+ * a per-row click-to-reveal that only this component can hold. Same
+ * substitution as EpisodeCard.tsx's own precedent rather than
+ * SpoilerGuard.tsx's blur: a generic "Episode N" label swapped in, plus a
+ * small reveal button. The show title, the episode code and the thumbnail
+ * are never guarded, only the episode's own title.
  *
  * The thumbnail is a 2:3 box like PosterTile.tsx's, at w-8 rather than a
  * grid cell's full width, and falls back to the title's first character on

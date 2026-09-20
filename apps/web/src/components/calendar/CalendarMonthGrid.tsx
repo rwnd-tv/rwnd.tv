@@ -32,16 +32,17 @@ function gridStartFor(monthAnchor: Date, locale: string): Date {
 }
 
 /** One compact entry inside a month-grid cell — a kind-colored dot plus a
- * single truncated line, linking straight to the underlying page (same
- * href as the full CalendarEventTile). Deliberately no reveal control at
- * this size: an unwatched episode's title is substituted with the generic
- * fallback outright rather than offered a click-to-reveal, same as
- * EpisodeCard.tsx's own space-constrained precedent — a real reveal
- * happens one click away, on the underlying episode/movie page.
+ * single truncated line, linking straight to the underlying page.
+ * Deliberately no reveal control at this size: an unwatched episode's
+ * title is substituted with the generic fallback outright rather than
+ * offered a click-to-reveal, same as EpisodeCard.tsx's own
+ * space-constrained precedent — a real reveal happens one click away, on
+ * the underlying episode/movie page.
  *
  * An episode entry (watched or upcoming) shows "Show · Episode": the show
  * title alone isn't enough context in a text-only row with no poster art
- * to disambiguate which episode, unlike the Agenda/selected-day tiles. */
+ * to disambiguate which episode, unlike the Agenda's own poster-thumbnail
+ * rows. */
 function CalendarMonthCellEntry({ event }: { event: CalendarEvent }) {
   const { t } = useTranslation()
   const title =

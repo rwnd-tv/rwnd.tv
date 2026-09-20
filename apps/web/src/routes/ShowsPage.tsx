@@ -238,6 +238,7 @@ export function ShowsPage() {
       {!isError && data && data.shows.length > 0 && (
         <>
           <LibraryControls<SortKey>
+            sticky
             filterValue={filter}
             onFilterChange={setFilter}
             filterLabel={t('shows.filterLabel')}

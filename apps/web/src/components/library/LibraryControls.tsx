@@ -19,6 +19,7 @@ export function LibraryControls<SortKey extends string>({
   onSortChange,
   sortLabel,
   sortOptions,
+  sticky = false,
 }: {
   filterValue: string
   onFilterChange: (value: string) => void
@@ -33,9 +34,19 @@ export function LibraryControls<SortKey extends string>({
   onSortChange: (value: SortKey) => void
   sortLabel: string
   sortOptions: Array<{ value: SortKey; label: string }>
+  /** Pins the bar below the app header instead of scrolling away with the
+   * rest of the page. `top-16`/`z-10` match Layout.tsx's header (`h-16`,
+   * `z-20`) and Sidebar.tsx's own `top-16` sticky offset. */
+  sticky?: boolean
 }) {
   return (
-    <div className="flex flex-wrap items-end gap-3">
+    <div
+      className={
+        sticky
+          ? 'sticky top-16 z-10 flex flex-wrap items-end gap-3 border-b border-[var(--color-border)] bg-[var(--color-bg)] py-3'
+          : 'flex flex-wrap items-end gap-3'
+      }
+    >
       <Field
         label={filterLabel}
         hideLabel

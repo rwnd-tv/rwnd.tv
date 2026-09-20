@@ -917,6 +917,29 @@ currently-dropped shows, since a row can have both
       `library-filter.test.ts`; extend with more per-language article
       tables if/when non-English locales ship.
 
+- [x] **Sticky filter/sort bar on TV Shows, History, and a Watchlist's detail page** (2026-09-06 added, done 2026-09-20)
+
+      `LibraryControls.tsx` (the shared "Filter by title" + Sort row, plus
+      each page's own "Filters…" button where it has one) gained an opt-in
+      `sticky` prop rather than always sticking - `top-16`/`z-10` to sit
+      below `Layout.tsx`'s header, with a background and bottom border so
+      the gallery grid doesn't show through while stuck. Wired onto
+      `ShowsPage.tsx`, `HistoryPage.tsx`, and `WatchlistDetailPage.tsx`;
+      left off `MoviesPage.tsx` at first since the original request only
+      named TV Shows, then turned on there too once James confirmed he
+      wanted Films included as well (done 2026-09-20 alongside the item
+      below).
+
+      Also extended, same day and same ask, to a fifth page the original
+      TODO never covered: `CalendarPage.tsx`'s Agenda/Month view toggle
+      plus its History/TV Shows/Films kind-filter buttons and month
+      navigator (one page-local `sticky` div, not `LibraryControls.tsx` -
+      Calendar doesn't use that shared component). Verified live on
+      dev.rwnd.tv on all five pages (TV Shows, Films, History, Watchlist
+      detail, Calendar's Agenda and Month views); confirmed Films' bar was
+      genuinely opt-in by checking it still scrolled away before the
+      follow-up ask turned it on.
+
 ## Mobile / responsive
 
 - [x] **Sidebar bottom items hidden behind the mobile address bar** (2026-08-21)\
@@ -4196,6 +4219,34 @@ DATABASE` ×2) — zero residue.\
       keying/describing each entry by that effective state instead of the
       raw row, matching the same rule the activity feed's `droppedBranch()`
       already used.
+
+- [x] **Investigate: two database backups being written per day, not one** (2026-09-16 added, root-caused and fixed 2026-09-16, verified 2026-09-20)
+
+      James, 2026-09-16: seeing two backup dumps land per calendar day
+      instead of the expected one. Root-caused against real prod backup
+      timestamps: `scheduleDatabaseBackup` (`apps/api/src/lib/database-backup.ts`)
+      takes an immediate pass on every boot, then re-anchors its 24h
+      `setInterval` to that boot time - so any restart landing on the same
+      calendar day as the previous scheduled backup (a redeploy, a
+      crash-and-restart) produced a second dump that day, with the clock
+      staying shifted from then on instead of settling back onto a fixed
+      time.
+
+      Fixed by anchoring the recurring pass to a fixed wall-clock hour
+      (`BACKUP_HOUR_UTC`, 03:00 UTC) via a `setTimeout` to the next
+      occurrence before starting the 24h `setInterval`, rather than the
+      interval running blind from process-start time. The immediate
+      on-boot dump is unchanged (still catches config errors early), so a
+      mid-day restart still produces its own dump that day, but the
+      *recurring* schedule no longer drifts with it.
+
+      Verified against both instances' real backup directories
+      (`/pool/docker/rwnd-tv/db-backups/` and
+      `/pool/docker/rwnd-tv-dev/db-backups/` on home-server) over the five
+      days since the fix landed (2026-09-16 through 2026-09-20, including
+      dev/prod redeploys on 2026-09-17 and 2026-09-20 that shifted the
+      dump's time-of-day): exactly one dump per calendar day on both
+      instances throughout, no same-day duplicates even across restarts.
 
 ## Self-hosting & deployment
 

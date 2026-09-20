@@ -175,6 +175,7 @@ export function MoviesPage() {
       {!isError && data && data.movies.length > 0 && (
         <>
           <LibraryControls<SortKey>
+            sticky
             filterValue={filter}
             onFilterChange={setFilter}
             filterLabel={t('movies.filterLabel')}

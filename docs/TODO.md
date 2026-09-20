@@ -107,32 +107,6 @@ Format:
 
 ## TV Shows / Movies gallery follow-ups
 
-- [ ] **Sticky filter/sort bar on TV Shows** (2026-09-06 added; M5)
-
-      "Filter by title", "Filters", and "Sort" (`LibraryControls.tsx`,
-      shared with MoviesPage) should stay pinned at the top of the TV Shows
-      page while the gallery grid scrolls beneath it, instead of scrolling
-      out of view with the rest of the page.
-
-      Requested for `ShowsPage.tsx` specifically; worth considering for
-      `MoviesPage.tsx` too since it uses the same control bar, but confirm
-      with James before extending scope there.
-
-- [ ] **Sticky filter/sort bar on History** (2026-09-06 added; M5)
-
-      Same as the TV Shows item above: `HistoryPage.tsx`'s "Filter by
-      title", "Filters" (`FiltersPanel.tsx`, holding
-      `ActivityKindFilterPanel`/`DateRangeFilterPanel`), and "Sort" row,
-      built from the same shared `LibraryControls.tsx`, should stay pinned
-      at the top while the history list scrolls beneath it.
-
-- [ ] **Sticky filter/sort bar on a Watchlist's detail page** (2026-09-06 added; M5)
-
-      Same as the two items above: `WatchlistDetailPage.tsx`'s "Filter by
-      title" and "Sort" row (`LibraryControls.tsx`; no `FiltersPanel` here,
-      unlike History/TV Shows) should stay pinned at the top while the
-      watchlist's items scroll beneath it.
-
 - [ ] **Virtualize the gallery grid if libraries grow** (2026-08-19 15:25)
 
       Shipped without `content-visibility`/windowing: real libraries are
@@ -267,93 +241,6 @@ Format:
       restore path is still open and wants its own decision, not a quick
       follow-on to the manual "back up now" button (shipped 2026-09-17,
       see `docs/TODO_ARCHIVE.md`).
-
-- [ ] **Investigate: two database backups being written per day, not one** (2026-09-16 added, root-caused 2026-09-16, fixed and deployed to dev 2026-09-16, pending multi-day verification; M5)
-
-      James, 2026-09-16: seeing two backup dumps land per calendar day
-      instead of the expected one. Not yet root-caused; needs
-      investigation, not just a fix guess.
-
-      `scheduleDatabaseBackup` (`apps/api/src/lib/database-backup.ts`,
-      around line 420) is only called once, from `index.ts`, but it runs
-      one pass immediately on every boot and then again every
-      `BACKUP_INTERVAL_HOURS` (24h) via `setInterval` — deliberate, per
-      its own doc comment, so a missing binary/unwritable directory/
-      version mismatch shows up in the boot log rather than a day later.
-      That means any container restart within the same day (a redeploy, a
-      crash-and-restart, a healthcheck-triggered restart) produces an
-      extra immediate dump on top of whatever the 24h timer already
-      produced, which would explain exactly this symptom if the container
-      is in fact restarting roughly once a day. Check `docker compose
-      logs` / container restart count on both dev and prod for a restart
-      cadence that lines up with the timing of the duplicate backups
-      before assuming the fix is in this file at all.
-
-      Distinct from the already-tracked no-concurrent-run-guard item
-      below (which is about two *overlapping* runs corrupting one
-      `.partial` file): this is two complete, individually valid dumps in
-      one day, most likely just retained as two separate files
-      (`dailyRetentionDays` keeps everything younger than its window, so
-      neither would even get pruned as a duplicate).
-
-      **Root-caused 2026-09-16, hypothesis confirmed against real prod
-      backup files** (`/pool/docker/rwnd-tv/db-backups/` on home-server,
-      timestamps below in UTC): the file list shows a clean recurring
-      pattern of a same-day extra dump every time the container restarts:
-
-      ```
-      2026-09-10 14:50 -> 2026-09-11 14:50 (24h, as expected)
-      2026-09-11 23:44 <- extra, same day, from a restart
-      2026-09-12 23:44 (24h from the restart, not the original 14:50 slot)
-      2026-09-13 12:24 <- another restart shifts the clock again
-      2026-09-14 12:24 (24h from that restart)
-      2026-09-14 19:13 <- another same-day extra, another restart
-      2026-09-15 19:13 (24h from that restart)
-      2026-09-15 21:02 <- another same-day extra, another restart
-      ```
-
-      Every single duplicate lines up with a fresh container start (prod's
-      current `StartedAt` is `2026-09-15T21:02:07Z`, 4 seconds before that
-      last backup) — confirming `scheduleDatabaseBackup`'s "run once
-      immediately on boot, then every 24h via `setInterval`" design is
-      exactly the mechanism: the 24h clock re-anchors to whenever the
-      process last started, so any restart landing on the same calendar
-      day as the previous scheduled backup produces a second one that day,
-      and the clock stays shifted from then on rather than settling back
-      onto a fixed time. `docker inspect`'s `RestartCount: 0` doesn't
-      distinguish a deliberate `docker compose up -d` redeploy from a
-      crash-triggered restart (both reset that counter), so this doesn't
-      by itself say whether prod is crash-looping or just being deployed —
-      but it doesn't need to: the bug reproduces from *any* restart,
-      deliberate or not, so the distinction doesn't change the fix.
-
-      **Fixed 2026-09-16**: `scheduleDatabaseBackup` still takes an
-      immediate pass on boot (unchanged, catches config errors early), but
-      the recurring pass now anchors to a fixed wall-clock hour
-      (`BACKUP_HOUR_UTC`, 03:00 UTC) via a `setTimeout` to the next
-      occurrence (`msUntilNextHourUtc`, pure and unit-tested in
-      `database-backup-retention.test.ts`) before starting the 24h
-      `setInterval`, rather than `setInterval` running blind from
-      process-start time. A restart mid-day still produces its own
-      immediate sanity-check dump (accepted, same as before, and bounded by
-      retention), but the *recurring* schedule no longer re-anchors to the
-      restart, so it settles back onto the same time every day instead of
-      drifting further with each restart. `webhook-retention.ts`'s
-      identically-shaped scheduler was deliberately left alone: its prune
-      is idempotent, so a same-day double run there is harmless, unlike a
-      backup producing an extra retained file.
-
-      **Deployed to dev 2026-09-16** and restarted twice back to back
-      (19:44 and 19:47 UTC) to check for boot-time regressions: both came
-      up clean, each still taking its own immediate on-boot dump as
-      designed (unchanged behavior, not the bug). That only confirms the
-      new scheduling code runs without error in the real deployed
-      environment, not that the fix itself holds: the bug was the
-      *recurring* schedule's anchor drifting across days, which needs
-      dev's backup directory (`/pool/docker/rwnd-tv-dev/db-backups/` on
-      home-server) watched over the next few days to confirm dumps keep
-      landing at 03:00 UTC regardless of any restart in between, before
-      archiving this item.
 
 ## Security
 

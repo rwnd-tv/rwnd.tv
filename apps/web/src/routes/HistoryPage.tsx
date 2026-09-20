@@ -250,6 +250,7 @@ export function HistoryPage() {
       ) : (
         <>
           <LibraryControls<ActivitySort>
+            sticky
             filterValue={filter}
             onFilterChange={setFilter}
             filterLabel={t('history.filterLabel')}

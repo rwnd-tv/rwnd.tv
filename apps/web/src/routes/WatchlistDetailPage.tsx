@@ -193,6 +193,7 @@ export function WatchlistDetailPage() {
       ) : (
         <>
           <LibraryControls<SortKey>
+            sticky
             filterValue={filter}
             onFilterChange={setFilter}
             filterLabel={t('watchlists.filterLabel')}

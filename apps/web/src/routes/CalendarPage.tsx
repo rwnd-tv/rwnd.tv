@@ -157,7 +157,7 @@ export function CalendarPage() {
         </p>
       )}
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="sticky top-16 z-10 flex flex-wrap items-center justify-between gap-3 border-b border-[var(--color-border)] bg-[var(--color-bg)] py-3">
         <div role="group" aria-label={t('calendar.view.label')} className="flex gap-2">
           <Button
             type="button"

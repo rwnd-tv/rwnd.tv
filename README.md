@@ -110,6 +110,7 @@ Significant design choices and their reasoning are recorded in [docs/adr/](docs/
 - [0005](docs/adr/0005-metadata-refresh.md): cached season metadata, with a scheduled refresher
 - [0006](docs/adr/0006-multi-provider-metadata.md): multi-provider metadata plumbing
 - [0007](docs/adr/0007-security-posture.md): security posture and trust model (M3 review)
+- [0008](docs/adr/0008-database-backups.md): automatic whole-database backups via `pg_dump`, matched to the server's version at runtime
 
 ## Contributing
 

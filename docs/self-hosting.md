@@ -232,7 +232,7 @@ volumes:
 
 Then `docker compose up -d`. The container runs as an unprivileged user, so `./db-backups` needs to be writable by it. A backup runs immediately on start (so a misconfiguration shows up right away rather than a day later) and every 24 hours after; `docker compose logs app` will show a line per dump.
 
-An admin account can also check this without shell access: the Admin page shows the last backup's time and size, the currently retained dumps, and the outcome of the last run (so a failure is visible even before the next dump would have been due). The same page lets an admin edit the retention policy: how many days of daily backups, weeks of weekly, and months of monthly to keep, each independently, down to 0 to skip a tier entirely (for example, daily backups kept for a year with nothing thinned in between).
+An admin account can also check this without shell access: the Admin page shows the last backup's time and size, the currently retained dumps, and the outcome of the last run (so a failure is visible even before the next dump would have been due). The same page lets an admin edit the retention policy: how many days of daily backups, weeks of weekly, and months of monthly to keep, each independently, down to 0 to skip a tier entirely (for example, daily backups kept for a year with nothing thinned in between), and a "Back up now" button to trigger an immediate dump without waiting for the next scheduled run (rate-limited to 5 per hour, per admin).
 
 Files are named `rwnd-<timestamp>.sql.gz`, so they sort chronologically. Only files matching that exact pattern are ever deleted, so anything else you keep in that directory is left alone.
 
@@ -288,6 +288,8 @@ volumes:
 ```
 
 Then `docker compose up -d`. The container runs as an unprivileged user, so `./backups` needs to be writable by it; if you hit permission errors, `chown` the host directory to match rather than loosening it further. Leave both commented out (the default) and the Backups section of the Database panel just doesn't appear.
+
+Before restoring one of these files, a "Diff" button on each saved backup shows exactly what would change: everything added and removed since that file was written, in one chronological list, so you can tell which backup you actually want before overwriting your current data with it.
 
 ## Email
 

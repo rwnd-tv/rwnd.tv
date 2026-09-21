@@ -1,5 +1,5 @@
 import { and, eq, inArray, sql } from 'drizzle-orm'
-import { UNKNOWN_WATCHED_AT } from '@rwnd/shared'
+import { UNKNOWN_WATCHED_AT, airedEpisode } from '@rwnd/shared'
 import type { Database } from '@rwnd/db'
 import { episodes, externalIds, movies, plays, shows, watchlistItems } from '@rwnd/db'
 import type { ResolvedEpisode } from '../../lib/media.js'
@@ -192,10 +192,7 @@ export async function logMissingWatches(
   const now = new Date()
   const targets = resolvedEpisodes.filter(
     (e): e is ResolvedEpisode & { firstAired: string } =>
-      !alreadyWatched.has(e.id) &&
-      !alreadyHasUnknownWatch.has(e.id) &&
-      e.firstAired !== null &&
-      new Date(e.firstAired) <= now,
+      !alreadyWatched.has(e.id) && !alreadyHasUnknownWatch.has(e.id) && airedEpisode(e, now),
   )
 
   const values = targets.map((e) => ({

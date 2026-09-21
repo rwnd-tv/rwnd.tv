@@ -8,6 +8,7 @@ import {
   playSchema,
   updatePlayRequestSchema,
   uuidSchema,
+  hasAired,
 } from '@rwnd/shared'
 import type { Database } from '@rwnd/db'
 import { episodes, movies, plays, shows } from '@rwnd/db'
@@ -261,7 +262,7 @@ playRoutes.openapi(
     // logMissingWatches (apps/api/src/routes/library/shared.ts) — an episode with
     // no known or future firstAired can't have been watched yet, no matter
     // what watchedAt is requested.
-    if (episode.firstAired === null || new Date(episode.firstAired) > new Date()) {
+    if (!hasAired(episode.firstAired)) {
       return c.json({ error: 'This episode has not aired yet' }, 400)
     }
 

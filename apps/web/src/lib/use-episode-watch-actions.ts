@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import type { SeasonDetail, SeasonEpisode, WatchedStatus } from '@rwnd/shared'
+import { hasAired, type SeasonDetail, type SeasonEpisode, type WatchedStatus } from '@rwnd/shared'
 import { api } from './api-client.js'
 import { invalidateWatchData } from './query-client.js'
 
@@ -106,8 +106,7 @@ export function useEpisodeWatchActions(
   // logMissingWatches enforces server-side (apps/api/src/routes/library.ts),
   // now enforced here too so the toggle never opens a dialog whose only
   // possible outcome is the POST /plays 400 this would otherwise hit.
-  const notAiredYet =
-    !episode || episode.firstAired === null || new Date(episode.firstAired) > new Date()
+  const notAiredYet = !episode || !hasAired(episode.firstAired)
   // Can only mark watched when the show has a TMDB id on record (POST
   // /plays needs it) and the episode has actually aired — unwatching needs
   // neither, so only guarded here. Also disabled outright while `episode`

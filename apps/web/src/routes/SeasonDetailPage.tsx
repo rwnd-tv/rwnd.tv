@@ -2,6 +2,7 @@ import { type ReactNode, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useNavigate, useParams } from 'react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { hasAired } from '@rwnd/shared'
 import { api, ApiError } from '../lib/api-client.js'
 import { invalidateWatchData } from '../lib/query-client.js'
 import { markWatchedRequestBody } from '../lib/date.js'
@@ -262,9 +263,11 @@ export function SeasonDetailPage() {
   // it still has unaired episodes left. The progress bar below is
   // deliberately untouched — it still shows progress against the whole
   // season, aired or not.
-  const airedEpisodes = season.episodes.filter(
-    (episode) => episode.firstAired !== null && new Date(episode.firstAired) <= new Date(),
-  )
+  // Hoists one `now` for the whole filter rather than constructing a new
+  // Date() per episode — a small correctness improvement over the
+  // per-element version this replaced (M5 milestone review, docs/TODO.md).
+  const now = new Date()
+  const airedEpisodes = season.episodes.filter((episode) => hasAired(episode.firstAired, now))
   const watchedAiredEpisodes = airedEpisodes.filter((episode) => episode.watched).length
   const fullyWatched = airedEpisodes.length > 0 && watchedAiredEpisodes === airedEpisodes.length
   // Same "nothing to mark watched yet" gate as ShowDetailPage.tsx's own

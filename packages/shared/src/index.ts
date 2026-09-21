@@ -1,5 +1,6 @@
 export * from './constants.js'
 export * from './slug.js'
+export * from './aired.js'
 export * from './schemas/common.js'
 export * from './schemas/auth.js'
 export * from './schemas/tokens.js'

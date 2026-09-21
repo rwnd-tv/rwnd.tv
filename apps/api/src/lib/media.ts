@@ -1,4 +1,5 @@
 import { and, eq, gt, gte, inArray, sql } from 'drizzle-orm'
+import { hasAired } from '@rwnd/shared'
 import type { Database } from '@rwnd/db'
 import { episodes, externalIds, movies, plays, seasons, shows } from '@rwnd/db'
 import type { MetadataProvider } from '../providers/types.js'
@@ -542,7 +543,7 @@ export async function findNextUnwatchedEpisode(
       const minEpisodeNumber =
         seasonNumber === startSeasonNumber ? (minEpisodeNumberInStartSeason ?? 0) : 0
       return (
-        new Date(episode.firstAired) <= now &&
+        hasAired(episode.firstAired, now) &&
         !watchedIds.has(episode.id) &&
         episode.episodeNumber > minEpisodeNumber
       )

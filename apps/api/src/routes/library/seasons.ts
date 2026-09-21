@@ -10,6 +10,7 @@ import {
   seasonWatchesSchema,
   watchedStatusSchema,
   watchesSchema,
+  hasAired,
 } from '@rwnd/shared'
 import { episodes, plays, ratings, seasons } from '@rwnd/db'
 import type { AppEnv } from '../../types.js'
@@ -659,9 +660,7 @@ seasonRoutes.openapi(
     // Same distinction as the show-level route's own "already fully
     // watched" vs "nothing has aired yet" - see its doc comment.
     const now = new Date()
-    const hasAired = (e: { firstAired: string | null }) =>
-      e.firstAired !== null && new Date(e.firstAired) <= now
-    if (!resolvedEpisodes.some(hasAired)) {
+    if (!resolvedEpisodes.some((e) => hasAired(e.firstAired, now))) {
       return c.json({ error: 'This season has not aired any episodes yet' }, 400)
     }
 

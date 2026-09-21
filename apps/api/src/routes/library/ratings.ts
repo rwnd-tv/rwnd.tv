@@ -1,6 +1,6 @@
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi'
 import { and, eq } from 'drizzle-orm'
-import { ratingStatusSchema, setRatingRequestSchema } from '@rwnd/shared'
+import { ratingStatusSchema, setRatingRequestSchema, hasAired } from '@rwnd/shared'
 import { ratings, seasons } from '@rwnd/db'
 import type { AppEnv } from '../../types.js'
 import { resolveEpisode } from '../../lib/media.js'
@@ -78,7 +78,7 @@ ratingRoutes.openapi(
     // plays.ts) and the bulk "Watched" button's logMissingWatches
     // (apps/api/src/routes/library/shared.ts) — an episode that hasn't
     // aired yet can't be rated either.
-    if (episode.firstAired === null || new Date(episode.firstAired) > new Date()) {
+    if (!hasAired(episode.firstAired)) {
       return c.json({ error: 'This episode has not aired yet' }, 400)
     }
 

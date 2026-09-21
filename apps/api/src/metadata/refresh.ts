@@ -1,4 +1,5 @@
 import { and, eq, exists, gt, gte, inArray, isNull, lt, notExists, or, sql } from 'drizzle-orm'
+import { hasAired } from '@rwnd/shared'
 import type { Database } from '@rwnd/db'
 import { episodes, externalIds, instanceSettings, movies, seasons, shows } from '@rwnd/db'
 import type { MetadataProvider } from '../providers/types.js'
@@ -550,8 +551,7 @@ export async function refreshOneShow(
       const now = new Date()
       airedCountBySeason.set(
         seasonNumber,
-        resolvedEpisodes.filter((e) => e.firstAired !== null && new Date(e.firstAired) <= now)
-          .length,
+        resolvedEpisodes.filter((e) => hasAired(e.firstAired, now)).length,
       )
       await sleep(REQUEST_STAGGER_MS)
     }

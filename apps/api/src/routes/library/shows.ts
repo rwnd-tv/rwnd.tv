@@ -13,6 +13,7 @@ import {
   showWatchesSchema,
   watchlistMembershipStatusSchema,
   uuidSchema,
+  hasAired,
 } from '@rwnd/shared'
 import { droppedShows, episodes, plays, ratings, seasons, shows } from '@rwnd/db'
 import type { AppEnv } from '../../types.js'
@@ -400,9 +401,7 @@ showRoutes.openapi(
             user.locale,
           )
           const now = new Date()
-          healedCount = resolved.filter(
-            (e) => e.firstAired !== null && new Date(e.firstAired) <= now,
-          ).length
+          healedCount = resolved.filter((e) => hasAired(e.firstAired, now)).length
         } else {
           healedCount = season.airDate !== null && season.airDate <= today ? season.episodeCount : 0
         }
@@ -906,9 +905,7 @@ showRoutes.openapi(
     // logMissingWatches itself applies per-episode when silently skipping
     // unaired ones for a partially-aired show.
     const now = new Date()
-    const hasAired = (e: { firstAired: string | null }) =>
-      e.firstAired !== null && new Date(e.firstAired) <= now
-    if (!resolvedEpisodes.some(hasAired)) {
+    if (!resolvedEpisodes.some((e) => hasAired(e.firstAired, now))) {
       return c.json({ error: 'This show has not aired any episodes yet' }, 400)
     }
 

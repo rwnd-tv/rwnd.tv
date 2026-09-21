@@ -269,6 +269,135 @@ Format:
       self-hoster's library gets meaningfully larger and scroll performance
       suffers.
 
+## Watchlists
+
+- [ ] **Sort and filter the Watchlist detail page by status, release year,
+      and TMDB rating** (2026-09-21 added, narrowed 2026-09-21, rating
+      sort added 2026-09-21, filters by status/year/rating added
+      2026-09-21)
+
+      James, 2026-09-21, across one session: wants to sort the watchlist
+      by release year, then asked for a TMDB rating sort too, then asked
+      to also filter by status, release year, and rating. Landed scope:
+      sort by year and rating; filter by status, year, and rating. Not
+      genre, and not the watch-progress-dependent dimensions (my rating,
+      watched year, dropped, progress) - those still don't apply to a
+      possibly-never-watched watchlist item, per the reasoning in
+      `WatchlistDetailPage.tsx`'s own doc comment (lines 80-87) that
+      originally scoped this page down to title-filter-only.
+
+      Turns out "status" isn't watch-progress at all: `LibraryShow`/
+      `LibraryMovie`'s `status` field (`packages/shared/src/schemas/
+      library.ts`) is TMDB's own raw status string (e.g. "Returning
+      Series", "Ended" for shows; TMDB's release status for movies), a
+      property of the underlying title, not of whether/how the user has
+      watched it - same category as genre/year/rating, all fair game for
+      a "what should I watch next" list.
+
+      Three different implementation costs:
+
+      **Release year** - self-contained UI change, no schema/API work:
+      `WatchlistItemMedia` (`packages/shared/src/schemas/watchlists.ts`)
+      already carries `year`, and both `yearComparatorAsc`/
+      `yearComparatorDesc` and `filterByReleaseYear`
+      (`apps/web/src/lib/library-filter.ts`) are already generic over any
+      `{ year: number | null }` - the same shape `ShowsPage.tsx` uses
+      them against, so `ReleaseYearFilterPanel.tsx` drops in as-is too.
+
+      **TMDB rating** needs the same schema/API change as status below
+      (`WatchlistItemMedia` has no `voteAverage` field today;
+      `apps/api/src/routes/watchlists.ts`'s two item queries around lines
+      363 and 375 would need it added alongside `year`/`posterPath`, and
+      the shaping step around line 397 would need it carried through).
+      Once that field exists, `filterByRating`/`ratingComparatorAsc`/
+      `ratingComparatorDesc` (`lib/library-filter.ts`) are already generic
+      over `{ voteAverage: number | null }`, so `RatingFilterPanel.tsx`
+      drops in as-is, same as `ReleaseYearFilterPanel.tsx`.
+
+      **Status** needs the same schema/API addition (no `status` field on
+      `WatchlistItemMedia` either) plus a genuine design decision James
+      flagged 2026-09-21, still open: `StatusFilterPanel.tsx` has only
+      ever been used on `ShowsPage.tsx` for shows alone - `MoviesPage.tsx`
+      has no status filter at all today, confirmed by grep. Shows and
+      movies use completely different TMDB status value sets ("Returning
+      Series"/"Ended"/"Canceled"/"Pilot" for shows vs "Released"/"Post
+      Production"/"Planned" for movies), and `WatchlistDetailPage.tsx`
+      mixes both types in one list. `filterByStatus`'s include-mode logic
+      excludes any item whose status isn't in the include list, so
+      picking a show-only status (e.g. "Ended") on a mixed watchlist would
+      silently hide every movie in the list, and vice versa for a
+      movie-only status - not obviously a bug at a glance, but likely to
+      look like one. Needs a decision before building, not just a drop-in
+      reuse of the existing single-type panel/logic: options discussed
+      2026-09-21 were (a) one merged status list across both types, accepting
+      that cross-type hiding effect, or (b) type-aware filtering where a
+      show-only status leaves movies unaffected (and vice versa), which
+      would need new filter logic rather than reusing `filterByStatus` as
+      written. James, 2026-09-21: leave the decision open for now rather
+      than picking one.
+
+      For all three: extend `WatchlistDetailPage.tsx`'s local `SortKey`
+      union and `sortItems` switch (lines 24-38) with `yearDesc`/
+      `yearAsc`/`ratingDesc`/`ratingAsc`, wrap the page's `<FiltersPanel>`
+      around the three filter panel components (same pattern as
+      `ShowsPage.tsx`, minus its genre/dropped/my-rating/watched-year
+      panels), add matching sort entries to `LibraryControls`'
+      `sortOptions`, and add the new `watchlists.sort*`/filter-panel i18n
+      strings in both `en-US` and `en-GB` `common.json`.
+
+- [ ] **Rethink the "add to watchlist" UI on the show/movie detail pages**
+      (2026-09-21 added)
+
+      James, 2026-09-21: has been adding shows to a custom watchlist and
+      isn't happy with the current UI for it. Two problems: (1) no visual
+      indicator on the page for "this title is on one of my custom
+      lists", unlike the default list, which does get one; (2) it
+      "generally feels clunky" - floated maybe merging the default-list
+      button with the custom-list button as one path worth exploring, but
+      wants real thought put into this rather than a quick patch.
+
+      Current shape, `WatchlistButton.tsx` (shared by both
+      `ShowDetailPage.tsx` and `MovieDetailPage.tsx` - this affects
+      movies too, not just shows, since it's one component): a primary
+      bookmark-icon button that one-click toggles membership in the
+      Default list only (filled/`variant="primary"` when `onDefault` is
+      true, otherwise `secondary`), plus a separate icon-only "manage
+      lists" button that always renders `variant="secondary"` regardless
+      of `myWatchlistIds`, opening a dialog with one checkbox per custom
+      list. That second button is where the missing indicator lives: it
+      never reflects "already on N custom lists" the way the primary
+      button reflects default-list membership.
+
+      This split was itself a deliberate call, not an oversight -
+      `WatchlistButton.tsx`'s own doc comment: "James, 2026-08-27: wanted
+      single-click for the common case, happy for the rest to need more
+      UI." Worth reading before redesigning, since whatever replaces it
+      should account for why single-click-for-Default mattered in the
+      first place, not just fix the missing indicator in isolation.
+
+      James, 2026-09-21, confirmed explicitly: think about the Movie
+      detail page's own UI for this too, not just Show. One shared
+      component today, but the two pages don't offer it the same amount
+      of surrounding room: `ShowDetailPage.tsx`'s action row carries
+      Watched, `+`, Drop, Watchlist, a sort-order icon, and refresh (six
+      controls), while `MovieDetailPage.tsx`'s has Watched, `+`,
+      Watchlist, and refresh (four - no Drop, no sort-order, per the
+      phone-width audit TODO above), so a redesign that reads fine in
+      Movie's more spacious row could still feel cramped in Show's, or
+      vice versa. Check the fix against both pages' actual layouts before
+      calling it done, not just against whichever page it was designed
+      against first.
+
+      Genuinely open on the shape of a fix - no direction picked yet.
+      Possible angles worth considering when this gets picked up: a badge/
+      dot on the manage-lists button when `myWatchlistIds` has any
+      non-default entries; folding Default into the same
+      checkbox-per-list dialog instead of a separate one-click button
+      (trading away the single-click precedent above); or a single
+      combined control that shows current membership count/state at a
+      glance and opens straight into management. Decide with James before
+      building, same as the watchlist status-filter question above.
+
 ## Auth & accounts
 
 - [ ] **Explain invite-only mode on the Create an account screen** (2026-09-16 added)

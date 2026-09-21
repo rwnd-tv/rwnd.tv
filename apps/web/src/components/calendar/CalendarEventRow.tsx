@@ -106,7 +106,10 @@ export function CalendarEventRow({ event, locale }: { event: CalendarEvent; loca
           </span>
         )}
       </span>
-      <span className="min-w-0 flex-1 truncate text-sm">
+      <span
+        className="min-w-0 flex-1 truncate text-sm"
+        title={hidden ? undefined : (event.overview ?? undefined)}
+      >
         <span className="font-medium">{primary}</span>
         {secondary !== undefined && (
           <>

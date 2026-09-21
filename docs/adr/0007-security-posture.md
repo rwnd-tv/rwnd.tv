@@ -550,3 +550,72 @@ added) is in `docs/security/asvs-l1.md`, which remains the durable
 per-requirement record; this ADR is where the _design decision_ (how the
 existing token-in-URL acceptance stays scoped to transit, not logs) is
 explained.
+
+## Update (2026-09-22): M5 milestone review close-out
+
+Per `CLAUDE.md`'s "Closing out a milestone" rule, M5 gets the same
+treatment M3 and M4 each got: a structured review before the milestone
+counts as done. Scoped to `v1.1.0..HEAD` (174 files, ~13.7k insertions /
+~6k deletions since M4's own close), the same base the milestone's
+mechanical `/code-review high` pass used a week earlier.
+
+Run as **one ASVS 4.0.3 Level 1 pass, not M4's seven stages**: M4 was a
+genuinely large milestone (multi-source webhook ingestion, the
+admin/owner privilege model, backups, calendar feeds, a token-encryption
+posture change, supply-chain hardening) that needed splitting to stay
+accurate. M5's own new security-relevant surface is much narrower - most
+of its diff is mobile/responsive CSS, a filter-panel consolidation, and
+doc changes with no security surface at all - so a single pass, the same
+method M3 originally used, is the right amount of process for this
+milestone's actual size.
+
+**No new findings.** Three areas that shipped mid-M5 and had never been
+individually ASVS-reviewed came back clean on direct inspection:
+
+- **Rating/play blocking for unaired or unreleased media** is enforced
+  server-side with a real 400, not just a client-hidden control:
+  `routes/library/ratings.ts` (episode, show via `airedEpisodeCount`, and
+  movie via `resolveReleaseDate`) and the matching checks in
+  `routes/plays.ts`.
+- **The scheduled backup's cross-process concurrent-run guard** is an
+  atomic `open(lockPath, 'wx')` file lock (`lib/database-backup.ts`),
+  stale-cleared after 6h, genuinely cross-process rather than an
+  in-process mutex. `pg_dump` runs via `spawn(..., { shell: false })`
+  with the password passed through `PGPASSWORD`, never argv - no shell
+  injection surface. The manual "back up now" route
+  (`routes/admin-database-backups.ts`) is admin-gated and rate-limited
+  (5/hour/user), 409ing cleanly on an unconfigured backup directory or an
+  already-running job.
+- **The calendar feed default flip** (`includeAllWatched` now defaults
+  `true`) only widens the query window; it stays fully `userId`-scoped
+  through `getFollowedShows`/`getFollowedMovies`, and the feed's own
+  token/auth model is untouched. The one accompanying migration
+  (`0045_optimal_ezekiel.sql`) is exactly this default change and nothing
+  else.
+
+Tonight's own 12-TODO milestone-review cleanup (webhook claim-logic
+dedup, the `UserBulkActions` config-table refactor, and the
+`buildMoviesEvents`/`CalendarEventRow` spoiler-guard de-duplication) also
+came back clean on independent re-review: the lock-before-check-then-write
+ordering and the redeem route's rollback-on-failure both survived the
+`claimLinkForUser`/`claimLinkForUserOrThrow` extraction
+(`lib/webhook-accounts.ts`, `lib/locks.ts`); `UserBulkActions`' trigger
+buttons still can't fire a confirm-gated action (promote/demote/delete)
+without going through the dialog, since `onClick` only ever calls
+`setPendingAction` when a `confirm` block is present, never
+`mutation.mutate` directly; and the new `CalendarEventRow` tooltip gates
+on the identical `hidden` flag the row's existing spoiler-fallback label
+already used, rather than a second, possibly-inconsistent check. The
+season-reconciliation batched `CASE WHEN` UPDATE
+(`routes/library/seasons.ts`) stays fully parameterized through Drizzle's
+`sql` tagged template and `sql.join()` - no string concatenation.
+
+`docs/security/asvs-l1.md` is updated in place (V4.1.3, V5.3.4, and
+V11.1.5) rather than gaining new chapters - M5 didn't introduce a new
+requirement category the way M4's V6/V10/V11 additions did, just new
+evidence for existing ones.
+
+Milestone close (flipping M5 to `✅ done` in `docs/ROADMAP.md`) and any
+eventual version cut both stay separate, later, explicit decisions, not
+automatic just because this review is now complete, same as M3 and M4's
+own close-outs.

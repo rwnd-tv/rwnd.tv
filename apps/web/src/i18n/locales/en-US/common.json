@@ -38,6 +38,10 @@
         "label": "M4 · done",
         "body": "Jellyfin/Emby/Tautulli webhooks, scheduled backups, calendar feeds, admin roles"
       },
+      "m5": {
+        "label": "M5 · done",
+        "body": "Security hardening, maintainability cleanups, sensible defaults, and a full mobile pass"
+      },
       "honest": {
         "label": "Worth knowing:",
         "body": "this is a single-maintainer project, so expect the occasional rough edge, and please file an issue when you hit one.",
@@ -117,7 +121,7 @@
     },
     "status": {
       "title": "Where the project actually is",
-      "body": "The first four milestones are done, and v{{version}} is out. The roadmap in the repo is a living document and this page follows it rather than getting ahead of it.",
+      "body": "The first five milestones are done, and v{{version}} is out. The roadmap in the repo is a living document and this page follows it rather than getting ahead of it.",
       "done": "done",
       "inProgress": "in progress",
       "m1": {
@@ -154,6 +158,15 @@
           "Automatic scheduled database backups, shipped",
           "Calendar of upcoming episodes, via webcal feeds and an in-app Calendar page, shipped",
           "Admin UI for managing users, an owner role, and bulk actions, shipped"
+        ]
+      },
+      "m5": {
+        "title": "M5: Quality, defaults & polish",
+        "items": [
+          "M4-review security follow-ups: encoding fixes, key-rotation resilience, full request logging",
+          "Reuse cleanups, backup scheduling fixes, and a manual back-up button",
+          "Better defaults: History filters, calendar feed scope, no rating unaired titles",
+          "A full mobile and responsive pass, including sticky filter/sort bars"
         ]
       },
       "builtTitle": "Built with Claude Code, in the open.",

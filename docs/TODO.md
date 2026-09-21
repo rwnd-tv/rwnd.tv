@@ -38,42 +38,6 @@ Format:
 
 ## UI polish
 
-- [ ] **Add M5 to the landing page's status section** (2026-09-17 added, M5'd 2026-09-17; M5)
-
-      The landing page's "Where the project actually is" section
-      (`landing.status.*` in `common.json`, rendered by the `MILESTONES`
-      array around line 45 of `LandingPage.tsx`) only lists M1-M4, all
-      `status: 'done'`. M5 is in progress (see `docs/ROADMAP.md`) and isn't
-      represented anywhere on the page yet.
-
-      Mechanically straightforward: add `{ key: 'm5', status: 'inProgress'
-      }` to `MILESTONES`, then `landing.status.m5.title` and four
-      `landing.status.m5.items` bullets in both `en-US` and `en-GB`
-      `common.json` (the layout hardcodes exactly four bullet slots per
-      milestone, `[0, 1, 2, 3]` around line 467). The `inProgress` status
-      label and its muted (non-success-green) styling already exist and
-      already work, unused until now since every milestone so far has been
-      `done` by the time it was added here.
-
-      Only touches the status section, not the top proof strip above it
-      (`MILESTONES.filter(({ status }) => status === 'done')` around line
-      249): that strip is deliberately done-only ("an in-progress one
-      belongs in the more nuanced STATUS section below instead," per its
-      own comment), so M5 should not appear there while still in progress.
-
-      Also update `landing.status.body`'s "The first four milestones are
-      done, and v{{version}} is out" line, which will read oddly once a
-      fifth, non-done milestone is visible right below it.
-
-      Picking four bullets to represent M5 needs a judgement call: M5 (see
-      ROADMAP.md, still marked "working title" there) spans four sub-groups
-      of quite different sizes and states (security hardening, done;
-      maintainability, mostly done; small correctness/default fixes and a
-      mobile/responsive pass, both not started) that don't compress onto
-      the M1-M4 bullets' "one shipped headline feature per line" pattern
-      as cleanly. Worth a status pass close to when M5 actually ships
-      rather than guessing the wording now while it's still moving.
-
 - [ ] **Fold the six other `PlusIcon` copies into the shared one** (2026-09-21 added; Not yet scheduled)
 
       The mobile-pass touch-target fix (M5) moved `PlusIcon`/`MinusIcon`

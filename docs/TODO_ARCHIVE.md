@@ -2258,6 +2258,28 @@ currently-dropped shows, since a row can have both
       the new GHCR digest, revision label verified against the commit
       SHA before promoting).
 
+- [x] **Add M5 to the landing page's status section** (2026-09-17 added,
+      done 2026-09-21) — M5\
+      Written as done rather than in-progress, at James's call: M5's
+      milestone-wide code and security review was scheduled for the same
+      evening, and he didn't want the page updated twice in short
+      succession. `MILESTONES` (`LandingPage.tsx`) gained `{ key: 'm5',
+      status: 'done' }`; `landing.status.m5`/`landing.strip.m5` added in
+      both `en-GB`/`en-US` `common.json`, four bullets each mapping to one
+      of M5's four ROADMAP sub-groups; `landing.status.body`'s "first four
+      milestones" became "first five".\
+      A 5th milestone exposed a real bug in the status grid, not just a
+      copy gap: `lg:grid-cols-4` now wraps to a second row, and the
+      existing `i > 0` border-l / `first:pl-0` padding logic (plus a flat
+      `lg:gap-y-0`) was written assuming exactly one row. Fixed by keying
+      the border/padding off `i % 4 === 0` (row-start, not array-start)
+      instead of `i > 0`, and dropping the `lg:gap-y-0` override so the
+      wrapped row gets the same vertical gap the stacked mobile layout
+      already had. Confirmed live: M5 lands in row 2 with no stray
+      left-border and correct spacing above it, and the top proof strip
+      (`MILESTONES.filter(status === 'done')`) now also shows "M5 · done"
+      automatically, with no separate change needed there.
+
 ## Localization
 
 - [x] **Drop fr-FR** (2026-08-23 done)\

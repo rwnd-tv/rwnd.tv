@@ -47,6 +47,7 @@ const MILESTONES = [
   { key: 'm2', status: 'done' },
   { key: 'm3', status: 'done' },
   { key: 'm4', status: 'done' },
+  { key: 'm5', status: 'done' },
 ] as const
 
 const QUICK_START = `curl -O https://raw.githubusercontent.com/rwnd-tv/rwnd.tv/main/docker-compose.yml
@@ -449,43 +450,55 @@ export function LandingPage() {
               {t('landing.status.body', { version: settings?.appVersion ?? '' })}
             </p>
           </div>
-          {/* gap-y-9 lg:gap-y-0: below lg this grid stacks to one column
-              (no explicit grid-cols until lg), where a flat gap-0 left zero
-              space between one milestone's list and the next one's heading
-              - confirmed on a real 375px phone. At lg and up the columns
-              already get their separation from each item's own lg:px-7
-              plus the border-l divider, so gap stays zeroed there instead
-              of doubling up. */}
-          <div className="mb-9 grid gap-x-0 gap-y-9 lg:grid-cols-4 lg:gap-y-0">
-            {MILESTONES.map(({ key, status }, i) => (
-              <div
-                key={key}
-                // The padding (and the divider it separates) only earns its
-                // keep once the grid actually has columns to divide, at lg
-                // — below that, the section's own px-5 already keeps this
-                // off the viewport edge, and an unconditional px-7 here just
-                // ate into an already-tight phone-width column for no
-                // visual reason.
-                className={`lg:px-7 lg:first:pl-0 ${i > 0 ? 'border-[var(--color-border)] lg:border-l' : ''}`}
-              >
-                <div className="mb-4 flex items-baseline justify-between gap-2 border-b border-[var(--color-border)] pb-3">
-                  <h3 className="text-[15px] font-bold">{t(`landing.status.${key}.title`)}</h3>
-                  <span
-                    className={`font-mono text-[11.5px] font-bold ${status === 'done' ? 'text-[var(--color-success)]' : 'text-[var(--color-fg-muted)]'}`}
-                  >
-                    {t(`landing.status.${status}`)}
-                  </span>
+          {/* gap-x-0 gap-y-9: below lg this grid stacks to one column (no
+              explicit grid-cols until lg), where the vertical gap gives
+              breathing room between one milestone's list and the next
+              one's heading - confirmed on a real 375px phone. gap-y stays
+              unconditional (not zeroed at lg) because a 5th milestone
+              wraps lg:grid-cols-4 onto a second row, which needs the same
+              vertical gap there too; gap-x stays 0 always, since
+              column-to-column separation comes from each item's own
+              padding/border below, not the grid gap. */}
+          <div className="mb-9 grid gap-x-0 gap-y-9 lg:grid-cols-4">
+            {MILESTONES.map(({ key, status }, i) => {
+              // Row-start (not just array-start): with 5 milestones at
+              // lg:grid-cols-4, item 4 (M5) wraps to column 1 of row 2 and
+              // must be treated the same as item 0 - no left border/padding
+              // - rather than picking up a stray border-l floating with
+              // nothing beside it, which `i > 0` alone would give it.
+              const isRowStart = i % 4 === 0
+              return (
+                <div
+                  key={key}
+                  // The padding (and the divider it separates) only earns
+                  // its keep once the grid actually has columns to divide,
+                  // at lg - below that, the section's own px-5 already
+                  // keeps this off the viewport edge, and an unconditional
+                  // px-7 here just ate into an already-tight phone-width
+                  // column for no visual reason.
+                  className={
+                    isRowStart ? 'lg:pr-7' : 'border-[var(--color-border)] lg:border-l lg:px-7'
+                  }
+                >
+                  <div className="mb-4 flex items-baseline justify-between gap-2 border-b border-[var(--color-border)] pb-3">
+                    <h3 className="text-[15px] font-bold">{t(`landing.status.${key}.title`)}</h3>
+                    <span
+                      className={`font-mono text-[11.5px] font-bold ${status === 'done' ? 'text-[var(--color-success)]' : 'text-[var(--color-fg-muted)]'}`}
+                    >
+                      {t(`landing.status.${status}`)}
+                    </span>
+                  </div>
+                  <ul className="m-0 flex list-none flex-col gap-[11px] p-0 text-[13.5px] leading-[1.5] text-[var(--color-fg-muted)]">
+                    {[0, 1, 2, 3].map((itemIndex) => (
+                      <li key={itemIndex} className="relative pl-4">
+                        <span className="absolute left-0 text-[var(--color-success)]">•</span>
+                        {t(`landing.status.${key}.items.${itemIndex}`)}
+                      </li>
+                    ))}
+                  </ul>
                 </div>
-                <ul className="m-0 flex list-none flex-col gap-[11px] p-0 text-[13.5px] leading-[1.5] text-[var(--color-fg-muted)]">
-                  {[0, 1, 2, 3].map((itemIndex) => (
-                    <li key={itemIndex} className="relative pl-4">
-                      <span className="absolute left-0 text-[var(--color-success)]">•</span>
-                      {t(`landing.status.${key}.items.${itemIndex}`)}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
+              )
+            })}
           </div>
           <div
             className="flex flex-wrap items-center justify-between gap-5 rounded-b-[10px] bg-[var(--color-surface)] px-[26px] py-[22px]"

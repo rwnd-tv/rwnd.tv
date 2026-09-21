@@ -8,8 +8,79 @@ import { runBulkAction, type BulkResult } from '../../lib/bulk-action.js'
 import { Button } from '../ui/Button.js'
 import { Dialog } from '../ui/Dialog.js'
 
-type ConfirmAction = 'delete' | 'promote' | 'demote'
-type BulkActionKind = ConfirmAction | 'revokeSessions' | 'passwordReset'
+type BulkActionKind = 'delete' | 'promote' | 'demote' | 'revokeSessions' | 'passwordReset'
+
+interface ConfirmConfig {
+  titleKey: string
+  bodyKey: string
+  confirmLabelKey: string
+  confirmVariant: 'primary' | 'danger'
+}
+
+interface BulkActionEntry {
+  request: (user: AdminUserSummary) => Promise<unknown>
+  buttonLabelKey: string
+  buttonVariant: 'secondary' | 'danger'
+  /** Presence, not a separate `ConfirmAction`/`BulkActionKind` type split, is
+   * what distinguishes an action that confirms first (promote/demote/delete)
+   * from one that fires immediately (revokeSessions/passwordReset). */
+  confirm?: ConfirmConfig
+}
+
+/** One entry per kind, `Record`-keyed so a 6th action is a compile error
+ * until every field below is filled in — the four independent ternary
+ * chains this replaced had no such guarantee: each one's fallthrough `else`
+ * silently meant "demote" with no type error. */
+const ACTIONS: Record<BulkActionKind, BulkActionEntry> = {
+  passwordReset: {
+    request: (u) => api.admin.sendPasswordReset(u.id),
+    buttonLabelKey: 'admin.bulk.sendPasswordReset',
+    buttonVariant: 'secondary',
+  },
+  revokeSessions: {
+    request: (u) => api.admin.revokeAllUserSessions(u.id),
+    buttonLabelKey: 'admin.bulk.revokeSessions',
+    buttonVariant: 'secondary',
+  },
+  promote: {
+    request: (u) => api.admin.updateUserRole(u.id, 'admin'),
+    buttonLabelKey: 'admin.bulk.promote',
+    buttonVariant: 'secondary',
+    confirm: {
+      titleKey: 'admin.bulk.promoteConfirmTitle',
+      bodyKey: 'admin.bulk.promoteConfirmBody',
+      confirmLabelKey: 'admin.bulk.confirmPromote',
+      confirmVariant: 'primary',
+    },
+  },
+  demote: {
+    request: (u) => api.admin.updateUserRole(u.id, 'user'),
+    buttonLabelKey: 'admin.bulk.demote',
+    buttonVariant: 'danger',
+    confirm: {
+      titleKey: 'admin.bulk.demoteConfirmTitle',
+      bodyKey: 'admin.bulk.demoteConfirmBody',
+      confirmLabelKey: 'admin.bulk.confirmDemote',
+      confirmVariant: 'danger',
+    },
+  },
+  delete: {
+    request: (u) => api.admin.deleteUser(u.id),
+    buttonLabelKey: 'admin.bulk.delete',
+    buttonVariant: 'danger',
+    confirm: {
+      titleKey: 'admin.bulk.deleteConfirmTitle',
+      bodyKey: 'admin.bulk.deleteConfirmBody',
+      confirmLabelKey: 'admin.bulk.confirmDelete',
+      confirmVariant: 'danger',
+    },
+  },
+}
+
+/** Trigger row render order: least to most destructive. Kept as an explicit
+ * list rather than `Object.keys(ACTIONS)` so it can't silently reshuffle if
+ * the table above is ever reordered for readability. */
+const ORDER: BulkActionKind[] = ['passwordReset', 'revokeSessions', 'promote', 'demote', 'delete']
 
 const MAX_NAMES_LISTED = 10
 
@@ -42,6 +113,31 @@ function AffectedNames({ users }: { users: AdminUserSummary[] }) {
       {remaining > 0 && <li>{t('admin.bulk.affectedMore', { count: remaining })}</li>}
     </ul>
   )
+}
+
+/** One `useMutation` per `BulkActionKind`, called explicitly five times at
+ * the top of the component (not `.map()`'d over `ACTIONS`) so the Rules of
+ * Hooks stay satisfied the ordinary way — a variable number of hook calls
+ * would break on any future 6th action added to the table. */
+function useBulkActionMutation(
+  kind: BulkActionKind,
+  onSettled: (
+    kind: BulkActionKind,
+    result: BulkResult<AdminUserSummary>,
+    targets: AdminUserSummary[],
+  ) => void,
+) {
+  const { t } = useTranslation()
+  return useMutation({
+    mutationFn: (targets: AdminUserSummary[]) =>
+      runBulkAction(
+        targets,
+        ACTIONS[kind].request,
+        (u) => u.displayName,
+        t('common.somethingWentWrong'),
+      ),
+    onSuccess: (result, targets) => onSettled(kind, result, targets),
+  })
 }
 
 /**
@@ -89,7 +185,7 @@ export function UserBulkActions({
   const { data: publicSettings } = usePublicSettings()
   const emailConfigured = publicSettings?.emailConfigured ?? false
 
-  const [pendingAction, setPendingAction] = useState<ConfirmAction | null>(null)
+  const [pendingAction, setPendingAction] = useState<BulkActionKind | null>(null)
   const [report, setReport] = useState<{
     action: BulkActionKind
     total: number
@@ -116,67 +212,21 @@ export function UserBulkActions({
     onSelectionSettled(result.failures.map((f) => f.id))
   }
 
-  const deleteUsers = useMutation({
-    mutationFn: (targets: AdminUserSummary[]) =>
-      runBulkAction(
-        targets,
-        (u) => api.admin.deleteUser(u.id),
-        (u) => u.displayName,
-        t('common.somethingWentWrong'),
-      ),
-    onSuccess: (result, targets) => finish('delete', result, targets),
-  })
+  const deleteUsers = useBulkActionMutation('delete', finish)
+  const promoteUsers = useBulkActionMutation('promote', finish)
+  const demoteUsers = useBulkActionMutation('demote', finish)
+  const revokeSessions = useBulkActionMutation('revokeSessions', finish)
+  const sendPasswordResets = useBulkActionMutation('passwordReset', finish)
 
-  const promoteUsers = useMutation({
-    mutationFn: (targets: AdminUserSummary[]) =>
-      runBulkAction(
-        targets,
-        (u) => api.admin.updateUserRole(u.id, 'admin'),
-        (u) => u.displayName,
-        t('common.somethingWentWrong'),
-      ),
-    onSuccess: (result, targets) => finish('promote', result, targets),
-  })
+  const mutations: Record<BulkActionKind, ReturnType<typeof useBulkActionMutation>> = {
+    delete: deleteUsers,
+    promote: promoteUsers,
+    demote: demoteUsers,
+    revokeSessions,
+    passwordReset: sendPasswordResets,
+  }
 
-  const demoteUsers = useMutation({
-    mutationFn: (targets: AdminUserSummary[]) =>
-      runBulkAction(
-        targets,
-        (u) => api.admin.updateUserRole(u.id, 'user'),
-        (u) => u.displayName,
-        t('common.somethingWentWrong'),
-      ),
-    onSuccess: (result, targets) => finish('demote', result, targets),
-  })
-
-  const revokeSessions = useMutation({
-    mutationFn: (targets: AdminUserSummary[]) =>
-      runBulkAction(
-        targets,
-        (u) => api.admin.revokeAllUserSessions(u.id),
-        (u) => u.displayName,
-        t('common.somethingWentWrong'),
-      ),
-    onSuccess: (result, targets) => finish('revokeSessions', result, targets),
-  })
-
-  const sendPasswordResets = useMutation({
-    mutationFn: (targets: AdminUserSummary[]) =>
-      runBulkAction(
-        targets,
-        (u) => api.admin.sendPasswordReset(u.id),
-        (u) => u.displayName,
-        t('common.somethingWentWrong'),
-      ),
-    onSuccess: (result, targets) => finish('passwordReset', result, targets),
-  })
-
-  const isBusy =
-    deleteUsers.isPending ||
-    promoteUsers.isPending ||
-    demoteUsers.isPending ||
-    revokeSessions.isPending ||
-    sendPasswordResets.isPending
+  const isBusy = Object.values(mutations).some((m) => m.isPending)
 
   // onBusyChange is UsersPanel.tsx's setIsBulkBusy (a setState function, so
   // stable across renders) — freezing every row checkbox and select-all
@@ -186,12 +236,8 @@ export function UserBulkActions({
   // overlapping Promise.allSettled loop.
   useEffect(() => onBusyChange(isBusy), [isBusy, onBusyChange])
 
-  const confirmMutation =
-    pendingAction === 'delete'
-      ? deleteUsers
-      : pendingAction === 'promote'
-        ? promoteUsers
-        : demoteUsers
+  const pendingConfig = pendingAction ? ACTIONS[pendingAction].confirm : undefined
+  const confirmMutation = pendingAction ? mutations[pendingAction] : undefined
 
   if (selectedUsers.length === 0 && !report) return null
 
@@ -205,57 +251,42 @@ export function UserBulkActions({
               {t('admin.bulk.hidden', { count: hiddenSelectedCount })}
             </span>
           )}
-          {emailConfigured ? (
-            <Button
-              type="button"
-              variant="secondary"
-              disabled={isBusy}
-              isLoading={sendPasswordResets.isPending}
-              onClick={() => sendPasswordResets.mutate(selectedUsers)}
-            >
-              {t('admin.bulk.sendPasswordReset')}
-            </Button>
-          ) : (
-            <span
-              className="text-sm text-[var(--color-fg-muted)]"
-              title={t('admin.passwordResetUnavailable')}
-            >
-              {t('admin.bulk.passwordResetUnavailableShort')}
-            </span>
-          )}
-          <Button
-            type="button"
-            variant="secondary"
-            disabled={isBusy}
-            isLoading={revokeSessions.isPending}
-            onClick={() => revokeSessions.mutate(selectedUsers)}
-          >
-            {t('admin.bulk.revokeSessions')}
-          </Button>
-          <Button
-            type="button"
-            variant="secondary"
-            disabled={isBusy}
-            onClick={() => setPendingAction('promote')}
-          >
-            {t('admin.bulk.promote')}
-          </Button>
-          <Button
-            type="button"
-            variant="danger"
-            disabled={isBusy}
-            onClick={() => setPendingAction('demote')}
-          >
-            {t('admin.bulk.demote')}
-          </Button>
-          <Button
-            type="button"
-            variant="danger"
-            disabled={isBusy}
-            onClick={() => setPendingAction('delete')}
-          >
-            {t('admin.bulk.delete')}
-          </Button>
+          {ORDER.map((kind) => {
+            // passwordReset alone has an availability gate — SMTP isn't
+            // configured on every instance, and no other action depends on
+            // an external service the way this one does.
+            if (kind === 'passwordReset' && !emailConfigured) {
+              return (
+                <span
+                  key={kind}
+                  className="text-sm text-[var(--color-fg-muted)]"
+                  title={t('admin.passwordResetUnavailable')}
+                >
+                  {t('admin.bulk.passwordResetUnavailableShort')}
+                </span>
+              )
+            }
+            const entry = ACTIONS[kind]
+            const mutation = mutations[kind]
+            return (
+              <Button
+                key={kind}
+                type="button"
+                variant={entry.buttonVariant}
+                disabled={isBusy}
+                // Immediate actions show their own spinner on the trigger;
+                // confirmed ones show it on the dialog's confirm button
+                // instead (below) — derivable from whether `confirm` is
+                // set, but stated explicitly rather than left implicit.
+                isLoading={entry.confirm ? undefined : mutation.isPending}
+                onClick={() =>
+                  entry.confirm ? setPendingAction(kind) : mutation.mutate(selectedUsers)
+                }
+              >
+                {t(entry.buttonLabelKey)}
+              </Button>
+            )
+          })}
           <Button type="button" variant="ghost" disabled={isBusy} onClick={onClearSelection}>
             {t('admin.bulk.clear')}
           </Button>
@@ -289,20 +320,10 @@ export function UserBulkActions({
       <Dialog
         open={pendingAction !== null}
         onClose={() => setPendingAction(null)}
-        title={
-          pendingAction === 'delete'
-            ? t('admin.bulk.deleteConfirmTitle', { count: selectedUsers.length })
-            : pendingAction === 'promote'
-              ? t('admin.bulk.promoteConfirmTitle', { count: selectedUsers.length })
-              : t('admin.bulk.demoteConfirmTitle', { count: selectedUsers.length })
-        }
+        title={pendingConfig ? t(pendingConfig.titleKey, { count: selectedUsers.length }) : ''}
       >
         <p className="mb-2 text-sm text-[var(--color-fg-muted)]">
-          {pendingAction === 'delete'
-            ? t('admin.bulk.deleteConfirmBody')
-            : pendingAction === 'promote'
-              ? t('admin.bulk.promoteConfirmBody')
-              : t('admin.bulk.demoteConfirmBody')}
+          {pendingConfig ? t(pendingConfig.bodyKey) : ''}
         </p>
         <AffectedNames users={selectedUsers} />
         <div className="flex justify-end gap-2">
@@ -311,15 +332,11 @@ export function UserBulkActions({
           </Button>
           <Button
             type="button"
-            variant={pendingAction === 'promote' ? 'primary' : 'danger'}
-            isLoading={confirmMutation.isPending}
-            onClick={() => pendingAction && confirmMutation.mutate(selectedUsers)}
+            variant={pendingConfig?.confirmVariant ?? 'danger'}
+            isLoading={confirmMutation?.isPending}
+            onClick={() => confirmMutation?.mutate(selectedUsers)}
           >
-            {pendingAction === 'delete'
-              ? t('admin.bulk.confirmDelete')
-              : pendingAction === 'promote'
-                ? t('admin.bulk.confirmPromote')
-                : t('admin.bulk.confirmDemote')}
+            {pendingConfig ? t(pendingConfig.confirmLabelKey) : ''}
           </Button>
         </div>
       </Dialog>

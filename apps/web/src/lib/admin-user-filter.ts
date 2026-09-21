@@ -26,7 +26,7 @@ export function filterByNameOrEmail<T extends { displayName: string; email: stri
   )
 }
 
-/** Role filter panel (UsersPanel.tsx / RoleFilterPanel.tsx). Same
+/** Role filter panel (UsersPanel.tsx / ui/KeyedFilterPanel.tsx). Same
  * include/exclude shape as `filterByStatus` (library-filter.ts) — reusing
  * its `StatusFilters` type rather than declaring an identical one — over
  * `role` instead of `status`: a single-valued field, but a real one, so

@@ -31,9 +31,8 @@ import { Spinner } from '../ui/Spinner.js'
 import { usePanelOpen } from '../../lib/use-panel-open.js'
 import { LibraryControls } from '../library/LibraryControls.js'
 import { FiltersPanel } from '../library/FiltersPanel.js'
-import { RoleFilterPanel } from './RoleFilterPanel.js'
-import { MfaFilterPanel } from './MfaFilterPanel.js'
-import { VerifiedFilterPanel } from './VerifiedFilterPanel.js'
+import { KeyedFilterPanel } from '../ui/KeyedFilterPanel.js'
+import { BooleanFilterPanel } from '../ui/BooleanFilterPanel.js'
 import { UserRow } from './UserRow.js'
 import { UserBulkActions } from './UserBulkActions.js'
 
@@ -83,9 +82,9 @@ function sortUsers(users: AdminUserSummary[], sortBy: SortKey, locale: string): 
  * "Filters…" button expanding a `FiltersPanel` (James, 2026-09-03: tried
  * putting the 3 facets inline first, but that overflowed the controls row
  * and squeezed the search box — the collapsible panel the galleries
- * already use avoids that), one collapsible `*FilterPanel.tsx` section per
- * facet (`RoleFilterPanel`/`MfaFilterPanel`/`VerifiedFilterPanel`, modelled
- * on `StatusFilterPanel`/`DroppedFilterPanel`), and a Reset button.
+ * already use avoids that), one collapsible filter section per facet
+ * (role via `KeyedFilterPanel`, MFA/verified via `BooleanFilterPanel`,
+ * shared with the library filter panels), and a Reset button.
  *
  * Expanded by default as of 2026-09-11 (docs/TODO_ARCHIVE.md), reversing
  * the 2026-09-03 decision recorded above to collapse it like every other
@@ -220,8 +219,8 @@ export function UsersPanel() {
 
           {filtersOpen && (
             <FiltersPanel>
-              <RoleFilterPanel
-                roles={ALL_ROLES}
+              <KeyedFilterPanel
+                keys={ALL_ROLES}
                 labelFor={(role) => t(`admin.${ROLE_KEY[role]}`)}
                 filters={roleFilters}
                 onChange={setRoleFilters}
@@ -229,7 +228,7 @@ export function UsersPanel() {
                 includeLabel={t('admin.usersFiltersPanel.include')}
                 excludeLabel={t('admin.usersFiltersPanel.exclude')}
               />
-              <MfaFilterPanel
+              <BooleanFilterPanel
                 mode={mfaMode}
                 onChange={setMfaMode}
                 groupLabel={t('admin.usersFiltersPanel.mfa')}
@@ -237,7 +236,7 @@ export function UsersPanel() {
                 includeLabel={t('admin.usersFiltersPanel.include')}
                 excludeLabel={t('admin.usersFiltersPanel.exclude')}
               />
-              <VerifiedFilterPanel
+              <BooleanFilterPanel
                 mode={verifiedMode}
                 onChange={setVerifiedMode}
                 groupLabel={t('admin.usersFiltersPanel.emailVerified')}

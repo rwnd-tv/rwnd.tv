@@ -141,7 +141,7 @@ export function collectGenres<T extends { genres: string[] }>(
 }
 
 /**
- * "Status" filter panel (ShowsPage.tsx / StatusFilterPanel.tsx). Same
+ * "Status" filter panel (ShowsPage.tsx / ui/KeyedFilterPanel.tsx). Same
  * include/exclude shape as the genre filter above — reusing its mode type
  * rather than redeclaring an identical union — but over a single-valued
  * field (`status`) instead of an array, since a show only ever has one
@@ -371,7 +371,7 @@ export function filterByWatchedYear<T extends { lastWatchedAt: string }>(
 }
 
 /**
- * "Dropped" filter panel (ShowsPage.tsx / DroppedFilterPanel.tsx). Same
+ * "Dropped" filter panel (ShowsPage.tsx / ui/BooleanFilterPanel.tsx). Same
  * tri-state shape as `UnknownWatchedMode` above — a single condition, not a
  * genre-style set of named items — but a different default: dropped shows
  * are meant to be hidden unless asked for, so ShowsPage.tsx seeds this

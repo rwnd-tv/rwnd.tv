@@ -5,20 +5,20 @@ export type IncludeExcludeMode = 'include' | 'exclude'
 
 /**
  * The plus/minus include/exclude row shared by every filter panel that
- * offers one: GenreFilterPanel, StatusFilterPanel, MyRatingFilterPanel,
- * WatchedYearFilterPanel, DroppedFilterPanel (library), and RoleFilterPanel,
- * MfaFilterPanel, VerifiedFilterPanel (admin). Those eight used to each
- * hand-roll an identical `*ModeButton` — a deliberate duplication at the
- * time (see this file's own history), reversed here because the control
- * also needed the IconButton hit-area fix, and fixing eight copies
- * separately would drift again.
+ * offers one: GenreFilterPanel, MyRatingFilterPanel, WatchedYearFilterPanel
+ * (library), plus the two generic panels — ui/KeyedFilterPanel.tsx (status,
+ * role) and ui/BooleanFilterPanel.tsx (dropped, MFA, email verified) — that
+ * later replaced five of those panels' own near-identical copies. Originally
+ * extracted from eight hand-rolled `*ModeButton` copies (see this file's own
+ * history) because the control also needed the IconButton hit-area fix, and
+ * fixing eight copies separately would drift again.
  *
- * Deliberately not generic: every one of the eight panels' own mode types
- * (`GenreFilterMode`, `Exclude<UnratedMode, 'neutral'>`, etc.) is
- * structurally `'include' | 'exclude'`, so a single non-generic
- * `IncludeExcludeMode` is mutually assignable with all of them. Each panel
- * keeps its own union on its own state/setter; only this leaf control
- * speaks the shared two-value one.
+ * Deliberately not generic: every caller's own mode type (`GenreFilterMode`,
+ * `Exclude<UnratedMode, 'neutral'>`, the generic panels' own type
+ * parameters, etc.) is structurally `'include' | 'exclude'`, so a single
+ * non-generic `IncludeExcludeMode` is mutually assignable with all of them.
+ * Each caller keeps its own union on its own state/setter; only this leaf
+ * control speaks the shared two-value one.
  */
 export function IncludeExcludeToggle({
   value,

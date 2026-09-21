@@ -36,12 +36,12 @@ import { ProgressBar } from '../components/library/ProgressBar.js'
 import { LibraryControls } from '../components/library/LibraryControls.js'
 import { FiltersPanel } from '../components/library/FiltersPanel.js'
 import { GenreFilterPanel } from '../components/library/GenreFilterPanel.js'
-import { StatusFilterPanel } from '../components/library/StatusFilterPanel.js'
+import { KeyedFilterPanel } from '../components/ui/KeyedFilterPanel.js'
 import { ReleaseYearFilterPanel } from '../components/library/ReleaseYearFilterPanel.js'
 import { RatingFilterPanel } from '../components/library/RatingFilterPanel.js'
 import { MyRatingFilterPanel } from '../components/library/MyRatingFilterPanel.js'
 import { WatchedYearFilterPanel } from '../components/library/WatchedYearFilterPanel.js'
-import { DroppedFilterPanel } from '../components/library/DroppedFilterPanel.js'
+import { BooleanFilterPanel } from '../components/ui/BooleanFilterPanel.js'
 import { Button } from '../components/ui/Button.js'
 import { Spinner } from '../components/ui/Spinner.js'
 
@@ -282,8 +282,8 @@ export function ShowsPage() {
                 includeLabel={t('shows.filtersPanel.include')}
                 excludeLabel={t('shows.filtersPanel.exclude')}
               />
-              <StatusFilterPanel
-                statuses={availableStatuses}
+              <KeyedFilterPanel
+                keys={availableStatuses}
                 labelFor={statusLabel}
                 filters={statusFilters}
                 onChange={setStatusFilters}
@@ -329,7 +329,7 @@ export function ShowsPage() {
                   excludeLabel={t('shows.filtersPanel.exclude')}
                 />
               )}
-              <DroppedFilterPanel
+              <BooleanFilterPanel
                 mode={droppedMode}
                 onChange={setDroppedMode}
                 groupLabel={t('shows.filtersPanel.dropped')}

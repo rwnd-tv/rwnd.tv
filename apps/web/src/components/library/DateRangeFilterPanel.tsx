@@ -1,5 +1,6 @@
 import type { DateRange } from '../../lib/use-date-range-cookie.js'
 import { Field } from '../ui/Field.js'
+import { FilterSection } from './FilterSection.js'
 
 /**
  * One collapsible section of the "Filters…" panel (see FiltersPanel.tsx,
@@ -26,10 +27,7 @@ export function DateRangeFilterPanel({
   beforeLabel: string
 }) {
   return (
-    <details>
-      <summary className="cursor-pointer text-sm font-semibold text-[var(--color-fg)]">
-        {groupLabel}
-      </summary>
+    <FilterSection title={groupLabel}>
       <div className="mt-3 flex w-fit gap-3">
         <Field
           type="date"
@@ -46,6 +44,6 @@ export function DateRangeFilterPanel({
           onChange={(e) => onChange({ ...range, before: e.target.value || null })}
         />
       </div>
-    </details>
+    </FilterSection>
   )
 }

@@ -1,5 +1,6 @@
 import type { GenreFilterMode, GenreFilters } from '../../lib/library-filter.js'
 import { IncludeExcludeToggle } from '../ui/IncludeExcludeToggle.js'
+import { FilterSection } from './FilterSection.js'
 
 /**
  * One collapsible section of the "Filters…" panel (see FiltersPanel.tsx,
@@ -44,13 +45,7 @@ export function GenreFilterPanel({
   }
 
   return (
-    // Native <details>/<summary> — same collapsible pattern already used
-    // for the failure list in ImportProgress.tsx: a real disclosure
-    // triangle for free, closed by default, no extra state to manage.
-    <details>
-      <summary className="cursor-pointer text-sm font-semibold text-[var(--color-fg)]">
-        {groupLabel}
-      </summary>
+    <FilterSection title={groupLabel}>
       {/* w-fit: sizes to the widest row's natural content width (longest
           genre name + icons), so each shorter row's justify-between icons
           land close to that same right edge instead of being spread across
@@ -72,6 +67,6 @@ export function GenreFilterPanel({
           )
         })}
       </ul>
-    </details>
+    </FilterSection>
   )
 }

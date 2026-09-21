@@ -1,5 +1,6 @@
 import { DualRangeSlider } from '../ui/DualRangeSlider.js'
 import type { AfterBefore } from '../../lib/use-year-range-cookie.js'
+import { FilterSection } from './FilterSection.js'
 
 /**
  * Same shape as ReleaseYearFilterPanel — a single two-handle
@@ -27,10 +28,7 @@ export function RatingFilterPanel({
   maxLabel: string
 }) {
   return (
-    <details>
-      <summary className="cursor-pointer text-sm font-semibold text-[var(--color-fg)]">
-        {groupLabel}
-      </summary>
+    <FilterSection title={groupLabel}>
       <div className="mt-3 w-64">
         <DualRangeSlider
           min={min}
@@ -43,6 +41,6 @@ export function RatingFilterPanel({
           formatValue={(v) => v.toFixed(1)}
         />
       </div>
-    </details>
+    </FilterSection>
   )
 }

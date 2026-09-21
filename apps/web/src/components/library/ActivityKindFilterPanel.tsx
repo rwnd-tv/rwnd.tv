@@ -1,11 +1,12 @@
 import { ACTIVITY_KINDS, type ActivityKind } from '@rwnd/shared'
+import { FilterSection } from './FilterSection.js'
 
 /**
  * One collapsible section of the "Filters…" panel (see FiltersPanel.tsx,
  * HistoryPage.tsx) — a plain checked/unchecked list over the four fixed
  * ACTIVITY_KINDS, not the include/exclude toggle every other filter panel
- * in this app uses (GenreFilterPanel.tsx, StatusFilterPanel.tsx,
- * DroppedFilterPanel.tsx) — see use-activity-kind-filter-cookie.ts for why
+ * in this app uses (GenreFilterPanel.tsx, ui/KeyedFilterPanel.tsx,
+ * ui/BooleanFilterPanel.tsx) — see use-activity-kind-filter-cookie.ts for why
  * `kind` doesn't fit that shape.
  */
 export function ActivityKindFilterPanel({
@@ -27,10 +28,7 @@ export function ActivityKindFilterPanel({
   }
 
   return (
-    <details>
-      <summary className="cursor-pointer text-sm font-semibold text-[var(--color-fg)]">
-        {groupLabel}
-      </summary>
+    <FilterSection title={groupLabel}>
       <ul className="mt-3 flex w-fit flex-col gap-2 text-sm">
         {ACTIVITY_KINDS.map((kind) => (
           <li key={kind}>
@@ -41,6 +39,6 @@ export function ActivityKindFilterPanel({
           </li>
         ))}
       </ul>
-    </details>
+    </FilterSection>
   )
 }

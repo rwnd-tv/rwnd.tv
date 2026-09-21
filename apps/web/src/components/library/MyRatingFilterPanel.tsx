@@ -2,6 +2,7 @@ import { DualRangeSlider } from '../ui/DualRangeSlider.js'
 import { IncludeExcludeToggle } from '../ui/IncludeExcludeToggle.js'
 import type { UnratedMode } from '../../lib/library-filter.js'
 import type { AfterBefore } from '../../lib/use-year-range-cookie.js'
+import { FilterSection } from './FilterSection.js'
 
 /**
  * Same shape as WatchedYearFilterPanel — a DualRangeSlider plus a tri-state
@@ -43,10 +44,7 @@ export function MyRatingFilterPanel({
   }
 
   return (
-    <details>
-      <summary className="cursor-pointer text-sm font-semibold text-[var(--color-fg)]">
-        {groupLabel}
-      </summary>
+    <FilterSection title={groupLabel}>
       <div className="mt-3 flex w-64 flex-col gap-4">
         <DualRangeSlider
           min={min}
@@ -68,6 +66,6 @@ export function MyRatingFilterPanel({
           />
         </div>
       </div>
-    </details>
+    </FilterSection>
   )
 }

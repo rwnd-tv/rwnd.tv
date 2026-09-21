@@ -36,18 +36,21 @@ Format:
       same thing from different angles; removing the ignore once TS 7 is
       supported stays the exit condition either way.
 
-- [ ] **Em-dashes in `docs/TODO.md` and `docs/adr/0007-security-posture.md` violate CLAUDE.md's prose-style rule** (2026-09-21 added, M5 review; Not yet scheduled)
+- [x] **Em-dashes in `docs/TODO.md` and `docs/adr/0007-security-posture.md` violate CLAUDE.md's prose-style rule** (2026-09-21 added, M5 review, fixed 2026-09-21; M5)
 
       CLAUDE.md's "Prose style in docs" section is explicit that
       `docs/TODO.md` is not exempt ("it's actively read, so it follows the
       same rule as everything else above"), and `docs/adr/` isn't exempt
-      either (only `docs/TODO_ARCHIVE.md` is). Confirmed live via `grep -c
-      "—"`: 25 instances in `docs/TODO.md`, 14 in `docs/adr/
+      either (only `docs/TODO_ARCHIVE.md` is). Found, via `grep -c
+      "—"`, 25 instances in `docs/TODO.md` and 14 in `docs/adr/
       0007-security-posture.md`, added across several earlier M5 commits
       (the security-hardening follow-ups and the M4-review write-up).
-      Needs a real read-through per instance to pick the right
-      replacement (colon, semicolon, comma, parentheses, or a separate
-      sentence) rather than a mechanical find-and-replace.
+
+      Fixed with a real read-through per instance rather than a mechanical
+      find-and-replace, picking whichever of colon, semicolon, comma,
+      parentheses, or a separate sentence read best for that sentence. One
+      instance intentionally remains in `docs/TODO.md`: the literal glyph
+      quoted above.
 
 ## UI polish
 
@@ -366,7 +369,7 @@ Format:
 
       Would show a rating badge next to the existing plain-text "IMDb"
       link on the detail pages (`MovieDetailPage.tsx`, around line 288 as
-      of 2026-09-16 — drifted from 276 when this item was first logged;
+      of 2026-09-16, drifted from 276 when this item was first logged;
       that link's own comment currently says "this app holds no IMDb
       rating"). Link groundwork (`imdbId` already resolved for most
       movies/shows) exists; only the rating value itself is missing.
@@ -441,7 +444,7 @@ Format:
       `docs/security/asvs-l1.md`) only ever added minimal
       `[security]`-prefixed event logging (`apps/api/src/lib/security-log.ts`),
       not a general request-logging pipeline. Left as a genuine, deliberately
-      unclosed gap at the time — but the old Security section this item lived
+      unclosed gap at the time, but the old Security section this item lived
       in got fully closed out and archived to `docs/TODO_ARCHIVE.md` without
       this one item being carried forward, leaving `asvs-l1.md`'s "Deferred
       items" section pointing at a section that no longer existed. Re-homed
@@ -454,13 +457,13 @@ Format:
       hook to redact the path before it's formatted). A new
       `lib/redact-path.ts` scrubs webhook/calendar-feed tokens out of the
       path before anything is logged, since those live as URL path
-      segments, not headers — see
+      segments, not headers; see
       [ADR 0007](adr/0007-security-posture.md)'s 2026-09-16 update for why
       that's the load-bearing design constraint. `LOG_FORMAT` env var
       (`json`/`pretty`/`silent`) controls output shape.
       `docs/security/asvs-l1.md` gained V7.1.2-V7.1.4 and V7.2.1-V7.2.2
       rows for this. `lib/security-log.ts` stays a deliberately separate
-      stream — see its own updated doc comment.
+      stream; see its own updated doc comment.
 
 - [ ] **Add a request/correlation id to the structured request log** (2026-09-16 added; Not yet scheduled)
 
@@ -468,7 +471,7 @@ Format:
       (above): `hono/request-id` and `hono/context-storage` are both
       already bundled with the installed Hono version (zero new
       dependency), but nothing in this codebase consumes a correlation id
-      today — single container, single process, no trace aggregation. A
+      today: single container, single process, no trace aggregation. A
       new field is purely additive later (breaks no existing log
       consumer), so there was no reason to build the plumbing ahead of an
       actual need.
@@ -488,7 +491,7 @@ Format:
 
       - [x] Stage 1: webhook ingestion core & trust model (Jellyfin/Emby/Tautulli,
             source-agnostic dispatch, play-dedup/advisory-lock rework,
-            consent-based attribution rework) — 2026-09-14. Fixed a real
+            consent-based attribution rework). 2026-09-14: fixed a real
             TOCTOU race in `resolveWebhookAccount` (concurrent first-sighting
             deliveries for the same account could 500 on a unique-index
             collision; `apps/api/src/lib/webhook-accounts.ts`), with a
@@ -499,7 +502,7 @@ Format:
             out of `/security-review`'s own scope. ASVS rows for Stage 7:
             V4.2.1 pass, new V11 section (business-logic/workflow-bypass)
             needed - pass, no bypass found.
-      - [x] Stage 2: admin & owner-role privilege model — 2026-09-14. No
+      - [x] Stage 2: admin & owner-role privilege model. 2026-09-14: no
             findings. Verified `assertNotLastAdmin`'s row-lock genuinely
             closes the concurrent-demotion race (same transaction as the
             write, at every call site), bulk actions re-enforce every
@@ -508,22 +511,22 @@ Format:
             row before swapping, `GET /admin/users` exposes nothing beyond
             ADR 0007's already-accepted scope, and the password-reset
             trigger never lets an admin see/set another user's password.
-            ASVS rows for Stage 7: V4.1.1, V4.1.2, V4.1.3, V4.2.1, V2.5.x —
+            ASVS rows for Stage 7: V4.1.1, V4.1.2, V4.1.3, V4.2.1, V2.5.x,
             all pass.
-      - [x] Stage 3: scheduled database backups (verify against ADR 0008) —
-            2026-09-14. 6 of 7 ADR 0008 claims held exactly; one had
+      - [x] Stage 3: scheduled database backups (verify against ADR 0008).
+            2026-09-14: 6 of 7 ADR 0008 claims held exactly; one had
             drifted: the stale-`.partial` cleanup matched any
             `*.partial` file, not just this job's own `rwnd-<ISO>.sql.gz.partial`
             shape, so a human-placed `.partial` file sitting in the bind
-            mount for 6h+ would get silently deleted — contradicted the
+            mount for 6h+ would get silently deleted, contradicting the
             ADR's own "can't delete anything it didn't write" claim. Fixed
             with a matching regex, regression test added. Also found and
             logged a new (not ADR-covered) cross-process concurrent-run
-            risk — see the item above. Verified container hardening
+            risk; see the item above. Verified container hardening
             (read_only/cap_drop/no-new-privileges) directly against
             docker-compose.yml. ASVS rows for Stage 7: V8.3.x, V12.1.1,
-            V14.4.x — pass (V12.1.1 pass only after the fix).
-      - [x] Stage 4: calendar feeds & in-app calendar — 2026-09-14. Found and
+            V14.4.x, pass (V12.1.1 pass only after the fix).
+      - [x] Stage 4: calendar feeds & in-app calendar. 2026-09-14: found and
             fixed a real spoiler-protection gap: the .ics feed's SUMMARY
             field always embedded the real episode title regardless of
             spoilerProtectionEnabled, the one field on a calendar event an
@@ -533,12 +536,12 @@ Format:
             added. Verified the token-in-URL rate limit, `Cache-Control:
             no-store`, no token logging anywhere, and the `ENCRYPTION_KEY`
             503 gate are all genuine, not just documented. ASVS rows for
-            Stage 7: V2/V3 (token pattern), V9.1.x (no-store) — pass;
+            Stage 7: V2/V3 (token pattern), V9.1.x (no-store), pass;
             V8.2.x/V8.3.x and new V11 (spoiler invariant across every
-            surface, not just ones with a client to blur with) — pass, but
+            surface, not just ones with a client to blur with), pass, but
             only after today's fix.
       - [x] Stage 5: Webhooks panel redesign & token-encryption posture
-            change — 2026-09-14. Found and fixed two real gaps. First,
+            change. 2026-09-14: found and fixed two real gaps. First,
             `serializeToken` called `decryptSecret` bare, so a single row
             encrypted under a since-rotated `ENCRYPTION_KEY` would 500 the
             whole `GET /tokens` list instead of just falling back to
@@ -565,10 +568,10 @@ Format:
             skipped, 0 failed) after clearing a corrupted local Vite
             dependency cache that had produced spurious failures against
             stale compiled output. ASVS rows for Stage 7: new V6 section
-            (Stored Cryptography) — pass, grounded in this stage's crypto
-            review; V4.1.x (cross-user access) — pass.
-      - [x] Stage 6: supply-chain, CI & dependency hygiene — 2026-09-15. No
-            code findings: `.github/workflows/{ci,codeql,release}.yml`,
+            (Stored Cryptography), pass, grounded in this stage's crypto
+            review; V4.1.x (cross-user access), pass.
+      - [x] Stage 6: supply-chain, CI & dependency hygiene. 2026-09-15: no
+            code findings. `.github/workflows/{ci,codeql,release}.yml`,
             `Dockerfile`, `docker-entrypoint.sh`, `pnpm-workspace.yaml`, and
             `.github/dependabot.yml` are all already hardened (every action
             pinned by SHA, the published image pinned by digest and
@@ -584,8 +587,8 @@ Format:
             posture, secret scanning + push protection both on. Enabled
             **Dependabot malware alerts** (free, no license needed, was
             off). Checked "Prevent direct alert dismissals" (Dependabot and
-            code scanning) and deliberately left it off — more process than
-            a solo-maintainer direct-push repo needs. Confirmed
+            code scanning) and deliberately left it off, since that's more
+            process than a solo-maintainer direct-push repo needs. Confirmed
             `secret_scanning_non_provider_patterns` and
             `secret_scanning_validity_checks` are genuinely unavailable, not
             misconfigured: no toggle in Settings → Advanced Security or via
@@ -599,7 +602,7 @@ Format:
             read-through above already covers them; worth a `/code-review
             high` (less fan-out) if a mechanical pass over these same files
             is ever wanted later. ASVS rows for Stage 7: new V10 section
-            (Malicious Code) — pass, grounded in this stage's review
+            (Malicious Code), pass, grounded in this stage's review
             (pinned actions/image, signed+digest-pinned release, Trivy gate
             on every CI run and release, Dependabot alerts + malware
             alerts, CodeQL).
@@ -651,16 +654,16 @@ Format:
 
       `providers/tmdb.ts` and `providers/tvdb.ts` build request paths like
       `` `/tv/${externalId}` `` and `` `/series/${externalId}/extended` ``
-      with no `encodeURIComponent`, for every provider client call — not
+      with no `encodeURIComponent`, for every provider client call, not
       just the webhook-driven ones. `externalId` for a webhook-triggered
       lookup ultimately traces back to attacker-controlled webhook payload
       content (Plex's `Metadata.Guid[].id`, Tautulli's templated fields,
-      etc. — anyone holding a valid webhook token controls the full body,
+      etc.; anyone holding a valid webhook token controls the full body,
       not just legitimate media-server data), so a crafted id containing
       `/` or `..` could redirect the request to a different TMDB/TVDB API
-      path than intended. Narrow in practice — same fixed host, this
+      path than intended. Narrow in practice: same fixed host, this
       server's own API key, no cross-host redirection possible, and
-      `/security-review`'s own scope explicitly excludes path-only SSRF —
+      `/security-review`'s own scope explicitly excludes path-only SSRF,
       but cheap to close with `encodeURIComponent(externalId)` at each call
       site. Touches the shared provider-client layer (also used by
       ordinary search/browse, not just webhooks), so it's its own

@@ -185,9 +185,13 @@ playRoutes.openapi(
       // Same "no unreleased movie" rule as PUT .../rating
       // (apps/api/src/routes/library/ratings.ts) — region-resolved the same
       // way the movie detail page displays it, so the server's check agrees
-      // with what the user actually sees.
+      // with what the user actually sees. A null date is deliberately not
+      // blocked: TVDB's movie records structurally never carry a release
+      // date at all (providers/tvdb.ts), so treating null as "unreleased"
+      // would permanently block logging every movie on a TVDB-resolved
+      // instance rather than only ones that genuinely haven't come out yet.
       const releaseDate = resolveReleaseDate(movie, localeRegion(user.locale)).date
-      if (releaseDate === null || new Date(releaseDate) > new Date()) {
+      if (releaseDate !== null && new Date(releaseDate) > new Date()) {
         return c.json({ error: 'This movie has not released yet' }, 400)
       }
 

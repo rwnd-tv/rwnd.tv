@@ -64,13 +64,34 @@ export function DatabaseBackupsPanel() {
 
   // Seeds the editable fields from the query once it loads, same "sync
   // during render on identity change" technique as InstanceSettingsPanel.tsx
-  // (see its own doc comment for why not useState(data) or a useEffect).
+  // (see its own doc comment for why not useState(data) or a useEffect) -
+  // re-seeding per field against what THAT field last read from the server,
+  // not against the field's current value, for the same reason
+  // InstanceSettingsPanel.tsx does: "Run backup now" (below) writes a fresh
+  // status object into this query's cache on every click via
+  // queryClient.setQueryData, giving `data.retention` a new identity even
+  // when the retention values themselves haven't changed, which used to
+  // blanket-overwrite all three fields and silently discard an in-progress
+  // edit made while a run was in flight.
   const [loadedRetention, setLoadedRetention] = useState<DatabaseBackupRetention>()
   if (data?.retention && data.retention !== loadedRetention) {
+    const prev = loadedRetention
     setLoadedRetention(data.retention)
-    setDailyRetentionDays(String(data.retention.dailyRetentionDays))
-    setWeeklyRetentionWeeks(String(data.retention.weeklyRetentionWeeks))
-    setMonthlyRetentionMonths(String(data.retention.monthlyRetentionMonths))
+    setDailyRetentionDays((current) =>
+      prev && data.retention.dailyRetentionDays === prev.dailyRetentionDays
+        ? current
+        : String(data.retention.dailyRetentionDays),
+    )
+    setWeeklyRetentionWeeks((current) =>
+      prev && data.retention.weeklyRetentionWeeks === prev.weeklyRetentionWeeks
+        ? current
+        : String(data.retention.weeklyRetentionWeeks),
+    )
+    setMonthlyRetentionMonths((current) =>
+      prev && data.retention.monthlyRetentionMonths === prev.monthlyRetentionMonths
+        ? current
+        : String(data.retention.monthlyRetentionMonths),
+    )
   }
 
   const updateRetention = useMutation({

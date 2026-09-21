@@ -286,6 +286,59 @@ describe('POST /webhook-links/redeem', () => {
     expect(second.status).toBe(400)
   })
 
+  it('only lets one of two concurrent redemptions of different accounts of the same source through', async () => {
+    // Same race shape as tokens.test.ts's own concurrent-self-link test:
+    // hasLinkedSource's check and the claiming write aren't atomic
+    // together without lockUserSource (apps/api/src/lib/
+    // webhook-accounts.ts) — two different link rows means Postgres's own
+    // row locking doesn't serialize the two requests on its own. Found in
+    // the M5 milestone review, docs/TODO.md: this route was missing the
+    // lock the sibling self-link route already had.
+    const ownerCookie = await createUserAndCookie('owner-race@example.com')
+    const token = await createToken(app, ownerCookie)
+    const linkA = await seedLink(token.id)
+    const [linkB] = await db
+      .insert(webhookAccountLinks)
+      .values({
+        tokenId: token.id,
+        source: 'plex',
+        externalAccountId: '3',
+        externalAccountName: 'other-profile',
+      })
+      .returning()
+    if (!linkB) throw new Error('failed to insert link')
+    const { code: codeA } = await generateCode(app, ownerCookie, token.id, linkA.id)
+    const { code: codeB } = await generateCode(app, ownerCookie, token.id, linkB.id)
+
+    await createLocalUser(db, 'race-redeemer@example.com', 'correct-horse-battery-staple')
+    const redeemerCookie = await loginAs(
+      'race-redeemer@example.com',
+      'correct-horse-battery-staple',
+    )
+
+    const [resA, resB] = await Promise.all([
+      app.request('/api/v1/webhook-links/redeem', {
+        method: 'POST',
+        headers: { cookie: redeemerCookie, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: codeA }),
+      }),
+      app.request('/api/v1/webhook-links/redeem', {
+        method: 'POST',
+        headers: { cookie: redeemerCookie, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: codeB }),
+      }),
+    ])
+    const statuses = [resA.status, resB.status].sort()
+    expect(statuses).toEqual([200, 409])
+
+    const links = await db
+      .select()
+      .from(webhookAccountLinks)
+      .where(eq(webhookAccountLinks.tokenId, token.id))
+    const linkedCount = links.filter((link) => link.userId !== null).length
+    expect(linkedCount).toBe(1)
+  })
+
   it('409s when the link was linked by someone else between code generation and redemption', async () => {
     const ownerCookie = await createUserAndCookie('owner5@example.com')
     const token = await createToken(app, ownerCookie)

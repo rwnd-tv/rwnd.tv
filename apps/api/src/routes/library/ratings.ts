@@ -299,9 +299,14 @@ ratingRoutes.openapi(
 
     // Region-resolved the same way the movie detail route displays it
     // (routes/library/movies.ts), so the server's check agrees with what
-    // the user actually sees on the page.
+    // the user actually sees on the page. A null date is deliberately not
+    // blocked, same as the show-level airedEpisodes check above: TVDB's
+    // movie records structurally never carry a release date at all
+    // (providers/tvdb.ts), so treating null as "unreleased" would
+    // permanently block rating every movie on a TVDB-resolved instance
+    // rather than only ones that genuinely haven't come out yet.
     const releaseDate = resolveReleaseDate(movie, localeRegion(user.locale)).date
-    if (releaseDate === null || new Date(releaseDate) > new Date()) {
+    if (releaseDate !== null && new Date(releaseDate) > new Date()) {
       return c.json({ error: 'This movie has not released yet' }, 400)
     }
 

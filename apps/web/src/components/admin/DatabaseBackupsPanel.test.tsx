@@ -16,6 +16,7 @@ vi.mock('../../lib/api-client.js', async (importOriginal) => {
         ...actual.api.admin,
         databaseBackupStatus: vi.fn(),
         updateDatabaseBackupRetention: vi.fn(),
+        runDatabaseBackupNow: vi.fn(),
       },
     },
   }
@@ -127,6 +128,44 @@ describe('DatabaseBackupsPanel', () => {
       monthlyRetentionMonths: 0,
     })
     expect(await screen.findByLabelText('Keep one backup per day for (days)')).toHaveValue(365)
+  })
+
+  it('"Run backup now" succeeding does not discard an unsaved retention edit (fixed 2026-09-21, see docs/TODO.md)', async () => {
+    // runNow's onSuccess writes a fresh status object straight into the
+    // cache via queryClient.setQueryData, unlike a plain refetch - that
+    // always gives `data.retention` a new object identity, even though
+    // this mock's retention values are byte-identical to the ones the
+    // form was already seeded with. The old bug re-seeded on any identity
+    // change, with no per-field check, so it clobbered whatever the admin
+    // was mid-typing.
+    const user = userEvent.setup()
+    vi.mocked(api.admin.runDatabaseBackupNow).mockResolvedValue({
+      configured: true,
+      intervalHours: 24,
+      retention: { ...DEFAULT_RETENTION },
+      files: [],
+      lastRun: { at: '2026-09-21T03:00:00Z', status: 'ok', message: null },
+      directoryError: null,
+    })
+
+    renderPanel({
+      configured: true,
+      intervalHours: 24,
+      retention: DEFAULT_RETENTION,
+      files: [],
+      lastRun: null,
+      directoryError: null,
+    })
+
+    const dailyField = await screen.findByLabelText('Keep one backup per day for (days)')
+    await user.clear(dailyField)
+    await user.type(dailyField, '30')
+    expect(dailyField).toHaveValue(30)
+
+    await user.click(screen.getByRole('button', { name: 'Back up now' }))
+    await screen.findByText('Backup complete.')
+
+    expect(screen.getByLabelText('Keep one backup per day for (days)')).toHaveValue(30)
   })
 
   it('surfaces a failed last run even with no files written yet', async () => {

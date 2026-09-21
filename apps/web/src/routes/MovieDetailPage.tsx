@@ -174,12 +174,17 @@ export function MovieDetailPage() {
   }
   if (!movie) return null
 
-  // A movie with no known release date, or one still in the future, can't
-  // be rated yet — same predicate shape as useEpisodeWatchActions'
-  // notAiredYet, new for movies specifically (use-movie-watch-actions.ts's
-  // own lack of an equivalent guard is about POST /plays policy, not
-  // ratings, so this doesn't contradict it).
-  const notReleasedYet = movie.releaseDate === null || new Date(movie.releaseDate) > new Date()
+  // A movie with a known future release date can't be rated yet - same
+  // predicate shape as useEpisodeWatchActions' notAiredYet, new for movies
+  // specifically (use-movie-watch-actions.ts's own lack of an equivalent
+  // guard is about POST /plays policy, not ratings, so this doesn't
+  // contradict it). A null date is deliberately not treated as
+  // unreleased: TVDB's movie records structurally never carry a release
+  // date at all (apps/api/src/providers/tvdb.ts), so blocking on null
+  // would permanently hide the rating control for every movie on a
+  // TVDB-resolved instance, matching the server-side fix in
+  // routes/library/ratings.ts and routes/plays.ts.
+  const notReleasedYet = movie.releaseDate !== null && new Date(movie.releaseDate) > new Date()
 
   return (
     <div className="flex flex-col gap-8">

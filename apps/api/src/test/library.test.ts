@@ -3847,7 +3847,12 @@ describe('library', () => {
       expect(res.status).toBe(404)
     })
 
-    it('400s for a movie with no release date, and for one releasing in the future', async () => {
+    it('400s for a movie releasing in the future, but allows one with no known release date', async () => {
+      // A null release date must NOT be treated as "unreleased": TVDB's
+      // movie records structurally never carry a release date at all
+      // (providers/tvdb.ts), so blocking on null would permanently block
+      // rating every movie on a TVDB-resolved instance. Found in the M5
+      // milestone review, docs/TODO.md.
       const cookie = await createUserAndCookie()
       const [noDateMovie] = await db
         .insert(movies)
@@ -3865,7 +3870,7 @@ describe('library', () => {
         headers: { cookie, 'Content-Type': 'application/json' },
         body: JSON.stringify({ rating: 8 }),
       })
-      expect(noDateRes.status).toBe(400)
+      expect(noDateRes.status).toBe(200)
 
       const futureRes = await app.request(`/api/v1/library/movies/${futureMovie.slug}/rating`, {
         method: 'PUT',
@@ -3873,7 +3878,7 @@ describe('library', () => {
         body: JSON.stringify({ rating: 8 }),
       })
       expect(futureRes.status).toBe(400)
-      expect(await db.select().from(ratings)).toHaveLength(0)
+      expect(await db.select().from(ratings)).toHaveLength(1)
     })
 
     it('rejects an out-of-range rating', async () => {

@@ -259,7 +259,12 @@ describe('plays', () => {
       expect(res.status).toBe(400)
     })
 
-    it('rejects logging a watch for a movie with no known release date', async () => {
+    it('allows logging a watch for a movie with no known release date', async () => {
+      // A null release date must NOT be treated as "unreleased": TVDB's
+      // movie records structurally never carry a release date at all
+      // (providers/tvdb.ts), so blocking on null would permanently block
+      // logging every movie on a TVDB-resolved instance. Found in the M5
+      // milestone review, docs/TODO.md.
       const cookie = await createUserAndCookie()
 
       const res = await app.request('/api/v1/plays', {
@@ -267,7 +272,10 @@ describe('plays', () => {
         headers: { 'Content-Type': 'application/json', cookie },
         body: JSON.stringify({ movie: { source: 'tmdb', externalId: '900' } }),
       })
-      expect(res.status).toBe(400)
+      expect(res.status).toBe(201)
+
+      const list = await app.request('/api/v1/plays', { headers: { cookie } })
+      expect((await json<ListPlaysResponse>(list)).plays).toHaveLength(1)
     })
 
     it('rejects logging a watch for a movie that has not released yet', async () => {

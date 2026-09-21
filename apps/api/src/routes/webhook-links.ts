@@ -10,7 +10,11 @@ import { webhookAccountLinks, webhookLinkCodes } from '@rwnd/db'
 import type { AppEnv } from '../types.js'
 import { hashSecret } from '../lib/tokens.js'
 import { replayPendingWebhookEvents } from '../lib/webhook-plays.js'
-import { hasLinkedSource, hasConflictingServerLink } from '../lib/webhook-accounts.js'
+import {
+  hasLinkedSource,
+  hasConflictingServerLink,
+  lockUserSource,
+} from '../lib/webhook-accounts.js'
 import { orderedProviders } from '../providers/priority.js'
 import { rateLimit } from '../middleware/rate-limit.js'
 import { logSecurityEvent } from '../lib/security-log.js'
@@ -120,6 +124,17 @@ webhookLinkRoutes.openapi(
         // rather than a distinct error the caller can't act on either way.
         if (!link) throw new InvalidLinkCodeError()
         if (link.userId) throw new AlreadyLinkedError()
+
+        // Same advisory lock the self-link route (routes/tokens.ts's
+        // claimLink) takes before its own hasLinkedSource/
+        // hasConflictingServerLink checks — without it, two concurrent
+        // redeems of different codes (or a redeem racing a concurrent
+        // self-link) each read these checks before either UPDATE commits,
+        // since the checks target different rows and Postgres row-locking
+        // doesn't serialize them. Missing here let a user link two
+        // accounts of the same source at once; found in the M5 milestone
+        // review, docs/TODO.md.
+        await lockUserSource(tx, user.id, link.source)
         if (await hasLinkedSource(tx, user.id, link.source)) {
           throw new AlreadySelfLinkedError()
         }

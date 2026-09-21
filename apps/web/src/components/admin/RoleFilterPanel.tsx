@@ -1,70 +1,6 @@
 import type { UserRole } from '@rwnd/shared'
+import { IncludeExcludeToggle } from '../ui/IncludeExcludeToggle.js'
 import type { StatusFilterMode, StatusFilters } from '../../lib/library-filter.js'
-
-function PlusIcon() {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      width={16}
-      height={16}
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2.5}
-      strokeLinecap="round"
-      aria-hidden="true"
-    >
-      <path d="M12 5v14M5 12h14" />
-    </svg>
-  )
-}
-
-function MinusIcon() {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      width={16}
-      height={16}
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2.5}
-      strokeLinecap="round"
-      aria-hidden="true"
-    >
-      <path d="M5 12h14" />
-    </svg>
-  )
-}
-
-/** Same plus/minus include/exclude button as library/StatusFilterPanel.tsx's
- * StatusModeButton — duplicated rather than shared, matching this
- * codebase's existing precedent of one small component per filter section. */
-function RoleModeButton({
-  mode,
-  active,
-  onClick,
-  label,
-}: {
-  mode: StatusFilterMode
-  active: boolean
-  onClick: () => void
-  label: string
-}) {
-  const activeClass = mode === 'include' ? 'text-emerald-500' : 'text-[var(--color-danger)]'
-  return (
-    <button
-      type="button"
-      aria-pressed={active}
-      aria-label={label}
-      title={label}
-      onClick={onClick}
-      className={`flex items-center justify-center rounded p-1 hover:bg-[var(--color-border)] ${
-        active ? activeClass : 'text-[var(--color-fg-muted)]'
-      }`}
-    >
-      {mode === 'include' ? <PlusIcon /> : <MinusIcon />}
-    </button>
-  )
-}
 
 /**
  * One collapsible section of the admin Users list's "Filters…" panel (see
@@ -115,28 +51,22 @@ export function RoleFilterPanel({
         {groupLabel}
       </summary>
       {/* w-fit: sizes to the widest row's natural content width, same
-          reasoning as StatusFilterPanel.tsx. */}
-      <ul className="mt-3 flex w-fit flex-col gap-2">
+          reasoning as StatusFilterPanel.tsx. gap-3 (not gap-2): tiles
+          IconButton's 44px hit-area expansion vertically with zero overlap
+          between rows. */}
+      <ul className="mt-3 flex w-fit flex-col gap-3">
         {roles.map((role) => {
           const mode = filters[role]
           const label = labelFor(role)
           return (
             <li key={role} className="flex items-center justify-between gap-2 text-sm">
               <span className="truncate">{label}</span>
-              <span className="flex shrink-0 items-center gap-1">
-                <RoleModeButton
-                  mode="include"
-                  active={mode === 'include'}
-                  onClick={() => setMode(role, 'include')}
-                  label={`${includeLabel} ${label}`}
-                />
-                <RoleModeButton
-                  mode="exclude"
-                  active={mode === 'exclude'}
-                  onClick={() => setMode(role, 'exclude')}
-                  label={`${excludeLabel} ${label}`}
-                />
-              </span>
+              <IncludeExcludeToggle
+                value={mode}
+                onSelect={(next) => setMode(role, next)}
+                includeLabel={`${includeLabel} ${label}`}
+                excludeLabel={`${excludeLabel} ${label}`}
+              />
             </li>
           )
         })}

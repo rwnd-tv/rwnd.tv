@@ -244,7 +244,7 @@ export function EpisodeDetailPage() {
           <Button
             type="button"
             variant="secondary"
-            className="px-2.5 py-2.5"
+            size="icon"
             disabled={!previousEpisode}
             aria-label={t('showDetail.episodeDetail.previousEpisode')}
             title={t('showDetail.episodeDetail.previousEpisode')}
@@ -259,7 +259,7 @@ export function EpisodeDetailPage() {
           <Button
             type="button"
             variant="secondary"
-            className="px-2.5 py-2.5"
+            size="icon"
             disabled={!nextEpisode}
             aria-label={t('showDetail.episodeDetail.nextEpisode')}
             title={t('showDetail.episodeDetail.nextEpisode')}
@@ -275,7 +275,6 @@ export function EpisodeDetailPage() {
       </div>
 
       <DetailHeader
-        breakpoint="lg"
         media={
           <div className="aspect-video w-full max-w-96 flex-shrink-0 overflow-hidden rounded-lg bg-[var(--color-surface)]">
             <SpoilerGuard
@@ -408,7 +407,7 @@ export function EpisodeDetailPage() {
           />
         )}
 
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           {/* Hidden rather than disabled for an unwatched, unaired episode -
               same reasoning as ShowDetailPage.tsx's Watched button. */}
           {!(watchActions.notAiredYet && !episode.watched) && (
@@ -432,7 +431,7 @@ export function EpisodeDetailPage() {
             <Button
               variant="secondary"
               type="button"
-              className="px-2.5 py-2.5"
+              size="icon"
               disabled={watchActions.unwatch.isPending || watchActions.markWatched.isPending}
               title={t('showDetail.addWatchTooltip.episode')}
               aria-label={t('showDetail.addWatchTooltip.episode')}

@@ -132,3 +132,45 @@ export function UsersIcon(props: SVGProps<SVGSVGElement>) {
     </Icon>
   )
 }
+
+/** Shared "include" glyph for IconButton/IncludeExcludeToggle — deliberately
+ * not built on the `Icon` wrapper above: these are 16x16 with no
+ * strokeLinejoin, not this file's usual 20x20 round-round, matching the
+ * geometry every one of the eight filter panels this was consolidated from
+ * already used. */
+export function PlusIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width={16}
+      height={16}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2.5}
+      strokeLinecap="round"
+      aria-hidden="true"
+      {...props}
+    >
+      <path d="M12 5v14M5 12h14" />
+    </svg>
+  )
+}
+
+/** "Exclude" counterpart to PlusIcon, same geometry. */
+export function MinusIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width={16}
+      height={16}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2.5}
+      strokeLinecap="round"
+      aria-hidden="true"
+      {...props}
+    >
+      <path d="M5 12h14" />
+    </svg>
+  )
+}

@@ -667,8 +667,8 @@
     "episodeCode": "S{{season}} E{{episode}}",
     "release": "Releases",
     "episodeFallbackLabel": "Episode {{number}}",
-    "moreCount_one": "+{{count}} more",
-    "moreCount_other": "+{{count}} more"
+    "dayEvents_one": "{{date}}, {{count}} event",
+    "dayEvents_other": "{{date}}, {{count}} events"
   },
   "import": {
     "title": "Import",

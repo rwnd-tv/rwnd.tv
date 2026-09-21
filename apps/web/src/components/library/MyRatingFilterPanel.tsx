@@ -1,71 +1,7 @@
 import { DualRangeSlider } from '../ui/DualRangeSlider.js'
+import { IncludeExcludeToggle } from '../ui/IncludeExcludeToggle.js'
 import type { UnratedMode } from '../../lib/library-filter.js'
 import type { AfterBefore } from '../../lib/use-year-range-cookie.js'
-
-function PlusIcon() {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      width={16}
-      height={16}
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2.5}
-      strokeLinecap="round"
-      aria-hidden="true"
-    >
-      <path d="M12 5v14M5 12h14" />
-    </svg>
-  )
-}
-
-function MinusIcon() {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      width={16}
-      height={16}
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2.5}
-      strokeLinecap="round"
-      aria-hidden="true"
-    >
-      <path d="M5 12h14" />
-    </svg>
-  )
-}
-
-/** Same plus/minus include/exclude button as WatchedYearFilterPanel.tsx's
- * UnknownModeButton — duplicated rather than shared, matching this
- * codebase's existing precedent of one small component per filter section. */
-function UnratedModeButton({
-  mode,
-  active,
-  onClick,
-  label,
-}: {
-  mode: Exclude<UnratedMode, 'neutral'>
-  active: boolean
-  onClick: () => void
-  label: string
-}) {
-  const activeClass = mode === 'include' ? 'text-emerald-500' : 'text-[var(--color-danger)]'
-  return (
-    <button
-      type="button"
-      aria-pressed={active}
-      aria-label={label}
-      title={label}
-      onClick={onClick}
-      className={`flex items-center justify-center rounded p-1 hover:bg-[var(--color-border)] ${
-        active ? activeClass : 'text-[var(--color-fg-muted)]'
-      }`}
-    >
-      {mode === 'include' ? <PlusIcon /> : <MinusIcon />}
-    </button>
-  )
-}
 
 /**
  * Same shape as WatchedYearFilterPanel — a DualRangeSlider plus a tri-state
@@ -124,20 +60,12 @@ export function MyRatingFilterPanel({
         />
         <div className="flex items-center justify-between gap-2 text-sm">
           <span>{unratedLabel}</span>
-          <span className="flex shrink-0 items-center gap-1">
-            <UnratedModeButton
-              mode="include"
-              active={unratedMode === 'include'}
-              onClick={() => setUnratedMode('include')}
-              label={`${includeLabel} ${unratedLabel}`}
-            />
-            <UnratedModeButton
-              mode="exclude"
-              active={unratedMode === 'exclude'}
-              onClick={() => setUnratedMode('exclude')}
-              label={`${excludeLabel} ${unratedLabel}`}
-            />
-          </span>
+          <IncludeExcludeToggle
+            value={unratedMode}
+            onSelect={setUnratedMode}
+            includeLabel={`${includeLabel} ${unratedLabel}`}
+            excludeLabel={`${excludeLabel} ${unratedLabel}`}
+          />
         </div>
       </div>
     </details>

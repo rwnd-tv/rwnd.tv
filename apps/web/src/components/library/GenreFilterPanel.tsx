@@ -1,71 +1,5 @@
 import type { GenreFilterMode, GenreFilters } from '../../lib/library-filter.js'
-
-function PlusIcon() {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      width={16}
-      height={16}
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2.5}
-      strokeLinecap="round"
-      aria-hidden="true"
-    >
-      <path d="M12 5v14M5 12h14" />
-    </svg>
-  )
-}
-
-function MinusIcon() {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      width={16}
-      height={16}
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2.5}
-      strokeLinecap="round"
-      aria-hidden="true"
-    >
-      <path d="M5 12h14" />
-    </svg>
-  )
-}
-
-/** Grey when off; green for a selected include, red for a selected exclude.
- * No app-wide "success" token exists for the green (only `--color-danger`
- * does, reused here for red) — matches ImportProgress.tsx's existing
- * precedent of raw Tailwind palette colours for one-off accents rather than
- * adding a new CSS variable for a single use. */
-function GenreModeButton({
-  mode,
-  active,
-  onClick,
-  label,
-}: {
-  mode: GenreFilterMode
-  active: boolean
-  onClick: () => void
-  label: string
-}) {
-  const activeClass = mode === 'include' ? 'text-emerald-500' : 'text-[var(--color-danger)]'
-  return (
-    <button
-      type="button"
-      aria-pressed={active}
-      aria-label={label}
-      title={label}
-      onClick={onClick}
-      className={`flex items-center justify-center rounded p-1 hover:bg-[var(--color-border)] ${
-        active ? activeClass : 'text-[var(--color-fg-muted)]'
-      }`}
-    >
-      {mode === 'include' ? <PlusIcon /> : <MinusIcon />}
-    </button>
-  )
-}
+import { IncludeExcludeToggle } from '../ui/IncludeExcludeToggle.js'
 
 /**
  * One collapsible section of the "Filters…" panel (see FiltersPanel.tsx,
@@ -120,27 +54,20 @@ export function GenreFilterPanel({
       {/* w-fit: sizes to the widest row's natural content width (longest
           genre name + icons), so each shorter row's justify-between icons
           land close to that same right edge instead of being spread across
-          the full card width. */}
-      <ul className="mt-3 flex w-fit flex-col gap-2">
+          the full card width. gap-3 (not gap-2): tiles IconButton's 44px
+          hit-area expansion vertically with zero overlap between rows. */}
+      <ul className="mt-3 flex w-fit flex-col gap-3">
         {genres.map((genre) => {
           const mode = filters[genre]
           return (
             <li key={genre} className="flex items-center justify-between gap-2 text-sm">
               <span className="truncate">{genre}</span>
-              <span className="flex shrink-0 items-center gap-1">
-                <GenreModeButton
-                  mode="include"
-                  active={mode === 'include'}
-                  onClick={() => setMode(genre, 'include')}
-                  label={`${includeLabel} ${genre}`}
-                />
-                <GenreModeButton
-                  mode="exclude"
-                  active={mode === 'exclude'}
-                  onClick={() => setMode(genre, 'exclude')}
-                  label={`${excludeLabel} ${genre}`}
-                />
-              </span>
+              <IncludeExcludeToggle
+                value={mode}
+                onSelect={(next) => setMode(genre, next)}
+                includeLabel={`${includeLabel} ${genre}`}
+                excludeLabel={`${excludeLabel} ${genre}`}
+              />
             </li>
           )
         })}

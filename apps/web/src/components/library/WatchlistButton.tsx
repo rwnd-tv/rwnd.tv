@@ -93,7 +93,7 @@ export function WatchlistButton({
       <Button
         variant="secondary"
         type="button"
-        className="px-2.5 py-2.5"
+        size="icon"
         title={t('watchlist.manageTooltip')}
         aria-label={t('watchlist.manageTooltip')}
         onClick={() => setDialogOpen(true)}

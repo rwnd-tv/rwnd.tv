@@ -1,9 +1,14 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router'
 import type { CalendarEvent } from '@rwnd/shared'
+import { CALENDAR_EVENT_KINDS } from '@rwnd/shared'
+import { CalendarEventRow } from './CalendarEventRow.js'
 import { CALENDAR_KIND_DOT_CLASS, calendarHref, eventDayKey } from './calendar-shared.js'
-import { toDateInputValue } from '../../lib/date.js'
+import { formatCalendarDayHeading, parseLocalDay, toDateInputValue } from '../../lib/date.js'
+import { BELOW_SM_QUERY, useMediaQuery } from '../../lib/use-media-query.js'
+import { Button } from '../ui/Button.js'
+import { Dialog } from '../ui/Dialog.js'
 
 const GRID_CELLS = 42
 
@@ -31,13 +36,14 @@ function gridStartFor(monthAnchor: Date, locale: string): Date {
   return addDays(first, -((firstDow - weekStart + 7) % 7))
 }
 
-/** One compact entry inside a month-grid cell — a kind-colored dot plus a
- * single truncated line, linking straight to the underlying page.
+/** One compact entry inside a wide-mode month-grid cell — a kind-colored dot
+ * plus a single truncated line, linking straight to the underlying page.
  * Deliberately no reveal control at this size: an unwatched episode's
  * title is substituted with the generic fallback outright rather than
  * offered a click-to-reveal, same as EpisodeCard.tsx's own
  * space-constrained precedent — a real reveal happens one click away, on
- * the underlying episode/movie page.
+ * the underlying episode/movie page (or, below `sm`, one tap away via the
+ * day sheet, which reuses CalendarEventRow's own reveal button instead).
  *
  * An episode entry (watched or upcoming) shows "Show · Episode": the show
  * title alone isn't enough context in a text-only row with no poster art
@@ -74,6 +80,30 @@ function CalendarMonthCellEntry({ event }: { event: CalendarEvent }) {
   )
 }
 
+/** Below `sm`, a day cell shows the day number plus one dot per distinct
+ * event kind present (bounded at 3 by CALENDAR_EVENT_KINDS, so there's no
+ * overflow case to design for) and the event total as a small numeral once
+ * there's more than one — enough to say "something's here, and roughly how
+ * much" without the per-title truncation that makes the wide grid
+ * unreadable at this width. Purely decorative: the real information is the
+ * enclosing button's accessible name. */
+function CompactDayDots({ events }: { events: CalendarEvent[] }) {
+  if (events.length === 0) return null
+  const kindsPresent = CALENDAR_EVENT_KINDS.filter((kind) => events.some((e) => e.kind === kind))
+  return (
+    <span aria-hidden="true" className="flex items-center gap-0.5">
+      {kindsPresent.map((kind) => (
+        <span key={kind} className={`h-1.5 w-1.5 rounded-full ${CALENDAR_KIND_DOT_CLASS[kind]}`} />
+      ))}
+      {events.length > 1 && (
+        <span className="text-[10px] leading-none text-[var(--color-fg-muted)]">
+          {events.length}
+        </span>
+      )}
+    </span>
+  )
+}
+
 /**
  * Month-grid view for the calendar page (CalendarPage.tsx) — genuinely new
  * UI territory in this codebase (no `grid-cols-7` precedent anywhere), so
@@ -83,11 +113,17 @@ function CalendarMonthCellEntry({ event }: { event: CalendarEvent }) {
  * regardless of how many weeks the month actually spans (avoids a
  * page-height jump between 5- and 6-week months on navigation).
  *
- * Cells show every event for their day rather than capping at a few and
- * offering a "+N more" control. `h-32` is therefore a floor, not a fixed
- * height: a table cell's specified height is a minimum, so a busy day
- * grows its whole row. Row heights consequently vary with the busiest day
- * in that week.
+ * Wide mode (`sm` and up) shows every event for its day rather than capping
+ * at a few and offering a "+N more" control — `h-32` is a floor, not a
+ * fixed height, so a busy day grows its whole row.
+ *
+ * Below `sm`, a full event title has nowhere to go (a 375px viewport gives
+ * each of the 7 columns roughly 49px), so the cell switches to a compact
+ * day-number-plus-dots rendering and taps open that day's events in a
+ * sheet instead — a genuinely different rendering chosen in JS via
+ * useMediaQuery, not a CSS toggle: compact mode needs the whole cell to be
+ * one `<button>` (wide mode needs per-event `<Link>`s, and `pointer-events`
+ * inherits, so both could never safely live in the DOM at once).
  */
 export function CalendarMonthGrid({
   monthAnchor,
@@ -99,6 +135,8 @@ export function CalendarMonthGrid({
   locale: string
 }) {
   const { t } = useTranslation()
+  const isCompact = useMediaQuery(BELOW_SM_QUERY)
+  const [openDay, setOpenDay] = useState<string | null>(null)
 
   const gridStart = useMemo(() => gridStartFor(monthAnchor, locale), [monthAnchor, locale])
   const days = useMemo(
@@ -123,9 +161,10 @@ export function CalendarMonthGrid({
 
   const monthNumber = monthAnchor.getMonth()
   const todayKey = toDateInputValue(new Date())
+  const openDayEvents = openDay ? (eventsByDay.get(openDay) ?? []) : []
 
   return (
-    <div className="overflow-x-auto">
+    <>
       <table className="w-full table-fixed border-collapse">
         <caption className="sr-only">
           {t('calendar.title')}{' '}
@@ -153,26 +192,51 @@ export function CalendarMonthGrid({
                 const inMonth = day.getMonth() === monthNumber
                 const isToday = dayKey === todayKey
 
+                const dayNumber = (
+                  <span
+                    aria-current={isToday ? 'date' : undefined}
+                    className={`mb-1 flex h-6 w-6 items-center justify-center rounded-full text-sm ${
+                      inMonth ? '' : 'text-[var(--color-fg-muted)]'
+                    } ${isToday ? 'font-semibold ring-1 ring-[var(--color-primary)]' : ''}`}
+                  >
+                    {day.getDate()}
+                  </span>
+                )
+
                 return (
                   <td
                     key={dayKey}
-                    className={`h-32 max-w-0 border border-[var(--color-border)] p-1 align-top ${
+                    className={`${isCompact ? 'h-14' : 'h-32'} max-w-0 border border-[var(--color-border)] p-1 align-top ${
                       inMonth ? '' : 'bg-[var(--color-surface)]'
                     }`}
                   >
-                    <span
-                      aria-current={isToday ? 'date' : undefined}
-                      className={`mb-1 flex h-6 w-6 items-center justify-center rounded-full text-sm ${
-                        inMonth ? '' : 'text-[var(--color-fg-muted)]'
-                      } ${isToday ? 'font-semibold ring-1 ring-[var(--color-primary)]' : ''}`}
-                    >
-                      {day.getDate()}
-                    </span>
-                    <div className="flex flex-col gap-0.5">
-                      {dayEvents.map((event) => (
-                        <CalendarMonthCellEntry key={event.uid} event={event} />
-                      ))}
-                    </div>
+                    {isCompact ? (
+                      dayEvents.length > 0 ? (
+                        <button
+                          type="button"
+                          onClick={() => setOpenDay(dayKey)}
+                          aria-label={t('calendar.dayEvents', {
+                            date: formatCalendarDayHeading(day, locale, t),
+                            count: dayEvents.length,
+                          })}
+                          className="flex h-full w-full flex-col items-center gap-0.5 rounded"
+                        >
+                          {dayNumber}
+                          <CompactDayDots events={dayEvents} />
+                        </button>
+                      ) : (
+                        dayNumber
+                      )
+                    ) : (
+                      <>
+                        {dayNumber}
+                        <div className="flex flex-col gap-0.5">
+                          {dayEvents.map((event) => (
+                            <CalendarMonthCellEntry key={event.uid} event={event} />
+                          ))}
+                        </div>
+                      </>
+                    )}
                   </td>
                 )
               })}
@@ -180,6 +244,28 @@ export function CalendarMonthGrid({
           ))}
         </tbody>
       </table>
-    </div>
+
+      {/* Only ever open in compact mode — rotating to a wide viewport flips
+          `isCompact` false, Dialog's own effect calls close(), and the
+          resulting native 'close' event clears openDay below. No need to
+          reset on month change either: a native modal makes the rest of
+          the page (including the month navigator) inert while open. */}
+      <Dialog
+        open={isCompact && openDay !== null}
+        onClose={() => setOpenDay(null)}
+        title={openDay ? formatCalendarDayHeading(parseLocalDay(openDay), locale, t) : ''}
+      >
+        <ul className="flex flex-col gap-0.5">
+          {openDayEvents.map((event) => (
+            <CalendarEventRow key={event.uid} event={event} locale={locale} />
+          ))}
+        </ul>
+        <div className="mt-6 flex justify-end">
+          <Button variant="secondary" type="button" onClick={() => setOpenDay(null)}>
+            {t('common.close')}
+          </Button>
+        </div>
+      </Dialog>
+    </>
   )
 }

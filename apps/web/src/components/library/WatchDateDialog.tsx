@@ -239,7 +239,15 @@ export function WatchDateDialog({
       </fieldset>
 
       {mode === 'other' && (
-        <div className="mt-4 flex gap-3">
+        // flex-wrap + a min-width floor on each field: at Dialog's ~289px
+        // content box on a true 375px phone, native date/time inputs (whose
+        // rendered width isn't under this app's control, and varies by
+        // browser/OS — mobile Safari runs wider than desktop Chrome) can be
+        // too tight to sit side by side. flex-1 lets both share the row
+        // when there's room; min-w-32 is a floor so a shrinking date input
+        // doesn't clip below its own usable width, so the pair wraps to two
+        // rows instead.
+        <div className="mt-4 flex flex-wrap gap-3">
           <Field
             label={t('showDetail.watchDialog.otherDateDateLabel')}
             hideLabel
@@ -254,6 +262,7 @@ export function WatchDateDialog({
               next.setFullYear(year!, month! - 1, day)
               updatePreviewDate(next)
             }}
+            className="min-w-32 flex-1"
           />
           <Field
             label={t('showDetail.watchDialog.otherDateTimeLabel')}
@@ -267,6 +276,7 @@ export function WatchDateDialog({
               next.setHours(hours!, minutes)
               updatePreviewDate(next)
             }}
+            className="min-w-32 flex-1"
           />
         </div>
       )}

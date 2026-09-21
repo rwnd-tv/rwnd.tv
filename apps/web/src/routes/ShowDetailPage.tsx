@@ -286,7 +286,6 @@ export function ShowDetailPage() {
   return (
     <div className="flex flex-col gap-8">
       <DetailHeader
-        breakpoint="sm"
         media={
           <div className="aspect-[2/3] w-48 flex-shrink-0 overflow-hidden rounded-lg bg-[var(--color-surface)]">
             {show.posterPath ? (
@@ -430,7 +429,7 @@ export function ShowDetailPage() {
           </p>
         )}
 
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           {/* Hidden rather than disabled when nothing's aired yet - there's
               no plausible click that unblocks this from the same page (the
               button only reappears once the metadata refresher or a new
@@ -462,7 +461,7 @@ export function ShowDetailPage() {
             <Button
               variant="secondary"
               type="button"
-              className="px-2.5 py-2.5"
+              size="icon"
               disabled={markWatched.isPending || !show.tmdbId}
               title={t('showDetail.addWatchTooltip.show')}
               aria-label={t('showDetail.addWatchTooltip.show')}
@@ -484,7 +483,7 @@ export function ShowDetailPage() {
           <Button
             variant="secondary"
             type="button"
-            className="px-2.5 py-2.5"
+            size="icon"
             disabled={refreshMetadata.isPending || !show.metadataSource}
             title={
               show.metadataSource

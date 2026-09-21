@@ -54,7 +54,12 @@ export function LibraryControls<SortKey extends string>({
         placeholder={filterPlaceholder}
         value={filterValue}
         onChange={(e) => onFilterChange(e.target.value)}
-        className="min-w-48 flex-1"
+        // min-w-48 (192px) alone used to always force the sort Select (also
+        // 192px) onto its own row below sm — nothing left for both to share
+        // a line at a phone's ~343px usable width. min-w-32 lets this field
+        // actually shrink there; sm:min-w-48 keeps today's floor everywhere
+        // it already fit.
+        className="min-w-32 flex-1 sm:min-w-48"
       />
       {betweenFilterAndSort}
       <Select
@@ -62,7 +67,7 @@ export function LibraryControls<SortKey extends string>({
         hideLabel
         value={sortValue}
         onChange={(e) => onSortChange(e.target.value as SortKey)}
-        className="w-48"
+        className="w-36 sm:w-48"
       >
         {sortOptions.map((option) => (
           <option key={option.value} value={option.value}>

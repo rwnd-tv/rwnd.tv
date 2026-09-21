@@ -307,7 +307,7 @@ export function SeasonDetailPage() {
           <Button
             type="button"
             variant="secondary"
-            className="px-2.5 py-2.5"
+            size="icon"
             disabled={!previousSeason}
             aria-label={t('showDetail.previousSeason')}
             title={t('showDetail.previousSeason')}
@@ -320,7 +320,7 @@ export function SeasonDetailPage() {
           <Button
             type="button"
             variant="secondary"
-            className="px-2.5 py-2.5"
+            size="icon"
             disabled={!nextSeason}
             aria-label={t('showDetail.nextSeason')}
             title={t('showDetail.nextSeason')}
@@ -332,7 +332,6 @@ export function SeasonDetailPage() {
       </div>
 
       <DetailHeader
-        breakpoint="sm"
         media={
           <div className="aspect-[2/3] w-48 flex-shrink-0 overflow-hidden rounded-lg bg-[var(--color-surface)]">
             {posterPath ? (
@@ -467,7 +466,7 @@ export function SeasonDetailPage() {
           </p>
         </div>
 
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           {/* Hidden rather than disabled when nothing in this season has
               aired yet - see ShowDetailPage.tsx's identical treatment of
               its own Watched button for the reasoning. */}
@@ -497,7 +496,7 @@ export function SeasonDetailPage() {
             <Button
               variant="secondary"
               type="button"
-              className="px-2.5 py-2.5"
+              size="icon"
               disabled={markSeasonWatched.isPending || !show?.tmdbId}
               title={t('showDetail.addWatchTooltip.season')}
               aria-label={t('showDetail.addWatchTooltip.season')}

@@ -7,6 +7,7 @@ import { useAuth } from '../lib/use-auth.js'
 import { useSortCookie } from '../lib/use-sort-cookie.js'
 import { useKindFilterCookie } from '../lib/use-kind-filter-cookie.js'
 import { localDayStartISO, localDayEndISO, toDateInputValue } from '../lib/date.js'
+import { BELOW_SM_QUERY, useMediaQuery } from '../lib/use-media-query.js'
 import { Spinner } from '../components/ui/Spinner.js'
 import { Button } from '../components/ui/Button.js'
 import { CalendarAgenda } from '../components/calendar/CalendarAgenda.js'
@@ -80,6 +81,7 @@ export function CalendarPage() {
   const { t } = useTranslation()
   const { user } = useAuth()
   const locale = user?.locale ?? 'en-GB'
+  const isCompact = useMediaQuery(BELOW_SM_QUERY)
 
   // Agenda is the default (2026-09-09): forward-looking is what this page
   // uniquely offers over History, and its dense list surfaces far more of
@@ -180,7 +182,11 @@ export function CalendarPage() {
         </div>
 
         <div className="flex flex-wrap items-center justify-end gap-3">
-          <div role="group" aria-label={t('calendar.filter.label')} className="flex gap-2">
+          <div
+            role="group"
+            aria-label={t('calendar.filter.label')}
+            className="flex flex-wrap gap-2"
+          >
             {CALENDAR_EVENT_KINDS.map((kind) => {
               const active = shownKinds.has(kind)
               return (
@@ -209,7 +215,7 @@ export function CalendarPage() {
           </div>
 
           {effectiveView === 'month' && (
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <Button
                 type="button"
                 variant="secondary"
@@ -220,11 +226,22 @@ export function CalendarPage() {
               </Button>
               {/* A fixed (not min-) width sized for "September 2026" — the
                   longest month name in either supported locale — so the
-                  widget doesn't resize as the anchor month changes. */}
-              <span className="w-40 shrink-0 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-2 text-center text-sm font-medium">
-                {new Intl.DateTimeFormat(locale, { month: 'long', year: 'numeric' }).format(
-                  monthAnchor,
-                )}
+                  widget doesn't resize as the anchor month changes. Below
+                  sm there isn't room for that: shrink the box and abbreviate
+                  the month name (Intl's own short form, e.g. "Sept" rather
+                  than "September") rather than letting the full label force
+                  this whole group onto its own row. whitespace-nowrap:
+                  w-28's ~80px content box already fits every abbreviated
+                  month/year pair, this just guarantees it rather than
+                  leaving wrapping as a possibility if that estimate is ever
+                  off - confirmed live at true phone width 2026-09-21. */}
+              <span
+                className={`shrink-0 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-2 text-center text-sm font-medium whitespace-nowrap ${isCompact ? 'w-28' : 'w-40'}`}
+              >
+                {new Intl.DateTimeFormat(locale, {
+                  month: isCompact ? 'short' : 'long',
+                  year: 'numeric',
+                }).format(monthAnchor)}
               </span>
               <Button
                 type="button"

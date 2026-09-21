@@ -13,6 +13,7 @@ import { LibraryControls } from '../components/library/LibraryControls.js'
 import { Button } from '../components/ui/Button.js'
 import { Dialog } from '../components/ui/Dialog.js'
 import { Field } from '../components/ui/Field.js'
+import { IconButton } from '../components/ui/IconButton.js'
 import { Spinner } from '../components/ui/Spinner.js'
 
 // Not cookie-persisted like ShowsPage.tsx/MoviesPage.tsx's own sort — a
@@ -40,13 +41,13 @@ function sortItems(items: WatchlistItemMedia[], sortBy: SortKey, locale: string)
 /** Small pin glyph for "set as this list's cover", filled when the tile is
  * the current pin. Page-local rather than shared/exported, matching this
  * codebase's one-icon-per-file convention for a component used in exactly
- * one place. */
+ * one place. 16x16 (bumped from 14x14) to match IconButton's other icons. */
 function PinIcon({ filled }: { filled: boolean }) {
   return (
     <svg
       viewBox="0 0 24 24"
-      width={14}
-      height={14}
+      width={16}
+      height={16}
       fill={filled ? 'currentColor' : 'none'}
       stroke="currentColor"
       strokeWidth={2}
@@ -63,8 +64,8 @@ function RemoveIcon() {
   return (
     <svg
       viewBox="0 0 24 24"
-      width={14}
-      height={14}
+      width={16}
+      height={16}
       fill="none"
       stroke="currentColor"
       strokeWidth={2}
@@ -225,27 +226,26 @@ export function WatchlistDetailPage() {
                     posterPath={item.posterPath}
                     to={item.type === 'show' ? `/shows/${item.slug}` : `/movies/${item.slug}`}
                   >
-                    <div className="flex items-center gap-1">
-                      <button
-                        type="button"
-                        title={t(isCover ? 'watchlists.unsetCover' : 'watchlists.setCover')}
-                        aria-label={t(isCover ? 'watchlists.unsetCover' : 'watchlists.setCover')}
+                    {/* mt-1: leaves clearance between this row's IconButtons
+                        and the poster Link above (PosterTile's own gap-2),
+                        since their hit-area expansion reaches 6px upward. */}
+                    <div className="mt-1 flex items-center gap-3">
+                      <IconButton
+                        label={t(isCover ? 'watchlists.unsetCover' : 'watchlists.setCover')}
+                        icon={<PinIcon filled={isCover} />}
+                        hoverBg="surface"
+                        className="hover:text-[var(--color-fg)]"
                         disabled={setCover.isPending}
                         onClick={() => setCover.mutate(isCover ? null : item.itemId)}
-                        className="rounded p-1 text-[var(--color-fg-muted)] hover:bg-[var(--color-surface)] hover:text-[var(--color-fg)] disabled:cursor-not-allowed disabled:opacity-60"
-                      >
-                        <PinIcon filled={isCover} />
-                      </button>
-                      <button
-                        type="button"
-                        title={t('watchlists.removeItem')}
-                        aria-label={t('watchlists.removeItem')}
+                      />
+                      <IconButton
+                        label={t('watchlists.removeItem')}
+                        icon={<RemoveIcon />}
+                        hoverBg="surface"
+                        className="hover:text-[var(--color-danger)]"
                         disabled={removeItem.isPending}
                         onClick={() => removeItem.mutate(item)}
-                        className="rounded p-1 text-[var(--color-fg-muted)] hover:bg-[var(--color-surface)] hover:text-[var(--color-danger)] disabled:cursor-not-allowed disabled:opacity-60"
-                      >
-                        <RemoveIcon />
-                      </button>
+                      />
                     </div>
                   </PosterTile>
                 )

@@ -449,11 +449,24 @@ export function LandingPage() {
               {t('landing.status.body', { version: settings?.appVersion ?? '' })}
             </p>
           </div>
-          <div className="mb-9 grid gap-0 lg:grid-cols-4">
+          {/* gap-y-9 lg:gap-y-0: below lg this grid stacks to one column
+              (no explicit grid-cols until lg), where a flat gap-0 left zero
+              space between one milestone's list and the next one's heading
+              - confirmed on a real 375px phone. At lg and up the columns
+              already get their separation from each item's own lg:px-7
+              plus the border-l divider, so gap stays zeroed there instead
+              of doubling up. */}
+          <div className="mb-9 grid gap-x-0 gap-y-9 lg:grid-cols-4 lg:gap-y-0">
             {MILESTONES.map(({ key, status }, i) => (
               <div
                 key={key}
-                className={`px-7 first:pl-0 ${i > 0 ? 'border-[var(--color-border)] lg:border-l' : ''}`}
+                // The padding (and the divider it separates) only earns its
+                // keep once the grid actually has columns to divide, at lg
+                // — below that, the section's own px-5 already keeps this
+                // off the viewport edge, and an unconditional px-7 here just
+                // ate into an already-tight phone-width column for no
+                // visual reason.
+                className={`lg:px-7 lg:first:pl-0 ${i > 0 ? 'border-[var(--color-border)] lg:border-l' : ''}`}
               >
                 <div className="mb-4 flex items-baseline justify-between gap-2 border-b border-[var(--color-border)] pb-3">
                   <h3 className="text-[15px] font-bold">{t(`landing.status.${key}.title`)}</h3>
@@ -481,7 +494,14 @@ export function LandingPage() {
               borderImage: `${GRADIENT.replace('135deg', '90deg')} 1`,
             }}
           >
-            <p className="min-w-[320px] flex-1 text-[14.5px] leading-[1.6] text-[var(--color-fg-muted)]">
+            {/* basis (not min-width): at a true 375px phone width, this
+                bar's ~283px content box (px-5 section padding plus
+                px-[26px] of its own) is narrower than a 320px min-width,
+                which held the row past the point flex-wrap above could
+                actually wrap it. A preferred basis still gets the same
+                320px on any row wide enough for it, but shrinks instead of
+                overflowing when there isn't room. */}
+            <p className="min-w-0 flex-1 basis-[320px] text-[14.5px] leading-[1.6] text-[var(--color-fg-muted)]">
               <strong className="font-bold text-[var(--color-fg)]">
                 {t('landing.status.builtTitle')}
               </strong>{' '}
@@ -574,7 +594,11 @@ export function LandingPage() {
                 .
               </p>
             </div>
-            <div className="flex gap-14">
+            {/* flex-wrap: the two link columns below don't need to stay side
+                by side at every width the way the row above (logo/blurb vs.
+                these columns) does — nothing stops a longer localized link
+                label from pushing this pair past a phone's usable width. */}
+            <div className="flex flex-wrap gap-14">
               <div className="flex flex-col gap-2.5 text-[13.5px]">
                 <span className="font-bold">{t('landing.footer.product')}</span>
                 <a href="#features" className="text-[var(--color-fg-muted)] hover:underline">

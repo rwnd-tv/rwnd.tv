@@ -112,6 +112,16 @@ export function UserRow({
               </Badge>
             </div>
             <p className="truncate text-sm text-[var(--color-fg-muted)]">{user.email}</p>
+            {/* Below sm, the right-hand metadata column (last login, MFA,
+                verified) disappears entirely rather than reflowing — this
+                third line keeps the two "at a glance" badges an admin
+                scanning for e.g. unverified accounts actually needs. The
+                long locale-formatted last-login timestamp stays hidden on
+                a phone; it's still on the per-user detail page. */}
+            <div className="mt-1 flex gap-1 sm:hidden">
+              <Badge>{user.mfaEnabled ? t('admin.mfaOn') : t('admin.mfaOff')}</Badge>
+              <Badge>{user.emailVerifiedAt ? t('admin.verified') : t('admin.unverified')}</Badge>
+            </div>
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-3">

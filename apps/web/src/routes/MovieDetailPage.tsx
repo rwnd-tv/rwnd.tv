@@ -184,7 +184,6 @@ export function MovieDetailPage() {
   return (
     <div className="flex flex-col gap-8">
       <DetailHeader
-        breakpoint="lg"
         media={
           <div className="aspect-[2/3] w-48 flex-shrink-0 overflow-hidden rounded-lg bg-[var(--color-surface)]">
             {movie.posterPath ? (
@@ -313,7 +312,7 @@ export function MovieDetailPage() {
           />
         )}
 
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           {/* Hidden rather than disabled for an unwatched, unreleased movie -
               same reasoning as ShowDetailPage.tsx's Watched button. */}
           {!(notReleasedYet && !movie.watched) && (
@@ -340,7 +339,7 @@ export function MovieDetailPage() {
             <Button
               variant="secondary"
               type="button"
-              className="px-2.5 py-2.5"
+              size="icon"
               disabled={toggleDisabled}
               title={t('movieDetail.addWatchTooltip')}
               aria-label={t('movieDetail.addWatchTooltip')}
@@ -357,7 +356,7 @@ export function MovieDetailPage() {
           <Button
             variant="secondary"
             type="button"
-            className="px-2.5 py-2.5"
+            size="icon"
             disabled={refreshMetadata.isPending || !movie.metadataSource}
             title={
               movie.metadataSource

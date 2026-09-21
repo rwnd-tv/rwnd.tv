@@ -20,7 +20,20 @@ export function Layout() {
   const { t } = useTranslation()
   const { data: settings } = usePublicSettings()
   const matches = useMatches()
-  const [collapsed, setCollapsed] = useState(() => getCookie(SIDEBAR_COLLAPSED_COOKIE) === 'true')
+  // No cookie means either a genuinely new visitor or a new browser session
+  // (this is a session cookie — see cookies.ts). Falling back to `false`
+  // (expanded) unconditionally used to mean every such visit landed on a
+  // phone with the sidebar's mobile overlay (see Sidebar.tsx) covering the
+  // page. Fall back to a one-shot viewport read instead, so a first phone
+  // visit starts collapsed the same way a returning phone visitor's cookie
+  // already leaves it. Deliberately not reactive (unlike
+  // closeSidebarIfMobile below): resizing an existing desktop window narrow
+  // shouldn't slam an already-open sidebar shut.
+  const [collapsed, setCollapsed] = useState(() => {
+    const cookie = getCookie(SIDEBAR_COLLAPSED_COOKIE)
+    if (cookie !== undefined) return cookie === 'true'
+    return window.matchMedia(MOBILE_BREAKPOINT_QUERY).matches
+  })
 
   function toggleCollapsed() {
     setCollapsed((current) => {

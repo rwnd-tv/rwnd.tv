@@ -37,6 +37,26 @@ HTMLDialogElement.prototype.close = function (this: HTMLDialogElement) {
 // position to assert against in jsdom anyway.
 Element.prototype.scrollIntoView = function () {}
 
+// jsdom doesn't implement matchMedia at all — Layout.tsx and
+// use-media-query.ts both call window.matchMedia() directly, so any test
+// mounting a component that reads a breakpoint throws "matchMedia is not a
+// function" without this. Defaults every query to non-matching (i.e. the
+// "wide"/desktop layout), which is what every existing test already assumes;
+// a test that wants the narrow layout stubs this globally itself
+// (vi.stubGlobal('matchMedia', ...)) rather than relying on this default.
+window.matchMedia = function (query: string): MediaQueryList {
+  return {
+    matches: false,
+    media: query,
+    onchange: null,
+    addListener: () => {},
+    removeListener: () => {},
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    dispatchEvent: () => false,
+  } as MediaQueryList
+}
+
 afterEach(() => {
   cleanup()
 })

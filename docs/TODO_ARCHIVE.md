@@ -975,6 +975,122 @@ currently-dropped shows, since a row can have both
       a nav link or the logout button is used, so it doesn't stay open
       over whatever page it just navigated to — desktop's expanded rail is
       unaffected and stays open across navigation same as always.
+- [x] **Quality pass on the whole interface at phone width** (2026-09-06
+      added, audit pass done 2026-09-20, all eight logged findings fixed
+      2026-09-21)\
+      The audit walked every distinct page template against dev.rwnd.tv at
+      the narrowest viewport this environment's browser automation could
+      reach (~501px, still narrow enough to trigger the app's only real
+      breakpoint, `sm` at 640px) and logged eight findings as their own
+      items, each fixed the same session this one closes - see the entries
+      immediately below. Two (`WatchDateDialog`'s date/time row and
+      `LandingPage.tsx`'s status-bar overflow) couldn't be live-verified
+      below 501px in this environment and were fixed defensively from
+      arithmetic instead, pending a real-phone spot check.
+- [x] **Mobile sidebar overlay opened by default on a first phone visit**
+      (2026-09-20 added, fixed 2026-09-21)\
+      `Layout.tsx`'s `collapsed` initializer read the `sidebar-collapsed`
+      cookie as `=== 'true'`, so an unset cookie (every new session, since
+      it's a session cookie) fell back to `false` (expanded) unconditionally
+      - meaning a first-time phone visitor always landed with the sidebar's
+      `fixed z-30` overlay covering the page. Now falls back to a one-shot
+      `window.matchMedia('(max-width: 639px)')` read instead of a hardcoded
+      `false`, deliberately not reactive (a desktop window resized narrow
+      shouldn't slam an already-open sidebar shut). Added a `window.
+      matchMedia` stub to the shared web test setup (jsdom doesn't implement
+      it), needed by this fix and by the Calendar/toolbar work below.
+- [x] **Icon-only touch targets across filter/watchlist controls widened to
+      ~44px** (2026-09-20 added, fixed 2026-09-21)\
+      The plus/minus include/exclude control was copy-pasted across eight
+      files (`GenreFilterPanel`, `StatusFilterPanel`, `MyRatingFilterPanel`,
+      `WatchedYearFilterPanel`, `DroppedFilterPanel`, and the admin
+      `RoleFilterPanel`/`MfaFilterPanel`/`VerifiedFilterPanel`), each a
+      24x24px target 4px from its neighbour - deliberately, per each file's
+      own "duplicated rather than shared" comment. Reversed that precedent: a
+      new `components/ui/IconButton.tsx` (chrome-less icon button, a `p-2`
+      visible box plus a transparent `after:-inset-1.5` hit-area expansion
+      to ~44px) and `components/ui/IncludeExcludeToggle.tsx` (the shared
+      plus/minus pair - non-generic, but structurally compatible with all
+      eight panels' own mode types) replace all eight. `Button.tsx` also
+      gained a `size="icon"` option, converting the eleven existing
+      hand-rolled `className="px-2.5 py-2.5"` icon-only buttons on the four
+      detail pages and `WatchlistButton.tsx` to the same treatment.
+      `WatchlistDetailPage.tsx`'s poster-tile pin/remove buttons converted to
+      `IconButton` directly (icons bumped 14px to 16px to match).
+      `RatingPicker.tsx` deliberately left alone - its five contiguous
+      2px-apart targets would only get worse from the same expansion.
+      Correction to the original finding: 24x24px passes WCAG 2.5.8 (the AA
+      minimum); 44px is 2.5.5 (AAA) plus Apple/Material guidance, not a
+      conformance fix.
+- [x] **Detail page action rows wrap instead of clipping at phone width**
+      (2026-09-20 added, fixed 2026-09-21)\
+      `ShowDetailPage.tsx`/`SeasonDetailPage.tsx`/`MovieDetailPage.tsx`/
+      `EpisodeDetailPage.tsx`'s action rows (`flex gap-2`, no wrap) each
+      gained `flex-wrap`. Alongside it, `DetailHeader.tsx`'s `breakpoint`
+      prop (Show/Season switched to a row layout at `sm` 640px, Movie/
+      Episode at `lg` 1024px - an inconsistency its own doc comment deferred
+      to this pass) was resolved and removed: all four now stack until `lg`,
+      since at `sm` Show's six-button row was squeezed into a narrower text
+      column across the whole 640-1024px band, a range the mobile audit
+      itself never reached.
+- [x] **Compact Calendar Month grid below `sm`, with a tap-to-open day
+      sheet** (2026-09-20 added, fixed 2026-09-21)\
+      `CalendarMonthGrid.tsx` used to render the same `table-fixed`
+      7-column grid at every width, truncating every event title to 2-4
+      characters at phone width. A new `useMediaQuery` hook (`lib/
+      use-media-query.ts`) switches the whole cell rendering in JS rather
+      than via CSS (compact mode needs the cell to be one `<button>`, wide
+      mode needs per-event `<Link>`s, and the two can't safely coexist in
+      the DOM at once): below `sm`, a cell shows the day number plus one dot
+      per distinct event kind present and the day's event count, and
+      tapping it opens that day's events in the existing `Dialog`, reusing
+      `CalendarAgenda`'s row (extracted to its own `CalendarEventRow.tsx`
+      first). Confirmed the spoiler guard doesn't widen: the month cell's
+      `kind === 'episode' && spoilerHidden` check and Agenda's bare
+      `spoilerHidden` are equivalent today, since `watch`/`release` events
+      are always `spoilerHidden: false` by construction.
+      `calendar.moreCount_one`/`_other` (orphaned since the "+N more" cap
+      was dropped) replaced with `calendar.dayEvents_one`/`_other` for the
+      day button's accessible name.
+- [x] **Admin Users list keeps MFA/verified badges on a phone** (2026-09-20
+      added, fixed 2026-09-21)\
+      Correction to the original finding: the role badge was never hidden
+      (it sits inline after the display name); only the last-login
+      timestamp, MFA badge and verified badge disappeared below `sm`, in a
+      `hidden ... sm:flex` column. `UserRow.tsx` now also renders the MFA/
+      verified badges (not the timestamp) on a third line under the email,
+      `sm:hidden`, so an admin scanning for e.g. unverified accounts still
+      can on a phone.
+- [x] **Sticky toolbars no longer eat most of a phone screen** (2026-09-20
+      added, fixed 2026-09-21)\
+      `CalendarPage.tsx`'s Month-view toolbar wrapped to four rows at phone
+      width: its kind-filter and month-navigator groups each used a
+      non-wrapping `flex gap-2` internally, and the month label's fixed
+      `w-40` (sized for "September 2026") was the biggest single
+      contributor. Both inner groups gained `flex-wrap`, and the label now
+      shrinks to `w-24` with an abbreviated month name
+      (`Intl.DateTimeFormat`'s `month: 'short'`) below `sm`, via the same
+      `useMediaQuery` hook the Calendar grid uses. `LibraryControls.tsx`'s
+      search box (`min-w-48`) and sort select (`w-48`) always summed past a
+      phone's usable width, forcing the select onto its own row on every
+      page that uses it (Shows, Films, History, Watchlist detail); both now
+      shrink below `sm` (`min-w-32`/`w-36`) and grow back at `sm` and up.
+- [x] **`WatchDateDialog`'s date/time row and `LandingPage`'s status-bar
+      overflow** (2026-09-20 added, fixed 2026-09-21)\
+      Neither could be live-verified below this environment's ~501px
+      browser-automation floor, so both fixed defensively from arithmetic,
+      pending a real-phone check. `WatchDateDialog.tsx`'s "Other date" `flex
+      gap-3` row (two native date/time inputs, unsized, inside a ~289px
+      content box at a true 375px) gained `flex-wrap` and a `flex-1`/
+      `min-w-32` floor on each field, so they share a row when there's room
+      and stack otherwise. `LandingPage.tsx`'s status-bar text
+      (`min-w-[320px] flex-1`, inside a ~283px content box) had its
+      `min-w-[320px]` swapped for `basis-[320px]` so the row (already
+      `flex-wrap`) can actually wrap instead of forcing horizontal scroll;
+      while in the file, also un-conditioned the status columns' `px-7`
+      padding to `lg:px-7` (only needed once the grid has columns to
+      divide) and added `flex-wrap` to the footer's non-wrapping
+      two-column link row.
 
 ## Per-user show state
 

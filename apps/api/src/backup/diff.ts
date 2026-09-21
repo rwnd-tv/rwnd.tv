@@ -50,17 +50,47 @@ export function multisetDiff<T>(
   return { added, removed }
 }
 
-/** Finds a movie/show by provider-tagged ref within a backup file's own
- * `movies`/`shows` arrays. Never misses in practice: `buildBackupFile`
- * only ever pushes a ref into a watch/rating/watchlist/dropped-show entry
- * alongside pushing the matching row into `movies`/`shows`, and the same
- * holds for whatever's already in a loaded backup file — but returns
- * `undefined` rather than throwing, since a diff line is diagnostic text,
- * not something worth failing the whole response over. */
-function findByRef<T extends { ref: ExternalRef }>(list: T[], ref: ExternalRef): T | undefined {
-  return list.find(
-    (item) => item.ref.source === ref.source && item.ref.externalId === ref.externalId,
-  )
+/** `source:externalId` — provably collision-free (`source` is a 2-value
+ * enum, `externalId` is digits-only, so neither can contain `:`), and
+ * correctly keeps a same-numbered TMDB/TVDB id apart, the exact hazard
+ * `ExternalRef`'s own doc comment (packages/shared/src/schemas/backups.ts)
+ * exists to prevent. */
+function refKey(ref: ExternalRef): string {
+  return `${ref.source}:${ref.externalId}`
+}
+
+/** One backup file's movies/shows, pre-indexed by `refKey` for O(1)
+ * lookup — built once per file (`computeBackupDiff` builds one for
+ * `current` and one for `backup`), rather than the O(entries x library
+ * size) blowup of scanning `file.movies`/`file.shows` from scratch on
+ * every single diff entry, which is what a plain `Array.find` per lookup
+ * used to do. Found in the M5 milestone review, docs/TODO.md. */
+export interface BackupRefIndex {
+  movies: Map<string, BackupMovie>
+  shows: Map<string, BackupShow>
+}
+
+/** Never misses in practice: `buildBackupFile` only ever pushes a ref into
+ * a watch/rating/watchlist/dropped-show entry alongside pushing the
+ * matching row into `movies`/`shows`, and the same holds for whatever's
+ * already in a loaded backup file — but a lookup miss (`Map.get`
+ * returning `undefined`) is still handled at each call site rather than
+ * throwing, since a diff line is diagnostic text, not something worth
+ * failing the whole response over. First-wins insertion (`if
+ * (!map.has(key))`) reproduces the old `Array.find`'s exact semantics in
+ * the not-expected duplicate-ref case. */
+export function indexByRef(file: BackupFile): BackupRefIndex {
+  const movies = new Map<string, BackupMovie>()
+  for (const movie of file.movies) {
+    const key = refKey(movie.ref)
+    if (!movies.has(key)) movies.set(key, movie)
+  }
+  const shows = new Map<string, BackupShow>()
+  for (const show of file.shows) {
+    const key = refKey(show.ref)
+    if (!shows.has(key)) shows.set(key, show)
+  }
+  return { movies, shows }
 }
 
 /** "S01E01" — zero-padded, matching how every other season/episode label
@@ -70,28 +100,28 @@ function episodeLabel(season: number, episode: number): string {
 }
 
 /** The movie/show(+episode) title and episode label a watch/rating/
- * watchlist entry points at, resolved against `file`'s own `movies`/
- * `shows` (the `current` snapshot's arrays for an added entry, the loaded
+ * watchlist entry points at, resolved against `index`'s own `movies`/
+ * `shows` (the `current` snapshot's index for an added entry, the loaded
  * backup's for a removed one — each side resolves against itself). `title`
- * falls back to a plain label when a ref can't be found (see findByRef's
- * doc comment for why that's a defensive fallback, not an expected path).
- * `episode` is deliberately just "S01E01", not the episode's own title too
- * - there's little room for it in this dialog, and the season/episode
- * number alone is enough to identify which one. Kept separate from `title`
- * (rather than one combined string) so the frontend can truncate a long
- * title with an ellipsis while the episode number - the part that actually
- * disambiguates - always stays visible. */
+ * falls back to a plain label when a ref can't be found (see
+ * `indexByRef`'s doc comment for why that's a defensive fallback, not an
+ * expected path). `episode` is deliberately just "S01E01", not the
+ * episode's own title too - there's little room for it in this dialog,
+ * and the season/episode number alone is enough to identify which one.
+ * Kept separate from `title` (rather than one combined string) so the
+ * frontend can truncate a long title with an ellipsis while the episode
+ * number - the part that actually disambiguates - always stays visible. */
 function mediaRefParts(
-  file: BackupFile,
+  index: BackupRefIndex,
   ref: { movie?: ExternalRef; show?: ExternalRef; season?: number; episode?: number },
 ): { title: string; episode: string | null } {
   if (ref.movie) {
-    const movie = findByRef<BackupMovie>(file.movies, ref.movie)
+    const movie = index.movies.get(refKey(ref.movie))
     if (!movie) return { title: 'Unknown movie', episode: null }
     return { title: movie.year ? `${movie.title} (${movie.year})` : movie.title, episode: null }
   }
 
-  const show = findByRef<BackupShow>(file.shows, ref.show!)
+  const show = index.shows.get(refKey(ref.show!))
   if (!show) return { title: 'Unknown show', episode: null }
   if (ref.season === undefined) return { title: show.title, episode: null }
 
@@ -141,24 +171,24 @@ function effectiveDrop(
   return entry.traktDropped ? { at: entry.traktDroppedAt!, reason: 'Trakt' } : null
 }
 
-function describeWatch(file: BackupFile, entry: BackupWatch): BackupDiffEntry {
-  return { ...splitDateTime(entry.watchedAt), ...mediaRefParts(file, entry), suffix: null }
+function describeWatch(index: BackupRefIndex, entry: BackupWatch): BackupDiffEntry {
+  return { ...splitDateTime(entry.watchedAt), ...mediaRefParts(index, entry), suffix: null }
 }
 
-function describeRating(file: BackupFile, entry: BackupRating): BackupDiffEntry {
+function describeRating(index: BackupRefIndex, entry: BackupRating): BackupDiffEntry {
   return {
     ...splitDateTime(entry.ratedAt),
-    ...mediaRefParts(file, entry),
+    ...mediaRefParts(index, entry),
     suffix: `rated ${entry.rating}`,
   }
 }
 
-function describeWatchlistItem(file: BackupFile, entry: BackupWatchlistItem): BackupDiffEntry {
-  return { ...splitDateTime(entry.listedAt), ...mediaRefParts(file, entry), suffix: entry.list }
+function describeWatchlistItem(index: BackupRefIndex, entry: BackupWatchlistItem): BackupDiffEntry {
+  return { ...splitDateTime(entry.listedAt), ...mediaRefParts(index, entry), suffix: entry.list }
 }
 
-function describeDroppedShow(file: BackupFile, entry: BackupDroppedShow): BackupDiffEntry {
-  const show = findByRef<BackupShow>(file.shows, entry.show)
+function describeDroppedShow(index: BackupRefIndex, entry: BackupDroppedShow): BackupDiffEntry {
+  const show = index.shows.get(refKey(entry.show))
   const title = show?.title ?? 'Unknown show'
   // Only ever called on an entry that survived computeBackupDiff's
   // effectiveDrop() filter below, so this is never actually null - the
@@ -198,6 +228,8 @@ export async function computeBackupDiff(
   providers: MetadataProvider[],
 ): Promise<BackupDiff> {
   const current = await buildBackupFile(db, userId, '', new Date(), providers)
+  const currentIndex = indexByRef(current)
+  const backupIndex = indexByRef(backup)
   const stringify = <T>(entry: T) => JSON.stringify(entry)
 
   const watchHistory = multisetDiff(current.watchHistory, backup.watchHistory, stringify)
@@ -233,26 +265,26 @@ export async function computeBackupDiff(
     watchHistory: {
       added: watchHistory.added.length,
       removed: watchHistory.removed.length,
-      addedItems: watchHistory.added.map((entry) => describeWatch(current, entry)),
-      removedItems: watchHistory.removed.map((entry) => describeWatch(backup, entry)),
+      addedItems: watchHistory.added.map((entry) => describeWatch(currentIndex, entry)),
+      removedItems: watchHistory.removed.map((entry) => describeWatch(backupIndex, entry)),
     },
     ratings: {
       added: ratings.added.length,
       removed: ratings.removed.length,
-      addedItems: ratings.added.map((entry) => describeRating(current, entry)),
-      removedItems: ratings.removed.map((entry) => describeRating(backup, entry)),
+      addedItems: ratings.added.map((entry) => describeRating(currentIndex, entry)),
+      removedItems: ratings.removed.map((entry) => describeRating(backupIndex, entry)),
     },
     watchlist: {
       added: watchlist.added.length,
       removed: watchlist.removed.length,
-      addedItems: watchlist.added.map((entry) => describeWatchlistItem(current, entry)),
-      removedItems: watchlist.removed.map((entry) => describeWatchlistItem(backup, entry)),
+      addedItems: watchlist.added.map((entry) => describeWatchlistItem(currentIndex, entry)),
+      removedItems: watchlist.removed.map((entry) => describeWatchlistItem(backupIndex, entry)),
     },
     droppedShows: {
       added: droppedShows.added.length,
       removed: droppedShows.removed.length,
-      addedItems: droppedShows.added.map((entry) => describeDroppedShow(current, entry)),
-      removedItems: droppedShows.removed.map((entry) => describeDroppedShow(backup, entry)),
+      addedItems: droppedShows.added.map((entry) => describeDroppedShow(currentIndex, entry)),
+      removedItems: droppedShows.removed.map((entry) => describeDroppedShow(backupIndex, entry)),
     },
   }
 }

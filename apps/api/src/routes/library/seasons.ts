@@ -1,5 +1,6 @@
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi'
 import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm'
+import type { SQL } from 'drizzle-orm'
 import {
   episodeImdbSchema,
   markShowWatchedRequestSchema,
@@ -151,19 +152,62 @@ seasonRoutes.openapi(
       .from(episodes)
       .where(and(eq(episodes.showId, show.id), eq(episodes.seasonNumber, seasonNumber)))
     const providerEpisodeByNumber = new Map(providerEpisodes.map((e) => [e.episodeNumber, e]))
+
+    // One batched UPDATE for the whole season instead of one per changed
+    // episode - a provider correcting several episodes' data at once (the
+    // routine steady-state case here) used to pay one sequential round
+    // trip per row on every season-detail page load. A `CASE WHEN id = ...`
+    // per column, `inArray`-scoped, matches this codebase's own precedent
+    // for a conditional per-row SET (import/trakt.ts) and a batched
+    // `inArray` update (metadata/refresh.ts). The `ELSE <column>` branch
+    // means a row that only changed the other column gets a harmless
+    // no-op self-write on this one - `episodes` has no `updatedAt` column
+    // or trigger, so there's no timestamp churn from that. Found in the
+    // M5 milestone review, docs/TODO.md.
+    const patches: { id: string; runtimeMinutes?: number; firstAired?: string }[] = []
     for (const local of localEpisodeRows) {
       const live = providerEpisodeByNumber.get(local.episodeNumber)
       if (!live) continue
-      const patch: Partial<{ runtimeMinutes: number; firstAired: string }> = {}
+      const patch: { id: string; runtimeMinutes?: number; firstAired?: string } = { id: local.id }
       if (live.runtimeMinutes !== null && live.runtimeMinutes !== local.runtimeMinutes) {
         patch.runtimeMinutes = live.runtimeMinutes
       }
       if (live.firstAired !== null && live.firstAired !== local.firstAired) {
         patch.firstAired = live.firstAired
       }
-      if (Object.keys(patch).length > 0) {
-        await db.update(episodes).set(patch).where(eq(episodes.id, local.id))
+      if (patch.runtimeMinutes !== undefined || patch.firstAired !== undefined) {
+        patches.push(patch)
       }
+    }
+    if (patches.length > 0) {
+      const runtimePatches = patches.filter((p) => p.runtimeMinutes !== undefined)
+      const firstAiredPatches = patches.filter((p) => p.firstAired !== undefined)
+      const set: Record<string, SQL> = {}
+      if (runtimePatches.length > 0) {
+        set.runtimeMinutes = sql`case ${sql.join(
+          runtimePatches.map(
+            (p) => sql`when ${episodes.id} = ${p.id} then ${p.runtimeMinutes}::int`,
+          ),
+          sql` `,
+        )} else ${episodes.runtimeMinutes} end`
+      }
+      if (firstAiredPatches.length > 0) {
+        set.firstAired = sql`case ${sql.join(
+          firstAiredPatches.map(
+            (p) => sql`when ${episodes.id} = ${p.id} then ${p.firstAired}::date`,
+          ),
+          sql` `,
+        )} else ${episodes.firstAired} end`
+      }
+      await db
+        .update(episodes)
+        .set(set)
+        .where(
+          inArray(
+            episodes.id,
+            patches.map((p) => p.id),
+          ),
+        )
     }
 
     // Scoped to the current user in the join condition (not a WHERE

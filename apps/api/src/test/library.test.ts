@@ -1094,6 +1094,88 @@ describe('library', () => {
       expect(updated?.firstAired).toBe('2020-01-02')
     })
 
+    it('reconciles two different episodes needing different columns patched, in one request (regression: batched CASE WHEN rewrite, M5 milestone review, docs/TODO.md)', async () => {
+      const cookie = await createUserAndCookie()
+      const userId = await meId(cookie)
+      const show = await insertShowWithSeason('2020-01-01')
+      await db.update(seasons).set({ episodeCount: 2 }).where(eq(seasons.showId, show.id))
+      // Episode 1 only needs its runtime corrected; episode 2 only needs
+      // its air date corrected - the case a single-CASE-WHEN-per-column
+      // rewrite could get wrong if it accidentally applied one episode's
+      // patch value to the other, or omitted a column's CASE entirely
+      // when only one of the two episodes needed it.
+      const [ep1] = await db
+        .insert(episodes)
+        .values({
+          showId: show.id,
+          seasonNumber: 1,
+          episodeNumber: 1,
+          title: 'Ep 1',
+          runtimeMinutes: 57,
+          firstAired: '2020-01-01',
+        })
+        .returning()
+      if (!ep1) throw new Error('failed to insert episode')
+      const [ep2] = await db
+        .insert(episodes)
+        .values({
+          showId: show.id,
+          seasonNumber: 1,
+          episodeNumber: 2,
+          title: 'Ep 2',
+          runtimeMinutes: 45,
+          firstAired: '2020-01-08',
+        })
+        .returning()
+      if (!ep2) throw new Error('failed to insert episode')
+      await db.insert(plays).values([
+        { userId, episodeId: ep1.id, watchedAt: new Date() },
+        { userId, episodeId: ep2.id, watchedAt: new Date() },
+      ])
+
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (input: string | URL) => {
+          const url = new URL(input)
+          if (url.pathname === '/3/tv/70001/season/1') {
+            return new Response(
+              JSON.stringify({
+                overview: null,
+                episodes: [
+                  {
+                    name: 'Ep 1',
+                    season_number: 1,
+                    episode_number: 1,
+                    air_date: '2020-01-01',
+                    runtime: 59,
+                  },
+                  {
+                    name: 'Ep 2',
+                    season_number: 1,
+                    episode_number: 2,
+                    air_date: '2020-01-09',
+                    runtime: 45,
+                  },
+                ],
+              }),
+              { status: 200 },
+            )
+          }
+          throw new Error(`Unexpected TMDB fetch in test: ${url}`)
+        }),
+      )
+
+      await app.request(`/api/v1/library/shows/${show.slug}/seasons/1`, { headers: { cookie } })
+
+      const [updated1] = await db.select().from(episodes).where(eq(episodes.id, ep1.id))
+      expect(updated1?.runtimeMinutes).toBe(59)
+      expect(updated1?.firstAired).toBe('2020-01-01')
+
+      const [updated2] = await db.select().from(episodes).where(eq(episodes.id, ep2.id))
+      expect(updated2?.runtimeMinutes).toBe(45)
+      expect(updated2?.firstAired).toBe('2020-01-09')
+    })
+
     it('never overwrites a stored runtime/air date with a live null (protects a cross-provider-backfilled value)', async () => {
       const cookie = await createUserAndCookie()
       const userId = await meId(cookie)

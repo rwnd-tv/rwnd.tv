@@ -570,6 +570,10 @@ async function buildMoviesEvents(
 
   return rows.map((row) => {
     const movie = moviesById.get(row.movieId)!
+    // Computed once, reused below — same pattern as buildShowsEvents
+    // above. Deliberately not applied to `summary`: unlike an episode
+    // title, a movie's title/year isn't spoiler content (docs/TODO.md).
+    const spoilerHidden = user.spoilerProtectionEnabled && !row.watched
     return {
       uid: `movie-${row.movieId}@rwnd.tv`,
       date: row.releaseDate!,
@@ -581,10 +585,8 @@ async function buildMoviesEvents(
       // shows the resolved date with a region flag) is where that gets
       // disambiguated.
       summary: movie.year !== null ? `${movie.title} (${movie.year})` : movie.title,
-      // Same spoiler rule as buildShowsEvents — see that query's own
-      // comment.
       description: withLink(
-        user.spoilerProtectionEnabled && !row.watched ? undefined : (row.overview ?? undefined),
+        spoilerHidden ? undefined : (row.overview ?? undefined),
         opts.baseUrl ? `${opts.baseUrl}/movies/${movie.slug}` : undefined,
       ),
       stamp: latestOf(row.createdAt, row.metadataRefreshedAt),
@@ -596,7 +598,7 @@ async function buildMoviesEvents(
         movieSlug: movie.slug,
       },
       watched: row.watched,
-      spoilerHidden: user.spoilerProtectionEnabled && !row.watched,
+      spoilerHidden,
       overview: row.overview,
     }
   })

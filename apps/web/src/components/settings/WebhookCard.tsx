@@ -7,7 +7,7 @@ import {
   type ApiToken,
   type WebhookSource,
 } from '@rwnd/shared'
-import { api } from '../../lib/api-client.js'
+import { api, ApiError } from '../../lib/api-client.js'
 import { Button } from '../ui/Button.js'
 import { Dialog } from '../ui/Dialog.js'
 import { ChevronDownIcon } from '../icons.js'
@@ -48,6 +48,7 @@ export function WebhookCard({ token, defaultOpen }: { token: ApiToken; defaultOp
   const { copied, copy } = useCopyFeedback<'url' | 'template'>()
   const [confirmRegenerate, setConfirmRegenerate] = useState(false)
   const [confirmRevoke, setConfirmRevoke] = useState(false)
+  const [sourceError, setSourceError] = useState<string>()
 
   const regenerate = useMutation({
     mutationFn: () => api.tokens.regenerate(token.id),
@@ -68,7 +69,21 @@ export function WebhookCard({ token, defaultOpen }: { token: ApiToken; defaultOp
 
   const setSource = useMutation({
     mutationFn: (source: WebhookSource) => api.tokens.update(token.id, { source }),
-    onSuccess: (updated) => setTokenInCache(queryClient, updated),
+    onSuccess: (updated) => {
+      setTokenInCache(queryClient, updated)
+      setSourceError(undefined)
+    },
+    onError: (err) => {
+      setSourceError(err instanceof ApiError ? err.message : t('common.somethingWentWrong'))
+      // A 409 here means two source buttons were clicked in quick
+      // succession (or another session raced this one) and the server-side
+      // state already moved on — refetch so the stale "pick a source"
+      // picker naturally disappears in favor of the real URL row, rather
+      // than staying stuck showing buttons for a token that already has one.
+      if (err instanceof ApiError && err.status === 409) {
+        void queryClient.invalidateQueries({ queryKey: ['tokens'] })
+      }
+    },
   })
 
   const source = token.source
@@ -109,6 +124,7 @@ export function WebhookCard({ token, defaultOpen }: { token: ApiToken; defaultOp
                     key={option}
                     type="button"
                     variant="secondary"
+                    disabled={setSource.isPending}
                     isLoading={setSource.isPending && setSource.variables === option}
                     onClick={() => setSource.mutate(option)}
                   >
@@ -116,6 +132,11 @@ export function WebhookCard({ token, defaultOpen }: { token: ApiToken; defaultOp
                   </Button>
                 ))}
               </div>
+              {sourceError && (
+                <p role="alert" className="text-sm text-[var(--color-danger)]">
+                  {sourceError}
+                </p>
+              )}
             </div>
           )}
 

@@ -11,9 +11,9 @@ import type { AppEnv } from '../types.js'
 import { hashSecret } from '../lib/tokens.js'
 import { replayPendingWebhookEvents } from '../lib/webhook-plays.js'
 import {
-  hasLinkedSource,
-  hasConflictingServerLink,
-  lockUserSource,
+  claimLinkForUserOrThrow,
+  CLAIM_FAILURE_RESPONSE,
+  WebhookLinkClaimError,
 } from '../lib/webhook-accounts.js'
 import { orderedProviders } from '../providers/priority.js'
 import { rateLimit } from '../middleware/rate-limit.js'
@@ -24,31 +24,10 @@ export const webhookLinkRoutes = new OpenAPIHono<AppEnv>()
 
 /** Thrown inside the redeem transaction below to roll it back — same
  * shape as `routes/auth.ts`'s `InvalidInviteCodeError` for invite
- * redemption. */
+ * redemption. Genuinely this route's own concern (code lookup/expiry), not
+ * shared with the self-link route the way the claim-outcome errors are
+ * (see `WebhookLinkClaimError`, `lib/webhook-accounts.js`). */
 class InvalidLinkCodeError extends Error {}
-
-/** Thrown when the code itself is valid but the link it points at has
- * already been linked by someone else in the meantime (a genuine race:
- * the token owner re-linked it themselves, or a second code for the
- * same link — generating one always supersedes the prior one, but two
- * outstanding requests could still interleave). */
-class AlreadyLinkedError extends Error {}
-
-/** Thrown when the code and link are both valid, but the redeemer
- * already has a different account of this same source linked to
- * themselves — the same one-rwnd.tv-user-per-source invariant
- * `hasLinkedSource` (`apps/api/src/lib/webhook-accounts.ts`) enforces
- * on the self-link route, applied here too so redeeming a code can't
- * be used to route around it. */
-class AlreadySelfLinkedError extends Error {}
-
-/** Thrown when the code and link are both valid, but the redeemer
- * already has an account linked from a *different* source describing
- * the same physical server (Plex ↔ Tautulli) — the same
- * `hasConflictingServerLink` invariant the self-link route enforces,
- * applied here too so redeeming a code can't be used to route around
- * it either. */
-class ServerAlreadyLinkedError extends Error {}
 
 /**
  * Redeems a one-time webhook link code
@@ -123,48 +102,24 @@ webhookLinkRoutes.openapi(
         // the code was generated — treat it the same as an invalid code
         // rather than a distinct error the caller can't act on either way.
         if (!link) throw new InvalidLinkCodeError()
-        if (link.userId) throw new AlreadyLinkedError()
 
-        // Same advisory lock the self-link route (routes/tokens.ts's
-        // claimLink) takes before its own hasLinkedSource/
-        // hasConflictingServerLink checks — without it, two concurrent
-        // redeems of different codes (or a redeem racing a concurrent
-        // self-link) each read these checks before either UPDATE commits,
-        // since the checks target different rows and Postgres row-locking
-        // doesn't serialize them. Missing here let a user link two
-        // accounts of the same source at once; found in the M5 milestone
-        // review, docs/TODO.md.
-        await lockUserSource(tx, user.id, link.source)
-        if (await hasLinkedSource(tx, user.id, link.source)) {
-          throw new AlreadySelfLinkedError()
-        }
-        if (await hasConflictingServerLink(tx, user.id, link.source, link.externalServerId)) {
-          throw new ServerAlreadyLinkedError()
-        }
-
-        const [updated] = await tx
-          .update(webhookAccountLinks)
-          .set({ userId: user.id })
-          .where(eq(webhookAccountLinks.id, link.id))
-          .returning()
-        if (!updated) throw new Error('Failed to link webhook account')
-        return updated
+        // claimLinkForUserOrThrow re-checks every invariant (including
+        // whether this exact link is still unclaimed, via its own
+        // `userId IS NULL` guard) inside the advisory lock it takes — a
+        // stronger, race-safe version of a plain `if (link.userId)` check
+        // here, since it also catches a link claimed between the SELECT
+        // above and this point. Deliberately a throw, not the plain
+        // claimLinkForUser union: a failure here must roll back the
+        // `usedBy` UPDATE above too, or a 409 would silently burn the
+        // one-time code. Found in the M5 milestone review, docs/TODO.md.
+        return await claimLinkForUserOrThrow(tx, link, user)
       })
     } catch (err) {
       if (err instanceof InvalidLinkCodeError) {
         return c.json({ error: 'Invalid or expired code' }, 400)
       }
-      if (err instanceof AlreadyLinkedError) {
-        return c.json({ error: 'This account has already been linked' }, 409)
-      }
-      if (err instanceof AlreadySelfLinkedError) {
-        return c.json({ error: 'You already have a linked account for this source' }, 409)
-      }
-      if (err instanceof ServerAlreadyLinkedError) {
-        return c.json(
-          { error: 'This server already has a linked account via a different source' },
-          409,
-        )
+      if (err instanceof WebhookLinkClaimError) {
+        return c.json({ error: CLAIM_FAILURE_RESPONSE[err.reason] }, 409)
       }
       throw err
     }

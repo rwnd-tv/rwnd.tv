@@ -393,6 +393,98 @@ describe('POST /webhook-links/redeem', () => {
     expect(unchanged?.userId).toBeNull()
   })
 
+  it('leaves the one-time code redeemable after a 409 from a claim failure (regression: claimLinkForUserOrThrow must roll back the usedBy consume)', async () => {
+    // claimLinkForUserOrThrow (apps/api/src/lib/webhook-accounts.ts) is a
+    // throw, not the plain claimLinkForUser union, specifically so a 409
+    // here rolls back the earlier `usedBy` UPDATE too. Found worth pinning
+    // directly in the M5 milestone review's follow-up pass, docs/TODO.md.
+    const ownerCookie = await createUserAndCookie('owner7@example.com')
+    const token = await createToken(app, ownerCookie)
+    const link = await seedLink(token.id)
+    const { code } = await generateCode(app, ownerCookie, token.id, link.id)
+
+    // First redeemer already has a different Plex account linked, so this
+    // redeem 409s on the source-already-linked check, after the code's
+    // own usedBy UPDATE already ran inside the same transaction.
+    await createLocalUser(db, 'redeemer7a@example.com', 'correct-horse-battery-staple')
+    const firstCookie = await loginAs('redeemer7a@example.com', 'correct-horse-battery-staple')
+    const firstToken = await createToken(app, firstCookie)
+    const firstOwnLink = await seedLink(firstToken.id)
+    await app.request(`/api/v1/tokens/${firstToken.id}/webhook-links/${firstOwnLink.id}/link`, {
+      method: 'POST',
+      headers: { cookie: firstCookie, 'Content-Type': 'application/json' },
+    })
+    const failed = await app.request('/api/v1/webhook-links/redeem', {
+      method: 'POST',
+      headers: { cookie: firstCookie, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code }),
+    })
+    expect(failed.status).toBe(409)
+
+    // A second redeemer, with no conflicting link, must still be able to
+    // use the same code — it must not have been consumed by the 409 above.
+    await createLocalUser(db, 'redeemer7b@example.com', 'correct-horse-battery-staple')
+    const secondCookie = await loginAs('redeemer7b@example.com', 'correct-horse-battery-staple')
+    const succeeded = await app.request('/api/v1/webhook-links/redeem', {
+      method: 'POST',
+      headers: { cookie: secondCookie, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code }),
+    })
+    expect(succeeded.status).toBe(200)
+  })
+
+  it('409s redeeming a code that would link the same physical server via a conflicting source', async () => {
+    // hasConflictingServerLink's own invariant (Plex <-> Tautulli covering
+    // the same physical server), exercised on the redeem-by-code route -
+    // previously untested here, found in the M5 milestone review,
+    // docs/TODO.md.
+    const ownerCookie = await createUserAndCookie('owner8@example.com')
+    const token = await createToken(app, ownerCookie)
+    const [plexLink] = await db
+      .insert(webhookAccountLinks)
+      .values({
+        tokenId: token.id,
+        source: 'plex',
+        externalAccountId: '2',
+        externalAccountName: 'kid-profile',
+        externalServerId: 'shared-server-1',
+      })
+      .returning()
+    if (!plexLink) throw new Error('failed to insert link')
+    const { code } = await generateCode(app, ownerCookie, token.id, plexLink.id)
+
+    // The redeemer already has a Tautulli-sourced link to that same
+    // physical server, under a token of their own.
+    await createLocalUser(db, 'redeemer8@example.com', 'correct-horse-battery-staple')
+    const redeemerCookie = await loginAs('redeemer8@example.com', 'correct-horse-battery-staple')
+    const redeemerToken = await createToken(app, redeemerCookie)
+    const [tautulliLink] = await db
+      .insert(webhookAccountLinks)
+      .values({
+        tokenId: redeemerToken.id,
+        source: 'tautulli',
+        externalAccountId: '2',
+        externalAccountName: 'kid-profile',
+        externalServerId: 'shared-server-1',
+        userId: await meId(app, redeemerCookie),
+      })
+      .returning()
+    if (!tautulliLink) throw new Error('failed to insert link')
+
+    const res = await app.request('/api/v1/webhook-links/redeem', {
+      method: 'POST',
+      headers: { cookie: redeemerCookie, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code }),
+    })
+    expect(res.status).toBe(409)
+
+    const [unchanged] = await db
+      .select()
+      .from(webhookAccountLinks)
+      .where(eq(webhookAccountLinks.id, plexLink.id))
+    expect(unchanged?.userId).toBeNull()
+  })
+
   it('requires authentication', async () => {
     const res = await app.request('/api/v1/webhook-links/redeem', {
       method: 'POST',

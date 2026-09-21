@@ -13,42 +13,22 @@ import {
   WEBHOOK_SOURCE_LABELS,
 } from '@rwnd/shared'
 import { apiTokens, instanceSettings, users, webhookAccountLinks, webhookLinkCodes } from '@rwnd/db'
-import type { Database, Tx } from '@rwnd/db'
-import type { AppEnv, UserRecord } from '../types.js'
+import type { Database } from '@rwnd/db'
+import type { AppEnv } from '../types.js'
 import { loadEnv } from '../env.js'
 import { generateApiToken, generateSecret, hashSecret } from '../lib/tokens.js'
 import { tryDecryptSecret } from '../lib/crypto.js'
 import { replayPendingWebhookEvents } from '../lib/webhook-plays.js'
 import {
   hasLinkedSource,
-  hasConflictingServerLink,
-  lockUserSource,
+  claimLinkForUser,
+  CLAIM_FAILURE_RESPONSE,
 } from '../lib/webhook-accounts.js'
 import { orderedProviders } from '../providers/priority.js'
 import { isEmailConfigured, sendWebhookLinkEmail } from '../lib/email.js'
 import { logSecurityEvent } from '../lib/security-log.js'
 
 export const tokenRoutes = new OpenAPIHono<AppEnv>()
-
-/** Thrown inside the self-link transaction below to roll it back — the
- * link itself was already claimed (by the token owner, or a second
- * concurrent self-link of the same row) between this route's initial
- * `link.userId` check and the transaction actually committing. */
-class AlreadyLinkedError extends Error {}
-
-/** Thrown when the link is still claimable, but the caller already has a
- * different account of this same source linked to themselves — the same
- * one-rwnd.tv-user-per-source invariant `hasLinkedSource`
- * (`apps/api/src/lib/webhook-accounts.ts`) enforces on the redeem-by-code
- * route (`routes/webhook-links.ts`), applied here too so self-linking
- * can't be used to route around it. */
-class AlreadySelfLinkedError extends Error {}
-
-/** Thrown when the link is still claimable, but the caller already has an
- * account linked from a *different* source describing the same physical
- * server (Plex ↔ Tautulli) — the same `hasConflictingServerLink`
- * invariant the redeem-by-code route enforces, applied here too. */
-class ServerAlreadyLinkedError extends Error {}
 
 // Same TTL as `invites` (apps/api/src/routes/invites.ts) — generous enough
 // to actually hand off (in person, over chat, whenever the recipient gets
@@ -131,36 +111,6 @@ async function findLink(
     .where(and(eq(webhookAccountLinks.id, linkId), eq(webhookAccountLinks.tokenId, tokenId)))
     .limit(1)
   return link
-}
-
-/** Claims `link` for `user`, re-checking every invariant inside the same
- * transaction the advisory lock (`lockUserSource`) and the write itself
- * run in — the pre-transaction checks in the route handler below are only
- * a fast path for the common case, not what actually makes this safe
- * against a concurrent self-link/redeem of a different account of the
- * same source. `userId IS NULL` in the WHERE clause is the atomic guard
- * against a concurrent claim of this *same* row (the token owner
- * re-linking it, or a second concurrent self-link of it), same shape as
- * the redeem route's own code-claim UPDATE. */
-async function claimLink(
-  tx: Tx,
-  link: typeof webhookAccountLinks.$inferSelect,
-  user: UserRecord,
-): Promise<typeof webhookAccountLinks.$inferSelect> {
-  await lockUserSource(tx, user.id, link.source)
-  if (await hasLinkedSource(tx, user.id, link.source)) {
-    throw new AlreadySelfLinkedError()
-  }
-  if (await hasConflictingServerLink(tx, user.id, link.source, link.externalServerId)) {
-    throw new ServerAlreadyLinkedError()
-  }
-  const [updated] = await tx
-    .update(webhookAccountLinks)
-    .set({ userId: user.id })
-    .where(and(eq(webhookAccountLinks.id, link.id), isNull(webhookAccountLinks.userId)))
-    .returning()
-  if (!updated) throw new AlreadyLinkedError()
-  return updated
 }
 
 tokenRoutes.openapi(
@@ -428,31 +378,22 @@ tokenRoutes.openapi(
     }
     const link = await findLink(db, id, linkId)
     if (!link) return c.json({ error: 'Link not found' }, 404)
-    if (link.userId) return c.json({ error: 'Already linked' }, 409)
+    if (link.userId) return c.json({ error: CLAIM_FAILURE_RESPONSE['already-linked'] }, 409)
 
-    let updated: typeof webhookAccountLinks.$inferSelect
-    try {
-      updated = await db.transaction((tx) => claimLink(tx, link, user))
-    } catch (err) {
-      if (err instanceof AlreadySelfLinkedError) {
-        return c.json({ error: 'You already have a linked account for this source' }, 409)
-      }
-      if (err instanceof ServerAlreadyLinkedError) {
-        return c.json(
-          { error: 'This server already has a linked account via a different source' },
-          409,
-        )
-      }
-      if (err instanceof AlreadyLinkedError) {
-        return c.json({ error: 'Already linked' }, 409)
-      }
-      throw err
+    // The pre-checks above are only a fast path for the common case; the
+    // real invariant enforcement (the advisory lock plus a re-check of
+    // every condition) happens inside claimLinkForUser, which is why this
+    // route needs no try/catch — every one of its outcomes is a 409 that
+    // differs only by message, all read straight from CLAIM_FAILURE_RESPONSE.
+    const result = await db.transaction((tx) => claimLinkForUser(tx, link, user))
+    if (!result.ok) {
+      return c.json({ error: CLAIM_FAILURE_RESPONSE[result.reason] }, 409)
     }
 
     const providers = await orderedProviders(db, c.get('metadataProviders'))
-    await replayPendingWebhookEvents(db, providers, user, updated)
+    await replayPendingWebhookEvents(db, providers, user, result.link)
     logSecurityEvent('webhook_account_linked', { userId: user.id })
-    return c.json(serializeLink(updated, user.displayName))
+    return c.json(serializeLink(result.link, user.displayName))
   },
 )
 

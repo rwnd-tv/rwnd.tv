@@ -745,6 +745,53 @@ describe('tokens', () => {
       expect(unchanged?.userId).toBeNull()
     })
 
+    it('409s self-linking a link that would link the same physical server via a conflicting source', async () => {
+      // hasConflictingServerLink's own invariant (Plex <-> Tautulli
+      // covering the same physical server), exercised on the self-link
+      // route - previously untested here, found in the M5 milestone
+      // review, docs/TODO.md.
+      const cookie = await createUserAndCookie()
+      const userId = await meId(cookie)
+      const tautulliToken = await createToken(cookie, 'Tautulli', 'tautulli')
+      const [tautulliLink] = await db
+        .insert(webhookAccountLinks)
+        .values({
+          tokenId: tautulliToken.id,
+          source: 'tautulli',
+          externalAccountId: '2',
+          externalAccountName: 'kid-profile',
+          externalServerId: 'shared-server-1',
+          userId,
+        })
+        .returning()
+      if (!tautulliLink) throw new Error('failed to insert link')
+
+      const plexToken = await createToken(cookie, 'Plex')
+      const [plexLink] = await db
+        .insert(webhookAccountLinks)
+        .values({
+          tokenId: plexToken.id,
+          source: 'plex',
+          externalAccountId: '2',
+          externalAccountName: 'kid-profile',
+          externalServerId: 'shared-server-1',
+        })
+        .returning()
+      if (!plexLink) throw new Error('failed to insert link')
+
+      const res = await app.request(
+        `/api/v1/tokens/${plexToken.id}/webhook-links/${plexLink.id}/link`,
+        { method: 'POST', headers: { cookie } },
+      )
+      expect(res.status).toBe(409)
+
+      const [unchanged] = await db
+        .select()
+        .from(webhookAccountLinks)
+        .where(eq(webhookAccountLinks.id, plexLink.id))
+      expect(unchanged?.userId).toBeNull()
+    })
+
     it("404s for a link that belongs to another user's token", async () => {
       const cookieA = await createUserAndCookie('owner@example.com')
       const createdA = await createToken(cookieA)

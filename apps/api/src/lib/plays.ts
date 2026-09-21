@@ -1,7 +1,8 @@
-import { and, eq, gte, inArray, lt, sql } from 'drizzle-orm'
+import { and, eq, gte, inArray, lt } from 'drizzle-orm'
 import type { Database, Tx } from '@rwnd/db'
 import { plays } from '@rwnd/db'
 import type { PlaySource } from '@rwnd/shared'
+import { lockUserScope } from './locks.js'
 
 /** Media-server sources that report a watch live, at (or very near) the
  * moment it actually happened — as opposed to `manual` (a user's own
@@ -105,27 +106,16 @@ async function deletePlays(tx: Tx, ids: string[]): Promise<void> {
 }
 
 /**
- * Takes a Postgres advisory lock scoped to this exact (userId, entity)
- * pair for the rest of the enclosing transaction — nothing else touching
- * the same user's watch of the same movie/episode can run concurrently
- * with this reconciliation. Without it, two requests (most plausibly a
- * live webhook and a retry of that very same delivery — see
- * SAME_SOURCE_RETRY_WINDOW_MS's doc comment for why the retry is likely
- * to land *while the original is still mid-flight*, not after) could each
- * run their own conflict check before either has inserted, both see "no
- * conflict yet", and both write a play the reconciliation rules meant to
- * collapse into one.
- *
- * `pg_advisory_xact_lock` (the transaction-scoped variant, not the
- * session one) releases automatically on commit or rollback — no manual
- * unlock needed, and no risk of leaking a held lock if this throws.
- * `hashtext()` collisions between two different (user, entity) pairs are
- * possible but harmless: advisory locks are pure mutual exclusion, not
- * data, so a collision at worst makes two unrelated requests briefly wait
- * on each other — never a correctness issue. This is why the lock is
- * database-held rather than an in-process mutex: it holds even if this
- * app ever ran as more than one process sharing this Postgres, with no
- * extra coordination required.
+ * Locks this exact (userId, entity) pair for the rest of the enclosing
+ * transaction — nothing else touching the same user's watch of the same
+ * movie/episode can run concurrently with this reconciliation. Without it,
+ * two requests (most plausibly a live webhook and a retry of that very
+ * same delivery — see SAME_SOURCE_RETRY_WINDOW_MS's doc comment for why
+ * the retry is likely to land *while the original is still mid-flight*,
+ * not after) could each run their own conflict check before either has
+ * inserted, both see "no conflict yet", and both write a play the
+ * reconciliation rules meant to collapse into one. See `lib/locks.ts`'s
+ * `lockUserScope` for the shared locking mechanics this delegates to.
  */
 async function lockEntity(
   tx: Tx,
@@ -133,7 +123,7 @@ async function lockEntity(
   entityRef: { movieId: string } | { episodeId: string },
 ): Promise<void> {
   const entityId = 'movieId' in entityRef ? entityRef.movieId : entityRef.episodeId
-  await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${userId}), hashtext(${entityId}))`)
+  await lockUserScope(tx, userId, entityId)
 }
 
 /**

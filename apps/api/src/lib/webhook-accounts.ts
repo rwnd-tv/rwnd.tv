@@ -1,8 +1,9 @@
-import { and, eq, inArray, sql } from 'drizzle-orm'
+import { and, eq, inArray, isNull } from 'drizzle-orm'
 import type { Database, Tx } from '@rwnd/db'
 import { users, webhookAccountLinks } from '@rwnd/db'
 import type { WebhookSource } from '@rwnd/shared'
 import type { UserRecord } from '../types.js'
+import { lockUserScope } from './locks.js'
 
 /**
  * Resolves which rwnd.tv user one webhook event's external account (e.g.
@@ -151,6 +152,25 @@ export async function hasConflictingServerLink(
   return rows.some((row) => row.externalServerId === serverId)
 }
 
+/** Locks this exact (userId, source) pair for the rest of the enclosing
+ * transaction — same shape as `apps/api/src/lib/plays.ts`'s `lockEntity`
+ * for a related race; see `lib/locks.ts`'s `lockUserScope` for the shared
+ * locking mechanics both delegate to. Without it, `hasLinkedSource`'s
+ * check and the write that follows aren't actually atomic together: two
+ * concurrent link attempts for two *different* not-yet-linked accounts of
+ * the same source (self-link and/or redeem-by-code,
+ * `apps/api/src/routes/tokens.ts` and `apps/api/src/routes/webhook-links.ts`)
+ * could each pass the check before either commits its own write —
+ * different target rows, so Postgres's own row locking doesn't serialize
+ * them — and both succeed, leaving this user linked to two accounts of the
+ * same source at once. Found unguarded on the self-link route in the M4
+ * review (docs/TODO.md, Stage 6); the redeem route had the identical
+ * latent gap despite already running inside a transaction, so both call
+ * this. */
+export async function lockUserSource(tx: Tx, userId: string, source: WebhookSource): Promise<void> {
+  await lockUserScope(tx, userId, source)
+}
+
 /** Whether `userId` already has a linked webhook account for `source` —
  * one rwnd.tv user maps to at most one external account per source
  * (James, 2026-09-02): a Plex account is one specific person, and this
@@ -165,25 +185,6 @@ export async function hasConflictingServerLink(
  * under a *different* token, which would be the same violation.
  * `Database | Tx` — the redeem route's own check needs to run inside its
  * link transaction, not after it. */
-/** Takes a Postgres advisory lock scoped to this exact (userId, source)
- * pair for the rest of the enclosing transaction — same shape as
- * `apps/api/src/lib/plays.ts`'s `lockEntity` for a related race. Without
- * it, `hasLinkedSource`'s check and the write that follows aren't
- * actually atomic together: two concurrent link attempts for two
- * *different* not-yet-linked accounts of the same source (self-link and/
- * or redeem-by-code, `apps/api/src/routes/tokens.ts` and
- * `apps/api/src/routes/webhook-links.ts`) could each pass the check
- * before either commits its own write — different target rows, so
- * Postgres's own row locking doesn't serialize them — and both succeed,
- * leaving this user linked to two accounts of the same source at once.
- * Found unguarded on the self-link route in the M4 review (docs/TODO.md,
- * Stage 6); the redeem route had the identical latent gap despite already
- * running inside a transaction, so both call this. `pg_advisory_xact_lock`
- * releases automatically on commit or rollback. */
-export async function lockUserSource(tx: Tx, userId: string, source: WebhookSource): Promise<void> {
-  await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${userId}), hashtext(${source}))`)
-}
-
 export async function hasLinkedSource(
   db: Database | Tx,
   userId: string,
@@ -195,4 +196,92 @@ export async function hasLinkedSource(
     .where(and(eq(webhookAccountLinks.userId, userId), eq(webhookAccountLinks.source, source)))
     .limit(1)
   return Boolean(existing)
+}
+
+/** Why a claim attempt in `claimLinkForUser` below didn't succeed — the
+ * three outcomes both the self-link route (`routes/tokens.ts`) and the
+ * redeem-by-code route (`routes/webhook-links.ts`) need to distinguish. */
+export type ClaimFailureReason =
+  'already-linked' | 'source-already-linked' | 'server-already-linked'
+
+export type ClaimLinkResult =
+  | { ok: true; link: typeof webhookAccountLinks.$inferSelect }
+  | { ok: false; reason: ClaimFailureReason }
+
+/** The 409 copy for each `ClaimFailureReason`, shared so both routes agree
+ * on wording rather than each hand-writing their own (they used to differ:
+ * "Already linked" vs "This account has already been linked" for the same
+ * `already-linked` case). Found in the M5 milestone review, docs/TODO.md. */
+export const CLAIM_FAILURE_RESPONSE: Record<ClaimFailureReason, string> = {
+  'already-linked': 'This account has already been linked',
+  'source-already-linked': 'You already have a linked account for this source',
+  'server-already-linked': 'This server already has a linked account via a different source',
+}
+
+/** Thrown by `claimLinkForUserOrThrow` below — a `ClaimLinkResult` carried
+ * as an exception, for a caller whose transaction needs the throw itself
+ * to roll back an earlier write (`routes/webhook-links.ts`'s redeem route
+ * consumes a one-time code before reaching the claim; see that route's own
+ * comment on why it can't use the plain `claimLinkForUser` union instead). */
+export class WebhookLinkClaimError extends Error {
+  constructor(readonly reason: ClaimFailureReason) {
+    super(reason)
+  }
+}
+
+/**
+ * Claims `link` for `user`, re-checking every invariant inside the same
+ * transaction the advisory lock and the write itself run in — a caller's
+ * own pre-transaction checks (if any) are only a fast path for the common
+ * case, not what actually makes this safe against a concurrent self-link/
+ * redeem of a different account of the same source. `userId IS NULL` in
+ * the `WHERE` clause is the atomic guard against a concurrent claim of
+ * this *same* row (the token owner re-linking it, or a second concurrent
+ * self-link/redeem of it).
+ *
+ * Pure: never throws for an expected outcome, and (unlike
+ * `claimLinkForUserOrThrow` below) never needs to, since nothing here
+ * writes anything before its own final `UPDATE` — there is nothing for a
+ * caller to roll back on failure. Shared by `routes/tokens.ts`'s self-link
+ * route and `routes/webhook-links.ts`'s redeem route, extracted after the
+ * two independently-duplicated copies let a real fix (the `lockUserScope`
+ * call) land in only one of them. Found in the M5 milestone review,
+ * docs/TODO.md.
+ */
+export async function claimLinkForUser(
+  tx: Tx,
+  link: typeof webhookAccountLinks.$inferSelect,
+  user: UserRecord,
+): Promise<ClaimLinkResult> {
+  await lockUserScope(tx, user.id, link.source)
+  if (await hasLinkedSource(tx, user.id, link.source)) {
+    return { ok: false, reason: 'source-already-linked' }
+  }
+  if (await hasConflictingServerLink(tx, user.id, link.source, link.externalServerId)) {
+    return { ok: false, reason: 'server-already-linked' }
+  }
+  const [updated] = await tx
+    .update(webhookAccountLinks)
+    .set({ userId: user.id })
+    .where(and(eq(webhookAccountLinks.id, link.id), isNull(webhookAccountLinks.userId)))
+    .returning()
+  if (!updated) return { ok: false, reason: 'already-linked' }
+  return { ok: true, link: updated }
+}
+
+/** Throwing wrapper around `claimLinkForUser`, for a caller inside a
+ * transaction that has already written something earlier (the redeem
+ * route's one-time-code consume) and needs a genuine `throw` to roll that
+ * back on failure — a bare union return would let the transaction commit
+ * regardless of `ok`, silently keeping a one-time code "used" even though
+ * the claim it was redeemed for failed. Do not simplify this back to the
+ * plain union inside such a transaction. */
+export async function claimLinkForUserOrThrow(
+  tx: Tx,
+  link: typeof webhookAccountLinks.$inferSelect,
+  user: UserRecord,
+): Promise<typeof webhookAccountLinks.$inferSelect> {
+  const result = await claimLinkForUser(tx, link, user)
+  if (!result.ok) throw new WebhookLinkClaimError(result.reason)
+  return result.link
 }

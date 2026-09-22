@@ -70,6 +70,13 @@ export const watchlistItemMediaSchema = z.object({
   title: z.string(),
   year: z.number().int().nullable(),
   posterPath: z.string().nullable(),
+  /** TMDB's average rating, 0-10 — see libraryShowSchema's `voteAverage`
+   * (schemas/library.ts) for the null-handling convention. Community
+   * rating, not the current user's own (`myRating`): a watchlisted title
+   * is by definition usually unwatched, so `myRating` would be null for
+   * nearly every row here, making a filter/sort on it useless in
+   * practice. Backs WatchlistDetailPage.tsx's rating filter/sort. */
+  voteAverage: z.number().nullable(),
   listedAt: z.string().datetime(),
 })
 export type WatchlistItemMedia = z.infer<typeof watchlistItemMediaSchema>

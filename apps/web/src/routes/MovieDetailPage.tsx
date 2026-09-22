@@ -12,6 +12,7 @@ import { useMovieWatchActions } from '../lib/use-movie-watch-actions.js'
 import { TMDB_LOGO_URL } from '../lib/tmdb.js'
 import { TVDB_LOGO_DARK_BG_URL, TVDB_LOGO_LIGHT_BG_URL, tvdbMovieUrl } from '../lib/tvdb.js'
 import { imdbTitleUrl } from '../lib/imdb.js'
+import { PlusIcon } from '../components/icons.js'
 import { DetailHeader } from '../components/library/DetailHeader.js'
 import { MetadataAttribution } from '../components/library/MetadataAttribution.js'
 import { RatingPicker } from '../components/library/RatingPicker.js'
@@ -39,25 +40,6 @@ function CheckIcon() {
       aria-hidden="true"
     >
       <path d="M5 13l4 4L19 7" />
-    </svg>
-  )
-}
-
-/** Icon for the icon-only "log an additional watch" button below. */
-function PlusIcon() {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      width={16}
-      height={16}
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={3}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M12 5v14M5 12h14" />
     </svg>
   )
 }
@@ -350,7 +332,7 @@ export function MovieDetailPage() {
               aria-label={t('movieDetail.addWatchTooltip')}
               onClick={() => setLogAdditionalWatchOpen(true)}
             >
-              <PlusIcon />
+              <PlusIcon strokeWidth={3} />
             </Button>
           )}
           <WatchlistButton

@@ -104,12 +104,19 @@ that matter most when nobody is actively maintaining an instance
 - [ ] **Configurable landing page for self-hosted instances**: a new
       admin-editable `landingMode` setting so a self-hoster's `/` can skip
       rwnd.tv's own marketing page and go straight to sign-in. See [TODO.md](TODO.md).
-- [ ] **Quick-fix polish**: explain invite-only mode on the Create an
+- [x] **Quick-fix polish**: explain invite-only mode on the Create an
       account screen; fold the remaining duplicate `PlusIcon` copies into
       the shared one; watchlist detail page year/rating sort+filter
-      (status filter stays deferred beyond M6); investigate whether
-      `resolveSeason`'s runtime upsert is actually stale-prone before
-      deciding whether it needs a fix at all. See [TODO.md](TODO.md).
+      (status filter split off, deferred beyond M6 - see
+      [TODO.md](TODO.md)). All three shipped 2026-09-22. See
+      [TODO_ARCHIVE.md](TODO_ARCHIVE.md).
+
+      The fourth original item, investigating whether `resolveSeason`'s
+      runtime upsert is actually stale-prone, is done too: a 2026-09-22
+      sample against dev.rwnd.tv found real drift (~3.3%, TMDB correcting
+      runtimes after the fact). Un-M6'd rather than fixed here, since a
+      real fix is a runtime-provenance design question, not a quick-fix -
+      see [TODO.md](TODO.md).
 
 ## Not yet scheduled
 

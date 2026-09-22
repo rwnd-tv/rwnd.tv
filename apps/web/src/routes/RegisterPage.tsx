@@ -116,13 +116,20 @@ export function RegisterPage() {
             autoComplete="new-password"
           />
           {settings?.registrationMode === 'invite' && (
-            <Field
-              label={t('register.inviteCode')}
-              value={inviteCode}
-              onChange={(e) => setInviteCode(e.target.value)}
-              required
-              error={error}
-            />
+            <>
+              <p className="text-sm text-[var(--color-fg-muted)]">
+                {settings.adminEmail
+                  ? t('register.inviteOnlyNoteWithContact', { email: settings.adminEmail })
+                  : t('register.inviteOnlyNote')}
+              </p>
+              <Field
+                label={t('register.inviteCode')}
+                value={inviteCode}
+                onChange={(e) => setInviteCode(e.target.value)}
+                required
+                error={error}
+              />
+            </>
           )}
           {settings?.registrationMode !== 'invite' && error && (
             <p role="alert" className="text-sm text-[var(--color-danger)]">

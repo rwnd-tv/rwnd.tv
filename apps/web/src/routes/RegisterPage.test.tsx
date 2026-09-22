@@ -97,6 +97,31 @@ describe('RegisterPage', () => {
     expect(screen.getAllByRole('alert')).toHaveLength(1)
   })
 
+  it('explains invite-only mode without a contact address when adminEmail is unset', async () => {
+    renderRegisterPage({ registrationMode: 'invite', adminEmail: null })
+    expect(
+      await screen.findByText(
+        "This instance is invite-only. You'll need an invite code from an admin to create an account.",
+      ),
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/Contact .+ if you don't have one/)).not.toBeInTheDocument()
+  })
+
+  it('includes the admin contact address in the invite-only explanation when set', async () => {
+    renderRegisterPage({ registrationMode: 'invite', adminEmail: 'admin@example.com' })
+    expect(
+      await screen.findByText(
+        "This instance is invite-only. You'll need an invite code from an admin to create an account. Contact admin@example.com if you don't have one.",
+      ),
+    ).toBeInTheDocument()
+  })
+
+  it('does not show the invite-only explanation when registration is open', async () => {
+    renderRegisterPage({ registrationMode: 'open' })
+    await screen.findByLabelText('Display name')
+    expect(screen.queryByText(/invite-only/)).not.toBeInTheDocument()
+  })
+
   it('renders only the closed-registration notice, with no form, when registration is closed', async () => {
     renderRegisterPage({ registrationMode: 'closed' })
     await screen.findByText('Registration is not currently open on this instance.')

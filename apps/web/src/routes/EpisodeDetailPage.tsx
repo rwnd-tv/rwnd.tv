@@ -8,6 +8,7 @@ import { useEpisodeRatingActions } from '../lib/use-episode-rating-actions.js'
 import { useEpisodeWatchActions } from '../lib/use-episode-watch-actions.js'
 import { TVDB_LOGO_DARK_BG_URL, TVDB_LOGO_LIGHT_BG_URL, tvdbEpisodeUrl } from '../lib/tvdb.js'
 import { imdbTitleUrl } from '../lib/imdb.js'
+import { PlusIcon } from '../components/icons.js'
 import { DetailHeader } from '../components/library/DetailHeader.js'
 import { MetadataAttribution } from '../components/library/MetadataAttribution.js'
 import { RatingPicker } from '../components/library/RatingPicker.js'
@@ -34,24 +35,6 @@ function CheckIcon() {
       aria-hidden="true"
     >
       <path d="M5 13l4 4L19 7" />
-    </svg>
-  )
-}
-
-function PlusIcon() {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      width={16}
-      height={16}
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={3}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M12 5v14M5 12h14" />
     </svg>
   )
 }
@@ -437,7 +420,7 @@ export function EpisodeDetailPage() {
               aria-label={t('showDetail.addWatchTooltip.episode')}
               onClick={() => watchActions.setLogAdditionalWatchOpen(true)}
             >
-              <PlusIcon />
+              <PlusIcon strokeWidth={3} />
             </Button>
           )}
         </div>

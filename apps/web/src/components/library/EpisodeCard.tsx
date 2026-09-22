@@ -5,11 +5,12 @@ import type { SeasonEpisode } from '@rwnd/shared'
 import { useAuth } from '../../lib/use-auth.js'
 import { useEpisodeRatingActions } from '../../lib/use-episode-rating-actions.js'
 import { useEpisodeWatchActions } from '../../lib/use-episode-watch-actions.js'
+import { PlusIcon } from '../icons.js'
 import { RatingPicker } from './RatingPicker.js'
 import { WatchDateDialog } from './WatchDateDialog.js'
 import { UnwatchConfirmDialog } from './UnwatchConfirmDialog.js'
 
-/** Duplicated from CheckIcon/PlusIcon's own precedent below, not imported
+/** Duplicated from CheckIcon's own precedent below, not imported
  * from SpoilerGuard.tsx — EpisodeCard can't use that component directly
  * (see its own doc comment for why) but still wants the same eye glyph. */
 function EyeIcon() {
@@ -45,27 +46,6 @@ function CheckIcon() {
       aria-hidden="true"
     >
       <path d="M5 13l4 4L19 7" />
-    </svg>
-  )
-}
-
-/** Icon for the icon-only "log an additional watch" button below —
- * duplicated rather than shared, matching this file's existing per-file
- * icon precedent (see CheckIcon above). */
-function PlusIcon() {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      width={16}
-      height={16}
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={3}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M12 5v14M5 12h14" />
     </svg>
   )
 }
@@ -206,7 +186,7 @@ export function EpisodeCard({
             onClick={() => setLogAdditionalWatchOpen(true)}
             className="absolute top-2 right-11 flex h-7 w-7 items-center justify-center rounded-full border border-white/70 bg-black/40 text-white/90 opacity-0 transition-opacity group-hover:opacity-100 hover:bg-black/60 focus-visible:opacity-100 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            <PlusIcon />
+            <PlusIcon strokeWidth={3} />
           </button>
         )}
         {/* Hidden rather than disabled for an unwatched, unaired episode -

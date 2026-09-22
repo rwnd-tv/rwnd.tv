@@ -320,6 +320,35 @@ describe('watchlists', () => {
     expect(afterSummary.coverPosterPath).toBe('/the-wire.jpg')
   })
 
+  it("carries each item's voteAverage through the detail response, for both shows and movies", async () => {
+    const cookie = await createUserAndCookie()
+    await db.insert(shows).values({ title: 'Breaking Bad', slug: 'breaking-bad', voteAverage: 8.9 })
+    await db
+      .insert(movies)
+      .values({ title: 'The Matrix', slug: 'the-matrix-1999', voteAverage: 8.2 })
+    // No cached rating yet — null, not 0, per libraryShowSchema's own
+    // voteAverage convention (schemas/library.ts).
+    await db.insert(shows).values({ title: 'The Wire', slug: 'the-wire' })
+
+    const watchlistsRes = await app.request('/api/v1/watchlists', { headers: { cookie } })
+    const defaultId = (await json<ListWatchlistsResponse>(watchlistsRes)).watchlists[0]!.id
+
+    for (const path of [
+      `/api/v1/library/shows/breaking-bad/watchlists/${defaultId}`,
+      `/api/v1/library/movies/the-matrix-1999/watchlists/${defaultId}`,
+      `/api/v1/library/shows/the-wire/watchlists/${defaultId}`,
+    ]) {
+      await app.request(path, { method: 'PUT', headers: { cookie } })
+    }
+
+    const detailRes = await app.request(`/api/v1/watchlists/${defaultId}`, { headers: { cookie } })
+    const detail = await json<WatchlistDetail>(detailRes)
+
+    expect(detail.items.find((i) => i.slug === 'breaking-bad')?.voteAverage).toBe(8.9)
+    expect(detail.items.find((i) => i.slug === 'the-matrix-1999')?.voteAverage).toBe(8.2)
+    expect(detail.items.find((i) => i.slug === 'the-wire')?.voteAverage).toBeNull()
+  })
+
   it('clearing the watchlist category deletes custom lists but leaves Default, emptied', async () => {
     const cookie = await createUserAndCookie()
     await seedShow('breaking-bad', 'Breaking Bad')

@@ -43,24 +43,6 @@ Format:
       some other way (e.g. installing it alongside TS 6 rather than
       replacing it).
 
-## UI polish
-
-- [ ] **Fold the five other `PlusIcon` copies into the shared one** (2026-09-21 added, count corrected 2026-09-22; M6)
-
-      The mobile-pass touch-target fix (M5) moved `PlusIcon`/`MinusIcon`
-      into `components/icons.tsx` and reused them from the new
-      `IncludeExcludeToggle`, but deliberately left five more `PlusIcon`
-      copies alone: `EpisodeDetailPage.tsx`, `MovieDetailPage.tsx`,
-      `SeasonDetailPage.tsx`, `ShowDetailPage.tsx`, and `EpisodeCard.tsx`
-      (originally miscounted as "six" when this item was added; confirmed
-      2026-09-22 there are five, no `MinusIcon` duplicates anywhere).
-      Those use `strokeWidth={3}` with a linejoin rather than the filter
-      panels' `strokeWidth={2.5}` with none, so folding them into the
-      shared icon as-is would be a visual change to five action buttons,
-      not a pure dedup. Worth doing once `icons.tsx`'s shared `Icon`
-      wrapper (or a similar one for this pair) exposes a stroke-weight
-      contract that can represent both without a caller-side override.
-
 ## TV Shows / Movies gallery follow-ups
 
 - [ ] **Virtualize the gallery grid if libraries grow** (2026-08-19 15:25)
@@ -72,20 +54,12 @@ Format:
 
 ## Watchlists
 
-- [ ] **Sort and filter the Watchlist detail page by status, release year,
-      and TMDB rating** (2026-09-21 added, narrowed 2026-09-21, rating
-      sort added 2026-09-21, filters by status/year/rating added
-      2026-09-21; M6 for year/rating only, status stays deferred)
+- [ ] **Filter the Watchlist detail page by status** (2026-09-21 added, narrowed 2026-09-21, year/rating split off and shipped 2026-09-22; Not yet scheduled)
 
-      James, 2026-09-21, across one session: wants to sort the watchlist
-      by release year, then asked for a TMDB rating sort too, then asked
-      to also filter by status, release year, and rating. Landed scope:
-      sort by year and rating; filter by status, year, and rating. Not
-      genre, and not the watch-progress-dependent dimensions (my rating,
-      watched year, dropped, progress) - those still don't apply to a
-      possibly-never-watched watchlist item, per the reasoning in
-      `WatchlistDetailPage.tsx`'s own doc comment (lines 80-87) that
-      originally scoped this page down to title-filter-only.
+      Split off from a wider "sort and filter by status, release year, and
+      TMDB rating" item once year/rating shipped 2026-09-22 (see
+      `docs/TODO_ARCHIVE.md`) - status was never M6 scope to begin with,
+      just bundled into the same original ask.
 
       Turns out "status" isn't watch-progress at all: `LibraryShow`/
       `LibraryMovie`'s `status` field (`packages/shared/src/schemas/
@@ -95,29 +69,9 @@ Format:
       watched it - same category as genre/year/rating, all fair game for
       a "what should I watch next" list.
 
-      Three different implementation costs:
-
-      **Release year** - self-contained UI change, no schema/API work:
-      `WatchlistItemMedia` (`packages/shared/src/schemas/watchlists.ts`)
-      already carries `year`, and both `yearComparatorAsc`/
-      `yearComparatorDesc` and `filterByReleaseYear`
-      (`apps/web/src/lib/library-filter.ts`) are already generic over any
-      `{ year: number | null }` - the same shape `ShowsPage.tsx` uses
-      them against, so `ReleaseYearFilterPanel.tsx` drops in as-is too.
-
-      **TMDB rating** needs the same schema/API change as status below
-      (`WatchlistItemMedia` has no `voteAverage` field today;
-      `apps/api/src/routes/watchlists.ts`'s two item queries around lines
-      363 and 375 would need it added alongside `year`/`posterPath`, and
-      the shaping step around line 397 would need it carried through).
-      Once that field exists, `filterByRating`/`ratingComparatorAsc`/
-      `ratingComparatorDesc` (`lib/library-filter.ts`) are already generic
-      over `{ voteAverage: number | null }`, so `RatingFilterPanel.tsx`
-      drops in as-is, same as `ReleaseYearFilterPanel.tsx`.
-
-      **Status** needs the same schema/API addition (no `status` field on
-      `WatchlistItemMedia` either) plus a genuine design decision James
-      flagged 2026-09-21, still open: the generic
+      Needs the same schema/API addition year/rating just got (no
+      `status` field on `WatchlistItemMedia` yet) plus a genuine design
+      decision James flagged 2026-09-21, still open: the generic
       `components/ui/KeyedFilterPanel.tsx` (renamed from the
       single-purpose `StatusFilterPanel.tsx` during the M5 filter-panel
       consolidation, see `docs/TODO_ARCHIVE.md`), which `ShowsPage.tsx`
@@ -140,15 +94,6 @@ Format:
       would need new filter logic rather than reusing `filterByStatus` as
       written. James, 2026-09-21: leave the decision open for now rather
       than picking one.
-
-      For all three: extend `WatchlistDetailPage.tsx`'s local `SortKey`
-      union and `sortItems` switch (lines 24-38) with `yearDesc`/
-      `yearAsc`/`ratingDesc`/`ratingAsc`, wrap the page's `<FiltersPanel>`
-      around the three filter panel components (same pattern as
-      `ShowsPage.tsx`, minus its genre/dropped/my-rating/watched-year
-      panels), add matching sort entries to `LibraryControls`'
-      `sortOptions`, and add the new `watchlists.sort*`/filter-panel i18n
-      strings in both `en-US` and `en-GB` `common.json`.
 
 - [ ] **Rethink the "add to watchlist" UI on the show/movie detail pages**
       (2026-09-21 added)
@@ -255,18 +200,27 @@ Format:
 
 ## Metadata & matching
 
-- [ ] **`resolveSeason`'s runtime upsert only ever fills a null, never corrects a stale one** (2026-09-17 added, scoped into M6 2026-09-22 pending investigation; M6)
+- [ ] **`resolveSeason`'s runtime upsert only ever fills a null, never corrects a stale one** (2026-09-17 added, scoped into M6 2026-09-22 pending investigation, investigated and un-M6'd 2026-09-22; Not yet scheduled)
 
-      M6 planning 2026-09-22: before implementing this as a fix, check
-      whether stale non-null runtimes actually exist on the reference
-      instance (compare a sample of `episodes.runtimeMinutes` against a
-      fresh provider fetch). The fill-only behavior looks deliberate per
-      `resolveSeason`'s own doc comment (protecting a cross-provider
-      backfilled runtime from being clobbered by a differently-numbered
-      same-provider value), so this may turn out to be "working as
-      documented" rather than a bug - see the M6 plan
-      (`C:\Users\James\.claude\plans\wise-tinkering-charm.md`) for the
-      full reasoning.
+      Investigated 2026-09-22 per the M6 plan's own instruction: sampled
+      `episodes.runtimeMinutes` against a fresh TMDB fetch on dev.rwnd.tv
+      (which mirrors the real reference instance's full watch history), a
+      read-only check run inside the container itself so the TMDB key
+      never left it. A first 40-episode sample came back clean (0
+      mismatches), but a follow-up 150-episode sample found 5 real drifts
+      (~3.3%), all TMDB correcting a runtime by 1-3 minutes after the
+      fact, e.g. stored 39 vs. live 41, stored 48 vs. live 51 - confirms
+      stale non-null runtimes are a real, if uncommon, occurrence, not
+      just a theoretical concern.
+
+      Un-M6'd rather than fixed as part of the quick-fix batch: per the
+      M6 plan's own framing, since drift is real this is a
+      runtime-provenance design question (the schema doesn't track which
+      provider wrote a given runtime, which a real fix needs to avoid
+      reintroducing the exact bug the fill-only behavior was written to
+      prevent - clobbering a cross-provider backfilled value with a
+      differently-numbered same-provider one), not a one-line upsert
+      flip. Worth its own scoped follow-up rather than a quick-fix.
 
       Found while fixing the season/episode drift item above (see
       TODO_ARCHIVE.md): `resolveSeason`'s upsert (`apps/api/src/lib/

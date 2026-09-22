@@ -6,10 +6,26 @@ import type { WatchlistItemMedia } from '@rwnd/shared'
 import { api, ApiError } from '../lib/api-client.js'
 import { invalidateWatchData } from '../lib/query-client.js'
 import { useAuth } from '../lib/use-auth.js'
-import { filterByTitle, titleComparatorAsc, titleComparatorDesc } from '../lib/library-filter.js'
+import {
+  filterByRating,
+  filterByReleaseYear,
+  filterByTitle,
+  ratingComparatorAsc,
+  ratingComparatorDesc,
+  ratingRange,
+  titleComparatorAsc,
+  titleComparatorDesc,
+  yearComparatorAsc,
+  yearComparatorDesc,
+  yearRange,
+} from '../lib/library-filter.js'
+import type { AfterBefore } from '../lib/use-year-range-cookie.js'
 import { PosterGrid } from '../components/library/PosterGrid.js'
 import { PosterTile } from '../components/library/PosterTile.js'
 import { LibraryControls } from '../components/library/LibraryControls.js'
+import { FiltersPanel } from '../components/library/FiltersPanel.js'
+import { ReleaseYearFilterPanel } from '../components/library/ReleaseYearFilterPanel.js'
+import { RatingFilterPanel } from '../components/library/RatingFilterPanel.js'
 import { Button } from '../components/ui/Button.js'
 import { Dialog } from '../components/ui/Dialog.js'
 import { Field } from '../components/ui/Field.js'
@@ -22,7 +38,15 @@ import { Spinner } from '../components/ui/Spinner.js'
 // list. Plain union rather than a `SORT_KEYS` array + useSortCookie: with
 // nothing to validate against (no cookie, no external source), there's no
 // runtime need for the array, just the type.
-type SortKey = 'addedDesc' | 'addedAsc' | 'titleAsc' | 'titleDesc'
+type SortKey =
+  | 'addedDesc'
+  | 'addedAsc'
+  | 'titleAsc'
+  | 'titleDesc'
+  | 'yearDesc'
+  | 'yearAsc'
+  | 'ratingDesc'
+  | 'ratingAsc'
 
 function sortItems(items: WatchlistItemMedia[], sortBy: SortKey, locale: string) {
   const sorted = [...items]
@@ -35,6 +59,14 @@ function sortItems(items: WatchlistItemMedia[], sortBy: SortKey, locale: string)
       return sorted.sort(titleComparatorAsc(locale))
     case 'titleDesc':
       return sorted.sort(titleComparatorDesc(locale))
+    case 'yearDesc':
+      return sorted.sort(yearComparatorDesc)
+    case 'yearAsc':
+      return sorted.sort(yearComparatorAsc)
+    case 'ratingDesc':
+      return sorted.sort(ratingComparatorDesc)
+    case 'ratingAsc':
+      return sorted.sort(ratingComparatorAsc)
   }
 }
 
@@ -81,11 +113,18 @@ function RemoveIcon() {
 /**
  * `/watchlists/{id}/{slug}` — one watchlist's shows and movies
  * (apps/api/src/routes/watchlists.ts), WatchlistsPage.tsx's per-tile
- * drill-down. Lighter than ShowsPage.tsx/MoviesPage.tsx: title filter +
- * sort only, no filter-panel stack — a watchlist holds a handful of
- * titles, not the whole library, and none of the genre/status/rating
- * dimensions those pages filter by apply to "should this be on my list"
- * in the first place.
+ * drill-down. Lighter than ShowsPage.tsx/MoviesPage.tsx: title filter plus
+ * release-year and TMDB-rating sort/filter only, not the full filter-panel
+ * stack — a watchlist holds a handful of titles, not the whole library,
+ * and the watch-progress-dependent dimensions (my rating, watched year,
+ * dropped, progress) still don't apply to a possibly-never-watched
+ * watchlist item. Status stays deferred too (docs/TODO.md): shows and
+ * movies use disjoint TMDB status vocabularies and this page mixes both
+ * types in one list, an open design question rather than a drop-in reuse
+ * of ShowsPage.tsx's single-type status panel. Release year and rating
+ * are a title property, not watch-progress, so both are fair game for a
+ * "what should I watch next" list the way genre/year/rating are on the
+ * galleries.
  *
  * The `{slug}` is cosmetic and ignored here (see WatchlistsPage.tsx, which
  * builds it from the list's name); `{id}` alone resolves the page, and the
@@ -105,6 +144,9 @@ export function WatchlistDetailPage() {
 
   const [filter, setFilter] = useState('')
   const [sortBy, setSortBy] = useState<SortKey>('addedDesc')
+  const [filtersOpen, setFiltersOpen] = useState(false)
+  const [yearFilter, setYearFilter] = useState<AfterBefore | null>(null)
+  const [ratingFilter, setRatingFilter] = useState<AfterBefore | null>(null)
   const [renameOpen, setRenameOpen] = useState(false)
   const [renameValue, setRenameValue] = useState('')
   const [deleteOpen, setDeleteOpen] = useState(false)
@@ -148,10 +190,26 @@ export function WatchlistDetailPage() {
     onSuccess: () => void invalidateWatchData(queryClient),
   })
 
+  // Bounds are computed from the whole list (not the currently-filtered
+  // subset) — same "the slider's own ends never move as you narrow the
+  // result" reasoning ShowsPage.tsx's libraryYearRange/libraryRatingRange
+  // follow, and what lets the panel disappear outright (rather than
+  // showing a broken zero-width slider) when nothing on the list has a
+  // known year/rating at all.
+  const yearBounds = useMemo(() => yearRange(watchlist?.items ?? []), [watchlist])
+  const ratingBounds = useMemo(() => ratingRange(watchlist?.items ?? []), [watchlist])
+
   const items = useMemo(() => {
-    const filtered = filterByTitle(watchlist?.items ?? [], filter)
+    let filtered = filterByTitle(watchlist?.items ?? [], filter)
+    if (yearFilter) filtered = filterByReleaseYear(filtered, yearFilter.after, yearFilter.before)
+    if (ratingFilter) filtered = filterByRating(filtered, ratingFilter.after, ratingFilter.before)
     return sortItems(filtered, sortBy, locale)
-  }, [watchlist, filter, sortBy, locale])
+  }, [watchlist, filter, yearFilter, ratingFilter, sortBy, locale])
+
+  function resetFilters() {
+    setYearFilter(null)
+    setRatingFilter(null)
+  }
 
   if (isLoading) return <Spinner label={t('common.loading')} />
 
@@ -199,6 +257,18 @@ export function WatchlistDetailPage() {
             onFilterChange={setFilter}
             filterLabel={t('watchlists.filterLabel')}
             filterPlaceholder={t('watchlists.filterPlaceholder')}
+            betweenFilterAndSort={
+              (yearBounds || ratingBounds) && (
+                <Button
+                  variant="secondary"
+                  type="button"
+                  aria-expanded={filtersOpen}
+                  onClick={() => setFiltersOpen((open) => !open)}
+                >
+                  {t('watchlists.filtersButton')}
+                </Button>
+              )
+            }
             sortValue={sortBy}
             onSortChange={setSortBy}
             sortLabel={t('watchlists.sortLabel')}
@@ -207,8 +277,44 @@ export function WatchlistDetailPage() {
               { value: 'addedAsc', label: t('watchlists.sortAddedAsc') },
               { value: 'titleAsc', label: t('watchlists.sortTitleAsc') },
               { value: 'titleDesc', label: t('watchlists.sortTitleDesc') },
+              { value: 'yearDesc', label: t('watchlists.sortYearDesc') },
+              { value: 'yearAsc', label: t('watchlists.sortYearAsc') },
+              { value: 'ratingDesc', label: t('watchlists.sortRatingDesc') },
+              { value: 'ratingAsc', label: t('watchlists.sortRatingAsc') },
             ]}
           />
+
+          {filtersOpen && (yearBounds || ratingBounds) && (
+            <FiltersPanel>
+              {yearBounds && (
+                <ReleaseYearFilterPanel
+                  min={yearBounds.min}
+                  max={yearBounds.max}
+                  range={yearFilter ?? { after: yearBounds.min, before: yearBounds.max }}
+                  onChange={setYearFilter}
+                  groupLabel={t('watchlists.filtersPanel.released')}
+                  afterLabel={t('watchlists.filtersPanel.after')}
+                  beforeLabel={t('watchlists.filtersPanel.before')}
+                />
+              )}
+              {ratingBounds && (
+                <RatingFilterPanel
+                  min={ratingBounds.min}
+                  max={ratingBounds.max}
+                  range={ratingFilter ?? { after: ratingBounds.min, before: ratingBounds.max }}
+                  onChange={setRatingFilter}
+                  groupLabel={t('watchlists.filtersPanel.rating')}
+                  minLabel={t('watchlists.filtersPanel.min')}
+                  maxLabel={t('watchlists.filtersPanel.max')}
+                />
+              )}
+              <div>
+                <Button variant="secondary" type="button" onClick={resetFilters}>
+                  {t('watchlists.filtersPanel.reset')}
+                </Button>
+              </div>
+            </FiltersPanel>
+          )}
 
           {items.length === 0 ? (
             <p className="text-[var(--color-fg-muted)]">

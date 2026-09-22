@@ -268,7 +268,9 @@
     "loginPrompt": "Already have an account?",
     "loginLink": "Log in",
     "closed": "Registration is not currently open on this instance.",
-    "emailNotConfigured": "Registration requires email to be configured on this instance."
+    "emailNotConfigured": "Registration requires email to be configured on this instance.",
+    "inviteOnlyNote": "This instance is invite-only. You'll need an invite code from an admin to create an account.",
+    "inviteOnlyNoteWithContact": "This instance is invite-only. You'll need an invite code from an admin to create an account. Contact {{email}} if you don't have one."
   },
   "forgotPassword": {
     "title": "Forgot password?",
@@ -595,6 +597,20 @@
     "sortAddedAsc": "Added (Oldest First)",
     "sortTitleAsc": "Title (A - Z)",
     "sortTitleDesc": "Title (Z - A)",
+    "sortYearDesc": "Year (Descending)",
+    "sortYearAsc": "Year (Ascending)",
+    "sortRatingDesc": "TMDB Rating (Descending)",
+    "sortRatingAsc": "TMDB Rating (Ascending)",
+    "filtersButton": "Filters…",
+    "filtersPanel": {
+      "released": "Released",
+      "rating": "TMDB rating",
+      "after": "After",
+      "before": "Before",
+      "min": "Min",
+      "max": "Max",
+      "reset": "Reset"
+    },
     "noMatches": "No titles match \"{{query}}\".",
     "rename": "Rename",
     "delete": "Delete",

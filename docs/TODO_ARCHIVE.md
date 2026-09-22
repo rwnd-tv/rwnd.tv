@@ -482,6 +482,31 @@ grouping, sorted oldest to newest.
       config table now drives all four, so a new bulk action needs one new
       table entry rather than four separately-updated chains.
 
+- [x] **Fold the five other `PlusIcon` copies into the shared one** (2026-09-21 added, count corrected 2026-09-22, done 2026-09-22; M6)
+
+      `EpisodeCard.tsx`, `EpisodeDetailPage.tsx`, `MovieDetailPage.tsx`,
+      `SeasonDetailPage.tsx`, and `ShowDetailPage.tsx` each had their own
+      copy alongside the shared one in `components/icons.tsx`
+      (`strokeWidth={2.5}`, no `strokeLinejoin`), which is why the fold had
+      been deferred - the five local copies used `strokeWidth={3}` with
+      `strokeLinejoin="round"`, so replacing them with the shared icon
+      as-is would have been a visual change to five live action buttons,
+      not a pure dedup.
+
+      Turned out the shared `PlusIcon` already spreads `{...props}` after
+      its own default `strokeWidth`, so a caller-side `strokeWidth={3}`
+      override already reproduces the exact original weight with no
+      wrapper-contract change needed - `strokeLinejoin` was a red herring:
+      the path (`M12 5v14M5 12h14`) is two disconnected straight strokes
+      with no shared vertex, so that attribute was never visually doing
+      anything on this glyph in the first place. All five call sites now
+      import the shared `PlusIcon` and pass `strokeWidth={3}`, and the
+      five local function definitions are gone. No dedicated tests exist
+      for any of these five components; verified pixel-identical live on
+      dev.rwnd.tv instead. `SeasonDetailPage.tsx`'s `MinusIcon` question
+      from the original TODO was already resolved when it was first
+      logged - confirmed no `MinusIcon` duplicate exists anywhere.
+
 ## TV Shows / Movies gallery follow-ups
 
 - [x] **Gallery nav overflow on narrow viewports** (2026-08-19 15:25)\
@@ -4770,6 +4795,42 @@ DATABASE` ×2) — zero residue.\
       same day. Live testing of that follow-up also surfaced a related,
       separate bug in the show page's own fully-watched detection, logged
       in TODO.md rather than fixed here.
+
+- [x] **Sort and filter the Watchlist detail page by release year and TMDB rating** (2026-09-21 added, narrowed 2026-09-21, rating sort added 2026-09-21, status split off, done 2026-09-22; M6)
+
+      The status-filter third of the original ask stays open, split off
+      into its own TODO.md item (a genuine design decision about mixed
+      show/movie status vocabularies, not scoped into M6 to begin with).
+
+      `voteAverage` added to `watchlistItemMediaSchema`
+      (packages/shared) and to both item queries in the `GET /watchlists/
+      {id}` route (`apps/api/src/routes/watchlists.ts`) - community
+      rating, not the user's own `myRating`, since a watchlisted title is
+      by definition usually unwatched so `myRating` would be null for
+      nearly every row. `WatchlistDetailPage.tsx`'s `SortKey` union and
+      `sortItems` switch gained `yearDesc`/`yearAsc`/`ratingDesc`/
+      `ratingAsc`, reusing the library gallery pages' own generic
+      `yearComparator*`/`ratingComparator*`/`filterByReleaseYear`/
+      `filterByRating`/`yearRange`/`ratingRange` helpers
+      (`lib/library-filter.ts`) rather than writing new ones. A "Filters…"
+      button plus `ReleaseYearFilterPanel`/`RatingFilterPanel` (same
+      components ShowsPage.tsx uses) now sit between the title filter and
+      sort dropdown, only rendered when at least one item on the list has
+      a known year or rating - same "nothing to build a slider from"
+      guard the gallery pages use. Not cookie-persisted, matching this
+      page's existing filter-state convention (a watchlist holds a
+      handful of titles; the page's own doc comment already explains why
+      it stays lighter than the galleries).
+
+      New `WatchlistDetailPage.test.tsx` (no test file existed for this
+      page before) covering both new sort dimensions, both new filter
+      dimensions (driven via `fireEvent.change` on the underlying native
+      range inputs — `userEvent` has no built-in drag simulation for
+      `<input type="range">`), the Filters button's conditional
+      visibility, and the Reset button. API test extension in
+      `watchlists.test.ts` confirming `voteAverage` comes through
+      correctly for both a show and a movie item, and stays `null` for
+      one with no cached rating yet.
 
 ## Security
 

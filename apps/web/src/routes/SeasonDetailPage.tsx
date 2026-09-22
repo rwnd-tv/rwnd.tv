@@ -9,6 +9,7 @@ import { markWatchedRequestBody } from '../lib/date.js'
 import { averageEpisodeRatingStars } from '../lib/rating.js'
 import { TVDB_LOGO_DARK_BG_URL, TVDB_LOGO_LIGHT_BG_URL, tvdbSeasonUrl } from '../lib/tvdb.js'
 import { useAuth } from '../lib/use-auth.js'
+import { PlusIcon } from '../components/icons.js'
 import { DetailHeader } from '../components/library/DetailHeader.js'
 import { EpisodeCard } from '../components/library/EpisodeCard.js'
 import { MetadataAttribution } from '../components/library/MetadataAttribution.js'
@@ -39,30 +40,10 @@ function CheckIcon() {
   )
 }
 
-/** Icon for the icon-only "log an additional watch" button below —
- * duplicated rather than shared, matching this file's existing per-file
- * icon precedent (see CheckIcon above). */
-function PlusIcon() {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      width={16}
-      height={16}
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={3}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M12 5v14M5 12h14" />
-    </svg>
-  )
-}
-
 /** Icon for the "reveal all episodes" button below — duplicated from
  * EpisodeCard.tsx's own EyeIcon rather than shared, same per-file icon
- * precedent as PlusIcon above. */
+ * precedent CheckIcon above still follows (PlusIcon itself was folded into
+ * the shared one in components/icons.tsx). */
 function EyeIcon() {
   return (
     <svg
@@ -505,7 +486,7 @@ export function SeasonDetailPage() {
               aria-label={t('showDetail.addWatchTooltip.season')}
               onClick={() => setLogAdditionalWatchOpen(true)}
             >
-              <PlusIcon />
+              <PlusIcon strokeWidth={3} />
             </Button>
           )}
           {hasHiddenEpisodes && (

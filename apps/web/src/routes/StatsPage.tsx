@@ -119,7 +119,19 @@ export function StatsPage() {
         )}
       </div>
 
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+      {/* xl, not sm — "313 days, 4 hours" (Time watched, the widest value
+          this grid ever holds) needs real room: confirmed live that even
+          ~990px (well past `sm`'s 640px) still wraps it into 4 separate
+          one-word lines once split across 4 narrow columns. 2 columns has
+          enough width to read cleanly at any size below that. Landed on
+          `xl` (not `sm`, not `2xl`) after live back-and-forth: `2xl`
+          (1536px) turned out to demand more width than is reasonable to
+          expect even on a large monitor — this value alone needs ~622px
+          per tile to stay on one line, which only fits 4-across above
+          ~2800px — so at narrower widths this is deliberately accepting a
+          wrap onto a second line ("313 days," / "4 hours") rather than
+          chasing single-line fit at an ever-larger breakpoint. */}
+      <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
         <StatTile
           label={t('stats.totals.episodesWatched')}
           value={totals.episodePlays.toLocaleString()}
@@ -208,7 +220,10 @@ export function StatsPage() {
           {selectedYear !== ALL_TIME && (
             <p className="text-xs text-[var(--color-fg-muted)]">{t('stats.ratings.scopeNote')}</p>
           )}
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+          {/* xl, matching the totals grid above — same reasoning, kept
+              consistent even though these two values are short enough not
+              to be hit by it in practice today. */}
+          <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
             <StatTile label={t('stats.ratings.total')} value={ratings.total.toLocaleString()} />
             {/* average is only null when total is 0, already excluded by this section's own guard above */}
             <StatTile label={t('stats.ratings.average')} value={ratings.average!.toFixed(1)} />

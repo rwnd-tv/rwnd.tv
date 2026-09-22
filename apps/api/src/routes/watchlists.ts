@@ -365,6 +365,7 @@ watchlistRoutes.openapi(
         title: movies.title,
         year: movies.year,
         posterPath: movies.posterPath,
+        voteAverage: movies.voteAverage,
         listedAt: watchlistItems.listedAt,
       })
       .from(watchlistItems)
@@ -377,6 +378,7 @@ watchlistRoutes.openapi(
         title: shows.title,
         year: shows.year,
         posterPath: shows.posterPath,
+        voteAverage: shows.voteAverage,
         listedAt: watchlistItems.listedAt,
       })
       .from(watchlistItems)
@@ -400,6 +402,7 @@ watchlistRoutes.openapi(
         title: item.title,
         year: item.year,
         posterPath: item.posterPath,
+        voteAverage: item.voteAverage,
         listedAt: item.listedAt.toISOString(),
       })),
     })

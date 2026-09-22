@@ -717,6 +717,25 @@
     "topMovies": {
       "title": "Top Movies"
     },
+    "genres": {
+      "title": "Top Genres",
+      "titlesCount_one": "{{count}} title",
+      "titlesCount_other": "{{count}} titles"
+    },
+    "ratings": {
+      "title": "Ratings",
+      "total": "Ratings given",
+      "average": "Average rating",
+      "count_one": "{{count}} rating",
+      "count_other": "{{count}} ratings",
+      "scopeNote": "Ratings are counted by when you rated a title, not when you watched it, so this can include titles watched in a different year."
+    },
+    "heatmap": {
+      "title": "By day and hour",
+      "empty": "Not enough activity yet to show a pattern.",
+      "cellCount_one": "{{count}} play",
+      "cellCount_other": "{{count}} plays"
+    },
     "duration": {
       "days_one": "{{count}} day",
       "days_other": "{{count}} days",

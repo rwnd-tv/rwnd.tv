@@ -403,24 +403,6 @@ source of truth for scope; this is just so a TODO listing is complete.
       this was over-tagged M2 when first added. Left unmilestoned rather
       than reassigned to M3; no strong reason it belongs there either.
 
-- [ ] **Stats and insights** (2026-08-23 15:32 added, un-M3'd 2026-08-26, M6'd 2026-09-16, scoped 2026-09-22; M6)
-
-      The reason to log anything in the first place, but not essential to
-      the core logging loop M3 was narrowed to (2026-08-26, see
-      ROADMAP.md's M3 framing).
-
-      Scoped and staged 2026-09-22 (see ROADMAP.md's M6 entry for the
-      full breakdown and the M6 plan at
-      `C:\Users\James\.claude\plans\wise-tinkering-charm.md`): a `/stats`
-      page in three stages, so the riskiest part (the runtime-estimation
-      math behind "time watched") ships and gets verified before the rest
-      layers on. Stage 1 (totals, time watched, top-10 shows/movies,
-      all-time only) shipped the same day, commits `ceb5070`/`27c8313`.
-      Stage 2 (`GET /stats/timeline`, year selector, activity-over-time
-      chart, `after`/`before` scoping on `GET /stats/summary`) shipped
-      2026-09-22 too, verified against real data on dev.rwnd.tv. Stage 3
-      (day/hour heatmap, top genres, ratings histogram) remains.
-
 - [ ] **OIDC login** (2026-08-23 15:34 added, un-M3'd 2026-08-26; Not yet scheduled)
 
       The `user_credentials` schema was designed for this from M1; see

@@ -18,9 +18,9 @@ export const statsSummaryQuerySchema = z.object({
 export type StatsSummaryQuery = z.infer<typeof statsSummaryQuerySchema>
 
 /**
- * GET /stats/summary — totals and top-10 shows/movies, optionally scoped to
- * an `after`/`before` window (statsSummaryQuerySchema above; stage 2, M6).
- * `topGenres`/`ratings` are stage 3.
+ * GET /stats/summary — totals, top-10 shows/movies, top-10 genres, and a
+ * ratings histogram, optionally scoped to an `after`/`before` window
+ * (statsSummaryQuerySchema above).
  *
  * `firstWatchedAt`/`lastWatchedAt` are the first/last watch *within the
  * requested window*, not necessarily the account's all-time first/last —
@@ -71,10 +71,58 @@ export const statsTopMovieSchema = z.object({
 })
 export type StatsTopMovie = z.infer<typeof statsTopMovieSchema>
 
+/**
+ * One genre's aggregate across every watched show/movie in scope (stage 3,
+ * M6) — `minutes` sums every title tagged with this genre, so a 3-genre
+ * title's minutes count toward all 3 rows: genre-minutes sums exceed
+ * `totals.minutesWatched` by design, not a bug. `titles` is the number of
+ * distinct shows/movies contributing, shown alongside `minutes` since two
+ * genres can tie (or nearly tie) on minutes for very different reasons (a
+ * handful of long-running shows vs. many short ones). Genre strings are
+ * unnormalized provider names (TMDB's TV and movie vocabularies differ,
+ * e.g. "Sci-Fi & Fantasy" vs. "Science Fiction") — accepted as a known
+ * cosmetic issue rather than built out into a normalization layer.
+ */
+export const statsTopGenreSchema = z.object({
+  genre: z.string(),
+  minutes: z.number().int(),
+  titles: z.number().int(),
+})
+export type StatsTopGenre = z.infer<typeof statsTopGenreSchema>
+
+/** One rating value (1-10)'s counts, split by entity type — zero-filled by
+ * the handler, so `distribution` always has exactly 10 entries even for a
+ * rating value nobody has used. */
+export const statsRatingBucketSchema = z.object({
+  rating: z.number().int().min(1).max(10),
+  movie: z.number().int(),
+  show: z.number().int(),
+  episode: z.number().int(),
+  total: z.number().int(),
+})
+export type StatsRatingBucket = z.infer<typeof statsRatingBucketSchema>
+
+/**
+ * Ratings histogram (stage 3, M6) — scoped by `ratedAt`, not `watchedAt`:
+ * unlike every other field in statsSummarySchema, a year-scoped ratings
+ * histogram is therefore *not* a subset of that year's watches (you can
+ * rate a title you watched in a different year, or one you've never
+ * logged a watch for at all). Worth a line of UI copy wherever this is
+ * shown alongside a year selector, so the two don't read as contradictory.
+ */
+export const statsRatingsSchema = z.object({
+  total: z.number().int(),
+  average: z.number().nullable(),
+  distribution: z.array(statsRatingBucketSchema).length(10),
+})
+export type StatsRatings = z.infer<typeof statsRatingsSchema>
+
 export const statsSummarySchema = z.object({
   totals: statsTotalsSchema,
   topShows: z.array(statsTopShowSchema).max(10),
   topMovies: z.array(statsTopMovieSchema).max(10),
+  topGenres: z.array(statsTopGenreSchema).max(10),
+  ratings: statsRatingsSchema,
 })
 export type StatsSummary = z.infer<typeof statsSummarySchema>
 

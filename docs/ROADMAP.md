@@ -76,10 +76,11 @@ that matter most when nobody is actively maintaining an instance
 (database restore automation, a configurable landing page). Full plan at
 `C:\Users\James\.claude\plans\wise-tinkering-charm.md`.
 
-- [ ] **Stats and insights**: the reason to log anything in the first
+- [x] **Stats and insights**: the reason to log anything in the first
       place. A new `/stats` page, built in three stages so the riskiest
-      part (the runtime-estimation math behind "time watched") ships and
-      gets verified before the rest is layered on.
+      part (the runtime-estimation math behind "time watched") shipped and
+      got verified before the rest layered on. See
+      [TODO_ARCHIVE.md](TODO_ARCHIVE.md).
 
       - [x] Stage 1 (spine): totals, time watched, top-10 shows/movies,
             all-time only. Shipped 2026-09-22, commits `ceb5070`/`27c8313`.
@@ -87,8 +88,10 @@ that matter most when nobody is actively maintaining an instance
             recap originally asked for), an activity-over-time chart, and
             `GET /stats/timeline`. Shipped 2026-09-22, verified against
             real data on dev.rwnd.tv.
-      - [ ] Stage 3: a day-of-week/hour-of-day heatmap, top genres, and a
-            ratings histogram.
+      - [x] Stage 3: a day-of-week/hour-of-day heatmap, top genres, and a
+            ratings histogram. Shipped 2026-09-22, verified against real
+            data on dev.rwnd.tv (the ratings section tested live by rating
+            and un-rating a title, since the reference account had none).
 
 - [ ] **Database restore automation**: reverses [ADR 0008](adr/0008-database-backups.md)'s
       "restore stays manual" call, which already recorded James's

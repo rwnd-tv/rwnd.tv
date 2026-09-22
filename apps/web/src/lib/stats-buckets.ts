@@ -52,3 +52,28 @@ export function bucketByYear(epochMinutes: number[]): Map<number, number> {
   }
   return buckets
 }
+
+/**
+ * A 7x24 matrix of play counts, indexed `[dayOfWeek][hour]` with
+ * `dayOfWeek` in JS's own `Date.getDay()` numbering (0 = Sunday .. 6 =
+ * Saturday) — deliberately locale-agnostic, matching this file's own
+ * "everything here reads local time, nothing here reads locale" scope.
+ * WeekHourHeatmap.tsx (the only caller) rotates the returned rows to the
+ * viewer's locale-appropriate week start when it renders them, the same
+ * split CalendarMonthGrid.tsx draws between locale-agnostic date math and
+ * locale-aware presentation.
+ *
+ * `year: 'all'` includes every play; a specific local year restricts to
+ * that year only, same convention as bucketByMonth above.
+ */
+export function weekHourMatrix(epochMinutes: number[], year: number | 'all'): number[][] {
+  const matrix: number[][] = Array.from({ length: 7 }, () => new Array<number>(24).fill(0))
+  for (const minutes of epochMinutes) {
+    const date = toLocalDate(minutes)
+    if (year !== 'all' && date.getFullYear() !== year) continue
+    const day = date.getDay()
+    const hour = date.getHours()
+    matrix[day]![hour] = matrix[day]![hour]! + 1
+  }
+  return matrix
+}

@@ -6,7 +6,7 @@ import {
   statsSummarySchema,
   statsTimelineSchema,
 } from '@rwnd/shared'
-import { episodes, movies, plays, shows } from '@rwnd/db'
+import { episodes, movies, plays, ratings, shows } from '@rwnd/db'
 import type { AppEnv } from '../types.js'
 import { watchedRangeFragments } from './library/shared.js'
 import {
@@ -36,10 +36,27 @@ function boundsFilter(userId: string, after: string | undefined, before: string 
 }
 
 /**
- * Totals and top-10 shows/movies, optionally scoped to an `after`/`before`
- * window (stage 2, M6). No `topGenres`/`ratings` yet (stage 3) — see
- * docs/TODO.md and the M6 plan for why those are staged separately rather
- * than built all at once.
+ * Same idea as boundsFilter, against `ratings.ratedAt` instead of
+ * `plays.watchedAt` — statsRatingsSchema's doc comment explains why the
+ * ratings histogram is scoped by when a title was *rated*, not watched.
+ */
+function ratingsBoundsFilter(
+  userId: string,
+  after: string | undefined,
+  before: string | undefined,
+) {
+  return and(
+    eq(ratings.userId, userId),
+    after ? gte(ratings.ratedAt, new Date(after)) : undefined,
+    before ? lte(ratings.ratedAt, new Date(before)) : undefined,
+  )
+}
+
+const RATING_VALUES = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] as const
+
+/**
+ * Totals, top-10 shows/movies/genres, and a ratings histogram, optionally
+ * scoped to an `after`/`before` window.
  *
  * Two per-title aggregates (all watched shows, all watched movies —
  * unlimited, not just top-10) drive everything below, rather than one
@@ -68,7 +85,7 @@ statsRoutes.openapi(
     const userId = c.get('user')!.id
     const db = c.get('db')
 
-    const [showRows, movieRows, overall] = await Promise.all([
+    const [showRows, movieRows, overall, ratingRows] = await Promise.all([
       db
         .select({
           id: shows.id,
@@ -76,6 +93,7 @@ statsRoutes.openapi(
           title: shows.title,
           year: shows.year,
           posterPath: shows.posterPath,
+          genres: shows.genres,
           plays: count,
           episodes: sql<number>`count(distinct ${episodes.id})`.mapWith(Number),
           knownMinutes: sql<number>`coalesce(sum(${episodes.runtimeMinutes}), 0)`.mapWith(Number),
@@ -94,6 +112,7 @@ statsRoutes.openapi(
           title: movies.title,
           year: movies.year,
           posterPath: movies.posterPath,
+          genres: movies.genres,
           plays: count,
           knownMinutes: sql<number>`coalesce(sum(${movies.runtimeMinutes}), 0)`.mapWith(Number),
           nullRuntimePlays:
@@ -124,6 +143,23 @@ statsRoutes.openapi(
         .from(plays)
         .where(boundsFilter(userId, after, before))
         .then((rows) => rows[0]!),
+      // Independent of `plays` entirely — ratingsBoundsFilter's doc comment
+      // explains why this is scoped by ratedAt rather than watchedAt.
+      db
+        .select({
+          rating: ratings.rating,
+          movie: sql<number>`count(*) filter (where ${ratings.entityType} = 'movie')`.mapWith(
+            Number,
+          ),
+          show: sql<number>`count(*) filter (where ${ratings.entityType} = 'show')`.mapWith(Number),
+          episode: sql<number>`count(*) filter (where ${ratings.entityType} = 'episode')`.mapWith(
+            Number,
+          ),
+          total: count,
+        })
+        .from(ratings)
+        .where(ratingsBoundsFilter(userId, after, before))
+        .groupBy(ratings.rating),
     ])
 
     const showIdsNeedingMedian = showRows
@@ -137,50 +173,87 @@ statsRoutes.openapi(
     let estimatedMinutes = 0
     let playsWithoutRuntime = 0
 
-    const topShows = showRows
-      .map((row) => {
-        const fallback = medianByShowId.get(row.id) ?? DEFAULT_EPISODE_RUNTIME_MINUTES
-        const estimated = row.nullRuntimePlays * fallback
-        const minutes = row.knownMinutes + estimated
-        episodePlays += row.plays
-        distinctEpisodes += row.episodes
-        minutesWatched += minutes
-        estimatedMinutes += estimated
-        playsWithoutRuntime += row.nullRuntimePlays
-        return {
-          slug: row.slug,
-          title: row.title,
-          year: row.year,
-          posterPath: row.posterPath,
-          plays: row.plays,
-          episodes: row.episodes,
-          minutes,
-        }
-      })
+    // Genre aggregation (topGenres below) needs every watched title's
+    // minutes, not just the top 10 — computed over the full array here,
+    // sliced to 10 only for topShows/topMovies themselves.
+    const genreMinutes = new Map<string, { minutes: number; titleIds: Set<string> }>()
+    const addToGenres = (row: { id: string; genres: string[] }, minutes: number) => {
+      for (const genre of row.genres) {
+        const entry = genreMinutes.get(genre) ?? { minutes: 0, titleIds: new Set() }
+        entry.minutes += minutes
+        entry.titleIds.add(row.id)
+        genreMinutes.set(genre, entry)
+      }
+    }
+
+    const allShows = showRows.map((row) => {
+      const fallback = medianByShowId.get(row.id) ?? DEFAULT_EPISODE_RUNTIME_MINUTES
+      const estimated = row.nullRuntimePlays * fallback
+      const minutes = row.knownMinutes + estimated
+      episodePlays += row.plays
+      distinctEpisodes += row.episodes
+      minutesWatched += minutes
+      estimatedMinutes += estimated
+      playsWithoutRuntime += row.nullRuntimePlays
+      addToGenres(row, minutes)
+      return {
+        slug: row.slug,
+        title: row.title,
+        year: row.year,
+        posterPath: row.posterPath,
+        plays: row.plays,
+        episodes: row.episodes,
+        minutes,
+      }
+    })
+    const topShows = [...allShows]
       .sort((a, b) => b.minutes - a.minutes || b.plays - a.plays)
       .slice(0, 10)
 
     let moviePlays = 0
 
-    const topMovies = movieRows
-      .map((row) => {
-        const estimated = row.nullRuntimePlays * DEFAULT_MOVIE_RUNTIME_MINUTES
-        const minutes = row.knownMinutes + estimated
-        moviePlays += row.plays
-        minutesWatched += minutes
-        estimatedMinutes += estimated
-        playsWithoutRuntime += row.nullRuntimePlays
-        return {
-          slug: row.slug,
-          title: row.title,
-          year: row.year,
-          posterPath: row.posterPath,
-          plays: row.plays,
-          minutes,
-        }
-      })
+    const allMovies = movieRows.map((row) => {
+      const estimated = row.nullRuntimePlays * DEFAULT_MOVIE_RUNTIME_MINUTES
+      const minutes = row.knownMinutes + estimated
+      moviePlays += row.plays
+      minutesWatched += minutes
+      estimatedMinutes += estimated
+      playsWithoutRuntime += row.nullRuntimePlays
+      addToGenres(row, minutes)
+      return {
+        slug: row.slug,
+        title: row.title,
+        year: row.year,
+        posterPath: row.posterPath,
+        plays: row.plays,
+        minutes,
+      }
+    })
+    const topMovies = [...allMovies]
       .sort((a, b) => b.minutes - a.minutes || b.plays - a.plays)
       .slice(0, 10)
+
+    const topGenres = [...genreMinutes.entries()]
+      .map(([genre, { minutes, titleIds }]) => ({ genre, minutes, titles: titleIds.size }))
+      .sort((a, b) => b.minutes - a.minutes)
+      .slice(0, 10)
+
+    const ratingByValue = new Map(ratingRows.map((row) => [row.rating, row]))
+    let ratingsTotal = 0
+    let ratingsWeightedSum = 0
+    const ratingsDistribution = RATING_VALUES.map((rating) => {
+      const row = ratingByValue.get(rating)
+      const total = row?.total ?? 0
+      ratingsTotal += total
+      ratingsWeightedSum += rating * total
+      return {
+        rating,
+        movie: row?.movie ?? 0,
+        show: row?.show ?? 0,
+        episode: row?.episode ?? 0,
+        total,
+      }
+    })
 
     return c.json({
       totals: {
@@ -201,6 +274,12 @@ statsRoutes.openapi(
       },
       topShows,
       topMovies,
+      topGenres,
+      ratings: {
+        total: ratingsTotal,
+        average: ratingsTotal > 0 ? ratingsWeightedSum / ratingsTotal : null,
+        distribution: ratingsDistribution,
+      },
     })
   },
 )

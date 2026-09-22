@@ -15,6 +15,21 @@ function epochMinutesFor(year: number, month: number, day: number): number {
   return Math.floor(new Date(year, month, day, 12).getTime() / 60_000)
 }
 
+const RATING_VALUES = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] as const
+function emptyRatings(): StatsSummary['ratings'] {
+  return {
+    total: 0,
+    average: null,
+    distribution: RATING_VALUES.map((rating) => ({
+      rating,
+      movie: 0,
+      show: 0,
+      episode: 0,
+      total: 0,
+    })),
+  }
+}
+
 vi.mock('../lib/api-client.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../lib/api-client.js')>()
   return { ...actual, api: { ...actual.api, stats: { summary: vi.fn(), timeline: vi.fn() } } }
@@ -79,6 +94,8 @@ function testSummary(overrides: Partial<StatsSummary> = {}): StatsSummary {
         minutes: 272,
       },
     ],
+    topGenres: [],
+    ratings: emptyRatings(),
     ...overrides,
   }
 }
@@ -249,6 +266,78 @@ describe('StatsPage', () => {
   it('shows an empty message for the activity chart when the timeline has no plays', async () => {
     renderPage(testSummary())
     expect(await screen.findByText('No activity in this period.')).toBeInTheDocument()
+  })
+
+  it('shows an empty-pattern message for the heatmap when the timeline has no plays', async () => {
+    renderPage(testSummary())
+    expect(
+      await screen.findByText('Not enough activity yet to show a pattern.'),
+    ).toBeInTheDocument()
+  })
+
+  it('renders the heatmap grid once the timeline has data', async () => {
+    renderPage(testSummary(), {
+      timeline: testTimeline({ episodePlays: [epochMinutesFor(2025, 5, 1)] }),
+    })
+    await screen.findByRole('heading', { name: 'By day and hour' })
+    expect(screen.queryByText('Not enough activity yet to show a pattern.')).not.toBeInTheDocument()
+  })
+
+  it('does not render a Top Genres section when there are no genres', async () => {
+    renderPage(testSummary({ topGenres: [] }))
+    await screen.findByText('Breaking Bad')
+    expect(screen.queryByText('Top Genres')).not.toBeInTheDocument()
+  })
+
+  it('renders top genres as a horizontal bar list', async () => {
+    renderPage(
+      testSummary({
+        topGenres: [
+          { genre: 'Science Fiction', minutes: 362, titles: 2 },
+          { genre: 'Drama', minutes: 180, titles: 1 },
+        ],
+      }),
+    )
+    expect(await screen.findByText('Top Genres')).toBeInTheDocument()
+    expect(screen.getByText('Science Fiction')).toBeInTheDocument()
+    expect(screen.getByText('Drama')).toBeInTheDocument()
+  })
+
+  it('does not render a Ratings section when nothing has been rated', async () => {
+    renderPage(testSummary({ ratings: emptyRatings() }))
+    await screen.findByText('Breaking Bad')
+    expect(screen.queryByText('Ratings')).not.toBeInTheDocument()
+  })
+
+  it('renders ratings totals and average, and the scope note only once a year is selected', async () => {
+    const distribution = emptyRatings().distribution.map((bucket) =>
+      bucket.rating === 9
+        ? { ...bucket, movie: 1, show: 1, total: 2 }
+        : bucket.rating === 7
+          ? { ...bucket, movie: 1, total: 1 }
+          : bucket,
+    )
+    renderPage(testSummary({ ratings: { total: 3, average: (9 + 9 + 7) / 3, distribution } }), {
+      timeline: testTimeline({
+        episodePlays: [epochMinutesFor(2025, 5, 1)],
+        moviePlays: [epochMinutesFor(2024, 0, 1)],
+      }),
+    })
+
+    await screen.findByRole('heading', { name: 'Ratings' })
+    // "3" and "8.3" also appear as bar labels/values in the histogram
+    // below, so assert against each stat tile's own value rather than a
+    // bare findByText.
+    expect(screen.getByText('Ratings given').nextElementSibling).toHaveTextContent('3')
+    expect(screen.getByText('Average rating').nextElementSibling).toHaveTextContent('8.3')
+    expect(
+      screen.queryByText(/Ratings are counted by when you rated a title/),
+    ).not.toBeInTheDocument()
+
+    await userEvent.selectOptions(screen.getByLabelText('Year'), '2025')
+    expect(
+      await screen.findByText(/Ratings are counted by when you rated a title/),
+    ).toBeInTheDocument()
   })
 
   it('shows an error message when the request fails', async () => {

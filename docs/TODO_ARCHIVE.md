@@ -5579,3 +5579,44 @@ up -d` pull-based quick start test (no local Docker CLI reachable
       default being tested against, rather than something to explicitly
       opt into first. Confirmed live on dev.rwnd.tv: both feeds show the
       new defaults and the updated description text.
+
+## Stats
+
+- [x] **Stats and insights** (2026-08-23 15:32 added, un-M3'd 2026-08-26, M6'd 2026-09-16, scoped 2026-09-22, done 2026-09-22)
+
+      A new `/stats` page, built in three stages so the riskiest part (the
+      runtime-estimation math behind "time watched") shipped and got
+      verified before the rest layered on - full design in the M6 plan
+      (`C:\Users\James\.claude\plans\wise-tinkering-charm.md`).
+
+      Stage 1 (spine): `GET /stats/summary`, totals, time watched (own
+      runtime -> per-show sibling median -> flat default fallback ladder,
+      shared with `calendar/build.ts` via the new `lib/runtime.ts`),
+      top-10 shows/movies, all-time only. Commits `ceb5070`/`27c8313`.
+
+      Stage 2 (time): `GET /stats/timeline` (unscoped, fetched once,
+      epoch-minute arrays so the year selector and chart bucketing both
+      run client-side in the browser's own timezone), a year selector,
+      an activity-over-time chart (`BarChart.tsx`, reused generically),
+      and `after`/`before` scoping on `GET /stats/summary` fed by
+      `date.ts`'s existing `localDayStartISO`/`localDayEndISO`. Clicking a
+      year bar in the all-time view drills into that year, same as picking
+      it from the dropdown.
+
+      Stage 3 (extras): a day/hour heatmap (`WeekHourHeatmap.tsx`, a real
+      `<table>` for accessibility, `color-mix` intensity ramp, count in
+      `title`/`.sr-only` text only, never visible cell text), top genres
+      (`BarChart.tsx`'s new `orientation: 'horizontal'`, a title's minutes
+      counted toward every one of its genres, so genre-minutes sum past
+      `totals.minutesWatched` by design), and a ratings histogram scoped
+      by `ratedAt` rather than `watchedAt` (a year-scoped histogram isn't a
+      subset of that year's watches - a one-line UI note covers it).
+
+      Zero new npm dependencies anywhere in this milestone - every chart
+      is CSS/div bars or a plain table, matching `ProgressBar.tsx`'s
+      existing inline-`style` precedent, not SVG or a charting library.
+      Full API + component test coverage throughout, including the
+      ratedAt-vs-watchedAt scoping distinction and the year-bar click
+      behavior. Each stage verified against real data on dev.rwnd.tv
+      (stage 3's ratings section tested live by rating and un-rating a
+      title, since the reference account itself had no ratings yet).

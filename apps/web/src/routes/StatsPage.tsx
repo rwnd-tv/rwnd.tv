@@ -11,23 +11,24 @@ import { Select } from '../components/ui/Select.js'
 import { StatTile } from '../components/stats/StatTile.js'
 import { TopTitlesRow } from '../components/stats/TopTitlesRow.js'
 import { ActivityChart } from '../components/stats/ActivityChart.js'
+import { BarChart } from '../components/stats/BarChart.js'
+import { WeekHourHeatmap } from '../components/stats/WeekHourHeatmap.js'
 
 const ALL_TIME = 'all'
 
 /**
- * Stage 2 (M6) of the Stats and insights feature: adds a year selector
- * (rescoping the totals/top-lists below via GET /stats/summary's
- * after/before) and an activity-over-time chart, on top of stage 1's
- * totals/time-watched/top-10 shows/movies. Stage 3 adds the day/hour
- * heatmap, top genres, and a ratings histogram. See the M6 plan for why
- * those are staged separately. `handle: fullWidthHandle` (App.tsx) — the
- * stat-tile grid, chart, and poster rows want the full column, same
- * reasoning as the gallery pages.
+ * Stats and insights (M6): a year selector (rescoping the totals/top-lists
+ * below via GET /stats/summary's after/before) and an activity-over-time
+ * chart, on top of totals/time-watched/top-10 shows/movies, plus a
+ * day/hour heatmap, top genres, and a ratings histogram. `handle:
+ * fullWidthHandle` (App.tsx) — the stat-tile grid, chart, and poster rows
+ * want the full column, same reasoning as the gallery pages.
  *
  * The timeline query (GET /stats/timeline) is deliberately unscoped and
  * fetched once — see statsTimelineSchema's doc comment — so it drives both
- * the year selector's own option list and the activity chart's bucketing,
- * entirely client-side, without refetching when `selectedYear` changes.
+ * the year selector's own option list and the activity chart/heatmap's
+ * bucketing, entirely client-side, without refetching when `selectedYear`
+ * changes.
  */
 export function StatsPage() {
   const { t } = useTranslation()
@@ -69,7 +70,21 @@ export function StatsPage() {
     return <Spinner label={t('common.loading')} />
   }
 
-  const { totals, topShows, topMovies } = summary.data
+  const { totals, topShows, topMovies, topGenres, ratings } = summary.data
+
+  const genreChartData = topGenres.map((genre) => ({
+    key: genre.genre,
+    label: genre.genre,
+    value: genre.minutes,
+    title: `${genre.genre}: ${formatDuration(genre.minutes, t)} (${t('stats.genres.titlesCount', { count: genre.titles })})`,
+  }))
+
+  const ratingsChartData = ratings.distribution.map((bucket) => ({
+    key: String(bucket.rating),
+    label: String(bucket.rating),
+    value: bucket.total,
+    title: `${bucket.rating}: ${t('stats.ratings.count', { count: bucket.total })}`,
+  }))
 
   if (totals.plays === 0 && selectedYear === ALL_TIME) {
     return (
@@ -149,6 +164,20 @@ export function StatsPage() {
         )}
       </div>
 
+      <div className="flex flex-col gap-3">
+        <h2 className="text-lg font-semibold">{t('stats.heatmap.title')}</h2>
+        {timeline.isLoading ? (
+          <Spinner label={t('common.loading')} />
+        ) : (
+          <WeekHourHeatmap
+            episodePlays={timeline.data?.episodePlays ?? []}
+            moviePlays={timeline.data?.moviePlays ?? []}
+            year={selectedYear}
+            locale={locale}
+          />
+        )}
+      </div>
+
       <TopTitlesRow
         title={t('stats.topShows.title')}
         items={topShows}
@@ -161,6 +190,32 @@ export function StatsPage() {
         linkPrefix="/movies"
         renderSecondary={(movie) => formatDuration(movie.minutes, t)}
       />
+
+      {topGenres.length > 0 && (
+        <div className="flex flex-col gap-3">
+          <h2 className="text-lg font-semibold">{t('stats.genres.title')}</h2>
+          <BarChart
+            data={genreChartData}
+            orientation="horizontal"
+            formatValue={(v) => formatDuration(v, t)}
+          />
+        </div>
+      )}
+
+      {ratings.total > 0 && (
+        <div className="flex flex-col gap-3">
+          <h2 className="text-lg font-semibold">{t('stats.ratings.title')}</h2>
+          {selectedYear !== ALL_TIME && (
+            <p className="text-xs text-[var(--color-fg-muted)]">{t('stats.ratings.scopeNote')}</p>
+          )}
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+            <StatTile label={t('stats.ratings.total')} value={ratings.total.toLocaleString()} />
+            {/* average is only null when total is 0, already excluded by this section's own guard above */}
+            <StatTile label={t('stats.ratings.average')} value={ratings.average!.toFixed(1)} />
+          </div>
+          <BarChart data={ratingsChartData} />
+        </div>
+      )}
     </div>
   )
 }

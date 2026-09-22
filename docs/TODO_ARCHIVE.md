@@ -191,6 +191,21 @@ grouping, sorted oldest to newest.
       Verified: `format:check`/`lint`/`-r typecheck`/`knip`, full
       `apps/web` suite (193 tests).
 
+- [x] **Em-dashes in `docs/TODO.md` and `docs/adr/0007-security-posture.md` violate CLAUDE.md's prose-style rule** (2026-09-21 added, M5 review, fixed 2026-09-21)\
+      CLAUDE.md's "Prose style in docs" section is explicit that
+      `docs/TODO.md` is not exempt ("it's actively read, so it follows the
+      same rule as everything else above"), and `docs/adr/` isn't exempt
+      either (only `docs/TODO_ARCHIVE.md` is). Found, via `grep -c
+      "—"`, 25 instances in `docs/TODO.md` and 14 in
+      `docs/adr/0007-security-posture.md`, added across several earlier
+      M5 commits (the security-hardening follow-ups and the M4-review
+      write-up).\
+      Fixed with a real read-through per instance rather than a
+      mechanical find-and-replace, picking whichever of colon, semicolon,
+      comma, parentheses, or a separate sentence read best for that
+      sentence. One instance intentionally remains in `docs/TODO.md`: the
+      literal glyph quoted above.
+
 ## Open questions / not yet decided
 
 - [x] **Local dev-loop** (2026-08-09 20:40)\
@@ -5157,6 +5172,196 @@ includeSubDomains; preload`) now that its HSTS setting is on too.
       error classes. The now-dead standalone `lockUserSource` was removed
       in the immediately-following commit `151e153` ("Remove dead
       lockUserSource, un-export hasConflictingServerLink").
+
+- [x] **Full structured request logging** (2026-08-29 added, re-homed here 2026-09-14, fixed 2026-09-16)\
+      The M3 ASVS review (`docs/adr/0007-security-posture.md`,
+      `docs/security/asvs-l1.md`) only ever added minimal
+      `[security]`-prefixed event logging (`apps/api/src/lib/security-log.ts`),
+      not a general request-logging pipeline. Left as a genuine,
+      deliberately unclosed gap at the time, but the old Security section
+      this item lived in got fully closed out and archived without this
+      one item being carried forward, leaving `asvs-l1.md`'s "Deferred
+      items" section pointing at a section that no longer existed.
+      Re-homed to `docs/TODO.md` 2026-09-14 while scoping the M4
+      milestone review, so the pointer resolved again.\
+      Fixed 2026-09-16: a new `apps/api/src/middleware/request-log.ts`
+      logs one structured line per request (method, redacted path,
+      status, duration, user id, ip), hand-rolled rather than
+      `hono/logger` (no hook to redact the path before it's formatted).
+      A new `lib/redact-path.ts` scrubs webhook/calendar-feed tokens out
+      of the path before anything is logged, since those live as URL
+      path segments, not headers; see [ADR 0007](adr/0007-security-posture.md)'s
+      2026-09-16 update for why that's the load-bearing design
+      constraint. `LOG_FORMAT` env var (`json`/`pretty`/`silent`)
+      controls output shape. `docs/security/asvs-l1.md` gained
+      V7.1.2-V7.1.4 and V7.2.1-V7.2.2 rows for this. `lib/security-log.ts`
+      stays a deliberately separate stream; see its own updated doc
+      comment.
+
+- [x] **M4 milestone code + security review** (2026-09-14 21:02 added, all 7 stages + milestone-wide pass completed 2026-09-15)\
+      Per `CLAUDE.md`'s "Closing out a milestone" rule: before marking M4
+      done in `ROADMAP.md`, ran both a code review and a security review
+      over everything that shipped for it (122 commits since `v1.0.0`,
+      M3's close), not just the latest diff. Matched M3's own method
+      (`docs/adr/0007-security-posture.md`, a structured ASVS 4.0.3
+      Level 1 pass) rather than a single `/security-review` run, since
+      that skill has no scope argument and excludes several categories
+      this milestone needed (dependency findings, secrets-at-rest
+      nuance, hardening/audit-log gaps). Spanned multiple sessions; full
+      plan at `C:\Users\James\.claude\plans\joyful-discovering-peach.md`.\
+      **Stage 1** (webhook ingestion core & trust model): fixed a real
+      TOCTOU race in `resolveWebhookAccount` (concurrent first-sighting
+      deliveries for the same account could 500 on a unique-index
+      collision; `apps/api/src/lib/webhook-accounts.ts`), with a
+      regression test. Logged the TMDB/TVDB path-encoding item below as
+      a follow-up. Everything else (rate limiting, log hygiene,
+      token-in-URL auth, consent/attribution flow) checked against ADR
+      0007 and found already covered or out of `/security-review`'s own
+      scope. ASVS: V4.2.1 pass, new V11 section (business-logic/
+      workflow-bypass) - pass, no bypass found.\
+      **Stage 2** (admin & owner-role privilege model): no findings.
+      Verified `assertNotLastAdmin`'s row-lock genuinely closes the
+      concurrent-demotion race, bulk actions re-enforce every invariant
+      server-side per item, `transfer-ownership` re-proves the password
+      and locks the owner row before swapping, `GET /admin/users`
+      exposes nothing beyond ADR 0007's already-accepted scope, and the
+      password-reset trigger never lets an admin see/set another user's
+      password. ASVS: V4.1.1, V4.1.2, V4.1.3, V4.2.1, V2.5.x, all pass.\
+      **Stage 3** (scheduled database backups, verified against ADR
+      0008): 6 of 7 ADR 0008 claims held exactly; one had drifted - the
+      stale-`.partial` cleanup matched any `*.partial` file, not just
+      this job's own `rwnd-<ISO>.sql.gz.partial` shape, so a
+      human-placed `.partial` file sitting in the bind mount for 6h+
+      would get silently deleted, contradicting the ADR's own "can't
+      delete anything it didn't write" claim. Fixed with a matching
+      regex, regression test added. Also found and logged a new
+      cross-process concurrent-run risk (fixed separately, see above).
+      Verified container hardening directly against docker-compose.yml.
+      ASVS: V8.3.x, V12.1.1, V14.4.x, pass (V12.1.1 only after the fix).\
+      **Stage 4** (calendar feeds & in-app calendar): found and fixed a
+      real spoiler-protection gap - the .ics feed's SUMMARY field always
+      embedded the real episode title regardless of
+      `spoilerProtectionEnabled`, the one field an .ics subscriber can't
+      avoid seeing. Fixed by reusing `episodeSummary()`'s existing
+      null-title branch; regression test added. Verified the
+      token-in-URL rate limit, `Cache-Control: no-store`, no token
+      logging anywhere, and the `ENCRYPTION_KEY` 503 gate are all
+      genuine, not just documented. ASVS: V2/V3 (token pattern), V9.1.x
+      (no-store), pass; V8.2.x/V8.3.x and new V11 (spoiler invariant
+      across every surface), pass after the fix.\
+      **Stage 5** (Webhooks panel redesign & token-encryption posture
+      change): found and fixed two real gaps. First, `serializeToken`
+      called `decryptSecret` bare, so a single row encrypted under a
+      since-rotated `ENCRYPTION_KEY` would 500 the whole `GET /tokens`
+      list instead of falling back to `token: null`; wrapped in
+      try/catch, regression test added (the same gap in
+      `serializeCalendarFeed` logged separately, see below). Second,
+      `PATCH /tokens/{id}` had no `source IS NULL` guard, so a token
+      owner could silently overwrite `source` repeatedly via a direct
+      API call, contradicting its documented "only settable once"
+      contract; added the missing guard plus a 409 response and
+      regression test. Verified AES-256-GCM's fresh-IV-per-call and
+      auth-tag handling, that regenerate atomically invalidates the old
+      token, that every mutation scopes its `WHERE` to the caller's own
+      `userId`, and that no webhook secret/URL ever reaches a log call.
+      Full suite green (1041 passed, 7 skipped). ASVS: new V6 section
+      (Stored Cryptography), pass; V4.1.x (cross-user access), pass.\
+      **Stage 6** (supply-chain, CI & dependency hygiene): no code
+      findings. `.github/workflows/{ci,codeql,release}.yml`, `Dockerfile`,
+      `docker-entrypoint.sh`, `pnpm-workspace.yaml`, and
+      `.github/dependabot.yml` all already hardened (every action pinned
+      by SHA, the published image pinned by digest and cosign-signed,
+      Trivy gating both the source lockfile and the built image on
+      every CI run and release, a non-root runtime user with `npm`/`npx`
+      stripped). Verified live against the GitHub API: dependency graph
+      and Dependabot security updates both actually enabled, zero open
+      Dependabot or CodeQL alerts, branch protection matches the
+      documented posture, secret scanning + push protection both on.
+      Enabled Dependabot malware alerts (was off). The planned
+      mechanical `/code-review max v1.0.0` pass fanned out into ~20
+      parallel subagents and hit the session's rate limit before
+      compiling a report; killed rather than repeated, since this
+      stage's files are static config/infra the manual read-through
+      already covered. ASVS: new V10 section (Malicious Code), pass.\
+      **Milestone-wide mechanical code review** (`/code-review high
+      v1.0.0`, commit `0050bc3`, not tied to one stage): found and fixed
+      two real bugs - the same rotated-`ENCRYPTION_KEY` gap Stage 5
+      fixed in `serializeToken` was unguarded at 4 more `decryptSecret`
+      call sites (MFA login, disable/regenerate, enrollment confirm),
+      locking out any MFA-enabled user after a key rotation instead of a
+      clean "wrong code"; fixed with a shared `verifyEncryptedTotp()`
+      helper (`lib/totp.ts`) that fails closed. Also a webhook self-link
+      TOCTOU race letting a user link two accounts of the same source at
+      once; fixed with `lockUserSource()` (since superseded, see above),
+      a Postgres advisory lock matching `lib/plays.ts`'s existing
+      pattern. Plus two trivial `Promise.all` efficiency fixes and 7
+      smaller findings logged as follow-ups. Verified via two clean full
+      local suite runs (1043/1043) and end-to-end against a live
+      dev.rwnd.tv deploy. ASVS: new V11 section (Business Logic), pass.\
+      **Stage 7** (close-out): added V6 (Stored Cryptography), V10
+      (Malicious Code), and V11 (Business Logic) sections to
+      `docs/security/asvs-l1.md`, each verified against the real ASVS
+      4.0.3 requirement text. Added a dated "M4 milestone review
+      close-out" update to [ADR 0007](adr/0007-security-posture.md)
+      summarizing all 7 stages plus the milestone-wide pass. `docs/
+      security/asvs-l1.md` stays the durable record, updated in place
+      per stage rather than replaced.
+
+- [x] **URL-encode external ids interpolated into TMDB/TVDB request paths** (2026-09-14 added, Stage 1 of the M4 review, fixed 2026-09-16)\
+      `providers/tmdb.ts` and `providers/tvdb.ts` built request paths
+      like `` `/tv/${externalId}` `` and `` `/series/${externalId}/extended` ``
+      with no `encodeURIComponent`, for every provider client call, not
+      just the webhook-driven ones. `externalId` for a webhook-triggered
+      lookup ultimately traces back to attacker-controlled webhook
+      payload content, so a crafted id containing `/` or `..` could
+      redirect the request to a different TMDB/TVDB API path than
+      intended. Narrow in practice (same fixed host, this server's own
+      API key, no cross-host redirection possible), but cheap to close.\
+      Fixed 2026-09-16: a new `apps/api/src/providers/api-path.ts`
+      tagged template (`` apiPath`/tv/${externalId}` ``) encodes every
+      interpolated value while leaving the template's own `/` separators
+      alone, applied uniformly at all 16 interpolation sites across both
+      provider files.
+
+- [x] **`serializeCalendarFeed` still 500s on a since-rotated `ENCRYPTION_KEY`** (2026-09-14 added, Stage 5 of the M4 review, fixed 2026-09-16)\
+      `apps/api/src/routes/tokens.ts`'s `serializeToken` and
+      `apps/api/src/lib/calendar-feeds.ts`'s `serializeCalendarFeed` both
+      called `decryptSecret` on a row's encrypted secret to redisplay
+      it, and both would throw uncaught if `ENCRYPTION_KEY` had changed
+      since that row was encrypted - a real scenario, since rotating the
+      key is itself a legitimate response to a suspected compromise.
+      Stage 5 fixed `serializeToken`, but `serializeCalendarFeed` needed
+      a different fix shape: its wire type (`CalendarFeed.token`) was
+      non-nullable, since `calendarFeeds.tokenEncrypted` itself is
+      `.notNull()`.\
+      Fixed 2026-09-16: chose the nullable-wire-type fork, not an
+      operational "rotating the key invalidates subscriptions" stance.
+      Rotating `ENCRYPTION_KEY` doesn't affect `tokenHash`, so every
+      already-subscribed calendar app keeps working regardless; only
+      re-display breaks, and the existing Regenerate button already
+      recovers that. `CalendarFeed.token` is now `z.string().nullable()`,
+      `serializeCalendarFeed` and `serializeToken` both now go through a
+      new shared `tryDecryptSecret` (`lib/crypto.ts`), and `FeedRow`
+      (`CalendarFeedsPanel.tsx`) shows a "regenerate to get a new URL"
+      message in place of the URL/Copy/Subscribe block when `token` is
+      null, mirroring `WebhookCard.tsx`'s existing precedent.
+
+- [x] **`trakt.ts`'s `ensureFreshAccessToken` gives a cryptic error on a rotated `ENCRYPTION_KEY`** (2026-09-15 added, M4 review's milestone-wide `/code-review high` pass, fixed 2026-09-16)\
+      Same unguarded-`decryptSecret` shape as the item above, but lower
+      priority: `apps/api/src/import/trakt.ts`'s `ensureFreshAccessToken`
+      was already inside the job runner's own try/catch, so a decrypt
+      failure after a key rotation failed the import job gracefully
+      rather than crashing or 500ing a live request. The gap was purely
+      UX: the stored `error` message was GCM's raw auth-tag-mismatch
+      text, not something that told the user to reconnect their Trakt
+      account.\
+      Fixed 2026-09-16: did both. A new `TraktReconnectRequiredError`
+      wraps the two unguarded decrypts, caught in `runImportJob`'s
+      existing catch to store a friendly reconnect message on the job
+      **and** delete the `traktConnections` row, so the Import page's
+      connect card flips back to "connect your account" on its next
+      poll with no new endpoint needed. A genuine Trakt API error during
+      refresh still surfaces as itself, unaffected.
 
 ## Documentation
 

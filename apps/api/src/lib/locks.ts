@@ -19,10 +19,12 @@ import type { Tx } from '@rwnd/db'
  * ever ran as more than one process sharing this Postgres, with no extra
  * coordination required.
  *
- * Callers keep their own domain-typed wrapper (`lockEntity`,
- * `lockUserSource`) rather than calling this directly, so a call site's own
- * race narrative and its argument's real type stay documented next to the
- * code that actually needs the lock.
+ * `lib/plays.ts`'s `lockEntity` keeps its own domain-typed wrapper around
+ * this rather than calling it directly, so its own race narrative and
+ * argument type stay documented next to the code that needs the lock.
+ * `lib/webhook-accounts.ts`'s `claimLinkForUser` calls this directly
+ * instead - it already *is* the domain-specific function, so a second
+ * wrapper around it would just be an extra layer with nothing to say.
  */
 export async function lockUserScope(tx: Tx, userId: string, scopeKey: string): Promise<void> {
   await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${userId}), hashtext(${scopeKey}))`)

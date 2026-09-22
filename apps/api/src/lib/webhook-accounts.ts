@@ -130,9 +130,14 @@ const SAME_SERVER_SOURCES: Partial<Record<WebhookSource, readonly WebhookSource[
  * covers instead), which is a genuinely separate, valid setup that must
  * not be blocked. The residual duplicate-logging risk in the "unknown"
  * gap is accepted, not solved here — it closes itself once both sides
- * have reported at least one event since this column existed. */
-export async function hasConflictingServerLink(
-  db: Database | Tx,
+ * have reported at least one event since this column existed. Module-
+ * private: only `claimLinkForUser` below calls it now, after the M5
+ * milestone review's claim-logic dedup folded its two former call sites
+ * (`routes/tokens.ts`, `routes/webhook-links.ts`) into that one function -
+ * always inside `claimLinkForUser`'s own transaction now, so `Tx` alone
+ * rather than `Database | Tx`. */
+async function hasConflictingServerLink(
+  db: Tx,
   userId: string,
   source: WebhookSource,
   serverId: string | null,
@@ -150,25 +155,6 @@ export async function hasConflictingServerLink(
       ),
     )
   return rows.some((row) => row.externalServerId === serverId)
-}
-
-/** Locks this exact (userId, source) pair for the rest of the enclosing
- * transaction — same shape as `apps/api/src/lib/plays.ts`'s `lockEntity`
- * for a related race; see `lib/locks.ts`'s `lockUserScope` for the shared
- * locking mechanics both delegate to. Without it, `hasLinkedSource`'s
- * check and the write that follows aren't actually atomic together: two
- * concurrent link attempts for two *different* not-yet-linked accounts of
- * the same source (self-link and/or redeem-by-code,
- * `apps/api/src/routes/tokens.ts` and `apps/api/src/routes/webhook-links.ts`)
- * could each pass the check before either commits its own write —
- * different target rows, so Postgres's own row locking doesn't serialize
- * them — and both succeed, leaving this user linked to two accounts of the
- * same source at once. Found unguarded on the self-link route in the M4
- * review (docs/TODO.md, Stage 6); the redeem route had the identical
- * latent gap despite already running inside a transaction, so both call
- * this. */
-export async function lockUserSource(tx: Tx, userId: string, source: WebhookSource): Promise<void> {
-  await lockUserScope(tx, userId, source)
 }
 
 /** Whether `userId` already has a linked webhook account for `source` —
@@ -234,10 +220,20 @@ export class WebhookLinkClaimError extends Error {
  * transaction the advisory lock and the write itself run in — a caller's
  * own pre-transaction checks (if any) are only a fast path for the common
  * case, not what actually makes this safe against a concurrent self-link/
- * redeem of a different account of the same source. `userId IS NULL` in
- * the `WHERE` clause is the atomic guard against a concurrent claim of
- * this *same* row (the token owner re-linking it, or a second concurrent
- * self-link/redeem of it).
+ * redeem of a different account of the same source. Without the
+ * `lockUserScope` call below, two concurrent link attempts for two
+ * *different* not-yet-linked accounts of the same source (self-link
+ * and/or redeem-by-code, `routes/tokens.ts` and `routes/webhook-links.ts`)
+ * could each pass `hasLinkedSource`'s check before either commits its own
+ * write - different target rows, so Postgres's own row locking doesn't
+ * serialize them - and both succeed, leaving this user linked to two
+ * accounts of the same source at once. Found unguarded on the self-link
+ * route in the M4 review (docs/TODO.md, Stage 6); the redeem route had the
+ * identical latent gap despite already running inside a transaction, so
+ * both call this. `userId IS NULL` in the `WHERE` clause is a second,
+ * separate atomic guard, against a concurrent claim of this *same* row
+ * (the token owner re-linking it, or a second concurrent self-link/redeem
+ * of it).
  *
  * Pure: never throws for an expected outcome, and (unlike
  * `claimLinkForUserOrThrow` below) never needs to, since nothing here

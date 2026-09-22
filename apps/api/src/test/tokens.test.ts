@@ -811,10 +811,10 @@ describe('tokens', () => {
     it('only lets one of two concurrent self-links of different accounts of the same source through', async () => {
       // Same race shape as the sequential "second Plex account" test
       // above, but actually concurrent: hasLinkedSource's check and the
-      // claiming write aren't atomic together without lockUserSource
-      // (apps/api/src/lib/webhook-accounts.ts) — two different link rows
-      // means Postgres's own row locking doesn't serialize the two
-      // requests on its own.
+      // claiming write aren't atomic together without claimLinkForUser's
+      // own lockUserScope call (apps/api/src/lib/webhook-accounts.ts) —
+      // two different link rows means Postgres's own row locking doesn't
+      // serialize the two requests on its own.
       const cookie = await createUserAndCookie()
       const created = await createToken(cookie)
       const linkA = await seedLink(created.id, '2')

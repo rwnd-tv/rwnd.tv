@@ -289,11 +289,11 @@ describe('POST /webhook-links/redeem', () => {
   it('only lets one of two concurrent redemptions of different accounts of the same source through', async () => {
     // Same race shape as tokens.test.ts's own concurrent-self-link test:
     // hasLinkedSource's check and the claiming write aren't atomic
-    // together without lockUserSource (apps/api/src/lib/
-    // webhook-accounts.ts) — two different link rows means Postgres's own
-    // row locking doesn't serialize the two requests on its own. Found in
-    // the M5 milestone review, docs/TODO.md: this route was missing the
-    // lock the sibling self-link route already had.
+    // together without claimLinkForUser's own lockUserScope call
+    // (apps/api/src/lib/webhook-accounts.ts) — two different link rows
+    // means Postgres's own row locking doesn't serialize the two requests
+    // on its own. Found in the M5 milestone review, docs/TODO.md: this
+    // route was missing the lock the sibling self-link route already had.
     const ownerCookie = await createUserAndCookie('owner-race@example.com')
     const token = await createToken(app, ownerCookie)
     const linkA = await seedLink(token.id)

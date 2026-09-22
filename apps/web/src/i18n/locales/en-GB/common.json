@@ -687,13 +687,27 @@
   "stats": {
     "title": "Stats",
     "empty": "Nothing here yet — log a watch and check back.",
+    "year": {
+      "label": "Year",
+      "all": "All time"
+    },
     "totals": {
       "episodesWatched": "Episodes watched",
       "moviesWatched": "Films watched",
       "showsWatched": "Shows watched",
       "timeWatched": "Time watched",
       "estimatedNote_one": "Includes an estimate for {{count}} play with no known runtime",
-      "estimatedNote_other": "Includes an estimate for {{count}} plays with no known runtime"
+      "estimatedNote_other": "Includes an estimate for {{count}} plays with no known runtime",
+      "unknownDateNote_one": "{{count}} play has no known date, so it's counted here but won't appear in any single year",
+      "unknownDateNote_other": "{{count}} plays have no known date, so they're counted here but won't appear in any single year"
+    },
+    "activity": {
+      "title": "Activity",
+      "empty": "No activity in this period.",
+      "episodesCount_one": "{{count}} episode",
+      "episodesCount_other": "{{count}} episodes",
+      "moviesCount_one": "{{count}} film",
+      "moviesCount_other": "{{count}} films"
     },
     "topShows": {
       "title": "Top Shows",

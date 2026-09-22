@@ -83,9 +83,10 @@ that matter most when nobody is actively maintaining an instance
 
       - [x] Stage 1 (spine): totals, time watched, top-10 shows/movies,
             all-time only. Shipped 2026-09-22, commits `ceb5070`/`27c8313`.
-      - [ ] Stage 2: a year selector (doubling as the "Year in Review"
+      - [x] Stage 2: a year selector (doubling as the "Year in Review"
             recap originally asked for), an activity-over-time chart, and
-            `GET /stats/timeline`.
+            `GET /stats/timeline`. Shipped 2026-09-22, verified against
+            real data on dev.rwnd.tv.
       - [ ] Stage 3: a day-of-week/hour-of-day heatmap, top genres, and a
             ratings histogram.
 

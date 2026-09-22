@@ -416,8 +416,10 @@ source of truth for scope; this is just so a TODO listing is complete.
       math behind "time watched") ships and gets verified before the rest
       layers on. Stage 1 (totals, time watched, top-10 shows/movies,
       all-time only) shipped the same day, commits `ceb5070`/`27c8313`.
-      Stage 2 (year selector, activity-over-time chart) and Stage 3
-      (day/hour heatmap, top genres, ratings histogram) remain.
+      Stage 2 (`GET /stats/timeline`, year selector, activity-over-time
+      chart, `after`/`before` scoping on `GET /stats/summary`) shipped
+      2026-09-22 too, verified against real data on dev.rwnd.tv. Stage 3
+      (day/hour heatmap, top genres, ratings histogram) remains.
 
 - [ ] **OIDC login** (2026-08-23 15:34 added, un-M3'd 2026-08-26; Not yet scheduled)
 

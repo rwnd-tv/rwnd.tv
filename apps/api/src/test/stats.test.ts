@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { UNKNOWN_WATCHED_AT, type StatsSummary } from '@rwnd/shared'
+import { UNKNOWN_WATCHED_AT, type StatsSummary, type StatsTimeline } from '@rwnd/shared'
 import type { Play } from '@rwnd/shared'
 import { extractCookie, json, resetDb, testApp, testDb } from './helpers.js'
 
@@ -221,6 +221,73 @@ describe('GET /stats/summary', () => {
 
   it('requires a session', async () => {
     const res = await app.request('/api/v1/stats/summary')
+    expect(res.status).toBe(401)
+  })
+
+  it('scopes totals and top lists to an after/before window, excluding plays outside it', async () => {
+    const cookie = await createUserAndCookie()
+
+    await logMovie(cookie, '603', '2025-06-01T12:00:00.000Z') // outside the 2026 window below
+    await logMovie(cookie, '603', '2026-01-01T12:00:00.000Z')
+    await logEpisode(cookie, 1, '2026-01-03T12:00:00.000Z')
+
+    const res = await app.request(
+      '/api/v1/stats/summary?after=2026-01-01T00:00:00.000Z&before=2026-12-31T23:59:59.999Z',
+      { headers: { cookie } },
+    )
+    expect(res.status).toBe(200)
+    const body = await json<StatsSummary>(res)
+
+    expect(body.totals.plays).toBe(2)
+    expect(body.totals.moviePlays).toBe(1)
+    expect(body.totals.episodePlays).toBe(1)
+    expect(body.topMovies).toHaveLength(1)
+    expect(body.topMovies[0]).toMatchObject({ title: 'The Matrix', plays: 1 })
+  })
+})
+
+describe('GET /stats/timeline', () => {
+  beforeEach(async () => {
+    await resetDb(db)
+    stubTmdb()
+  })
+
+  function toEpochMinutes(iso: string): number {
+    return Math.floor(new Date(iso).getTime() / 60_000)
+  }
+
+  it('returns ascending epoch-minute arrays split by episode/movie, sentinel-excluded and counted separately', async () => {
+    const cookie = await createUserAndCookie()
+
+    await logMovie(cookie, '603', '2026-01-02T12:00:00.000Z')
+    await logMovie(cookie, '603', UNKNOWN_WATCHED_AT)
+    await logEpisode(cookie, 1, '2026-01-01T06:00:00.000Z')
+    await logEpisode(cookie, 2, '2026-01-03T18:30:00.000Z')
+
+    const res = await app.request('/api/v1/stats/timeline', { headers: { cookie } })
+    expect(res.status).toBe(200)
+    const body = await json<StatsTimeline>(res)
+
+    expect(body.episodePlays).toEqual([
+      toEpochMinutes('2026-01-01T06:00:00.000Z'),
+      toEpochMinutes('2026-01-03T18:30:00.000Z'),
+    ])
+    expect(body.moviePlays).toEqual([toEpochMinutes('2026-01-02T12:00:00.000Z')])
+    expect(body.unknownDatePlays).toBe(1)
+  })
+
+  it('returns empty arrays for a user with no watch history', async () => {
+    const cookie = await createUserAndCookie()
+
+    const res = await app.request('/api/v1/stats/timeline', { headers: { cookie } })
+    expect(res.status).toBe(200)
+    const body = await json<StatsTimeline>(res)
+
+    expect(body).toEqual({ episodePlays: [], moviePlays: [], unknownDatePlays: 0 })
+  })
+
+  it('requires a session', async () => {
+    const res = await app.request('/api/v1/stats/timeline')
     expect(res.status).toBe(401)
   })
 })

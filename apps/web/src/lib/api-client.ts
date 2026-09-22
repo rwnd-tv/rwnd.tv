@@ -75,6 +75,7 @@ import {
   type ShowDetail,
   type ShowWatches,
   type StatsSummary,
+  type StatsTimeline,
   type TotpStatus,
   type TraktConnectionStatus,
   type TraktDevicePairing,
@@ -320,10 +321,20 @@ export const api = {
       del<void>('/activity-feed', { entries } satisfies RemoveActivityRequest),
   },
   stats: {
-    // Stage 1 (M6): all-time only, no query params yet — after/before
-    // scoping lands in stage 2 alongside the timeline endpoint and the
-    // frontend's year selector.
-    summary: () => get<StatsSummary>('/stats/summary'),
+    /** `after`/`before` are browser-local year boundaries as ISO instants
+     * (date.ts's localDayStartISO/localDayEndISO, fed the year's first/last
+     * day) — omitted entirely for the all-time view. Same convention as
+     * calendar.events/activity.list above. */
+    summary: (params?: { after?: string; before?: string }) => {
+      const qs = new URLSearchParams()
+      if (params?.after) qs.set('after', params.after)
+      if (params?.before) qs.set('before', params.before)
+      const query = qs.toString()
+      return get<StatsSummary>(`/stats/summary${query ? `?${query}` : ''}`)
+    },
+    // Unscoped, fetched once — see statsTimelineSchema's doc comment for why
+    // the year selector doesn't retrigger this one.
+    timeline: () => get<StatsTimeline>('/stats/timeline'),
   },
   library: {
     // Whole-library responses, not paginated — see packages/shared/src/schemas/library.ts.

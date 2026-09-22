@@ -1,6 +1,11 @@
 import { OpenAPIHono, createRoute } from '@hono/zod-openapi'
-import { eq, sql } from 'drizzle-orm'
-import { statsSummarySchema } from '@rwnd/shared'
+import { and, asc, eq, gte, isNotNull, lte, ne, sql } from 'drizzle-orm'
+import {
+  UNKNOWN_WATCHED_AT,
+  statsSummaryQuerySchema,
+  statsSummarySchema,
+  statsTimelineSchema,
+} from '@rwnd/shared'
 import { episodes, movies, plays, shows } from '@rwnd/db'
 import type { AppEnv } from '../types.js'
 import { watchedRangeFragments } from './library/shared.js'
@@ -15,10 +20,26 @@ export const statsRoutes = new OpenAPIHono<AppEnv>()
 const count = sql<number>`count(*)`.mapWith(Number)
 
 /**
- * Stage 1 (M6) of the stats feature: totals and top-10 shows/movies,
- * all-time only. No `after`/`before` scoping yet (stage 2) and no
- * `topGenres`/`ratings` (stage 3) — see docs/TODO.md and the M6 plan for
- * why those are staged separately rather than built all at once.
+ * `after`/`before` are pre-resolved full ISO instants (statsSummaryQuerySchema's
+ * doc comment), parsed to `Date` here — plain `gte`/`lte` against
+ * `plays.watchedAt` work directly with a `Date`, no raw-SQL `::timestamptz`
+ * cast needed, since (unlike activity.ts's unioned CTE column) this is a
+ * real typed column Drizzle already knows how to encode a bound against.
+ * Same idiom as calendar/build.ts's `opts.after`/`opts.before` handling.
+ */
+function boundsFilter(userId: string, after: string | undefined, before: string | undefined) {
+  return and(
+    eq(plays.userId, userId),
+    after ? gte(plays.watchedAt, new Date(after)) : undefined,
+    before ? lte(plays.watchedAt, new Date(before)) : undefined,
+  )
+}
+
+/**
+ * Totals and top-10 shows/movies, optionally scoped to an `after`/`before`
+ * window (stage 2, M6). No `topGenres`/`ratings` yet (stage 3) — see
+ * docs/TODO.md and the M6 plan for why those are staged separately rather
+ * than built all at once.
  *
  * Two per-title aggregates (all watched shows, all watched movies —
  * unlimited, not just top-10) drive everything below, rather than one
@@ -34,6 +55,7 @@ statsRoutes.openapi(
     method: 'get',
     path: '/stats/summary',
     summary: "Aggregate stats over the current user's watch history",
+    request: { query: statsSummaryQuerySchema },
     responses: {
       200: {
         description: 'Stats summary',
@@ -42,6 +64,7 @@ statsRoutes.openapi(
     },
   }),
   async (c) => {
+    const { after, before } = c.req.valid('query')
     const userId = c.get('user')!.id
     const db = c.get('db')
 
@@ -62,7 +85,7 @@ statsRoutes.openapi(
         .from(plays)
         .innerJoin(episodes, eq(plays.episodeId, episodes.id))
         .innerJoin(shows, eq(episodes.showId, shows.id))
-        .where(eq(plays.userId, userId))
+        .where(boundsFilter(userId, after, before))
         .groupBy(shows.id),
       db
         .select({
@@ -78,7 +101,7 @@ statsRoutes.openapi(
         })
         .from(plays)
         .innerJoin(movies, eq(plays.movieId, movies.id))
-        .where(eq(plays.userId, userId))
+        .where(boundsFilter(userId, after, before))
         .groupBy(movies.id),
       db
         .select({
@@ -89,14 +112,17 @@ statsRoutes.openapi(
           // backfill value) watchedRangeFragments excludes from the two
           // fragments above — counted separately here rather than hidden,
           // matching hasUnknownWatchDate's "say so, don't just drop it"
-          // convention.
+          // convention. Never actually inside an after/before window in
+          // practice (1900 predates any real year selection), but not
+          // special-cased on that assumption either — boundsFilter applies
+          // here exactly like the other two queries.
           unknownDatePlays:
             sql<number>`count(*) filter (where extract(year from ${plays.watchedAt}) = 1900)`.mapWith(
               Number,
             ),
         })
         .from(plays)
-        .where(eq(plays.userId, userId))
+        .where(boundsFilter(userId, after, before))
         .then((rows) => rows[0]!),
     ])
 
@@ -175,6 +201,67 @@ statsRoutes.openapi(
       },
       topShows,
       topMovies,
+    })
+  },
+)
+
+/**
+ * GET /stats/timeline — stage 2 (M6). See statsTimelineSchema's doc comment
+ * for the response shape/reasoning. Two plain queries (episode plays, movie
+ * plays), not one — `plays_exactly_one_media_ref` guarantees they're
+ * disjoint, and keeping them separate here is what lets the frontend stack
+ * episodes vs. movies in the activity chart without re-deriving that split
+ * from a mixed array. Ordered ascending by `plays_user_watched_at_idx`'s
+ * own scan direction, so no extra sort work.
+ */
+statsRoutes.openapi(
+  createRoute({
+    method: 'get',
+    path: '/stats/timeline',
+    summary: "Every watched-at instant in the current user's history, for client-side bucketing",
+    responses: {
+      200: {
+        description: 'Watch timeline',
+        content: { 'application/json': { schema: statsTimelineSchema } },
+      },
+    },
+  }),
+  async (c) => {
+    const userId = c.get('user')!.id
+    const db = c.get('db')
+
+    const sentinelExcluded = ne(plays.watchedAt, new Date(UNKNOWN_WATCHED_AT))
+
+    const [episodeRows, movieRows, unknownDatePlays] = await Promise.all([
+      db
+        .select({ watchedAt: plays.watchedAt })
+        .from(plays)
+        .where(and(eq(plays.userId, userId), isNotNull(plays.episodeId), sentinelExcluded))
+        .orderBy(asc(plays.watchedAt)),
+      db
+        .select({ watchedAt: plays.watchedAt })
+        .from(plays)
+        .where(and(eq(plays.userId, userId), isNotNull(plays.movieId), sentinelExcluded))
+        .orderBy(asc(plays.watchedAt)),
+      db
+        .select({
+          count:
+            sql<number>`count(*) filter (where extract(year from ${plays.watchedAt}) = 1900)`.mapWith(
+              Number,
+            ),
+        })
+        .from(plays)
+        .where(eq(plays.userId, userId))
+        .then((rows) => rows[0]!.count),
+    ])
+
+    const toEpochMinutes = (rows: { watchedAt: Date }[]) =>
+      rows.map((row) => Math.floor(row.watchedAt.getTime() / 60_000))
+
+    return c.json({
+      episodePlays: toEpochMinutes(episodeRows),
+      moviePlays: toEpochMinutes(movieRows),
+      unknownDatePlays,
     })
   },
 )

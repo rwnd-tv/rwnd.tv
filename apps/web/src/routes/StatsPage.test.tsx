@@ -1,15 +1,23 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import type { StatsSummary, User } from '@rwnd/shared'
+import type { StatsSummary, StatsTimeline, User } from '@rwnd/shared'
 import { StatsPage } from './StatsPage.js'
 import { AuthContext } from '../lib/use-auth.js'
 import { api, ApiError } from '../lib/api-client.js'
+import { localDayEndISO, localDayStartISO } from '../lib/date.js'
+
+/** Local `new Date(y, m, d)` -> epoch minutes, same reasoning as
+ * stats-buckets.test.ts: avoids a TZ-dependent hardcoded UTC timestamp. */
+function epochMinutesFor(year: number, month: number, day: number): number {
+  return Math.floor(new Date(year, month, day, 12).getTime() / 60_000)
+}
 
 vi.mock('../lib/api-client.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../lib/api-client.js')>()
-  return { ...actual, api: { ...actual.api, stats: { summary: vi.fn() } } }
+  return { ...actual, api: { ...actual.api, stats: { summary: vi.fn(), timeline: vi.fn() } } }
 })
 
 beforeEach(() => {
@@ -75,8 +83,16 @@ function testSummary(overrides: Partial<StatsSummary> = {}): StatsSummary {
   }
 }
 
-function renderPage(summary: StatsSummary, user = testUser()) {
+function testTimeline(overrides: Partial<StatsTimeline> = {}): StatsTimeline {
+  return { episodePlays: [], moviePlays: [], unknownDatePlays: 0, ...overrides }
+}
+
+function renderPage(
+  summary: StatsSummary,
+  { user = testUser(), timeline = testTimeline() }: { user?: User; timeline?: StatsTimeline } = {},
+) {
   vi.mocked(api.stats.summary).mockResolvedValue(summary)
+  vi.mocked(api.stats.timeline).mockResolvedValue(timeline)
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={queryClient}>
@@ -160,8 +176,84 @@ describe('StatsPage', () => {
     ).toBeInTheDocument()
   })
 
+  it('shows the unknown-date footnote on the all-time view but not once a year is selected', async () => {
+    renderPage(testSummary(), {
+      timeline: testTimeline({
+        episodePlays: [epochMinutesFor(2025, 5, 1)],
+        moviePlays: [epochMinutesFor(2024, 0, 1)],
+      }),
+    })
+
+    expect(
+      await screen.findByText(
+        "1 play has no known date, so it's counted here but won't appear in any single year",
+      ),
+    ).toBeInTheDocument()
+
+    await userEvent.selectOptions(await screen.findByLabelText('Year'), '2025')
+    expect(screen.queryByText(/has no known date, so it's counted here/)).not.toBeInTheDocument()
+  })
+
+  it('offers a year selector once the timeline spans data, and re-scopes the summary request on selection', async () => {
+    renderPage(testSummary(), {
+      timeline: testTimeline({
+        episodePlays: [epochMinutesFor(2025, 5, 1)],
+        moviePlays: [epochMinutesFor(2024, 0, 1)],
+      }),
+    })
+
+    const select = await screen.findByLabelText('Year')
+    expect(screen.getByRole('option', { name: 'All time' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: '2025' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: '2024' })).toBeInTheDocument()
+
+    expect(api.stats.summary).toHaveBeenCalledWith({ after: undefined, before: undefined })
+
+    await userEvent.selectOptions(select, '2025')
+
+    expect(api.stats.summary).toHaveBeenCalledWith({
+      after: localDayStartISO('2025-01-01'),
+      before: localDayEndISO('2025-12-31'),
+    })
+  })
+
+  it('selects that year, same as the dropdown, when a year bar in the activity chart is clicked', async () => {
+    renderPage(testSummary(), {
+      timeline: testTimeline({
+        episodePlays: [epochMinutesFor(2025, 5, 1)],
+        moviePlays: [epochMinutesFor(2024, 0, 1)],
+      }),
+    })
+
+    await screen.findByLabelText('Year')
+    expect(api.stats.summary).toHaveBeenCalledWith({ after: undefined, before: undefined })
+
+    await userEvent.click(screen.getByRole('button', { name: /1 episode, 0 movies/ }))
+
+    expect(api.stats.summary).toHaveBeenCalledWith({
+      after: localDayStartISO('2025-01-01'),
+      before: localDayEndISO('2025-12-31'),
+    })
+    expect(screen.getByLabelText('Year')).toHaveValue('2025')
+  })
+
+  it('renders the activity chart once the timeline has data', async () => {
+    renderPage(testSummary(), {
+      timeline: testTimeline({ episodePlays: [epochMinutesFor(2025, 5, 1)] }),
+    })
+
+    await screen.findByText('Activity')
+    expect(screen.queryByText('No activity in this period.')).not.toBeInTheDocument()
+  })
+
+  it('shows an empty message for the activity chart when the timeline has no plays', async () => {
+    renderPage(testSummary())
+    expect(await screen.findByText('No activity in this period.')).toBeInTheDocument()
+  })
+
   it('shows an error message when the request fails', async () => {
     vi.mocked(api.stats.summary).mockRejectedValue(new ApiError(500, 'boom'))
+    vi.mocked(api.stats.timeline).mockResolvedValue(testTimeline())
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
     render(
       <QueryClientProvider client={queryClient}>

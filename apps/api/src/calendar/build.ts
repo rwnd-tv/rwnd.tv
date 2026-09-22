@@ -7,6 +7,7 @@ import { getFollowedShows } from '../lib/followed-shows.js'
 import { getFollowedMovies } from '../lib/followed-movies.js'
 import { localeRegion, releaseDateExpr } from '../lib/release-date.js'
 import { episodeDisplayTitle } from '../lib/media.js'
+import { medianRuntimeByShow, runtimeForRow } from '../lib/runtime.js'
 
 /**
  * Superset of `IcsEvent` carrying the extra fields the in-app calendar's
@@ -102,34 +103,6 @@ function episodeSummary(
 ) {
   const code = `S${String(seasonNumber).padStart(2, '0')}E${String(episodeNumber).padStart(2, '0')}`
   return title ? `${showTitle} — ${code} ${title}` : `${showTitle} — ${code}`
-}
-
-// Duration for a history event whose own runtime, and its show's sibling
-// median (see runtimeForRow below), are both unavailable — rare enough in
-// practice (38 of 10,701 real episode plays on the reference instance,
-// always a whole season TMDB never had a runtime for at all) that a fixed
-// guess isn't worth the complexity of a movie-shaped vs. episode-shaped
-// default. It only ever means "no better number was findable," never a
-// real duration.
-const DEFAULT_RUNTIME_MINUTES = 30
-
-/** A history row's own runtime, or (for an episode) the median runtime of
- * other episodes of the same show, or the flat default above — in that
- * order. `medianByShowId` covers only shows where at least one row in
- * this feed actually needs it; see its own construction in
- * buildHistoryEvents. */
-function runtimeForRow(
-  row: {
-    movieRuntimeMinutes: number | null
-    episodeRuntimeMinutes: number | null
-    showId: string | null
-  },
-  medianByShowId: Map<string, number>,
-): number {
-  const own = row.showId === null ? row.movieRuntimeMinutes : row.episodeRuntimeMinutes
-  if (own !== null) return own
-  const median = row.showId !== null ? medianByShowId.get(row.showId) : undefined
-  return median ?? DEFAULT_RUNTIME_MINUTES
 }
 
 /**
@@ -235,13 +208,10 @@ async function buildHistoryEvents(
     previousBeforeWindow = row
   }
 
-  // One extra query for the shows whose sibling-episode runtime median
-  // this feed actually needs — not a subquery nested inside the query
-  // above: docs/TODO_ARCHIVE.md records a live bug where a raw `sql`
-  // fragment nested inside a joinless Drizzle query silently lost its own
-  // column qualifiers, and a separate top-level query sidesteps that
-  // shape entirely. `percentile_cont` itself ignores NULL inputs, so this
-  // is correctly "the median of the episodes that do have a runtime."
+  // One extra query (lib/runtime.ts's medianRuntimeByShow, shared with
+  // stats/build.ts) for the shows whose sibling-episode runtime median
+  // this feed actually needs — see that module for why it's a separate
+  // top-level query rather than a subquery nested inside the query above.
   const showIdsNeedingMedian = [
     ...new Set(
       rows
@@ -249,22 +219,7 @@ async function buildHistoryEvents(
         .map((row) => row.showId!),
     ),
   ]
-  const medianByShowId = new Map<string, number>()
-  if (showIdsNeedingMedian.length > 0) {
-    const medianRows = await db
-      .select({
-        showId: episodes.showId,
-        median: sql<
-          number | null
-        >`percentile_cont(0.5) within group (order by ${episodes.runtimeMinutes})`,
-      })
-      .from(episodes)
-      .where(inArray(episodes.showId, showIdsNeedingMedian))
-      .groupBy(episodes.showId)
-    for (const row of medianRows) {
-      if (row.median !== null) medianByShowId.set(row.showId, Math.round(row.median))
-    }
-  }
+  const medianByShowId = await medianRuntimeByShow(db, showIdsNeedingMedian)
 
   return rows.map((row, i) => {
     // `watchedAt` records when playback *finished*, not when it started —

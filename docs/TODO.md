@@ -61,7 +61,7 @@ Format:
 
 ## UI polish
 
-- [ ] **Fold the five other `PlusIcon` copies into the shared one** (2026-09-21 added, count corrected 2026-09-22; Not yet scheduled)
+- [ ] **Fold the five other `PlusIcon` copies into the shared one** (2026-09-21 added, count corrected 2026-09-22; M6)
 
       The mobile-pass touch-target fix (M5) moved `PlusIcon`/`MinusIcon`
       into `components/icons.tsx` and reused them from the new
@@ -91,7 +91,7 @@ Format:
 - [ ] **Sort and filter the Watchlist detail page by status, release year,
       and TMDB rating** (2026-09-21 added, narrowed 2026-09-21, rating
       sort added 2026-09-21, filters by status/year/rating added
-      2026-09-21)
+      2026-09-21; M6 for year/rating only, status stays deferred)
 
       James, 2026-09-21, across one session: wants to sort the watchlist
       by release year, then asked for a TMDB rating sort too, then asked
@@ -224,7 +224,7 @@ Format:
 
 ## Auth & accounts
 
-- [ ] **Explain invite-only mode on the Create an account screen** (2026-09-16 added)
+- [ ] **Explain invite-only mode on the Create an account screen** (2026-09-16 added; M6)
 
       `RegisterPage.tsx` renders the invite code `Field` whenever
       `settings?.registrationMode === 'invite'` (around line 118), but
@@ -271,7 +271,18 @@ Format:
 
 ## Metadata & matching
 
-- [ ] **`resolveSeason`'s runtime upsert only ever fills a null, never corrects a stale one** (2026-09-17 added, not on any milestone)
+- [ ] **`resolveSeason`'s runtime upsert only ever fills a null, never corrects a stale one** (2026-09-17 added, scoped into M6 2026-09-22 pending investigation; M6)
+
+      M6 planning 2026-09-22: before implementing this as a fix, check
+      whether stale non-null runtimes actually exist on the reference
+      instance (compare a sample of `episodes.runtimeMinutes` against a
+      fresh provider fetch). The fill-only behavior looks deliberate per
+      `resolveSeason`'s own doc comment (protecting a cross-provider
+      backfilled runtime from being clobbered by a differently-numbered
+      same-provider value), so this may turn out to be "working as
+      documented" rather than a bug - see the M6 plan
+      (`C:\Users\James\.claude\plans\wise-tinkering-charm.md`) for the
+      full reasoning.
 
       Found while fixing the season/episode drift item above (see
       TODO_ARCHIVE.md): `resolveSeason`'s upsert (`apps/api/src/lib/
@@ -337,7 +348,7 @@ Format:
 
 ## Backups
 
-- [ ] **Restore automation for the automatic database backup** (2026-09-09 added, narrowed 2026-09-10 x2, split from the "back up now" button 2026-09-16; Not yet scheduled)
+- [ ] **Restore automation for the automatic database backup** (2026-09-09 added, narrowed 2026-09-10 x2, split from the "back up now" button 2026-09-16, scoped into M6 2026-09-22; M6)
 
       [ADR 0008](adr/0008-database-backups.md) decided restore stays a
       manual shell procedure, on the grounds that it's destructive, rare,
@@ -349,6 +360,25 @@ Format:
       restore path is still open and wants its own decision, not a quick
       follow-on to the manual "back up now" button (shipped 2026-09-17,
       see `docs/TODO_ARCHIVE.md`).
+
+      Decision made 2026-09-22: build it, as part of M6. Design research
+      found the obvious in-process approach (an admin route that drops
+      and recreates the schema, then restarts the process) has real holes
+      - Drizzle's migrations table lives in its own `drizzle` schema, not
+      `public`, so dropping only `public` either fails the restore
+      outright or silently desyncs the migration history; and a
+      drop-then-restore split across two transactions can leave the
+      database empty if the restore step fails partway. The design that
+      avoids both: entrypoint-driven, marker-file mediated - the app
+      validates the request and writes a small marker file, then exits;
+      `docker-entrypoint.sh` performs the actual drop-and-restore (as one
+      atomic transaction) before migrations run, while the app process
+      isn't holding any connections open. Full mechanism, including the
+      confirmation/permission gating (`requireOwner` + typed confirmation
+      + password re-proof, matching `transfer-ownership`'s bar) and the
+      pre-restore-snapshot handling, is in the M6 plan
+      (`C:\Users\James\.claude\plans\wise-tinkering-charm.md`). Not yet
+      started - the highest-risk piece of M6.
 
 ## Security
 
@@ -678,15 +708,21 @@ source of truth for scope; this is just so a TODO listing is complete.
       this was over-tagged M2 when first added. Left unmilestoned rather
       than reassigned to M3; no strong reason it belongs there either.
 
-- [ ] **Stats and insights** (2026-08-23 15:32 added, un-M3'd 2026-08-26, M6'd 2026-09-16; M6, tentative)
+- [ ] **Stats and insights** (2026-08-23 15:32 added, un-M3'd 2026-08-26, M6'd 2026-09-16, scoped 2026-09-22; M6)
 
       The reason to log anything in the first place, but not essential to
       the core logging loop M3 was narrowed to (2026-08-26, see
       ROADMAP.md's M3 framing).
 
-      James, 2026-09-16: pencilled in as M6 while scoping M5, but not set
-      in stone, just how the milestones are shaping up in his head right
-      now.
+      Scoped and staged 2026-09-22 (see ROADMAP.md's M6 entry for the
+      full breakdown and the M6 plan at
+      `C:\Users\James\.claude\plans\wise-tinkering-charm.md`): a `/stats`
+      page in three stages, so the riskiest part (the runtime-estimation
+      math behind "time watched") ships and gets verified before the rest
+      layers on. Stage 1 (totals, time watched, top-10 shows/movies,
+      all-time only) shipped the same day, commits `ceb5070`/`27c8313`.
+      Stage 2 (year selector, activity-over-time chart) and Stage 3
+      (day/hour heatmap, top genres, ratings histogram) remain.
 
 - [ ] **OIDC login** (2026-08-23 15:34 added, un-M3'd 2026-08-26; Not yet scheduled)
 
@@ -706,7 +742,7 @@ source of truth for scope; this is just so a TODO listing is complete.
 
       A public view of a user's watch history/stats.
 
-- [ ] **Configurable or optional landing page for self-hosted instances** (2026-09-17 added, status strip count corrected 2026-09-22; Not yet scheduled)
+- [ ] **Configurable or optional landing page for self-hosted instances** (2026-09-17 added, status strip count corrected 2026-09-22, scoped into M6 2026-09-22; M6)
 
       `LandingPage.tsx` (route `/`) is deliberately rwnd.tv's own marketing
       page: the self-host CTA, GitHub/vision.md links, the M1-M5 status
@@ -727,6 +763,16 @@ source of truth for scope; this is just so a TODO listing is complete.
       these needs a decision on how much stays fixed (layout, self-host
       messaging that assumes this is *the* rwnd.tv project) versus
       genuinely swappable per instance.
+
+      Decided 2026-09-22, as part of M6 scoping: the first option, a new
+      `landingMode: 'marketing' | 'login'` enum field on `instance_settings`
+      (same public/admin-editable pattern as `registrationMode`), defaulting
+      to `'marketing'` so rwnd.tv's own instance is unaffected. Not the
+      admin-authored-copy option - that's a materially bigger feature (i18n
+      implications alone touch ~112 existing `landing.*` keys) for a
+      "skip the marketing page" ask. Full design in the M6 plan
+      (`C:\Users\James\.claude\plans\wise-tinkering-charm.md`). Not yet
+      built.
 
 - [ ] **Consider federation (ActivityPub/AT Protocol) for cross-instance social features** (2026-09-20 added; Not yet scheduled)
 

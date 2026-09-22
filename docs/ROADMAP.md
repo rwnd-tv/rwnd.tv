@@ -67,16 +67,46 @@ genuinely production-ready.
 - [x] **Mobile & responsive UI pass**: an audit of the whole app at real phone viewport widths (only 10 of the app's `.tsx` files used any responsive breakpoint before this), plus sticky filter/sort bars on TV Shows, History, and a Watchlist's detail page (shipped 2026-09-20). The audit's eight logged findings (sidebar overlay opening by default, undersized touch targets, non-wrapping detail action rows, an unreadable Calendar Month grid, hidden admin badges, wrapping sticky toolbars, and two arithmetic-only fixes for a dialog and the landing page) all fixed 2026-09-21; see [TODO_ARCHIVE.md](TODO_ARCHIVE.md). Two of those eight couldn't be live-verified below this environment's ~501px browser-automation floor and are pending a real-phone spot check. The rest of the UI-polish batch bundled alongside this shipped already: an inset dropdown arrow on `<select>` controls, only showing the tick on "Watched" buttons once actually watched, removing the calendar month grid's now-redundant selected-day panel, and making each Calendar feeds row collapsible (collapsed by default). See [TODO.md](TODO.md) and [TODO_ARCHIVE.md](TODO_ARCHIVE.md).
 - [x] **Landing page copy pass**: rewrote the "Honestly:" callout (dropped "young" and its apologetic framing, not just the one word); dropped the FAQ's Kodi mention now that shipping it is increasingly uncertain; retitled "What works today" to "Features" and re-picked a set that better represents the project now that M4 is done, not just table-stakes basics. Added M5 to the "Where the project actually is" status section once M5 itself was actually finishing, rather than guessing its wording earlier while it was still moving; written as done, not in-progress, since the milestone-wide review was happening the same evening. See [TODO_ARCHIVE.md](TODO_ARCHIVE.md).
 
-## M6: Stats and insights (working title, tentative)
+## M6: Stats and insights
 
-Pencilled in while scoping M5, not set in stone: James, 2026-09-16, this is
-just how the milestones are shaping up in his head right now, not a
-committed scope.
+Scoped and planned with James 2026-09-22: intended as the last milestone
+before a longer pause on active development, so alongside its headline
+feature it also bundles the accumulated quick-fix polish and two gaps
+that matter most when nobody is actively maintaining an instance
+(database restore automation, a configurable landing page). Full plan at
+`C:\Users\James\.claude\plans\wise-tinkering-charm.md`.
 
 - [ ] **Stats and insights**: the reason to log anything in the first
-      place, per [TODO.md](TODO.md). Scope beyond the headline idea isn't
-      fleshed out yet.
+      place. A new `/stats` page, built in three stages so the riskiest
+      part (the runtime-estimation math behind "time watched") ships and
+      gets verified before the rest is layered on.
+
+      - [x] Stage 1 (spine): totals, time watched, top-10 shows/movies,
+            all-time only. Shipped 2026-09-22, commits `ceb5070`/`27c8313`.
+      - [ ] Stage 2: a year selector (doubling as the "Year in Review"
+            recap originally asked for), an activity-over-time chart, and
+            `GET /stats/timeline`.
+      - [ ] Stage 3: a day-of-week/hour-of-day heatmap, top genres, and a
+            ratings histogram.
+
+- [ ] **Database restore automation**: reverses [ADR 0008](adr/0008-database-backups.md)'s
+      "restore stays manual" call, which already recorded James's
+      2026-09-10 disagreement as an open question. Redesigned during M6
+      planning to be entrypoint-driven (a marker file checked before
+      migrations run, not a simple in-app route performing its own schema
+      drop) after research found the obvious approach would either fail
+      outright or could leave the database empty on a failed restore. The
+      milestone's highest-risk piece; not yet started. See [TODO.md](TODO.md).
+- [ ] **Configurable landing page for self-hosted instances**: a new
+      admin-editable `landingMode` setting so a self-hoster's `/` can skip
+      rwnd.tv's own marketing page and go straight to sign-in. See [TODO.md](TODO.md).
+- [ ] **Quick-fix polish**: explain invite-only mode on the Create an
+      account screen; fold the remaining duplicate `PlusIcon` copies into
+      the shared one; watchlist detail page year/rating sort+filter
+      (status filter stays deferred beyond M6); investigate whether
+      `resolveSeason`'s runtime upsert is actually stale-prone before
+      deciding whether it needs a fix at all. See [TODO.md](TODO.md).
 
 ## Not yet scheduled
 
-Ideas that are in scope for the project eventually but don't have a milestone yet: OIDC login (the `user_credentials` schema was designed for this from M1, see [ADR 0003](adr/0003-auth-model.md)), additional locales beyond English, mobile-friendly PWA installability, public/shareable profile pages, a configurable or optional landing page for self-hosted instances (see TODO.md).
+Ideas that are in scope for the project eventually but don't have a milestone yet: OIDC login (the `user_credentials` schema was designed for this from M1, see [ADR 0003](adr/0003-auth-model.md)), additional locales beyond English, mobile-friendly PWA installability, public/shareable profile pages.

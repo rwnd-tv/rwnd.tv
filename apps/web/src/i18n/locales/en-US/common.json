@@ -226,6 +226,7 @@
     "watchlists": "Watchlists",
     "history": "History",
     "calendar": "Calendar",
+    "stats": "Stats",
     "import": "Import",
     "admin": "Admin",
     "settings": "Settings",
@@ -682,6 +683,34 @@
     "episodeFallbackLabel": "Episode {{number}}",
     "dayEvents_one": "{{date}}, {{count}} event",
     "dayEvents_other": "{{date}}, {{count}} events"
+  },
+  "stats": {
+    "title": "Stats",
+    "empty": "Nothing here yet — log a watch and check back.",
+    "totals": {
+      "episodesWatched": "Episodes watched",
+      "moviesWatched": "Movies watched",
+      "showsWatched": "Shows watched",
+      "timeWatched": "Time watched",
+      "estimatedNote_one": "Includes an estimate for {{count}} play with no known runtime",
+      "estimatedNote_other": "Includes an estimate for {{count}} plays with no known runtime"
+    },
+    "topShows": {
+      "title": "Top Shows",
+      "episodes_one": "{{count}} episode",
+      "episodes_other": "{{count}} episodes"
+    },
+    "topMovies": {
+      "title": "Top Movies"
+    },
+    "duration": {
+      "days_one": "{{count}} day",
+      "days_other": "{{count}} days",
+      "hours_one": "{{count}} hour",
+      "hours_other": "{{count}} hours",
+      "minutes_one": "{{count}} minute",
+      "minutes_other": "{{count}} minutes"
+    }
   },
   "import": {
     "title": "Import",

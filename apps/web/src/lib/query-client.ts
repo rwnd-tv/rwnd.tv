@@ -31,7 +31,11 @@ export const queryClient = new QueryClient({
  * sites were first written. `['watchlists']` covers both the Watchlists
  * index (item counts, cover art) and any open watchlist detail page — added
  * once watchlist membership became a real mutation, not just an import-only
- * value with nothing in the UI to refresh.
+ * value with nothing in the UI to refresh. `['stats']` covers StatsPage.tsx
+ * (M6) — deliberately included even though its stage-2 timeline query is the
+ * largest response the app produces, since a stat page showing yesterday's
+ * numbers right after logging a watch would be a worse default than one
+ * extra fetch; revisit if that payload size becomes a real problem.
  */
 export function invalidateWatchData(queryClient: QueryClient): Promise<void> {
   return Promise.all([
@@ -39,5 +43,6 @@ export function invalidateWatchData(queryClient: QueryClient): Promise<void> {
     queryClient.invalidateQueries({ queryKey: ['activity'] }),
     queryClient.invalidateQueries({ queryKey: ['library'] }),
     queryClient.invalidateQueries({ queryKey: ['watchlists'] }),
+    queryClient.invalidateQueries({ queryKey: ['stats'] }),
   ]).then(() => undefined)
 }

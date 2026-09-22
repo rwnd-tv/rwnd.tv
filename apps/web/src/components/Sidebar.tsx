@@ -12,6 +12,7 @@ import {
   MoviesIcon,
   SettingsIcon,
   ShowsIcon,
+  StatsIcon,
   UsersIcon,
   WatchlistsIcon,
 } from './icons.js'
@@ -145,6 +146,13 @@ export function Sidebar({ collapsed, onNavigate }: { collapsed: boolean; onNavig
           to="/calendar"
           label={t('nav.calendar')}
           icon={<CalendarIcon />}
+          collapsed={collapsed}
+          onNavigate={onNavigate}
+        />
+        <SidebarLink
+          to="/stats"
+          label={t('nav.stats')}
+          icon={<StatsIcon />}
           collapsed={collapsed}
           onNavigate={onNavigate}
         />

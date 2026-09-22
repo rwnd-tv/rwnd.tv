@@ -74,6 +74,7 @@ import {
   type SetupRequest,
   type ShowDetail,
   type ShowWatches,
+  type StatsSummary,
   type TotpStatus,
   type TraktConnectionStatus,
   type TraktDevicePairing,
@@ -317,6 +318,12 @@ export const api = {
     },
     removeMany: (entries: RemoveActivityRequest['entries']) =>
       del<void>('/activity-feed', { entries } satisfies RemoveActivityRequest),
+  },
+  stats: {
+    // Stage 1 (M6): all-time only, no query params yet — after/before
+    // scoping lands in stage 2 alongside the timeline endpoint and the
+    // frontend's year selector.
+    summary: () => get<StatsSummary>('/stats/summary'),
   },
   library: {
     // Whole-library responses, not paginated — see packages/shared/src/schemas/library.ts.

@@ -11,6 +11,7 @@ import { ResetPasswordPage } from './routes/ResetPasswordPage.js'
 import { VerifyEmailPage } from './routes/VerifyEmailPage.js'
 import { ConfirmEmailChangePage } from './routes/ConfirmEmailChangePage.js'
 import { DashboardPage } from './routes/DashboardPage.js'
+import { StatsPage } from './routes/StatsPage.js'
 import { HistoryPage } from './routes/HistoryPage.js'
 import { CalendarPage } from './routes/CalendarPage.js'
 import { ShowsPage } from './routes/ShowsPage.js'
@@ -74,6 +75,7 @@ const router = createBrowserRouter([
           },
           { path: '/history', element: <HistoryPage />, handle: fullWidthHandle },
           { path: '/calendar', element: <CalendarPage />, handle: fullWidthHandle },
+          { path: '/stats', element: <StatsPage />, handle: fullWidthHandle },
           { path: '/import', element: <ImportPage /> },
           { path: '/settings', element: <SettingsPage /> },
           { path: '/account', element: <AccountPage /> },

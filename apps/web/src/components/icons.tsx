@@ -86,6 +86,14 @@ export function CalendarIcon(props: SVGProps<SVGSVGElement>) {
   )
 }
 
+export function StatsIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <Icon {...props}>
+      <path d="M4 20V10M12 20V4M20 20v-6" />
+    </Icon>
+  )
+}
+
 export function ImportIcon(props: SVGProps<SVGSVGElement>) {
   return (
     <Icon {...props}>

@@ -15,14 +15,13 @@ Format:
 
 ## Repo hygiene
 
-- [ ] **Hold TS 7 bump** (2026-08-09 20:40 added, ignore rule added 2026-08-30, rationale revised 2026-09-09)
+- [ ] **Hold TS 7 bump** (2026-08-09 20:40 added, ignore rule added 2026-08-30, rationale revised 2026-09-09, exit condition corrected 2026-09-22)
 
-      `typescript-eslint` doesn't support TS 7 yet. A Dependabot PR
+      `typescript-eslint` doesn't support TS 7. A Dependabot PR
       (`dev-dependencies` group) bundled a `typescript` 5.9.3→7.0.2 bump in
       with 13 unrelated safe updates, failing CI (lint) for the whole
       group. Added a `typescript` major-version `ignore` rule to
-      `.github/dependabot.yml` so Dependabot stops proposing it; remove
-      that ignore once `typescript-eslint` supports TS 7.
+      `.github/dependabot.yml` so Dependabot stops proposing it.
 
       The bundling half of that reasoning no longer applies. Since
       2026-09-09 the `dev-dependencies` group carries
@@ -32,9 +31,17 @@ Format:
 
       The ignore rule is still worth keeping, on the narrower grounds that
       it stops Dependabot reopening a PR that can only be closed again
-      until `typescript-eslint` catches up. Both mechanisms now guard the
-      same thing from different angles; removing the ignore once TS 7 is
-      supported stays the exit condition either way.
+      until `typescript-eslint` catches up.
+
+      Correction 2026-09-22: `typescript-eslint` has closed the TS 7
+      support request as "not planned", not just "not yet" - TS 7 ships
+      without a stable programmatic API, which their type-aware rules
+      depend on structurally. "Remove the ignore once `typescript-eslint`
+      supports TS 7" may therefore never trigger as worded. Revisit if
+      `typescript-eslint` reverses that position, or consider whether a
+      TS 7 bump is ever wanted enough to work around the incompatibility
+      some other way (e.g. installing it alongside TS 6 rather than
+      replacing it).
 
 - [x] **Em-dashes in `docs/TODO.md` and `docs/adr/0007-security-posture.md` violate CLAUDE.md's prose-style rule** (2026-09-21 added, M5 review, fixed 2026-09-21; M5)
 
@@ -54,70 +61,21 @@ Format:
 
 ## UI polish
 
-- [ ] **Fold the six other `PlusIcon` copies into the shared one** (2026-09-21 added; Not yet scheduled)
+- [ ] **Fold the five other `PlusIcon` copies into the shared one** (2026-09-21 added, count corrected 2026-09-22; Not yet scheduled)
 
       The mobile-pass touch-target fix (M5) moved `PlusIcon`/`MinusIcon`
       into `components/icons.tsx` and reused them from the new
-      `IncludeExcludeToggle`, but deliberately left six more `PlusIcon`
+      `IncludeExcludeToggle`, but deliberately left five more `PlusIcon`
       copies alone: `EpisodeDetailPage.tsx`, `MovieDetailPage.tsx`,
-      `SeasonDetailPage.tsx`, `ShowDetailPage.tsx`, and `EpisodeCard.tsx`.
+      `SeasonDetailPage.tsx`, `ShowDetailPage.tsx`, and `EpisodeCard.tsx`
+      (originally miscounted as "six" when this item was added; confirmed
+      2026-09-22 there are five, no `MinusIcon` duplicates anywhere).
       Those use `strokeWidth={3}` with a linejoin rather than the filter
       panels' `strokeWidth={2.5}` with none, so folding them into the
       shared icon as-is would be a visual change to five action buttons,
       not a pure dedup. Worth doing once `icons.tsx`'s shared `Icon`
       wrapper (or a similar one for this pair) exposes a stroke-weight
       contract that can represent both without a caller-side override.
-
-- [ ] **`EpisodeCard`'s watch-toggle button can render with no icon at all** (2026-09-21 added, M5 review; Not yet scheduled)
-
-      The button's inner expression is
-      `episode.watchedCount > 1 ? <count> : episode.watched && <CheckIcon />`.
-      For an episode that has aired but has no play logged
-      (`episode.watched === false`, `watchedCount === 0`), the surrounding
-      visibility guard (`!(notAiredYet && !episode.watched)`) still renders
-      the button, but the inner expression evaluates to `false`, so the
-      button shows as a bare unlabeled circle with no icon - the tile's
-      only visible "mark as watched" affordance disappears, unlike the
-      equivalent buttons on detail pages, which have a text label as a
-      fallback.
-
-- [ ] **Deleting `CalendarEventTile.tsx` dropped the spoiler-guarded synopsis tooltip with no replacement** (2026-09-21 added, M5 review; Not yet scheduled)
-
-      The deleted tile rendered each entry's synopsis as a `title` tooltip,
-      spoiler-guarded (`title={hidden ? undefined : event.overview}`); its
-      replacement, `CalendarEventRow.tsx` (extracted for the mobile pass's
-      day-sheet reuse, see `docs/TODO_ARCHIVE.md`), has no title/overview
-      prop at all. A user hovering a calendar entry in the Agenda list or
-      Month view's day sheet no longer sees the episode/movie synopsis
-      tooltip that existed before; `event.overview` is now dead in the UI
-      layer (only referenced in test fixtures). Not a crash, but a UI
-      feature and its spoiler-safety guard quietly disappeared.
-
-- [ ] **Adopt `CollapsiblePanel` in the 8 filter-panel components instead of a hand-rolled `<details>` shell** (2026-09-21 added, M5 review; Not yet scheduled)
-
-      All 8 filter panels (5 in `components/library/`, 3 in
-      `components/admin/`) hand-roll an identical `<details><summary>`
-      collapsible shell byte-for-byte, even though `CollapsiblePanel.tsx`
-      (extracted this same milestone, replacing 27 other hand-rolled
-      instances - see `docs/TODO_ARCHIVE.md`) was built for exactly this.
-      A future change to the section header (an active-filter indicator,
-      an `aria-expanded` fix) has to be hand-applied identically across 8
-      files. `DroppedFilterPanel`, `MfaFilterPanel` and
-      `VerifiedFilterPanel` are also structurally identical aside from a
-      type name and could collapse into one generic component.
-
-- [ ] **`UserBulkActions.tsx` duplicates the same mutation/ternary shape 5 times** (2026-09-21 added, M5 review; Not yet scheduled)
-
-      Five near-identical `useMutation` blocks (delete/promote/demote/
-      revoke/reset-password) differ only in the API call and an
-      action-name string, and the same delete/promote/demote three-way
-      ternary chain is repeated four separate times (mutation selection,
-      dialog title, body, confirm-button label). Adding a 6th bulk action
-      means copying a 12-line block and separately updating four ternary
-      chains; a copy-paste slip in any one of the four (e.g. forgetting to
-      update the button-label chain) produces a dialog whose title/body/
-      button silently disagrees with which mutation actually runs, with no
-      type error to catch it.
 
 ## TV Shows / Movies gallery follow-ups
 
@@ -175,7 +133,11 @@ Format:
 
       **Status** needs the same schema/API addition (no `status` field on
       `WatchlistItemMedia` either) plus a genuine design decision James
-      flagged 2026-09-21, still open: `StatusFilterPanel.tsx` has only
+      flagged 2026-09-21, still open: the generic
+      `components/ui/KeyedFilterPanel.tsx` (renamed from the
+      single-purpose `StatusFilterPanel.tsx` during the M5 filter-panel
+      consolidation, see `docs/TODO_ARCHIVE.md`), which `ShowsPage.tsx`
+      now uses (`keys={availableStatuses}`) for status filtering, has only
       ever been used on `ShowsPage.tsx` for shows alone - `MoviesPage.tsx`
       has no status filter at all today, confirmed by grep. Shows and
       movies use completely different TMDB status value sets ("Returning
@@ -238,14 +200,17 @@ Format:
       detail page's own UI for this too, not just Show. One shared
       component today, but the two pages don't offer it the same amount
       of surrounding room: `ShowDetailPage.tsx`'s action row carries
-      Watched, `+`, Drop, Watchlist, a sort-order icon, and refresh (six
-      controls), while `MovieDetailPage.tsx`'s has Watched, `+`,
-      Watchlist, and refresh (four - no Drop, no sort-order, per the
-      phone-width audit TODO above), so a redesign that reads fine in
-      Movie's more spacious row could still feel cramped in Show's, or
-      vice versa. Check the fix against both pages' actual layouts before
-      calling it done, not just against whichever page it was designed
-      against first.
+      Watched, `+`, Drop, and Watchlist (which itself renders two buttons,
+      the bookmark toggle and the manage-lists button), plus Refresh - six
+      buttons from five named controls, no separate sort-order control
+      (corrected 2026-09-22; none exists on this page) - while
+      `MovieDetailPage.tsx`'s has Watched, `+`, Watchlist, and Refresh
+      (four named controls, five buttons - no Drop, per the phone-width
+      audit TODO above), so a redesign that reads fine in Movie's more
+      spacious row could still feel cramped in Show's, or vice versa.
+      Check the fix against both pages' actual layouts before calling it
+      done, not just against whichever page it was designed against
+      first.
 
       Genuinely open on the shape of a fix - no direction picked yet.
       Possible angles worth considering when this gets picked up: a badge/
@@ -324,52 +289,11 @@ Format:
       a separate call site and a separate judgment call from what the
       season-route fix asked for - not changed as part of it.
 
-- [ ] **The "has this episode aired" predicate is duplicated across ~5-10 call sites** (2026-09-21 added, M5 review; Not yet scheduled)
-
-      `e.firstAired !== null && new Date(e.firstAired) <= now` (or its
-      equivalent) is independently re-typed in
-      `apps/api/src/routes/library/shows.ts`, `seasons.ts`, `shared.ts`,
-      `metadata/refresh.ts`, `plays.ts`, and several client-side booleans,
-      rather than importing the one version already in `shared.ts`. The
-      two copies added fresh in the M5 "block rating/watching unreleased
-      content" work (rather than reusing `shared.ts`'s version) show the
-      drift risk directly: a future correctness fix to the aired/released
-      rule (timezone handling, a grace period) needs finding and patching
-      every call site in lockstep.
-
-- [ ] **Season-detail reconciliation issues one `UPDATE` per changed episode instead of one batched query** (2026-09-21 added, M5 review; Not yet scheduled)
-
-      `apps/api/src/routes/library/seasons.ts`'s per-episode
-      reconciliation loop (added alongside the season/episode drift fix,
-      see `docs/TODO_ARCHIVE.md`) issues one awaited `db.update(episodes)`
-      per changed row inside a `for...of`, on every season-detail page
-      load. For a season where several episodes' cached fields differ
-      from the live provider values (a routine steady-state case when a
-      provider corrects data after the fact), each `GET` pays N sequential
-      round trips instead of one batched `UPDATE`.
-
-- [ ] **`buildMoviesEvents` duplicates its `spoilerHidden` computation inline, unlike `buildShowsEvents`** (2026-09-21 added, M5 review; Not yet scheduled)
-
-      `apps/api/src/calendar/build.ts`'s `buildShowsEvents` was refactored
-      during M5 to compute `spoilerHidden` once and reuse it for
-      summary/description (fixing a real leak where an unwatched
-      episode's title leaked into the .ics `SUMMARY` field even with
-      spoiler protection on - see `docs/TODO_ARCHIVE.md`). The
-      structurally-parallel `buildMoviesEvents` wasn't given the same
-      refactor and still computes
-      `user.spoilerProtectionEnabled && !row.watched` twice inline.
-      Confirmed this is not currently a live bug (both inline occurrences
-      read the same two never-mutated values, and a movie's title/year
-      isn't spoiler content the way an episode title is), but it's
-      duplicated-but-consistent code in the same file that just fixed the
-      identical class of drift bug for shows - a future spoiler-condition
-      change applied by copy-paste could reintroduce it.
-
 - [ ] **IMDb ratings on Movies (and maybe TV Shows)** (2026-09-01 13:35 added, shelved 2026-09-01, not on any milestone)
 
       Would show a rating badge next to the existing plain-text "IMDb"
-      link on the detail pages (`MovieDetailPage.tsx`, around line 288 as
-      of 2026-09-16, drifted from 276 when this item was first logged;
+      link on the detail pages (`MovieDetailPage.tsx`, around line 287 as
+      of 2026-09-22, drifted from 276 when this item was first logged;
       that link's own comment currently says "this app holds no IMDb
       rating"). Link groundwork (`imdbId` already resolved for most
       movies/shows) exists; only the rating value itself is missing.
@@ -425,16 +349,6 @@ Format:
       restore path is still open and wants its own decision, not a quick
       follow-on to the manual "back up now" button (shipped 2026-09-17,
       see `docs/TODO_ARCHIVE.md`).
-
-- [ ] **Per-user backup Diff dialog's `findByRef` is O(entries x library size)** (2026-09-21 added, M5 review; Not yet scheduled)
-
-      `apps/api/src/backup/diff.ts`'s `findByRef` does a linear
-      `Array.find` over `file.movies`/`file.shows`, called once per diff
-      entry (every added/removed watch, rating, watchlist item, dropped
-      show) via `mediaRefParts`/`describeDroppedShow`. For a user with a
-      large watch history and library, viewing a backup diff scales
-      multiplicatively with both. A `Map` keyed by `` `${source}:${externalId}` ``
-      built once per file would make each lookup O(1).
 
 ## Security
 
@@ -738,49 +652,6 @@ Format:
       with no new endpoint needed. A genuine Trakt API error during
       refresh still surfaces as itself, unaffected.
 
-- [ ] **`WebhookCard.tsx`'s source-picker fails silently on a losing concurrent request** (2026-09-21 added, M5 review; Not yet scheduled)
-
-      The `setSource` mutation has no `onError` handler, and the app has
-      no global toast/error mechanism to catch it either (checked
-      `apps/web/src/lib/query-client.ts`). The source-picker only disables
-      the specific button just clicked
-      (`isPending && variables === option`), so sibling source buttons
-      stay clickable while a request is in flight. A user who clicks two
-      different source options in quick succession fires two concurrent
-      `PATCH /tokens/{id}` requests; the loser gets the route's 409
-      ("Source is already set and cannot be changed") with zero UI
-      feedback.
-
-- [ ] **Extract the webhook self-link/redeem routes' shared claim logic into one helper** (2026-09-21 added, M5 review; Not yet scheduled)
-
-      `apps/api/src/routes/tokens.ts`'s `claimLink` and
-      `apps/api/src/routes/webhook-links.ts`'s redeem handler duplicate
-      the same transaction/check/error-mapping shape (lock, check
-      `hasLinkedSource`, check `hasConflictingServerLink`, write) with
-      separate, differently-named error classes for the same three
-      outcomes. This duplication is the direct root cause of a real bug
-      already fixed 2026-09-21 (see `docs/TODO_ARCHIVE.md`): the
-      `lockUserSource` advisory-lock fix landed in `tokens.ts` only and
-      was never backported to `webhook-links.ts`, because the invariant
-      logic lived in two independent copies. Worth extracting to
-      `lib/webhook-accounts.ts` so both routes call the same function -
-      possibly also merging `hasLinkedSource`/`hasConflictingServerLink`'s
-      two sequential round trips into one query, and replacing the
-      throw-based signaling (three custom `Error` subclasses forcing an
-      `instanceof` cascade) with a discriminated-union return, while
-      already in this code.
-
-- [ ] **`lockUserSource` duplicates `plays.ts`'s `lockEntity` locking primitive** (2026-09-21 added, M5 review; Not yet scheduled)
-
-      `apps/api/src/lib/webhook-accounts.ts`'s `lockUserSource`
-      re-implements the same `pg_advisory_xact_lock(hashtext($1),
-      hashtext($2))` two-key locking shape already used by the private
-      `lockEntity` function in `apps/api/src/lib/plays.ts` (the diff's own
-      comment on `lockUserSource` notes "same shape as ... lockEntity").
-      Worth generalizing `lockEntity` into a shared exported helper so a
-      future correctness fix to the locking approach only needs applying
-      once.
-
 ## Roadmap
 
 Every open item from [ROADMAP.md](ROADMAP.md) that doesn't already have a
@@ -835,11 +706,12 @@ source of truth for scope; this is just so a TODO listing is complete.
 
       A public view of a user's watch history/stats.
 
-- [ ] **Configurable or optional landing page for self-hosted instances** (2026-09-17 added; Not yet scheduled)
+- [ ] **Configurable or optional landing page for self-hosted instances** (2026-09-17 added, status strip count corrected 2026-09-22; Not yet scheduled)
 
       `LandingPage.tsx` (route `/`) is deliberately rwnd.tv's own marketing
-      page: the self-host CTA, GitHub/vision.md links, the M1-M4 status
-      strip, the "Built with Claude Code" note, all specific to this
+      page: the self-host CTA, GitHub/vision.md links, the M1-M5 status
+      strip (M1-M4 as of when this item was added; M5 shipped since), the
+      "Built with Claude Code" note, all specific to this
       project's own identity and positioning (see CLAUDE.md's "Public-
       facing design surfaces" section). James, 2026-09-17: that's right
       for rwnd.tv itself, but a self-hoster running their own instance

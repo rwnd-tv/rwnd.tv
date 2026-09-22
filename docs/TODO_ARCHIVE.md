@@ -424,6 +424,49 @@ grouping, sorted oldest to newest.
       unconfigured state. The invites-list query still stays disabled
       outside invite-only mode, so nothing extra gets fetched.
 
+- [x] **Two small UI findings from the M5 milestone review: `EpisodeCard`'s bare watch-toggle icon, and `CalendarEventTile`'s lost synopsis tooltip** (2026-09-21 added, M5 review, fixed 2026-09-22)\
+      `EpisodeCard.tsx`'s watch-toggle button rendered as a bare unlabeled
+      circle for an aired-but-unwatched episode with no play logged, since
+      its inner expression (`episode.watched && <CheckIcon />`) evaluated
+      to `false` rather than falling back to any icon. Fixed by rendering
+      `<CheckIcon />` unconditionally in that branch.\
+      Separately, deleting `CalendarEventTile.tsx` (replaced by
+      `CalendarEventRow.tsx` for the mobile pass's day-sheet reuse) had
+      dropped the spoiler-guarded synopsis `title` tooltip with no
+      replacement. `CalendarEventRow.tsx` now carries the same
+      spoiler-guarded `title` attribute the deleted tile had. Both fixed
+      in commit `5b1f64f` ("Fix two small UI findings from the M5
+      milestone review").
+
+- [x] **Adopt a shared collapsible shell in the filter-panel components instead of a hand-rolled `<details>`, and generalize the structurally-identical boolean/keyed panels** (2026-09-21 added, M5 review, fixed 2026-09-22)\
+      All the filter panels in `components/library/` and
+      `components/admin/` hand-rolled an identical `<details><summary>`
+      collapsible shell byte-for-byte, even though `CollapsiblePanel.tsx`
+      (see the "Six reuse/simplification cleanups" entry above) was built
+      for exactly this. `DroppedFilterPanel`, `MfaFilterPanel`, and
+      `VerifiedFilterPanel` were also structurally identical aside from a
+      type name, and `StatusFilterPanel`/`RoleFilterPanel` likewise.\
+      Fixed in commit `d2bbbcb` ("Consolidate the 'Filters…' panel's shell
+      and its duplicated boolean/keyed panels"): a new
+      `components/library/FilterSection.tsx` became the shared shell for
+      all 12 filter panels, and two new generic components replaced the
+      structurally-identical ones - `components/ui/BooleanFilterPanel.tsx`
+      (replacing `DroppedFilterPanel`/`MfaFilterPanel`/
+      `VerifiedFilterPanel`) and `components/ui/KeyedFilterPanel.tsx`
+      (replacing `StatusFilterPanel`/`RoleFilterPanel`, keyed by an
+      arbitrary string set, e.g. `keys={availableStatuses}`).
+
+- [x] **`UserBulkActions.tsx` duplicates the same mutation/ternary shape 5 times** (2026-09-21 added, M5 review, fixed 2026-09-22)\
+      Five near-identical `useMutation` blocks (delete/promote/demote/
+      revoke/reset-password) differed only in the API call and an
+      action-name string, and the same delete/promote/demote three-way
+      ternary chain was repeated four separate times (mutation selection,
+      dialog title, body, confirm-button label). Fixed in commit
+      `12828a5` ("Consolidate UserBulkActions' four action-shaped ternary
+      chains into a config table"): a `Record<BulkActionKind, entry>`
+      config table now drives all four, so a new bulk action needs one new
+      table entry rather than four separately-updated chains.
+
 ## TV Shows / Movies gallery follow-ups
 
 - [x] **Gallery nav overflow on narrow viewports** (2026-08-19 15:25)\
@@ -2839,6 +2882,37 @@ episodes.imdb_checked_at IS NOT NULL`, run against dev (0 rows — nothing
       full `apps/api` suite (901+ tests) green; confirmed live on
       dev.rwnd.tv.
 
+- [x] **The "has this episode aired" predicate was duplicated across ~5-10 call sites** (2026-09-21 added, M5 review, fixed 2026-09-22)\
+      `e.firstAired !== null && new Date(e.firstAired) <= now` (or its
+      equivalent) had been independently re-typed in
+      `apps/api/src/routes/library/shows.ts`, `seasons.ts`, `shared.ts`,
+      `metadata/refresh.ts`, `plays.ts`, and several client-side booleans.
+      Fixed in commit `e70e7a0` ("Extract a shared hasAired predicate to
+      packages/shared"): a new `hasAired()` helper in
+      `packages/shared/src/aired.ts` is now imported consistently at every
+      one of those sites, plus `ratings.ts` and
+      `use-episode-watch-actions.ts` on the client.
+
+- [x] **Season-detail reconciliation issued one `UPDATE` per changed episode instead of one batched query** (2026-09-21 added, M5 review, fixed 2026-09-22)\
+      `apps/api/src/routes/library/seasons.ts`'s per-episode reconciliation
+      loop (see the entry above) issued one awaited `db.update(episodes)`
+      per changed row inside a `for...of`, on every season-detail page
+      load. Fixed in commit `e38d481` ("Batch the season-detail
+      reconciliation UPDATE into one query"): a single batched `UPDATE`
+      using a `CASE WHEN id = ...` per column, scoped with `inArray`,
+      replaces the per-row loop.
+
+- [x] **`buildMoviesEvents` duplicated its `spoilerHidden` computation inline, unlike `buildShowsEvents`** (2026-09-21 added, M5 review, fixed 2026-09-22)\
+      `apps/api/src/calendar/build.ts`'s `buildShowsEvents` computed
+      `spoilerHidden` once and reused it for summary/description (fixing a
+      real spoiler-leak bug during M5, see the calendar .ics entry below);
+      the structurally-parallel `buildMoviesEvents` still computed
+      `user.spoilerProtectionEnabled && !row.watched` twice inline. Not a
+      live bug (both occurrences read the same never-mutated values), but
+      duplicated-but-consistent code next to the fix for the identical
+      class of drift in shows. Fixed in commit `14bb60d` ("Compute
+      buildMoviesEvents' spoilerHidden once instead of twice inline").
+
 ## Webhooks & scrobbling
 
 - [x] **Plex webhook ingestion** (2026-08-23 15:30 added, done 2026-08-24) — M2\
@@ -4386,6 +4460,17 @@ DATABASE` ×2) — zero residue.\
       dump's time-of-day): exactly one dump per calendar day on both
       instances throughout, no same-day duplicates even across restarts.
 
+- [x] **Per-user backup Diff dialog's `findByRef` was O(entries x library size)** (2026-09-21 added, M5 review, fixed 2026-09-22)\
+      `apps/api/src/backup/diff.ts`'s `findByRef` did a linear `Array.find`
+      over `file.movies`/`file.shows`, called once per diff entry (every
+      added/removed watch, rating, watchlist item, dropped show) via
+      `mediaRefParts`/`describeDroppedShow`, scaling multiplicatively with
+      both entry count and library size. Fixed in commit `0293659`
+      ("Replace backup diff's O(n×m) findByRef with an O(1) Map lookup"):
+      a new `indexByRef()` builds a `BackupRefIndex` Map keyed by
+      `` `${source}:${externalId}` `` once per file, making each lookup
+      O(1).
+
 ## Self-hosting & deployment
 
 - [x] **`docker-compose.yml` never passes through `TVDB_API_KEY`/`TVDB_PIN`/`ENVIRONMENT_LABEL`** (2026-08-26 added, done 2026-08-26) — M3\
@@ -5032,6 +5117,46 @@ includeSubDomains; preload`) now that its HSTS setting is on too.
       Redundant but harmless — both agree on "always HTTPS," and this is
       the last item from the 2026-08-29 security review's Security
       section, which is now fully closed.
+
+- [x] **`WebhookCard.tsx`'s source-picker failed silently on a losing concurrent request** (2026-09-21 added, M5 review, fixed 2026-09-22)\
+      The `setSource` mutation had no `onError` handler, and the app had
+      no global toast/error mechanism to catch it either. The
+      source-picker only disabled the specific button just clicked
+      (`isPending && variables === option`), so sibling source buttons
+      stayed clickable while a request was in flight, meaning a user who
+      clicked two different source options in quick succession could fire
+      two concurrent `PATCH /tokens/{id}` requests with the loser's 409
+      going nowhere. Fixed in commit `c856b19` ("Fix WebhookCard's silent
+      failure on a raced or stale source pick"): `setSource` now has an
+      `onError` handler that surfaces a `sourceError` message, and all
+      source buttons disable together (`disabled={setSource.isPending}`)
+      while any request is pending.
+
+- [x] **Extract the webhook self-link/redeem routes' shared claim logic into one helper, and unify `lockUserSource`/`lockEntity`'s duplicated advisory-lock primitive** (2026-09-21 added, M5 review, fixed 2026-09-22)\
+      `apps/api/src/routes/tokens.ts`'s `claimLink` and
+      `apps/api/src/routes/webhook-links.ts`'s redeem handler duplicated
+      the same transaction/check/error-mapping shape (lock, check
+      `hasLinkedSource`, check `hasConflictingServerLink`, write) with
+      separate, differently-named error classes for the same three
+      outcomes - the direct root cause of a real bug already fixed
+      2026-09-21 (see the M4 milestone-wide review entry above): the
+      `lockUserSource` advisory-lock fix had landed in `tokens.ts` only and
+      was never backported to `webhook-links.ts`, because the invariant
+      logic lived in two independent copies. Separately,
+      `lib/webhook-accounts.ts`'s `lockUserSource` re-implemented the same
+      `pg_advisory_xact_lock(hashtext($1), hashtext($2))` two-key locking
+      shape already used by `lib/plays.ts`'s private `lockEntity`.\
+      Fixed in commit `9fde200` ("Dedupe webhook claim-locking logic
+      behind a shared advisory-lock primitive"): a new `lib/locks.ts`
+      exports `lockUserScope` as the single shared advisory-lock primitive
+      (`plays.ts`'s `lockEntity` now delegates to it), and
+      `lib/webhook-accounts.ts` now exports `claimLinkForUser`/
+      `claimLinkForUserOrThrow`, used by both `tokens.ts` and
+      `webhook-links.ts`, with one `ClaimFailureReason` union and one
+      shared response copy in place of the two previously differently-worded
+      error classes. The now-dead standalone `lockUserSource` was removed
+      in the immediately-following commit `151e153` ("Remove dead
+      lockUserSource, un-export hasConflictingServerLink").
 
 ## Documentation
 

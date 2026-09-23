@@ -6,6 +6,7 @@ import type { MetadataProvider } from '../providers/types.js'
 import { orderedProviders } from '../providers/priority.js'
 import { resolveSeason, upsertExternalId } from '../lib/media.js'
 import { resolveEpisodeImdbId } from '../lib/episode-imdb.js'
+import { alertOnJobFailure } from '../lib/job-alerts.js'
 
 /**
  * Keeps cached show/movie metadata (apps/api/src/lib/media.ts's
@@ -1223,6 +1224,16 @@ export async function runMetadataRefresh(
   episodeOverviewSeasonsFilled: number
   episodeRuntimeSeasonsFilled: number
   episodeTitlesFilled: number
+  /** Candidates with a resolvable provider target, i.e. where
+   * refreshOneShow/refreshOneMovie was actually attempted — a candidate
+   * with no target at all is a no-op skip, not an attempt, and stays
+   * uncounted here just like it stays uncounted against *Refreshed above.
+   * Used by runAndAlertMetadataRefresh to tell "nothing needed doing"
+   * apart from "everything failed." */
+  showsAttempted: number
+  showsFailed: number
+  moviesAttempted: number
+  moviesFailed: number
 }> {
   const [locale, ordered, staleShows, staleMovies] = await Promise.all([
     currentLocale(db),
@@ -1238,12 +1249,15 @@ export async function runMetadataRefresh(
     ordered,
   )
   let showsRefreshed = 0
+  let showsAttempted = 0
+  let showsFailed = 0
   for (const candidate of staleShows) {
     // No configured provider has any id for this show at all — a no-op
     // skip, not a failed refresh, so it's neither counted nor logged as an
     // error (there's nothing an admin could act on here).
     const target = showTargets.get(candidate.id)
     if (!target) continue
+    showsAttempted += 1
     try {
       await refreshOneShow(
         db,
@@ -1253,6 +1267,7 @@ export async function runMetadataRefresh(
       )
       showsRefreshed += 1
     } catch (err) {
+      showsFailed += 1
       console.error(`Metadata refresh failed for show ${candidate.id}:`, err)
     }
     await sleep(REQUEST_STAGGER_MS)
@@ -1266,6 +1281,7 @@ export async function runMetadataRefresh(
   )
   let moviesRefreshed = 0
   let moviesAttempted = 0
+  let moviesFailed = 0
   for (const candidate of staleMovies) {
     // No configured provider has any id for this movie — a no-op skip,
     // same as the shows loop above, and deliberately NOT counted against
@@ -1285,6 +1301,7 @@ export async function runMetadataRefresh(
       )
       moviesRefreshed += 1
     } catch (err) {
+      moviesFailed += 1
       console.error(`Metadata refresh failed for movie ${candidate.id}:`, err)
     }
     await sleep(REQUEST_STAGGER_MS)
@@ -1302,6 +1319,84 @@ export async function runMetadataRefresh(
     episodeOverviewSeasonsFilled,
     episodeRuntimeSeasonsFilled,
     episodeTitlesFilled,
+    showsAttempted,
+    showsFailed,
+    moviesAttempted,
+    moviesFailed,
+  }
+}
+
+/** How much of a pass's refresh attempts have to fail before it's worth an
+ * admin's attention — tolerant enough to absorb the occasional transient
+ * 404/5xx this module's own doc comment already treats as unremarkable
+ * ("errors on one item ... are logged and skipped rather than aborting the
+ * whole pass"), but low enough to catch a fully dead or rate-limited
+ * provider key, which pushes the rate toward 1.0 since every attempt in
+ * the pass fails the same way. */
+const METADATA_REFRESH_FAILURE_ALERT_THRESHOLD = 0.5
+
+/**
+ * Runs one pass and alerts (lib/job-alerts.ts) on either failure shape:
+ * a high attempt-failure rate within a completed pass (see
+ * METADATA_REFRESH_FAILURE_ALERT_THRESHOLD above — the case a plain "did
+ * it throw" check would miss, since a dead provider key fails every item
+ * individually rather than the pass as a whole), or the rarer case of the
+ * pass itself throwing (e.g. the database being unreachable). Split out
+ * from scheduleMetadataRefresh below the same way
+ * runAndRecordDatabaseBackup is split from scheduleDatabaseBackup
+ * (database-backup.ts) — this is a plain testable async function; the
+ * scheduler around it isn't (it's deliberately outside createApp(), so no
+ * test ever calls it — see this function's own scheduler's doc comment).
+ */
+export async function runAndAlertMetadataRefresh(
+  db: Database,
+  providers: MetadataProvider[],
+): Promise<void> {
+  try {
+    const {
+      showsRefreshed,
+      moviesRefreshed,
+      episodeImdbIdsFilled,
+      episodeOverviewSeasonsFilled,
+      episodeRuntimeSeasonsFilled,
+      episodeTitlesFilled,
+      showsAttempted,
+      showsFailed,
+      moviesAttempted,
+      moviesFailed,
+    } = await runMetadataRefresh(db, providers)
+
+    if (
+      showsRefreshed ||
+      moviesRefreshed ||
+      episodeImdbIdsFilled ||
+      episodeOverviewSeasonsFilled ||
+      episodeRuntimeSeasonsFilled ||
+      episodeTitlesFilled
+    ) {
+      console.log(
+        `Metadata refresh: ${showsRefreshed} show(s), ${moviesRefreshed} movie(s) updated, ` +
+          `${episodeImdbIdsFilled} episode IMDb id(s) filled, ` +
+          `${episodeOverviewSeasonsFilled} episode overview season(s) filled, ` +
+          `${episodeRuntimeSeasonsFilled} episode runtime season(s) filled, ` +
+          `${episodeTitlesFilled} episode title(s) filled.`,
+      )
+    }
+
+    const attempted = showsAttempted + moviesAttempted
+    const failed = showsFailed + moviesFailed
+    if (attempted > 0 && failed / attempted >= METADATA_REFRESH_FAILURE_ALERT_THRESHOLD) {
+      void alertOnJobFailure(
+        db,
+        'Metadata refresh',
+        `${failed} of ${attempted} refresh attempts failed this pass. Check the server ` +
+          `logs for details — this usually means a metadata provider API key has expired ` +
+          `or is being rate-limited.`,
+      )
+    }
+  } catch (err) {
+    console.error('Metadata refresh pass failed:', err)
+    void alertOnJobFailure(db, 'Metadata refresh', err instanceof Error ? err.message : String(err))
   }
 }
 
@@ -1315,36 +1410,7 @@ export async function runMetadataRefresh(
  */
 export function scheduleMetadataRefresh(db: Database, providers: MetadataProvider[]): void {
   const DAY_MS = 24 * 60 * 60 * 1000
-  const run = () =>
-    runMetadataRefresh(db, providers)
-      .then(
-        ({
-          showsRefreshed,
-          moviesRefreshed,
-          episodeImdbIdsFilled,
-          episodeOverviewSeasonsFilled,
-          episodeRuntimeSeasonsFilled,
-          episodeTitlesFilled,
-        }) => {
-          if (
-            showsRefreshed ||
-            moviesRefreshed ||
-            episodeImdbIdsFilled ||
-            episodeOverviewSeasonsFilled ||
-            episodeRuntimeSeasonsFilled ||
-            episodeTitlesFilled
-          ) {
-            console.log(
-              `Metadata refresh: ${showsRefreshed} show(s), ${moviesRefreshed} movie(s) updated, ` +
-                `${episodeImdbIdsFilled} episode IMDb id(s) filled, ` +
-                `${episodeOverviewSeasonsFilled} episode overview season(s) filled, ` +
-                `${episodeRuntimeSeasonsFilled} episode runtime season(s) filled, ` +
-                `${episodeTitlesFilled} episode title(s) filled.`,
-            )
-          }
-        },
-      )
-      .catch((err: unknown) => console.error('Metadata refresh pass failed:', err))
+  const run = () => runAndAlertMetadataRefresh(db, providers)
   void run()
   setInterval(() => void run(), DAY_MS)
 }

@@ -7,9 +7,12 @@ import type { MetadataProvider, ProviderSeason } from '../providers/types.js'
 import {
   backfillShowEpisodeRuntimes,
   refreshOneShow,
+  runAndAlertMetadataRefresh,
   runMetadataRefresh,
 } from '../metadata/refresh.js'
 import { resetDb, testDb } from './helpers.js'
+
+vi.mock('../lib/job-alerts.js', () => ({ alertOnJobFailure: vi.fn() }))
 
 const db = testDb()
 const provider = createMetadataProviders(loadEnv())[0]!
@@ -962,6 +965,9 @@ describe('metadata refresh', () => {
     const result = await runMetadataRefresh(db, [provider])
     expect(result.showsRefreshed).toBe(0)
     expect(fetchMock).not.toHaveBeenCalled()
+    // A no-target skip is a no-op, not an attempt — see runMetadataRefresh's
+    // own doc comment on showsAttempted.
+    expect(result.showsAttempted).toBe(0)
   })
 
   it('skips a show whose only external id is from a source none of the configured providers use', async () => {
@@ -1012,6 +1018,10 @@ describe('metadata refresh', () => {
     expect(result.showsRefreshed).toBe(1) // the 404'd show doesn't count...
     const okSeasons = await db.select().from(seasons).where(eq(seasons.showId, ok.id))
     expect(okSeasons).toHaveLength(1) // ...but the other show still went through
+    // Both shows had a resolvable target, so both count as attempted — one
+    // of the two failed.
+    expect(result.showsAttempted).toBe(2)
+    expect(result.showsFailed).toBe(1)
   })
 
   // Same backfill-gap regression class as the shows genres test above,
@@ -1173,6 +1183,30 @@ describe('metadata refresh', () => {
     const result = await runMetadataRefresh(db, [provider])
     expect(result.moviesRefreshed).toBe(0)
     expect(fetchMock).not.toHaveBeenCalled()
+    expect(result.moviesAttempted).toBe(0)
+  })
+
+  it("one movie's TMDB failure does not stop the rest of the sweep from being refreshed", async () => {
+    await insertMovie({ tmdbId: 404, metadataRefreshedAt: new Date() })
+    const ok = await insertMovie({ tmdbId: 22, metadataRefreshedAt: new Date() })
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: string | URL) => {
+        const url = new URL(input)
+        if (url.pathname === '/3/movie/404') {
+          return new Response('{"status_message":"Not Found"}', { status: 404 })
+        }
+        return new Response(tmdbMovieResponse({ id: 22, genres: ['Comedy'] }), { status: 200 })
+      }),
+    )
+
+    const result = await runMetadataRefresh(db, [provider])
+    expect(result.moviesRefreshed).toBe(1) // the 404'd movie doesn't count...
+    const [updated] = await db.select().from(movies).where(eq(movies.id, ok.id))
+    expect(updated?.genres).toEqual(['Comedy']) // ...but the other movie still went through
+    expect(result.moviesAttempted).toBe(2)
+    expect(result.moviesFailed).toBe(1)
   })
 
   describe('cross-provider episode runtime backfill', () => {
@@ -1735,5 +1769,80 @@ describe('metadata refresh', () => {
       const [row] = await db.select().from(episodes).where(eq(episodes.showId, show.id))
       expect(row?.title).toBe('Episode 7')
     })
+  })
+})
+
+describe('runAndAlertMetadataRefresh', () => {
+  beforeEach(async () => {
+    await resetDb(db)
+    vi.clearAllMocks()
+  })
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('does not alert when nothing was stale (zero attempts)', async () => {
+    const { alertOnJobFailure } = await import('../lib/job-alerts.js')
+    vi.stubGlobal('fetch', vi.fn())
+
+    await runAndAlertMetadataRefresh(db, [provider])
+
+    expect(alertOnJobFailure).not.toHaveBeenCalled()
+  })
+
+  it('does not alert when the failure rate stays below the threshold', async () => {
+    const { alertOnJobFailure } = await import('../lib/job-alerts.js')
+    // 1 of 3 fails — below METADATA_REFRESH_FAILURE_ALERT_THRESHOLD (0.5).
+    await insertShow({ tmdbId: 404, status: null, metadataRefreshedAt: new Date() })
+    await insertShow({ tmdbId: 1, status: null, metadataRefreshedAt: new Date() })
+    await insertShow({ tmdbId: 2, status: null, metadataRefreshedAt: new Date() })
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: string | URL) => {
+        const url = new URL(input)
+        if (url.pathname === '/3/tv/404') {
+          return new Response('{"status_message":"Not Found"}', { status: 404 })
+        }
+        const id = Number(url.pathname.split('/').pop())
+        return new Response(
+          tmdbShowResponse({
+            id,
+            status: 'Ended',
+            seasons: [{ season_number: 1, episode_count: 1 }],
+          }),
+          { status: 200 },
+        )
+      }),
+    )
+
+    await runAndAlertMetadataRefresh(db, [provider])
+
+    expect(alertOnJobFailure).not.toHaveBeenCalled()
+  })
+
+  it('alerts when the failure rate meets the threshold, e.g. a dead provider key', async () => {
+    const { alertOnJobFailure } = await import('../lib/job-alerts.js')
+    await insertShow({ tmdbId: 404, status: null, metadataRefreshedAt: new Date() })
+    await insertShow({ tmdbId: 405, status: null, metadataRefreshedAt: new Date() })
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('{}', { status: 401 })),
+    )
+
+    await runAndAlertMetadataRefresh(db, [provider])
+
+    expect(alertOnJobFailure).toHaveBeenCalledWith(
+      db,
+      'Metadata refresh',
+      expect.stringContaining('2 of 2 refresh attempts failed'),
+    )
+  })
+
+  it('alerts with the error message when the whole pass throws', async () => {
+    const { alertOnJobFailure } = await import('../lib/job-alerts.js')
+    const { createDatabase } = await import('@rwnd/db')
+    const brokenDb = createDatabase('postgres://baduser:badpass@no-such-host.invalid:5432/nope')
+
+    await runAndAlertMetadataRefresh(brokenDb, [provider])
+
+    expect(alertOnJobFailure).toHaveBeenCalledWith(brokenDb, 'Metadata refresh', expect.any(String))
   })
 })

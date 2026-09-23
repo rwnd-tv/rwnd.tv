@@ -14,6 +14,7 @@ import { loadEnv } from '../env.js'
 // what lets a scheduled/manual backup refuse to start once a restore is
 // queued — see its use in runDatabaseBackup below for why.
 import { hasPendingRestore } from './database-restore.js'
+import { alertOnJobFailure } from './job-alerts.js'
 
 /**
  * Only files matching this are ever considered, for listing or for deletion.
@@ -686,23 +687,43 @@ export function msUntilNextHourUtc(hourUtc: number, now: Date): number {
  * at the call site so index.ts stays a flat list of unconditional calls and
  * the reasoning sits next to the code that needs it.
  */
+/**
+ * One scheduled backup attempt: run it, and on a real failure (not
+ * BackupAlreadyRunningError, which just means another run — a different
+ * container during a deploy, or a manual "back up now" trigger — already
+ * holds the lock) alert the admin. Split out from scheduleDatabaseBackup
+ * below the same way runAndAlertMetadataRefresh is split from
+ * scheduleMetadataRefresh (metadata/refresh.ts) — this is a plain testable
+ * async function; the scheduler around it isn't, since schedule* functions
+ * are deliberately outside createApp() and no test ever calls them. Only
+ * the scheduled path alerts, not the manual `POST /admin/database-backups/run`
+ * route (admin-database-backups.ts, which also calls runAndRecordDatabaseBackup
+ * directly) — a manual trigger's failure is already visible in that
+ * request's own response, right in front of whoever clicked the button.
+ */
+export async function runScheduledDatabaseBackup(opts: {
+  db: Database
+  dir: string
+  databaseUrl: string
+}): Promise<void> {
+  try {
+    await runAndRecordDatabaseBackup(opts)
+  } catch (err) {
+    if (err instanceof BackupAlreadyRunningError) {
+      console.log(`Database backup: skipped (${err.message})`)
+      return
+    }
+    void alertOnJobFailure(opts.db, 'Database backup', describeFailure(err))
+  }
+}
+
 export function scheduleDatabaseBackup(db: Database): void {
   const env = loadEnv()
   const dir = env.DATABASE_BACKUP_DIR
   if (!dir) return
 
   const DAY_MS = BACKUP_INTERVAL_HOURS * 60 * 60 * 1000
-  const run = () =>
-    runAndRecordDatabaseBackup({ db, dir, databaseUrl: env.DATABASE_URL }).catch((err: unknown) => {
-      // Not a failure: another run (a different container during a
-      // deploy, or a manual "back up now" trigger) already holds the
-      // lock. Any other error was already logged and recorded by
-      // runAndRecordDatabaseBackup itself, so there's nothing left to do
-      // here beyond swallowing the rejection.
-      if (err instanceof BackupAlreadyRunningError) {
-        console.log(`Database backup: skipped (${err.message})`)
-      }
-    })
+  const run = () => runScheduledDatabaseBackup({ db, dir, databaseUrl: env.DATABASE_URL })
   void run()
   setTimeout(
     () => {

@@ -5,10 +5,14 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { text } from 'node:stream/consumers'
 import { createGunzip, gzipSync } from 'node:zlib'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { eq, sql } from 'drizzle-orm'
 import { createDatabase, movies, users, watchlistItems, watchlists } from '@rwnd/db'
-import { BackupAlreadyRunningError, runDatabaseBackup } from '../lib/database-backup.js'
+import {
+  BackupAlreadyRunningError,
+  runDatabaseBackup,
+  runScheduledDatabaseBackup,
+} from '../lib/database-backup.js'
 import {
   PRE_RESTORE_RE,
   readLastRestoreResult,
@@ -16,6 +20,8 @@ import {
   writeRestoreRequest,
 } from '../lib/database-restore.js'
 import { createLocalUser, hasPgDump, resetDb, testDb } from './helpers.js'
+
+vi.mock('../lib/job-alerts.js', () => ({ alertOnJobFailure: vi.fn() }))
 
 const db = testDb()
 let DIR: string
@@ -317,6 +323,44 @@ describe.skipIf(!hasPgDump())('database backup', () => {
 
     const left = await readdir(DIR).catch(() => [])
     expect(left).not.toContain('rwnd-backup.lock')
+  })
+})
+
+describe.skipIf(!hasPgDump())('runScheduledDatabaseBackup', () => {
+  beforeEach(async () => {
+    ;[DIR] = await Promise.all([mkdtemp(join(tmpdir(), 'rwnd-tv-test-db-backups-')), resetDb(db)])
+    vi.clearAllMocks()
+  })
+
+  it('does not alert on a successful run', async () => {
+    const { alertOnJobFailure } = await import('../lib/job-alerts.js')
+
+    await runScheduledDatabaseBackup({ db, dir: DIR, databaseUrl: databaseUrl() })
+
+    expect(alertOnJobFailure).not.toHaveBeenCalled()
+  })
+
+  it('alerts with the failure message on a real failure', async () => {
+    const { alertOnJobFailure } = await import('../lib/job-alerts.js')
+    const url = new URL(databaseUrl())
+    url.hostname = 'no-such-host.invalid'
+
+    await runScheduledDatabaseBackup({ db, dir: DIR, databaseUrl: url.toString() })
+
+    expect(alertOnJobFailure).toHaveBeenCalledWith(
+      db,
+      'Database backup',
+      expect.stringContaining('no-such-host.invalid'),
+    )
+  })
+
+  it('does not alert when another run already holds the lock', async () => {
+    const { alertOnJobFailure } = await import('../lib/job-alerts.js')
+    await writeFile(join(DIR, 'rwnd-backup.lock'), '999999')
+
+    await runScheduledDatabaseBackup({ db, dir: DIR, databaseUrl: databaseUrl() })
+
+    expect(alertOnJobFailure).not.toHaveBeenCalled()
   })
 })
 

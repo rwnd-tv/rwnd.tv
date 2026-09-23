@@ -430,3 +430,29 @@ export async function sendEmailChangedNotice(
       `<p>If this was you, no action is needed: you'll need to use the new address to log in from now on. If it wasn't you, someone else may have access to your account; ${adminContactHtml}.</p>`,
   )
 }
+
+/** Sent to the instance's admin contact address when a scheduled background
+ * job (the daily database backup, the metadata refresh sweep) fails
+ * unattended — see lib/job-alerts.ts, the only caller. `instanceName` is in
+ * the subject, not just the body: a self-hoster who runs more than one
+ * instance (dev + prod, same as this project's own author) needs to know
+ * which one without opening the email first. */
+export async function sendJobFailureAlert(
+  to: string,
+  instanceName: string,
+  jobName: string,
+  message: string,
+): Promise<void> {
+  const appUrl = loadEnv().APP_URL
+  const adminUrl = `${appUrl}/admin`
+  await sendMail(
+    to,
+    `${jobName} failed on ${instanceName}`,
+    `${jobName} failed on ${instanceName}:\n\n${message}\n\nCheck the admin panel or the server logs for details:\n${adminUrl}`,
+    `<p><strong>${jobName}</strong> failed on <a href="${appUrl}">${instanceName}</a>:</p>` +
+      `<p style="color:${BRAND.muted};">${message}</p>` +
+      `<p>Check the admin panel or the server logs for details.</p>` +
+      emailButton(adminUrl, 'Open the admin panel') +
+      fallbackLinkParagraph(adminUrl),
+  )
+}

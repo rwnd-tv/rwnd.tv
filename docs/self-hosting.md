@@ -283,7 +283,7 @@ docker compose start app
 
 The dump has to be taken by a `pg_dump` matching your Postgres server's major version, because its output targets a server of that version or newer. The image bundles clients for Postgres 16, 17 and 18 and picks the right one automatically, so this only bites if you run a Postgres newer than any of those. You will see a line in `docker compose logs app` saying so, and no backups will be written until the image gains that version. Downgrading Postgres is not necessary; opening an issue is the fastest fix.
 
-The Admin page's backup status shows the same failure (an admin account without shell access does not need `docker compose logs app` to notice), so check there first.
+The Admin page's backup status shows the same failure (an admin account without shell access does not need `docker compose logs app` to notice), so check there first. If SMTP and an admin contact email (see Email below) are both configured, a scheduled backup failure also sends that address an alert email, so you don't have to be actively checking the Admin page to find out.
 
 ### Per-user backup/restore
 
@@ -303,5 +303,7 @@ Before restoring one of these files, a "Diff" button on each saved backup shows 
 ## Email
 
 Set `SMTP_HOST` (and its four companion variables above) to enable account verification emails on registration and the "Forgot password?" link on the login page. Off by default: leave `SMTP_HOST` unset and those hide themselves entirely rather than erroring; accounts created before email was ever configured are treated as already-verified, so turning this on later doesn't retroactively ask existing users to reverify.
+
+With SMTP configured and an admin contact email set (Admin → Instance settings), the instance also emails that address if a scheduled background job fails unattended: the daily database backup, or the metadata refresh sweep that keeps cached show/movie data current. Best-effort, same as every other email here: nothing about the job itself depends on the alert actually sending.
 
 Plain SMTP, not a specific provider's SDK; point it at whatever mail relay you already have: a Gmail account with an [App Password](https://myaccount.google.com/apppasswords) (`smtp.gmail.com`, port `587`), a transactional-email provider's own SMTP endpoint (Brevo, Resend, Mailgun, ...), or a mail server you run yourself. Fine to change later: nothing about the setup locks you into whichever relay you start with.

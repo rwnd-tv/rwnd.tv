@@ -1,21 +1,33 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import type { DatabaseBackupRetention } from '@rwnd/shared'
+import type { DatabaseBackupRetention, DatabaseBackupStatus } from '@rwnd/shared'
 import { api, ApiError } from '../../lib/api-client.js'
+import { useAuth } from '../../lib/use-auth.js'
+import { usePublicSettings } from '../../lib/use-public-settings.js'
 import { CollapsiblePanel } from '../ui/CollapsiblePanel.js'
 import { Field } from '../ui/Field.js'
 import { Button } from '../ui/Button.js'
+import { Dialog } from '../ui/Dialog.js'
 import { Spinner } from '../ui/Spinner.js'
 import { usePanelOpen } from '../../lib/use-panel-open.js'
 
 const QUERY_KEY = ['admin', 'databaseBackups']
 
 // Same source LandingPage.tsx links its self-hosting doc from — restoring
-// stays a manual shell procedure (ADR 0008), not a route, so this panel can
-// only point at where that procedure is documented, not perform it.
+// stays documented here too, since the manual shell procedure remains the
+// only option when restoreAvailable is false (not running under
+// docker-entrypoint.sh) or the caller isn't the owner.
 const REPO = 'https://github.com/rwnd-tv/rwnd.tv'
 const RESTORE_DOCS_URL = `${REPO}/blob/main/docs/self-hosting.md#restoring`
+
+/** How long the "Restoring…" state polls GET /health before giving up and
+ * telling the owner to check the host directly — generous relative to a
+ * self-hosted container's real restart time (image already pulled/built,
+ * migrations run against data that's already there), which is normally a
+ * handful of seconds. */
+const RESTORE_POLL_TIMEOUT_MS = 60_000
+const RESTORE_POLL_INTERVAL_MS = 2_000
 
 /** "12.4 MB" — compact/technical rather than prose, same reasoning as
  * AboutPanel.tsx's formatUptime: a byte count reads the same across
@@ -23,6 +35,146 @@ const RESTORE_DOCS_URL = `${REPO}/blob/main/docs/self-hosting.md#restoring`
 function formatBytes(bytes: number): string {
   const mb = bytes / 1024 / 1024
   return `${mb.toFixed(1)} MB`
+}
+
+/**
+ * The confirm-and-restore dialog for one file (a regular backup or a
+ * pre-restore snapshot — both restorable through the same route). Same
+ * typed-confirmation-plus-password shape as DeleteAccountCard.tsx/
+ * TransferOwnershipCard.tsx, except the typed value is the instance name
+ * rather than the caller's own email: the consequence here (every user's
+ * data replaced) is instance-wide, not personal.
+ *
+ * `onRestoring` fires once the 202 lands — DatabaseBackupsPanel.tsx owns
+ * the actual polling state, since it has to survive this dialog closing.
+ */
+function RestoreDialog({
+  file,
+  createdAt,
+  onClose,
+  onRestoring,
+}: {
+  file: string
+  createdAt: string
+  onClose: () => void
+  onRestoring: () => void
+}) {
+  const { t, i18n } = useTranslation()
+  const { data: settings } = usePublicSettings()
+  const [confirmInstanceName, setConfirmInstanceName] = useState('')
+  const [currentPassword, setCurrentPassword] = useState('')
+  const [error, setError] = useState<string>()
+
+  const restore = useMutation({
+    mutationFn: () =>
+      api.admin.restoreDatabaseBackup(file, { confirmInstanceName, currentPassword }),
+    onSuccess: onRestoring,
+    onError: (err) =>
+      setError(err instanceof ApiError ? err.message : t('common.somethingWentWrong')),
+  })
+
+  function handleSubmit(e: FormEvent) {
+    e.preventDefault()
+    setError(undefined)
+    restore.mutate()
+  }
+
+  return (
+    <Dialog open onClose={onClose} title={t('admin.databaseBackups.restoreConfirmTitle')}>
+      <p className="mb-4 text-sm text-[var(--color-fg-muted)]">
+        {t('admin.databaseBackups.restoreConfirmBody', {
+          file,
+          date: new Date(createdAt).toLocaleString(i18n.language),
+        })}
+      </p>
+      <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+        <Field
+          label={t('admin.databaseBackups.restoreConfirmInstanceName', {
+            name: settings?.instanceName ?? 'rwnd.tv',
+          })}
+          value={confirmInstanceName}
+          onChange={(e) => setConfirmInstanceName(e.target.value)}
+          required
+        />
+        <Field
+          label={t('admin.databaseBackups.restoreConfirmPassword')}
+          type="password"
+          value={currentPassword}
+          onChange={(e) => setCurrentPassword(e.target.value)}
+          required
+          autoComplete="current-password"
+          error={error}
+        />
+        <div className="mt-2 flex justify-end gap-2">
+          <Button type="button" variant="secondary" onClick={onClose}>
+            {t('common.cancel')}
+          </Button>
+          <Button type="submit" variant="danger" isLoading={restore.isPending}>
+            {t('admin.databaseBackups.restoreButton')}
+          </Button>
+        </div>
+      </form>
+    </Dialog>
+  )
+}
+
+/** Polls GET /health (a public, unauthenticated route) after a restore's
+ * 202, and moves to `/login` once it's back — never `/admin`, since the
+ * acting owner's own session row was itself part of what just got replaced.
+ * Only counts the API as "back" after at least one failed poll first: the
+ * old process is still answering for the ~500ms between the 202 response
+ * and its own `exitForRestore()` call, and a success on the very first poll
+ * would otherwise be mistaken for the new process already being up. */
+function RestoringState() {
+  const { t } = useTranslation()
+  const [timedOut, setTimedOut] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    let sawFailure = false
+    const startedAt = Date.now()
+
+    const interval = setInterval(() => {
+      void (async () => {
+        try {
+          await api.health()
+          if (cancelled) return
+          if (sawFailure) {
+            window.location.assign('/login')
+            return
+          }
+        } catch {
+          sawFailure = true
+        }
+        if (!cancelled && Date.now() - startedAt > RESTORE_POLL_TIMEOUT_MS) {
+          setTimedOut(true)
+          clearInterval(interval)
+        }
+      })()
+    }, RESTORE_POLL_INTERVAL_MS)
+
+    return () => {
+      cancelled = true
+      clearInterval(interval)
+    }
+  }, [])
+
+  return (
+    <div className="flex flex-col items-center gap-3 py-6 text-center">
+      {timedOut ? (
+        <p role="alert" className="text-sm text-[var(--color-danger)]">
+          {t('admin.databaseBackups.restoreTimedOut')}
+        </p>
+      ) : (
+        <>
+          <Spinner label={t('admin.databaseBackups.restoreInProgressTitle')} />
+          <p className="text-sm text-[var(--color-fg-muted)]">
+            {t('admin.databaseBackups.restoreInProgressBody')}
+          </p>
+        </>
+      )}
+    </div>
+  )
 }
 
 /**
@@ -44,9 +196,19 @@ function formatBytes(bytes: number): string {
  * The backup cadence itself (`intervalHours`) is shown but not editable —
  * only the retention tiers are (RetentionTiers' own doc comment explains
  * why the cadence stays fixed).
+ *
+ * Restore (ADR 0008's 2026-09-22 update): owner-only, and only offered when
+ * `restoreAvailable` (the API is running under docker-entrypoint.sh — see
+ * apps/api/src/lib/database-restore.ts). Neither gap hides the feature —
+ * same "explain, don't disappear" convention as the whole panel — it just
+ * explains why the button isn't there. Every restore first takes an
+ * automatic pre-restore snapshot as an undo point, listed in its own
+ * section below with the same Restore button, so undoing a restore is the
+ * same one-click flow as doing one.
  */
 export function DatabaseBackupsPanel() {
   const { t, i18n } = useTranslation()
+  const { user } = useAuth()
   const queryClient = useQueryClient()
   const [open, setOpen] = usePanelOpen('panelAdminDatabaseBackups')
 
@@ -61,6 +223,8 @@ export function DatabaseBackupsPanel() {
   const [saveError, setSaveError] = useState<string>()
   const [runSucceeded, setRunSucceeded] = useState(false)
   const [runError, setRunError] = useState<string>()
+  const [restoreTarget, setRestoreTarget] = useState<{ file: string; createdAt: string }>()
+  const [restoring, setRestoring] = useState(false)
 
   // Seeds the editable fields from the query once it loads, same "sync
   // during render on identity change" technique as InstanceSettingsPanel.tsx
@@ -142,6 +306,44 @@ export function DatabaseBackupsPanel() {
     updateRetention.mutate()
   }
 
+  const canRestore = user?.role === 'owner'
+
+  function restoreButton(file: { name: string; createdAt: string }) {
+    if (!data || !data.configured) return null
+    if (!canRestore || !data.restoreAvailable) return null
+    return (
+      <Button
+        type="button"
+        variant="danger"
+        className="shrink-0"
+        onClick={() => setRestoreTarget({ file: file.name, createdAt: file.createdAt })}
+      >
+        {t('admin.databaseBackups.restoreButton')}
+      </Button>
+    )
+  }
+
+  function renderFileList(files: DatabaseBackupStatus['files']) {
+    return (
+      <ul className="flex flex-col gap-2 text-sm text-[var(--color-fg-muted)]">
+        {files.map((file) => (
+          <li key={file.name} className="flex items-start justify-between gap-4">
+            <div className="flex min-w-0 flex-wrap items-baseline gap-x-2">
+              <span className="text-[var(--color-fg)]">
+                {new Date(file.createdAt).toLocaleString(i18n.language)}
+              </span>
+              <span className="text-xs break-words">{file.name}</span>
+            </div>
+            <div className="flex shrink-0 items-center gap-3">
+              <span>{formatBytes(file.bytes)}</span>
+              {restoreButton(file)}
+            </div>
+          </li>
+        ))}
+      </ul>
+    )
+  }
+
   return (
     <CollapsiblePanel title={t('admin.databaseBackups.title')} open={open} onOpenChange={setOpen}>
       {isLoading ? (
@@ -154,6 +356,8 @@ export function DatabaseBackupsPanel() {
         <p className="text-sm text-[var(--color-fg-muted)]">
           {t('admin.databaseBackups.notConfigured')}
         </p>
+      ) : data && restoring ? (
+        <RestoringState />
       ) : data ? (
         <div className="flex flex-col gap-4">
           <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
@@ -194,18 +398,36 @@ export function DatabaseBackupsPanel() {
             )}
           </div>
 
-          <p className="text-sm text-[var(--color-fg-muted)]">
-            {t('admin.databaseBackups.restorePrompt')}{' '}
-            <a
-              href={RESTORE_DOCS_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-[var(--color-primary)] underline"
-            >
-              {t('admin.databaseBackups.restoreLinkText')}
-            </a>
-            .
-          </p>
+          {canRestore && data.restoreAvailable ? (
+            <p className="text-sm text-[var(--color-fg-muted)]">
+              {t('admin.databaseBackups.restoreAvailablePrompt')}{' '}
+              <a
+                href={RESTORE_DOCS_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[var(--color-primary)] underline"
+              >
+                {t('admin.databaseBackups.restoreLinkText')}
+              </a>
+              .
+            </p>
+          ) : (
+            <p className="text-sm text-[var(--color-fg-muted)]">
+              {t('admin.databaseBackups.restorePrompt')}{' '}
+              <a
+                href={RESTORE_DOCS_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[var(--color-primary)] underline"
+              >
+                {t('admin.databaseBackups.restoreLinkText')}
+              </a>
+              .{' '}
+              {!canRestore
+                ? t('admin.databaseBackups.restoreNotOwner')
+                : t('admin.databaseBackups.restoreNotAvailable')}
+            </p>
+          )}
 
           {data.lastRun?.status === 'failed' && (
             <p role="alert" className="text-sm text-[var(--color-danger)]">
@@ -216,26 +438,52 @@ export function DatabaseBackupsPanel() {
             </p>
           )}
 
+          {data.lastRestore && (
+            <p
+              role={data.lastRestore.status === 'failed' ? 'alert' : 'status'}
+              className={
+                data.lastRestore.status === 'failed'
+                  ? 'text-sm text-[var(--color-danger)]'
+                  : 'text-sm text-[var(--color-fg-muted)]'
+              }
+            >
+              {data.lastRestore.status === 'ok'
+                ? t('admin.databaseBackups.lastRestoreSucceeded', {
+                    date: new Date(data.lastRestore.finishedAt).toLocaleString(i18n.language),
+                    file: data.lastRestore.file,
+                  })
+                : t('admin.databaseBackups.lastRestoreFailed', {
+                    date: new Date(data.lastRestore.finishedAt).toLocaleString(i18n.language),
+                    file: data.lastRestore.file,
+                    message: data.lastRestore.message,
+                  })}
+            </p>
+          )}
+
           {data.directoryError && (
             <p role="alert" className="text-sm text-[var(--color-danger)]">
               {t('admin.databaseBackups.directoryError', { message: data.directoryError })}
             </p>
           )}
 
-          {data.files.length > 0 && (
-            <ul className="flex flex-col gap-2 text-sm text-[var(--color-fg-muted)]">
-              {data.files.map((file) => (
-                <li key={file.name} className="flex items-start justify-between gap-4">
-                  <div className="flex min-w-0 flex-wrap items-baseline gap-x-2">
-                    <span className="text-[var(--color-fg)]">
-                      {new Date(file.createdAt).toLocaleString(i18n.language)}
-                    </span>
-                    <span className="text-xs break-words">{file.name}</span>
-                  </div>
-                  <span className="shrink-0">{formatBytes(file.bytes)}</span>
-                </li>
-              ))}
-            </ul>
+          {data.files.length > 0 && renderFileList(data.files)}
+
+          {(canRestore || data.snapshots.length > 0) && (
+            <div className="mt-2 border-t border-[var(--color-border)] pt-4">
+              <h3 className="mb-1 text-sm font-semibold">
+                {t('admin.databaseBackups.snapshotsTitle')}
+              </h3>
+              <p className="mb-3 text-sm text-[var(--color-fg-muted)]">
+                {t('admin.databaseBackups.snapshotsDescription')}
+              </p>
+              {data.snapshots.length > 0 ? (
+                renderFileList(data.snapshots)
+              ) : (
+                <p className="text-sm text-[var(--color-fg-muted)]">
+                  {t('admin.databaseBackups.snapshotsEmpty')}
+                </p>
+              )}
+            </div>
           )}
 
           <div className="mt-2 border-t border-[var(--color-border)] pt-4">
@@ -289,6 +537,18 @@ export function DatabaseBackupsPanel() {
           </div>
         </div>
       ) : null}
+
+      {restoreTarget && (
+        <RestoreDialog
+          file={restoreTarget.file}
+          createdAt={restoreTarget.createdAt}
+          onClose={() => setRestoreTarget(undefined)}
+          onRestoring={() => {
+            setRestoreTarget(undefined)
+            setRestoring(true)
+          }}
+        />
+      )}
     </CollapsiblePanel>
   )
 }

@@ -1,5 +1,6 @@
-import { mkdir, rm, utimes, writeFile } from 'node:fs/promises'
+import { mkdir, readdir, rm, utimes, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import { gzipSync } from 'node:zlib'
 import { beforeEach, describe, expect, it } from 'vitest'
 import type { DatabaseBackupStatus } from '@rwnd/shared'
 import { loadEnv } from '../env.js'
@@ -27,8 +28,8 @@ async function createAdminAndCookie(email = 'admin@example.com') {
   return { id: body.id, cookie: extractCookie(res)! }
 }
 
-async function createUserAndCookie(email: string) {
-  const id = await createLocalUser(db, email, 'correct-horse-battery-staple')
+async function createUserAndCookie(email: string, opts: { role?: 'admin' | 'user' } = {}) {
+  const id = await createLocalUser(db, email, 'correct-horse-battery-staple', opts)
   const res = await app.request('/api/v1/auth/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -75,6 +76,14 @@ describe('GET /admin/database-backups', () => {
       files: [],
       lastRun: null,
       directoryError: null,
+      // RWND_RESTORE_ENTRYPOINT is never set in the test environment (see
+      // vitest.config.ts) — restoreAvailable is false everywhere in this
+      // suite, which is also why the actual 202 restore-request path below
+      // can only be tested at the runPendingRestore level
+      // (database-backup.test.ts), not through this route.
+      restoreAvailable: false,
+      lastRestore: null,
+      snapshots: [],
     })
   })
 
@@ -249,5 +258,193 @@ describe('POST /admin/database-backups/run', () => {
     expect(body.files).toHaveLength(1)
     expect(body.files[0]!.name).toMatch(/^rwnd-\d{8}T\d{6}Z\.sql\.gz$/)
     expect(body.lastRun).toEqual({ at: expect.any(String), status: 'ok', message: null })
+  })
+})
+
+/**
+ * `POST /admin/database-backups/{file}/restore` — the destructive whole-
+ * database restore route, ADR 0008's 2026-09-22 update. The route checks
+ * filename shape, instance-name confirmation, password, file existence and
+ * the pre-flight dump checks *before* the RWND_RESTORE_ENTRYPOINT gate
+ * (deliberately — see the route's own comment), so all of that is
+ * reachable and tested here even though this suite never sets that env var
+ * (vitest.config.ts doesn't, and loadEnv() caches on first call, so there's
+ * no per-test way to flip it). Only the final "does the entrypoint pick
+ * this up" step is untestable at this level, and it always 409s here —
+ * proven by the last test below, which passes every other check first. The
+ * actual drop-and-restore mechanics are covered end-to-end against a real
+ * scratch database in database-backup.test.ts's runPendingRestore suite,
+ * which doesn't go through this route or that flag at all.
+ */
+describe('POST /admin/database-backups/{file}/restore', () => {
+  beforeEach(() => Promise.all([resetDb(db), rm(dir, { recursive: true, force: true })]))
+
+  function restoreBody(
+    overrides: Partial<{ confirmInstanceName: string; currentPassword: string }> = {},
+  ) {
+    return JSON.stringify({
+      confirmInstanceName: 'rwnd.tv',
+      currentPassword: 'correct-horse-battery-staple',
+      ...overrides,
+    })
+  }
+
+  async function restore(file: string, cookie: string, body = restoreBody()) {
+    return app.request(`/api/v1/admin/database-backups/${encodeURIComponent(file)}/restore`, {
+      method: 'POST',
+      headers: { cookie, 'Content-Type': 'application/json' },
+      body,
+    })
+  }
+
+  /** A file that passes every pre-flight check without needing real pg_dump:
+   * valid gzip, a complete trailer, no `OWNER TO` (so the owner-role check
+   * never applies) and no `-- Dumped by pg_dump version` header (so the
+   * version check never applies either). preflightCheckDump is pure Node
+   * stream/readline code with no dependency on the pg_dump/psql binaries
+   * themselves — only running an actual restore does. */
+  async function writeValidDump(name: string) {
+    await mkdir(dir, { recursive: true })
+    await writeFile(
+      join(dir, name),
+      gzipSync(['SELECT 1;', '-- PostgreSQL database dump complete', ''].join('\n')),
+    )
+  }
+
+  it('rejects an unauthenticated request', async () => {
+    const res = await app.request('/api/v1/admin/database-backups/some-file/restore', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: restoreBody(),
+    })
+    expect(res.status).toBe(401)
+  })
+
+  it('rejects an admin who is not the owner (requireOwner, stricter than requireAdmin)', async () => {
+    const admin = await createUserAndCookie('admin@example.com', { role: 'admin' })
+    const res = await restore('some-file', admin.cookie)
+    expect(res.status).toBe(403)
+  })
+
+  it('rejects a plain user', async () => {
+    const user = await createUserAndCookie('plain@example.com')
+    const res = await restore('some-file', user.cookie)
+    expect(res.status).toBe(403)
+  })
+
+  it('rejects a filename matching neither a backup nor a pre-restore snapshot pattern', async () => {
+    const owner = await createAdminAndCookie()
+    const res = await restore('not-a-real-backup.txt', owner.cookie)
+    expect(res.status).toBe(400)
+    const body = await json<{ error: string }>(res)
+    expect(body.error).toMatch(/not a recognized/i)
+  })
+
+  it('accepts a pre-restore snapshot filename shape too, not just a regular backup', async () => {
+    const owner = await createAdminAndCookie()
+    const res = await restore('rwnd-pre-restore-20260909T030000Z.sql.gz', owner.cookie)
+    // No such file on disk — proves the filename-shape check passed and it
+    // moved on to the next check (instance name matched here, so this gets
+    // as far as the file-existence check).
+    expect(res.status).toBe(404)
+  })
+
+  it('rejects a wrong instance name, before ever touching the filesystem', async () => {
+    const owner = await createAdminAndCookie()
+    const res = await restore(
+      'rwnd-20260909T030000Z.sql.gz',
+      owner.cookie,
+      restoreBody({ confirmInstanceName: 'not the right name' }),
+    )
+    expect(res.status).toBe(400)
+    const body = await json<{ error: string }>(res)
+    expect(body.error).toMatch(/does not match/i)
+  })
+
+  it('rejects a wrong password', async () => {
+    const owner = await createAdminAndCookie()
+    const res = await restore(
+      'rwnd-20260909T030000Z.sql.gz',
+      owner.cookie,
+      restoreBody({ currentPassword: 'definitely-not-it' }),
+    )
+    expect(res.status).toBe(400)
+    const body = await json<{ error: string }>(res)
+    expect(body.error).toMatch(/incorrect/i)
+  })
+
+  it('404s when the confirmed file does not exist on disk', async () => {
+    const owner = await createAdminAndCookie()
+    const res = await restore('rwnd-20260909T030000Z.sql.gz', owner.cookie)
+    expect(res.status).toBe(404)
+  })
+
+  it('rejects a file that fails pre-flight (corrupt gzip)', async () => {
+    const owner = await createAdminAndCookie()
+    await mkdir(dir, { recursive: true })
+    await writeFile(join(dir, 'rwnd-20260909T030000Z.sql.gz'), 'not gzip at all')
+
+    const res = await restore('rwnd-20260909T030000Z.sql.gz', owner.cookie)
+    expect(res.status).toBe(400)
+    const body = await json<{ error: string }>(res)
+    expect(body.error).toMatch(/gzip/i)
+  })
+
+  it('rejects a file that fails pre-flight (no complete trailer — looks truncated)', async () => {
+    const owner = await createAdminAndCookie()
+    await mkdir(dir, { recursive: true })
+    await writeFile(join(dir, 'rwnd-20260909T030000Z.sql.gz'), gzipSync('SELECT 1;'))
+
+    const res = await restore('rwnd-20260909T030000Z.sql.gz', owner.cookie)
+    expect(res.status).toBe(400)
+    const body = await json<{ error: string }>(res)
+    expect(body.error).toMatch(/truncated|complete/i)
+  })
+
+  it('409s when a restore is already pending, before ever looking at the requested filename', async () => {
+    const owner = await createAdminAndCookie()
+    await mkdir(dir, { recursive: true })
+    await writeFile(
+      join(dir, 'rwnd-restore-request.json'),
+      JSON.stringify({ file: 'rwnd-20260101T000000Z.sql.gz', userId: 'someone-else' }),
+    )
+
+    // A second, otherwise-completely-invalid request still 409s first,
+    // rather than 400ing on the filename — proves the pending-restore
+    // guard runs before filename validation, so a second submission can
+    // never silently overwrite the first request's marker file.
+    const res = await restore('not-a-real-file.txt', owner.cookie)
+    expect(res.status).toBe(409)
+    const body = await json<{ error: string }>(res)
+    expect(body.error).toMatch(/already pending/i)
+  })
+
+  it('409s because this API instance is not running under docker-entrypoint.sh, once everything else has checked out', async () => {
+    const owner = await createAdminAndCookie()
+    await writeValidDump('rwnd-20260909T030000Z.sql.gz')
+
+    const res = await restore('rwnd-20260909T030000Z.sql.gz', owner.cookie)
+    expect(res.status).toBe(409)
+    const body = await json<{ error: string }>(res)
+    expect(body.error).toMatch(/docker-entrypoint\.sh/)
+
+    // Nothing was written or requested — the gate above fired before any
+    // of that.
+    const files = await readdir(dir)
+    expect(files).not.toContain('rwnd-restore-request.json')
+  })
+
+  it('rate-limits repeated restore attempts tighter than the manual backup route (3/hour)', async () => {
+    const owner = await createAdminAndCookie()
+
+    for (let i = 0; i < 3; i++) {
+      const res = await restore('some-file', owner.cookie)
+      // Rejected on filename shape each time — the point here is only that
+      // the rate limiter counts the attempt regardless of why it failed.
+      expect(res.status).toBe(400)
+    }
+
+    const fourth = await restore('some-file', owner.cookie)
+    expect(fourth.status).toBe(429)
   })
 })

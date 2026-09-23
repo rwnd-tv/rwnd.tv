@@ -93,14 +93,22 @@ that matter most when nobody is actively maintaining an instance
             data on dev.rwnd.tv (the ratings section tested live by rating
             and un-rating a title, since the reference account had none).
 
-- [ ] **Database restore automation**: reverses [ADR 0008](adr/0008-database-backups.md)'s
+- [x] **Database restore automation**: reverses [ADR 0008](adr/0008-database-backups.md)'s
       "restore stays manual" call, which already recorded James's
       2026-09-10 disagreement as an open question. Redesigned during M6
       planning to be entrypoint-driven (a marker file checked before
       migrations run, not a simple in-app route performing its own schema
       drop) after research found the obvious approach would either fail
       outright or could leave the database empty on a failed restore. The
-      milestone's highest-risk piece; not yet started. See [TODO.md](TODO.md).
+      milestone's highest-risk piece. Shipped and verified live on
+      dev.rwnd.tv 2026-09-23: a real restore (undone via its own automatic
+      pre-restore snapshot), a truncated/corrupt dump correctly rejected
+      before anything restarted, and a dump that passes pre-flight but
+      fails mid-transaction correctly rolled back with data untouched. That
+      last case also caught a real bug live (a broken-pipe error masking
+      psql's actual failure message) and fixed it. See
+      [ADR 0008](adr/0008-database-backups.md)'s 2026-09-22 update for the
+      full design.
 - [ ] **Configurable landing page for self-hosted instances**: a new
       admin-editable `landingMode` setting so a self-hoster's `/` can skip
       rwnd.tv's own marketing page and go straight to sign-in. See [TODO.md](TODO.md).

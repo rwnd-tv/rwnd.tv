@@ -252,7 +252,16 @@ docker compose exec db pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB" > backup.sql
 
 ### Restoring
 
-Restoring is manual either way, deliberately: it is destructive and rare. Stop the `app` service first so nothing writes mid-restore. For an automatic backup, gunzip it on the way in:
+**From the Admin page (recommended, requires `DATABASE_BACKUP_DIR`).** The owner account can restore any listed backup or pre-restore snapshot in place: pick one, type the instance name and your password to confirm, and the app validates the file, requests a restore, and exits. `docker-entrypoint.sh` performs the actual drop-and-restore on the next boot, before migrations, once the app's own process (and its database connections) are already gone, then the container restarts normally under the compose file's `restart: unless-stopped`. The page polls for the API coming back and moves you to the sign-in page once it does. Every session created after the restored backup was taken stops working, since it's not in the data being restored; a session that already existed at that point (yours included) can survive, if it hasn't otherwise expired.
+
+A few things worth knowing before you use it:
+
+- **A snapshot of the current database is taken automatically right before every restore**, so a restore can be undone: it shows up in the same Admin page section as another restorable file. Snapshots are never deleted automatically, so old ones accumulate; remove them from the `DATABASE_BACKUP_DIR` directory by hand if you want to reclaim the space.
+- **This is the single most destructive action in the app.** If the backup predates your account or its password, you'll need the credentials that existed at the time to sign in afterward.
+- **Only offered when the API is actually running under `docker-entrypoint.sh`** (the image's own container, not a bare `node dist/index.js` or a dev server); otherwise nothing would ever pick up the request, and the Admin page says so instead of offering a button that would silently do nothing.
+- If the container is killed mid-restore, the drop-and-restore runs inside one Postgres transaction, so the database is left exactly as it was; the next boot reports the interrupted attempt as failed rather than retrying it automatically.
+
+**Manual, either kind of dump.** Still available, and the only option when the automated path above isn't applicable (an older image, or the API not running under the entrypoint). Destructive and rare either way: stop the `app` service first so nothing writes mid-restore:
 
 ```sh
 docker compose stop app
@@ -268,7 +277,7 @@ docker compose exec -T db psql -U "$POSTGRES_USER" "$POSTGRES_DB" < backup.sql
 docker compose start app
 ```
 
-**An older backup restores onto a newer version.** The dump carries the schema as it was, and the app runs its migrations on every start, so restoring a months-old backup and starting the current image brings the schema forward with your data intact. You do not need to match the app version to the backup.
+**An older backup restores onto a newer version, through either path.** The dump carries the schema as it was, and the app runs its migrations on every start, so restoring a months-old backup and starting the current image brings the schema forward with your data intact. You do not need to match the app version to the backup.
 
 ### If backups stop appearing
 

@@ -1,7 +1,11 @@
 import { defineConfig } from 'tsup'
 
 export default defineConfig({
-  entry: ['src/index.ts'],
+  // restore-entrypoint.ts is a second, standalone entry run directly by
+  // docker-entrypoint.sh (as dist/restore-entrypoint.js) — see its own doc
+  // comment for why it has to be a separate process rather than a code path
+  // inside index.ts.
+  entry: ['src/index.ts', 'src/restore-entrypoint.ts'],
   format: ['esm'],
   target: 'node22',
   outDir: 'dist',

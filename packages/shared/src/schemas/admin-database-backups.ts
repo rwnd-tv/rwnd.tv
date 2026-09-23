@@ -57,6 +57,41 @@ export type UpdateDatabaseBackupRetentionRequest = z.infer<
   typeof updateDatabaseBackupRetentionRequestSchema
 >
 
+/**
+ * `POST /admin/database-backups/{file}/restore` body (owner only, ADR 0008's
+ * 2026-09-22 update). Both fields re-prove the caller's identity/intent for
+ * the single most destructive action in the app — same "typed confirmation
+ * plus current password" shape DeleteAccountCard.tsx and
+ * TransferOwnershipCard.tsx already use, except the typed value here is the
+ * instance name rather than the word DELETE, since the consequence (every
+ * user's data replaced) is instance-wide, not the caller's own account.
+ */
+export const restoreDatabaseBackupRequestSchema = z.object({
+  confirmInstanceName: z.string().min(1),
+  currentPassword: z.string().min(1),
+})
+export type RestoreDatabaseBackupRequest = z.infer<typeof restoreDatabaseBackupRequestSchema>
+
+/**
+ * A completed (or interrupted) restore's outcome, written by
+ * runPendingRestore (apps/api/src/lib/database-restore.ts) to a file rather
+ * than a table — a successful restore's very first act is replacing the
+ * database this process would otherwise have recorded it in. Read by the
+ * admin status route as `lastRestore` below.
+ */
+export const databaseRestoreResultSchema = z.object({
+  file: z.string(),
+  requestedAt: z.string().datetime(),
+  finishedAt: z.string().datetime(),
+  status: z.enum(['ok', 'failed']),
+  message: z.string().nullable(),
+  /** The pre-restore snapshot taken before this restore, if it got that
+   * far — null on a failure before the snapshot step (or if the snapshot
+   * itself failed). */
+  snapshot: z.string().nullable(),
+})
+export type DatabaseRestoreResult = z.infer<typeof databaseRestoreResultSchema>
+
 export const databaseBackupStatusSchema = z.object({
   configured: z.boolean(),
   // The real, fixed cadence (BACKUP_INTERVAL_HOURS in database-backup.ts),
@@ -74,5 +109,13 @@ export const databaseBackupStatusSchema = z.object({
   // otherwise surface as a 500 on exactly the screen meant to answer "is
   // this working?".
   directoryError: z.string().nullable(),
+  // False when the API isn't running under docker-entrypoint.sh (a bare
+  // `node dist/index.js`, or `pnpm dev:api`) — nothing would ever pick up a
+  // restore request in that case, so the panel explains why rather than
+  // offering a button that silently does nothing (RWND_RESTORE_ENTRYPOINT,
+  // apps/api/src/env.ts).
+  restoreAvailable: z.boolean(),
+  lastRestore: databaseRestoreResultSchema.nullable(),
+  snapshots: z.array(databaseBackupFileSchema),
 })
 export type DatabaseBackupStatus = z.infer<typeof databaseBackupStatusSchema>

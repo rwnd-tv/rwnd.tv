@@ -67,6 +67,7 @@ import {
   type ResolveMediaRequest,
   type ResolveMediaResponse,
   type RestoreBackupResponse,
+  type RestoreDatabaseBackupRequest,
   type SearchResponse,
   type SeasonDetail,
   type SeasonWatches,
@@ -170,6 +171,9 @@ export const api = {
     status: () => get<{ required: boolean }>('/setup'),
     create: (body: SetupRequest) => post<User>('/setup', body),
   },
+  /** Liveness check (routes/health.ts) — used by DatabaseBackupsPanel.tsx to
+   * poll for the API coming back up after a database restore. */
+  health: () => get<{ status: 'ok' }>('/health'),
   invites: {
     list: () => get<ListInvitesResponse>('/invites'),
     create: (body: CreateInviteRequest) => post<CreateInviteResponse>('/invites', body),
@@ -199,6 +203,8 @@ export const api = {
     updateDatabaseBackupRetention: (body: UpdateDatabaseBackupRetentionRequest) =>
       patch<DatabaseBackupStatus>('/admin/database-backups', body),
     runDatabaseBackupNow: () => post<DatabaseBackupStatus>('/admin/database-backups/run'),
+    restoreDatabaseBackup: (file: string, body: RestoreDatabaseBackupRequest) =>
+      post<void>(`/admin/database-backups/${encodeURIComponent(file)}/restore`, body),
   },
   auth: {
     login: (body: LoginRequest) => post<User | MfaRequiredResponse>('/auth/login', body),

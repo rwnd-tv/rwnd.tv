@@ -15,7 +15,7 @@ import { loadEnv } from '../env.js'
  * may also drop files into, so the retention sweep has to be structurally
  * incapable of deleting anything this job didn't write.
  */
-const DUMP_RE = /^rwnd-\d{8}T\d{6}Z\.sql\.gz$/
+export const DUMP_RE = /^rwnd-\d{8}T\d{6}Z\.sql\.gz$/
 
 /** Same file, mid-write. Deliberately its own pattern rather than
  * `DUMP_RE.test(name.slice(0, -'.partial'.length))`: a plain
@@ -69,7 +69,7 @@ export class BackupAlreadyRunningError extends Error {
  * reappearing means something else is wrong and should surface as "already
  * running" rather than loop silently.
  */
-async function acquireBackupLock(dir: string): Promise<FileHandle> {
+export async function acquireBackupLock(dir: string): Promise<FileHandle> {
   const lockPath = join(dir, LOCK_FILE_NAME)
   for (let attempt = 0; attempt < 5; attempt++) {
     try {
@@ -96,7 +96,7 @@ async function acquireBackupLock(dir: string): Promise<FileHandle> {
  * unlink here would otherwise mask the real result of the run it guarded,
  * and a lock left behind is simply treated as stale (STALE_LOCK_MS) by the
  * next run anyway. */
-async function releaseBackupLock(handle: FileHandle, dir: string): Promise<void> {
+export async function releaseBackupLock(handle: FileHandle, dir: string): Promise<void> {
   await handle.close().catch(() => {})
   await unlink(join(dir, LOCK_FILE_NAME)).catch(() => {})
 }
@@ -253,47 +253,54 @@ function timestampName(now: Date): string {
 }
 
 /**
- * Which pg_dump binary to use for a given server.
+ * Which `pg_dump` or `psql` binary to use for a given server.
  *
- * pg_dump's compatibility is directional in BOTH directions, and picking one
- * client gets one of them wrong:
+ * Both tools' compatibility is directional in BOTH directions, and picking
+ * one client gets one of them wrong:
  *
- *  - it refuses to read a server newer than itself, and
- *  - its output targets a server of its own version or newer, so a dump from
- *    a newer client will not restore into an older server. pg_dump 17+ emits
- *    `SET transaction_timeout`, a GUC that does not exist before 17, and a
- *    16 server rejects the whole restore on it.
+ *  - it refuses to read/write a server newer than itself, and
+ *  - `pg_dump`'s output targets a server of its own version or newer, so a
+ *    dump from a newer client will not restore into an older server. pg_dump
+ *    17+ emits `SET transaction_timeout`, a GUC that does not exist before
+ *    17, and a 16 server rejects the whole restore on it.
  *
- * The second half is the dangerous one: it fails at restore time, long after
- * the backup looked fine. So match the client to the server rather than
- * bundling one and hoping. Caught by the round-trip test in
- * apps/api/src/test/database-backup.test.ts, which is the reason that test
- * loads a dump back rather than just inspecting it.
+ * The second half is the dangerous one for pg_dump: it fails at restore
+ * time, long after the backup looked fine. So match the client to the
+ * server rather than bundling one and hoping. Caught by the round-trip test
+ * in apps/api/src/test/database-backup.test.ts, which is the reason that
+ * test loads a dump back rather than just inspecting it. `psql` needs the
+ * same match for the restore side (apps/api/src/lib/database-restore.ts): a
+ * bare `psql` on PATH may be the wrong major, since the image ships three
+ * side by side.
  *
- * Falls back to whatever `pg_dump` is on PATH when there is no versioned
+ * Falls back to whatever `name` is on PATH when there is no versioned
  * binary for this server, which is what makes the tests work on a developer
  * machine or a CI runner with a single client installed.
  *
  * Probes over the app's own pool rather than opening a connection, which is
- * why this module takes a `db` at all: pg_dump still connects on its own.
+ * why this module takes a `db` at all: the child process still connects on
+ * its own.
  */
-async function pgDumpBinary(db: Database): Promise<string> {
+export async function pgClientBinary(db: Database, name: 'pg_dump' | 'psql'): Promise<string> {
   const [row] = (await db.execute(
     sql`select current_setting('server_version_num')::int / 10000 as major`,
   )) as { major: number }[]
-  const versioned = `/usr/libexec/postgresql${row?.major}/pg_dump`
-  return existsSync(versioned) ? versioned : 'pg_dump'
+  const versioned = `/usr/libexec/postgresql${row?.major}/${name}`
+  return existsSync(versioned) ? versioned : name
 }
 
 /**
- * pg_dump connection flags from a DATABASE_URL.
+ * pg_dump/psql connection flags from a DATABASE_URL.
  *
  * The password is deliberately NOT returned here: it goes to the child's
  * environment as PGPASSWORD instead. A URI or a `--password` flag in argv
  * would land in /proc/<pid>/cmdline and in any error that echoes the command
  * line, against ADR 0007's Stage G secret-and-log hygiene.
  */
-function connectionArgs(databaseUrl: string): { args: string[]; password: string | undefined } {
+export function connectionArgs(databaseUrl: string): {
+  args: string[]
+  password: string | undefined
+} {
   const url = new URL(databaseUrl)
   const args = [
     '--host',
@@ -375,20 +382,97 @@ export async function listDatabaseBackups(dir: string): Promise<DatabaseBackupFi
 }
 
 /**
- * Takes one whole-database dump: `pg_dump` piped through gzip into
- * `dir`, then prunes older dumps.
+ * Takes one whole-database dump at `finalPath`: `pg_dump` piped through
+ * gzip, written under a `.partial` sibling and renamed only once pg_dump has
+ * exited 0 AND the gzip pipeline has resolved. Rename within one filesystem
+ * is atomic, so a container killed mid-dump can never leave a truncated
+ * file that looks like a valid backup.
  *
  * Plain SQL rather than pg_dump's custom format, so restoring stays the
  * host-side shell redirect docs/self-hosting.md already documents instead
  * of needing pg_restore against the db container. Gzipped because
  * `users.avatar_image` is bytea, which hex-encodes to twice its binary size
- * in a plain dump.
+ * in a plain dump. `--no-owner --no-privileges`: without these, a dump
+ * restored onto a database with a different role name fails on its first
+ * `ALTER ... OWNER TO` — exactly the prod-onto-dev case ADR 0008 endorses.
+ * Older dumps taken before this flag existed still need the owner-role
+ * preflight check in database-restore.ts.
+ *
+ * Shared by runDatabaseBackup below (the scheduled/manual whole-database
+ * backup) and runPendingRestore's pre-restore snapshot
+ * (apps/api/src/lib/database-restore.ts) — the only differences between
+ * those two callers (the filename, and what happens to older dumps
+ * afterwards) stay out of this function.
  *
  * Pure: takes its config explicitly and never calls loadEnv(), so tests can
  * point it anywhere without fighting that module-level cache.
  *
  * See docs/adr/0008-database-backups.md for why this shells out to pg_dump
  * at all rather than dumping over the connection the app already holds.
+ */
+export async function dumpDatabaseTo({
+  db,
+  databaseUrl,
+  finalPath,
+}: {
+  db: Database
+  databaseUrl: string
+  finalPath: string
+}): Promise<{ bytes: number }> {
+  const partialPath = `${finalPath}.partial`
+
+  const { args, password } = connectionArgs(databaseUrl)
+  const binary = await pgClientBinary(db, 'pg_dump')
+  const child = spawn(
+    binary,
+    [...args, '--format=plain', '--no-password', '--no-owner', '--no-privileges'],
+    {
+      shell: false,
+      env: password === undefined ? process.env : { ...process.env, PGPASSWORD: password },
+    },
+  )
+
+  let stderr = ''
+  child.stderr.setEncoding('utf8')
+  child.stderr.on('data', (chunk: string) => {
+    // Bounded: a pathological failure shouldn't hold the whole of stderr in
+    // memory. The first 8KB carries the actual error every time.
+    if (stderr.length < 8192) stderr += chunk
+  })
+
+  const exited = new Promise<number>((resolve, reject) => {
+    child.on('error', reject)
+    child.on('close', (code) => resolve(code ?? 1))
+  })
+  // A spawn failure (e.g. pg_dump missing entirely) rejects both this and
+  // child.stdout around the same time. When the pipeline below throws
+  // first, `exited` is never awaited - without this, its rejection would
+  // otherwise surface as an unhandled promise rejection rather than the
+  // error this function actually throws.
+  exited.catch(() => {})
+
+  try {
+    await pipeline(child.stdout, createGzip(), createWriteStream(partialPath))
+    // A resolved pipeline does NOT imply a successful dump: pg_dump can fail
+    // after writing some output, and gzip will happily compress a truncated
+    // stream. The exit code is the only real signal.
+    const code = await exited
+    if (code !== 0) throw new Error(`pg_dump exited ${code}: ${stderr.trim() || 'no output'}`)
+
+    await rename(partialPath, finalPath)
+  } catch (err) {
+    await unlink(partialPath).catch(() => {})
+    throw err
+  }
+
+  const { size } = await stat(finalPath)
+  return { bytes: size }
+}
+
+/**
+ * Runs one scheduled/manual whole-database backup: dumps to a fresh
+ * timestamped file in `dir` (dumpDatabaseTo above), then prunes older dumps
+ * under the current retention policy.
  */
 export async function runDatabaseBackup({
   db,
@@ -408,56 +492,11 @@ export async function runDatabaseBackup({
   try {
     const name = timestampName(now)
     const finalPath = join(dir, name)
-    // Written under .partial and renamed only once pg_dump has exited 0 AND
-    // the gzip pipeline has resolved. Rename within one filesystem is atomic,
-    // so a container killed mid-dump can never leave a truncated file that
-    // looks like a valid backup.
-    const partialPath = `${finalPath}.partial`
+    const { bytes } = await dumpDatabaseTo({ db, databaseUrl, finalPath })
 
-    const { args, password } = connectionArgs(databaseUrl)
-    const binary = await pgDumpBinary(db)
-    const child = spawn(binary, [...args, '--format=plain', '--no-password'], {
-      shell: false,
-      env: password === undefined ? process.env : { ...process.env, PGPASSWORD: password },
-    })
-
-    let stderr = ''
-    child.stderr.setEncoding('utf8')
-    child.stderr.on('data', (chunk: string) => {
-      // Bounded: a pathological failure shouldn't hold the whole of stderr in
-      // memory. The first 8KB carries the actual error every time.
-      if (stderr.length < 8192) stderr += chunk
-    })
-
-    const exited = new Promise<number>((resolve, reject) => {
-      child.on('error', reject)
-      child.on('close', (code) => resolve(code ?? 1))
-    })
-    // A spawn failure (e.g. pg_dump missing entirely) rejects both this and
-    // child.stdout around the same time. When the pipeline below throws
-    // first, `exited` is never awaited - without this, its rejection would
-    // otherwise surface as an unhandled promise rejection rather than the
-    // error this function actually throws.
-    exited.catch(() => {})
-
-    try {
-      await pipeline(child.stdout, createGzip(), createWriteStream(partialPath))
-      // A resolved pipeline does NOT imply a successful dump: pg_dump can fail
-      // after writing some output, and gzip will happily compress a truncated
-      // stream. The exit code is the only real signal.
-      const code = await exited
-      if (code !== 0) throw new Error(`pg_dump exited ${code}: ${stderr.trim() || 'no output'}`)
-
-      await rename(partialPath, finalPath)
-    } catch (err) {
-      await unlink(partialPath).catch(() => {})
-      throw err
-    }
-
-    const { size } = await stat(finalPath)
     const tiers = await getRetentionTiers(db)
     const pruned = await prune(dir, Date.now(), tiers)
-    return { file: name, bytes: size, durationMs: Date.now() - startedAt, pruned }
+    return { file: name, bytes, durationMs: Date.now() - startedAt, pruned }
   } finally {
     await releaseBackupLock(lock, dir)
   }

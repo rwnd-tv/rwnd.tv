@@ -1163,6 +1163,7 @@
       "runNow": "Back up now",
       "runNowSucceeded": "Backup complete.",
       "restorePrompt": "Restoring from one of these is a manual step, on purpose. See",
+      "restoreAvailablePrompt": "Restore any of these below in place, or follow the manual procedure instead. See",
       "restoreLinkText": "the self-hosting guide's Restoring instructions",
       "lastRunFailed": "The backup run at {{date}} failed: {{message}}",
       "directoryError": "The backup directory couldn't be read: {{message}}",
@@ -1171,7 +1172,22 @@
       "dailyRetentionDays": "Keep one backup per day for (days)",
       "weeklyRetentionWeeks": "Then keep one per week for (weeks)",
       "monthlyRetentionMonths": "Then keep one per month for (months)",
-      "retentionSave": "Save"
+      "retentionSave": "Save",
+      "restoreButton": "Restore",
+      "restoreNotOwner": "Only the instance owner can restore a backup from here.",
+      "restoreNotAvailable": "This API instance isn't running under docker-entrypoint.sh, so a restore requested here would never be picked up. Use the manual procedure above instead.",
+      "restoreConfirmTitle": "Restore this backup?",
+      "restoreConfirmBody": "This replaces every user's data, settings and history with what's in \"{{file}}\", taken {{date}}. A snapshot of the current database is taken first, so this can be undone. Any session created since that backup was taken (including yours, unless it already existed then) will stop working — if this backup predates your account or password, you'll need the credentials that existed at the time.",
+      "restoreConfirmInstanceName": "Type the instance name ({{name}}) to confirm",
+      "restoreConfirmPassword": "Current password",
+      "restoreInProgressTitle": "Restoring…",
+      "restoreInProgressBody": "The server is restarting. This page will move to the sign-in page once it's back.",
+      "restoreTimedOut": "The server hasn't come back within a minute. Check docker compose logs on the host to see what happened.",
+      "lastRestoreSucceeded": "Last restore ({{date}}) from {{file}} succeeded.",
+      "lastRestoreFailed": "The restore at {{date}} from {{file}} failed: {{message}}",
+      "snapshotsTitle": "Pre-restore snapshots",
+      "snapshotsDescription": "Taken automatically right before each restore, as an undo point. Never deleted automatically — restore one of these the same way to undo a restore.",
+      "snapshotsEmpty": "None yet."
     }
   },
   "account": {

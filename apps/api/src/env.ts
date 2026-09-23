@@ -108,6 +108,16 @@ const rawEnvSchema = z.object({
   // unprivileged `rwnd` user, see Dockerfile); the job creates files inside
   // it but never the mount root itself.
   DATABASE_BACKUP_DIR: z.string().optional(),
+  // Set by docker-entrypoint.sh itself (`export RWND_RESTORE_ENTRYPOINT=1`)
+  // right after it has run restore-entrypoint.ts, never something an
+  // operator sets by hand — it exists purely so POST
+  // /admin/database-backups/{file}/restore (routes/admin-database-backups.ts)
+  // can 409 instead of accepting a restore request that nothing will ever
+  // pick up: `pnpm dev:api` and a bare `node dist/index.js` never go through
+  // the entrypoint, so without this gate a restore request there would sit
+  // in DATABASE_BACKUP_DIR forever, silently doing nothing. Same
+  // string-not-boolean parsing as COOKIE_SECURE above, same reasoning.
+  RWND_RESTORE_ENTRYPOINT: z.string().optional(),
   // Outbound email (account verification, password reset —
   // apps/api/src/lib/email.ts). Optional as a group, same "unset means the
   // feature hides itself" pattern as TRAKT_CLIENT_ID/BACKUP_DIR above —
@@ -167,6 +177,11 @@ const envSchema = rawEnvSchema.transform((data) => ({
   // (unlike COOKIE_SECURE above, TRUST_PROXY's default doesn't depend on
   // telling undefined and '' apart).
   TRUST_PROXY: data.TRUST_PROXY === 'true',
+  // Same "default false" reasoning as TRUST_PROXY — see its own comment
+  // above and RWND_RESTORE_ENTRYPOINT's raw-field comment for why there is
+  // no NODE_ENV-derived default here either.
+  RWND_RESTORE_ENTRYPOINT:
+    data.RWND_RESTORE_ENTRYPOINT === 'true' || data.RWND_RESTORE_ENTRYPOINT === '1',
   // Same "default false, no NODE_ENV-derived default" reasoning as
   // TRUST_PROXY — see the DATABASE_SSL field comment above.
   DATABASE_SSL: data.DATABASE_SSL === 'true',

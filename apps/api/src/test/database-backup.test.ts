@@ -4,11 +4,17 @@ import { mkdtemp, readdir, readFile, rm, writeFile, utimes } from 'node:fs/promi
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { text } from 'node:stream/consumers'
-import { createGunzip } from 'node:zlib'
+import { createGunzip, gzipSync } from 'node:zlib'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { eq } from 'drizzle-orm'
-import { movies, users, watchlistItems, watchlists } from '@rwnd/db'
+import { eq, sql } from 'drizzle-orm'
+import { createDatabase, movies, users, watchlistItems, watchlists } from '@rwnd/db'
 import { BackupAlreadyRunningError, runDatabaseBackup } from '../lib/database-backup.js'
+import {
+  PRE_RESTORE_RE,
+  readLastRestoreResult,
+  runPendingRestore,
+  writeRestoreRequest,
+} from '../lib/database-restore.js'
 import { createLocalUser, hasPgDump, resetDb, testDb } from './helpers.js'
 
 const db = testDb()
@@ -98,6 +104,12 @@ describe.skipIf(!hasPgDump())('database backup', () => {
     expect(sql).toContain(item!.id)
     // bytea round-trips as hex.
     expect(sql).toMatch(/\\\\x89504e4700ff|\\x89504e4700ff/)
+    // --no-owner --no-privileges (added alongside restore automation, ADR
+    // 0008's 2026-09-22 update): a dump restored onto a database connecting
+    // as a different role must not fail on its first ALTER ... OWNER TO —
+    // the prod-onto-dev case the ADR already endorses. Only a dump taken
+    // before this flag existed still carries these statements.
+    expect(sql).not.toMatch(/OWNER TO/)
   })
 
   it('restores onto an empty database with the data intact', async () => {
@@ -305,5 +317,220 @@ describe.skipIf(!hasPgDump())('database backup', () => {
 
     const left = await readdir(DIR).catch(() => [])
     expect(left).not.toContain('rwnd-backup.lock')
+  })
+})
+
+/**
+ * `runPendingRestore` (apps/api/src/lib/database-restore.ts) — the actual
+ * drop-and-restore mechanics behind ADR 0008's 2026-09-22 restore-automation
+ * update. Run against a genuinely separate scratch database, never the
+ * shared `db`/`testDb()` connection every other test file in this suite
+ * uses: this function drops every schema it finds, which would otherwise
+ * wipe every other file's data mid-run. `DROP DATABASE ... WITH (FORCE)`
+ * (PG13+) in the teardown, not a plain `DROP DATABASE`, since a test that
+ * fails partway can leave `runPendingRestore`'s own connections still open
+ * against the scratch database.
+ */
+describe.skipIf(!hasPgDump())('database restore (runPendingRestore)', () => {
+  let RESTORE_DIR: string
+  let scratchName: string
+  let scratchUrl: string
+  let psqlConn: string[]
+  let psqlEnv: NodeJS.ProcessEnv
+  let adminDb: string
+
+  beforeEach(async () => {
+    RESTORE_DIR = await mkdtemp(join(tmpdir(), 'rwnd-tv-test-restore-'))
+
+    const url = new URL(databaseUrl())
+    scratchName = `rwnd_restore_${Date.now()}_${Math.floor(Math.random() * 1e6)}`
+    psqlEnv = { ...process.env, PGPASSWORD: decodeURIComponent(url.password) }
+    psqlConn = [
+      '--host',
+      url.hostname,
+      '--port',
+      url.port || '5432',
+      '--username',
+      decodeURIComponent(url.username),
+      '--no-password',
+    ]
+    adminDb = url.pathname.replace(/^\//, '')
+    execFileSync(
+      'psql',
+      [...psqlConn, '--dbname', adminDb, '-c', `CREATE DATABASE ${scratchName}`],
+      {
+        env: psqlEnv,
+        stdio: 'ignore',
+      },
+    )
+
+    const scratch = new URL(databaseUrl())
+    scratch.pathname = `/${scratchName}`
+    scratchUrl = scratch.toString()
+
+    // Mirrors what the real entrypoint restores onto: an already-running,
+    // already-migrated instance, not a fresh unmigrated database — restore
+    // runs *before* migrations in docker-entrypoint.sh, against whatever
+    // schema the previous boot last left behind.
+    execFileSync('pnpm', ['--filter', '@rwnd/db', 'migrate'], {
+      env: { ...process.env, DATABASE_URL: scratchUrl },
+      stdio: 'ignore',
+      shell: true,
+    })
+  })
+
+  afterEach(async () => {
+    await rm(RESTORE_DIR, { recursive: true, force: true })
+    execFileSync(
+      'psql',
+      [
+        ...psqlConn,
+        '--dbname',
+        adminDb,
+        '-c',
+        `DROP DATABASE IF EXISTS ${scratchName} WITH (FORCE)`,
+      ],
+      { env: psqlEnv, stdio: 'ignore' },
+    )
+  })
+
+  it('replaces the database with the dump, leaving __drizzle_migrations and citext working', async () => {
+    const scratchDb = createDatabase(scratchUrl)
+    await scratchDb.insert(users).values({ email: 'old@example.com', displayName: 'Old' })
+
+    const { file } = await runDatabaseBackup({
+      db: scratchDb,
+      dir: RESTORE_DIR,
+      databaseUrl: scratchUrl,
+    })
+
+    // Diverge from the dump, so the restore is actually observable.
+    await scratchDb.delete(users)
+    await scratchDb.insert(users).values({ email: 'new@example.com', displayName: 'New' })
+    await scratchDb.$client.end()
+
+    await writeRestoreRequest(RESTORE_DIR, { file, userId: 'test-user' })
+    await runPendingRestore({ dir: RESTORE_DIR, databaseUrl: scratchUrl, ssl: false })
+
+    const result = await readLastRestoreResult(RESTORE_DIR)
+    expect(result?.status).toBe('ok')
+    expect(result?.snapshot).toMatch(PRE_RESTORE_RE)
+
+    const restoredDb = createDatabase(scratchUrl)
+    const rows = await restoredDb.select().from(users)
+    expect(rows.map((r) => r.email)).toEqual(['old@example.com'])
+    // citext survives the schema drop + CREATE EXTENSION IF NOT EXISTS in
+    // the dump body: a case-different lookup still matches.
+    const [caseInsensitive] = await restoredDb
+      .select()
+      .from(users)
+      .where(eq(users.email, 'OLD@EXAMPLE.COM'))
+    expect(caseInsensitive?.email).toBe('old@example.com')
+    // The migrations ledger lives in its own `drizzle` schema, not
+    // `public` — this only works because runPendingRestore drops every
+    // non-system schema (pg_namespace), not a hand-picked list.
+    const migrationRows = await restoredDb.execute(
+      sql`select count(*)::int as count from drizzle.__drizzle_migrations`,
+    )
+    expect((migrationRows[0] as { count: number }).count).toBeGreaterThan(0)
+    await restoredDb.$client.end()
+
+    // The snapshot taken before the restore is on disk and not pruned —
+    // never matches DUMP_RE, so retention can never touch it.
+    const files = await readdir(RESTORE_DIR)
+    expect(files).toContain(result!.snapshot)
+  })
+
+  it('leaves the database untouched and records a failure for a truncated (corrupt gzip) dump', async () => {
+    const scratchDb = createDatabase(scratchUrl)
+    await scratchDb.insert(users).values({ email: 'untouched@example.com', displayName: 'U' })
+    await scratchDb.$client.end()
+
+    const badFile = 'rwnd-20260101T000000Z.sql.gz'
+    const real = gzipSync('some content that will be truncated below, well past a few bytes')
+    await writeFile(join(RESTORE_DIR, badFile), real.subarray(0, 5))
+
+    await writeRestoreRequest(RESTORE_DIR, { file: badFile, userId: 'test-user' })
+    await runPendingRestore({ dir: RESTORE_DIR, databaseUrl: scratchUrl, ssl: false })
+
+    const result = await readLastRestoreResult(RESTORE_DIR)
+    expect(result?.status).toBe('failed')
+
+    const restoredDb = createDatabase(scratchUrl)
+    const rows = await restoredDb.select().from(users)
+    expect(rows.map((r) => r.email)).toEqual(['untouched@example.com'])
+    await restoredDb.$client.end()
+  })
+
+  it('leaves the database untouched and records a failure for a well-formed dump with a bad statement', async () => {
+    const scratchDb = createDatabase(scratchUrl)
+    await scratchDb.insert(users).values({ email: 'untouched2@example.com', displayName: 'U' })
+    await scratchDb.$client.end()
+
+    // Passes preflight (valid gzip, has a complete trailer, no OWNER TO, no
+    // pg_dump version header to compare) but fails once psql actually runs
+    // it — --single-transaction must roll the whole thing back.
+    const badSql = [
+      'SELECT 1;',
+      'THIS IS NOT VALID SQL AT ALL;',
+      '-- PostgreSQL database dump complete',
+      '',
+    ].join('\n')
+    const badFile = 'rwnd-20260102T000000Z.sql.gz'
+    await writeFile(join(RESTORE_DIR, badFile), gzipSync(badSql))
+
+    await writeRestoreRequest(RESTORE_DIR, { file: badFile, userId: 'test-user' })
+    await runPendingRestore({ dir: RESTORE_DIR, databaseUrl: scratchUrl, ssl: false })
+
+    const result = await readLastRestoreResult(RESTORE_DIR)
+    expect(result?.status).toBe('failed')
+    // Regression: psql exiting on the bad statement closes its stdin before
+    // this process finishes writing the rest of the dump, which makes the
+    // input pipeline itself reject with EPIPE — a real message seen live
+    // against dev.rwnd.tv (2026-09-23) that carries no diagnostic value.
+    // The actual psql stderr must win instead.
+    expect(result?.message).not.toMatch(/EPIPE/i)
+    expect(result?.message?.toLowerCase()).toContain('syntax error')
+
+    const restoredDb = createDatabase(scratchUrl)
+    const rows = await restoredDb.select().from(users)
+    expect(rows.map((r) => r.email)).toEqual(['untouched2@example.com'])
+    await restoredDb.$client.end()
+  })
+
+  it('converts a leftover .attempted marker (an interrupted restore) to a failed result, never retrying it', async () => {
+    const scratchDb = createDatabase(scratchUrl)
+    await scratchDb.insert(users).values({ email: 'never-touched@example.com', displayName: 'U' })
+    await scratchDb.$client.end()
+
+    // Simulates a container killed mid-restore: the request was already
+    // claimed (renamed to .attempted) but the process never got to write a
+    // result. Postgres itself already rolled the transaction back on
+    // disconnect, so the database is genuinely untouched — this only
+    // checks that the marker is never acted on again.
+    const file = 'rwnd-20260103T000000Z.sql.gz'
+    await writeFile(
+      join(RESTORE_DIR, 'rwnd-restore-attempted.json'),
+      JSON.stringify({ file, userId: 'test-user', requestedAt: new Date().toISOString() }),
+    )
+
+    await runPendingRestore({ dir: RESTORE_DIR, databaseUrl: scratchUrl, ssl: false })
+
+    const result = await readLastRestoreResult(RESTORE_DIR)
+    expect(result?.status).toBe('failed')
+    expect(result?.message).toMatch(/interrupted/i)
+
+    const restoredDb = createDatabase(scratchUrl)
+    const rows = await restoredDb.select().from(users)
+    expect(rows.map((r) => r.email)).toEqual(['never-touched@example.com'])
+    await restoredDb.$client.end()
+
+    const files = await readdir(RESTORE_DIR)
+    expect(files).not.toContain('rwnd-restore-attempted.json')
+  })
+
+  it('no-ops when there is no pending request', async () => {
+    await runPendingRestore({ dir: RESTORE_DIR, databaseUrl: scratchUrl, ssl: false })
+    expect(await readLastRestoreResult(RESTORE_DIR)).toBeNull()
   })
 })

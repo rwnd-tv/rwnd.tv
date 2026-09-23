@@ -67,7 +67,7 @@ genuinely production-ready.
 - [x] **Mobile & responsive UI pass**: an audit of the whole app at real phone viewport widths (only 10 of the app's `.tsx` files used any responsive breakpoint before this), plus sticky filter/sort bars on TV Shows, History, and a Watchlist's detail page (shipped 2026-09-20). The audit's eight logged findings (sidebar overlay opening by default, undersized touch targets, non-wrapping detail action rows, an unreadable Calendar Month grid, hidden admin badges, wrapping sticky toolbars, and two arithmetic-only fixes for a dialog and the landing page) all fixed 2026-09-21; see [TODO_ARCHIVE.md](TODO_ARCHIVE.md). Two of those eight couldn't be live-verified below this environment's ~501px browser-automation floor and are pending a real-phone spot check. The rest of the UI-polish batch bundled alongside this shipped already: an inset dropdown arrow on `<select>` controls, only showing the tick on "Watched" buttons once actually watched, removing the calendar month grid's now-redundant selected-day panel, and making each Calendar feeds row collapsible (collapsed by default). See [TODO.md](TODO.md) and [TODO_ARCHIVE.md](TODO_ARCHIVE.md).
 - [x] **Landing page copy pass**: rewrote the "Honestly:" callout (dropped "young" and its apologetic framing, not just the one word); dropped the FAQ's Kodi mention now that shipping it is increasingly uncertain; retitled "What works today" to "Features" and re-picked a set that better represents the project now that M4 is done, not just table-stakes basics. Added M5 to the "Where the project actually is" status section once M5 itself was actually finishing, rather than guessing its wording earlier while it was still moving; written as done, not in-progress, since the milestone-wide review was happening the same evening. See [TODO_ARCHIVE.md](TODO_ARCHIVE.md).
 
-## M6: Stats and insights
+## M6: Stats and insights ✅ done
 
 Scoped and planned with James 2026-09-22: intended as the last milestone
 before a longer pause on active development, so alongside its headline
@@ -127,6 +127,33 @@ that matter most when nobody is actively maintaining an instance
       runtimes after the fact). Un-M6'd rather than fixed here, since a
       real fix is a runtime-provenance design question, not a quick-fix -
       see [TODO.md](TODO.md).
+
+- [x] **Milestone-wide code review & security pass**: one `/code-review high`
+      pass over the diff since M5's closing tag (`v1.2.0`), plus a
+      manual ASVS-style security pass giving particular attention to the
+      new restore mechanism (marker-file trust boundary, pre-flight
+      checks, `requireOwner`+typed-confirm+password gating), per
+      [CLAUDE.md](../CLAUDE.md)'s "Closing out a milestone" rule. The
+      security pass found nothing meeting its HIGH/MEDIUM+confidence bar.
+      The code review found and fixed, inline, all 10: two real
+      correctness bugs in the restore's crash-recovery bookkeeping (a
+      leftover `.attempted` marker could overwrite an already-successful
+      restore's result as `failed`; a failed pre-restore snapshot could
+      still report a snapshot filename that was never written), a lock
+      race letting the scheduled backup start (and be killed mid-write) in
+      the restore route's exit delay, a confirmed behavior regression
+      where the shared runtime-fallback extraction silently changed the
+      already-shipped (M4) History/.ics calendar feed's movie default from
+      30 to 90 minutes (kept as 90 - the M6-reasoned value - and locked in
+      with an explicit test and doc comment rather than reverted), plus
+      six lower-severity duplication/efficiency cleanups (a
+      three-times-repeated Postgres version probe, duplicated child-process
+      spawn boilerplate between the backup and restore paths, a hand-rolled
+      polling loop replaced with the app's existing React Query
+      `refetchInterval` pattern, unmemoized heatmap formatters, and
+      `docker-entrypoint.sh` no longer spawning Node on every ordinary boot
+      just to check for a restore marker that's almost never there). Full
+      suite (`apps/api` + `apps/web`) green throughout.
 
 ## Not yet scheduled
 

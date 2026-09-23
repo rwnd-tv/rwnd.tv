@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { DatabaseBackupRetention, DatabaseBackupStatus } from '@rwnd/shared'
@@ -124,40 +124,50 @@ function RestoreDialog({
  * Only counts the API as "back" after at least one failed poll first: the
  * old process is still answering for the ~500ms between the 202 response
  * and its own `exitForRestore()` call, and a success on the very first poll
- * would otherwise be mistaken for the new process already being up. */
+ * would otherwise be mistaken for the new process already being up.
+ *
+ * Built on React Query's own `refetchInterval` (ImportProgress.tsx/
+ * TraktConnectCard.tsx's existing polling pattern) rather than a hand-rolled
+ * `setInterval`, so this gets the same cancellation-on-unmount and error
+ * handling every other polling UI in the app already gets for free. */
 function RestoringState() {
   const { t } = useTranslation()
+  const [sawFailure, setSawFailure] = useState(false)
   const [timedOut, setTimedOut] = useState(false)
+  // Reads the real wall clock deliberately, same reasoning/precedent as
+  // WatchDateDialog.tsx's own maxDate — there's no derivable-from-props
+  // "pure" value for "when did this polling loop start."
+  // eslint-disable-next-line react-hooks/purity
+  const startedAtRef = useRef(Date.now())
+
+  const { isError, dataUpdatedAt, errorUpdatedAt } = useQuery({
+    queryKey: ['admin', 'databaseBackups', 'restoreHealthCheck'],
+    queryFn: () => api.health(),
+    retry: false,
+    refetchInterval: timedOut ? false : RESTORE_POLL_INTERVAL_MS,
+  })
+
+  // dataUpdatedAt/errorUpdatedAt change on every poll tick, success or
+  // failure alike (unlike the isError/data values themselves, which don't
+  // change identity across two consecutive failures or two consecutive
+  // successes) — the right dependency for "run this once per poll."
+  useEffect(() => {
+    if (dataUpdatedAt === 0 && errorUpdatedAt === 0) return
+    if (isError) {
+      // Not derivable from props/state alone — it's genuinely reacting to
+      // an external system's result (the health poll), the case this lint
+      // rule's own guidance calls out as legitimate.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setSawFailure(true)
+    } else if (sawFailure) {
+      window.location.assign('/login')
+    }
+  }, [dataUpdatedAt, errorUpdatedAt, isError, sawFailure])
 
   useEffect(() => {
-    let cancelled = false
-    let sawFailure = false
-    const startedAt = Date.now()
-
-    const interval = setInterval(() => {
-      void (async () => {
-        try {
-          await api.health()
-          if (cancelled) return
-          if (sawFailure) {
-            window.location.assign('/login')
-            return
-          }
-        } catch {
-          sawFailure = true
-        }
-        if (!cancelled && Date.now() - startedAt > RESTORE_POLL_TIMEOUT_MS) {
-          setTimedOut(true)
-          clearInterval(interval)
-        }
-      })()
-    }, RESTORE_POLL_INTERVAL_MS)
-
-    return () => {
-      cancelled = true
-      clearInterval(interval)
-    }
-  }, [])
+    if (dataUpdatedAt === 0 && errorUpdatedAt === 0) return
+    if (Date.now() - startedAtRef.current > RESTORE_POLL_TIMEOUT_MS) setTimedOut(true)
+  }, [dataUpdatedAt, errorUpdatedAt])
 
   return (
     <div className="flex flex-col items-center gap-3 py-6 text-center">

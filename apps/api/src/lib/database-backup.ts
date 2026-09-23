@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process'
+import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import { createWriteStream, existsSync } from 'node:fs'
 import { mkdir, open, readdir, rename, stat, unlink, type FileHandle } from 'node:fs/promises'
 import { join } from 'node:path'
@@ -7,6 +7,13 @@ import { createGzip } from 'node:zlib'
 import { eq, sql } from 'drizzle-orm'
 import { instanceSettings, type Database } from '@rwnd/db'
 import { loadEnv } from '../env.js'
+// A circular import (database-restore.ts itself imports several things
+// from this file) — safe here because both sides only ever call each
+// other's exports from inside async functions invoked well after module
+// load finishes, never at module-evaluation time. hasPendingRestore is
+// what lets a scheduled/manual backup refuse to start once a restore is
+// queued — see its use in runDatabaseBackup below for why.
+import { hasPendingRestore } from './database-restore.js'
 
 /**
  * Only files matching this are ever considered, for listing or for deletion.
@@ -48,8 +55,8 @@ const STALE_LOCK_MS = STALE_PARTIAL_MS
  * below, and eventually a manual "back up now" route) can report
  * "already running" instead of treating it as a failure. */
 export class BackupAlreadyRunningError extends Error {
-  constructor() {
-    super('A database backup is already running.')
+  constructor(message = 'A database backup is already running.') {
+    super(message)
     this.name = 'BackupAlreadyRunningError'
   }
 }
@@ -281,11 +288,28 @@ function timestampName(now: Date): string {
  * why this module takes a `db` at all: the child process still connects on
  * its own.
  */
-export async function pgClientBinary(db: Database, name: 'pg_dump' | 'psql'): Promise<string> {
+async function pgClientBinary(db: Database, name: 'pg_dump' | 'psql'): Promise<string> {
+  return pgClientBinaryForMajor(await getServerMajor(db), name)
+}
+
+/** The connected Postgres server's major version (`17` for "17.2", etc).
+ * Shared by pgClientBinary above and by database-restore.ts's own preflight
+ * checks and the restore route (admin-database-backups.ts) — all three used
+ * to run this identical query independently, up to 3 times across one
+ * restore's route+entrypoint lifecycle. */
+export async function getServerMajor(db: Database): Promise<number> {
   const [row] = (await db.execute(
     sql`select current_setting('server_version_num')::int / 10000 as major`,
   )) as { major: number }[]
-  const versioned = `/usr/libexec/postgresql${row?.major}/${name}`
+  return row?.major ?? 0
+}
+
+/** Pure half of pgClientBinary, for a caller that already has `major` in
+ * hand (e.g. database-restore.ts's runPendingRestore, which needs it for
+ * preflightCheckDump anyway) and would otherwise pay for a second identical
+ * getServerMajor round trip just to resolve a binary path. */
+export function pgClientBinaryForMajor(major: number, name: 'pg_dump' | 'psql'): string {
+  const versioned = `/usr/libexec/postgresql${major}/${name}`
   return existsSync(versioned) ? versioned : name
 }
 
@@ -313,6 +337,52 @@ export function connectionArgs(databaseUrl: string): {
     url.pathname.replace(/^\//, ''),
   ]
   return { args, password: url.password ? decodeURIComponent(url.password) : undefined }
+}
+
+/** Bounds how much of a failing child process's stderr is kept in memory —
+ * a pathological failure shouldn't hold the whole of stderr in memory.
+ * Shared cap for both pg_dump (dumpDatabaseTo below) and psql
+ * (database-restore.ts's runPsqlRestore). */
+const STDERR_CAP_BYTES = 8192
+
+/**
+ * Spawns `binary`, captures its stderr up to STDERR_CAP_BYTES, and resolves
+ * `exited` to its exit code once the process closes — the
+ * spawn/stderr-cap/exit-code-promise/unhandled-rejection-guard shape
+ * dumpDatabaseTo below and database-restore.ts's runPsqlRestore both need
+ * identically for their own child pg_dump/psql process. Callers still pipe
+ * `child.stdout`/`child.stdin` themselves; this only standardizes spawning
+ * and failure reporting.
+ */
+export function spawnWithStderrCapture(
+  binary: string,
+  args: string[],
+  options: { env: NodeJS.ProcessEnv },
+): { child: ChildProcessWithoutNullStreams; getStderr: () => string; exited: Promise<number> } {
+  const child = spawn(binary, args, {
+    shell: false,
+    stdio: ['pipe', 'pipe', 'pipe'],
+    env: options.env,
+  })
+
+  let stderr = ''
+  child.stderr.setEncoding('utf8')
+  child.stderr.on('data', (chunk: string) => {
+    if (stderr.length < STDERR_CAP_BYTES) stderr += chunk
+  })
+
+  const exited = new Promise<number>((resolve, reject) => {
+    child.on('error', reject)
+    child.on('close', (code) => resolve(code ?? 1))
+  })
+  // A spawn failure rejects both this and whatever pipeline the caller
+  // builds around child.stdout/child.stdin around the same time. When the
+  // pipeline rejects first, `exited` is never awaited — without this, its
+  // rejection would otherwise surface as an unhandled promise rejection
+  // rather than the error the caller actually throws.
+  exited.catch(() => {})
+
+  return { child, getStderr: () => stderr, exited }
 }
 
 /** Real dumps among `entries`, newest first. Descending by name is
@@ -423,33 +493,11 @@ export async function dumpDatabaseTo({
 
   const { args, password } = connectionArgs(databaseUrl)
   const binary = await pgClientBinary(db, 'pg_dump')
-  const child = spawn(
+  const { child, getStderr, exited } = spawnWithStderrCapture(
     binary,
     [...args, '--format=plain', '--no-password', '--no-owner', '--no-privileges'],
-    {
-      shell: false,
-      env: password === undefined ? process.env : { ...process.env, PGPASSWORD: password },
-    },
+    { env: password === undefined ? process.env : { ...process.env, PGPASSWORD: password } },
   )
-
-  let stderr = ''
-  child.stderr.setEncoding('utf8')
-  child.stderr.on('data', (chunk: string) => {
-    // Bounded: a pathological failure shouldn't hold the whole of stderr in
-    // memory. The first 8KB carries the actual error every time.
-    if (stderr.length < 8192) stderr += chunk
-  })
-
-  const exited = new Promise<number>((resolve, reject) => {
-    child.on('error', reject)
-    child.on('close', (code) => resolve(code ?? 1))
-  })
-  // A spawn failure (e.g. pg_dump missing entirely) rejects both this and
-  // child.stdout around the same time. When the pipeline below throws
-  // first, `exited` is never awaited - without this, its rejection would
-  // otherwise surface as an unhandled promise rejection rather than the
-  // error this function actually throws.
-  exited.catch(() => {})
 
   try {
     await pipeline(child.stdout, createGzip(), createWriteStream(partialPath))
@@ -457,7 +505,7 @@ export async function dumpDatabaseTo({
     // after writing some output, and gzip will happily compress a truncated
     // stream. The exit code is the only real signal.
     const code = await exited
-    if (code !== 0) throw new Error(`pg_dump exited ${code}: ${stderr.trim() || 'no output'}`)
+    if (code !== 0) throw new Error(`pg_dump exited ${code}: ${getStderr().trim() || 'no output'}`)
 
     await rename(partialPath, finalPath)
   } catch (err) {
@@ -487,6 +535,19 @@ export async function runDatabaseBackup({
 }): Promise<DatabaseBackupResult> {
   const startedAt = Date.now()
   await mkdir(dir, { recursive: true })
+
+  // A restore request/attempted marker means the next boot is about to
+  // replace the whole database (database-restore.ts) — refuse to start a
+  // new backup once one exists. Checked before even trying the lock: the
+  // restore route's own lock check (admin-database-backups.ts) is only a
+  // point-in-time snapshot taken before its ~500ms delayed
+  // process.exit(0), so without this a scheduled/manual backup could still
+  // start (and be killed mid-write, leaving a stale lock/.partial file) in
+  // the gap between that check and the process actually exiting. The
+  // restore marker persists across that whole gap; the lock alone doesn't.
+  if (await hasPendingRestore(dir)) {
+    throw new BackupAlreadyRunningError('A database restore is pending; skipping this backup.')
+  }
 
   const lock = await acquireBackupLock(dir)
   try {
@@ -639,7 +700,7 @@ export function scheduleDatabaseBackup(db: Database): void {
       // runAndRecordDatabaseBackup itself, so there's nothing left to do
       // here beyond swallowing the rejection.
       if (err instanceof BackupAlreadyRunningError) {
-        console.log('Database backup: skipped, another run already in progress.')
+        console.log(`Database backup: skipped (${err.message})`)
       }
     })
   void run()

@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi'
 import type { Context } from 'hono'
-import { and, eq, sql } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 import { instanceSettings, userCredentials } from '@rwnd/db'
 import {
   databaseBackupStatusSchema,
@@ -22,6 +22,7 @@ import {
   acquireBackupLock,
   getLastDatabaseBackupRun,
   getRetentionTiers,
+  getServerMajor,
   listDatabaseBackups,
   releaseBackupLock,
   runAndRecordDatabaseBackup,
@@ -263,7 +264,7 @@ adminDatabaseBackupRoutes.openapi(
       await runAndRecordDatabaseBackup({ db, dir, databaseUrl: env.DATABASE_URL })
     } catch (err) {
       if (err instanceof BackupAlreadyRunningError) {
-        return c.json({ error: 'A backup is already running. Try again shortly.' }, 409)
+        return c.json({ error: err.message }, 409)
       }
       // Any other failure is already recorded in lastRun by
       // runAndRecordDatabaseBackup and surfaces via buildStatus below, the
@@ -370,10 +371,7 @@ adminDatabaseBackupRoutes.openapi(
       return c.json({ error: 'File not found.' }, 404)
     }
 
-    const [row] = (await db.execute(
-      sql`select current_setting('server_version_num')::int / 10000 as major`,
-    )) as { major: number }[]
-    const serverMajor = row?.major ?? 0
+    const serverMajor = await getServerMajor(db)
     const role = decodeURIComponent(new URL(env.DATABASE_URL).username)
     const preflight = await preflightCheckDump(dumpPath, { serverMajor, role })
     if (!preflight.ok) {

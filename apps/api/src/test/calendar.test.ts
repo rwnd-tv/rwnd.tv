@@ -512,6 +512,34 @@ describe('calendar feeds', () => {
       expect(body).toContain('DTEND:20260904T190000Z')
     })
 
+    it('falls back to a flat 90 minutes for a movie with no runtime data at all', async () => {
+      // Deliberately a different default from the episode case above (30
+      // min): lib/runtime.ts's DEFAULT_MOVIE_RUNTIME_MINUTES, shared with
+      // the Stats endpoints. Locks in a real M6 behavior change for this
+      // already-shipped (M4) calendar feed — the old flat 30-minute default
+      // this feed used for both movies and episodes alike was replaced by a
+      // movie-specific 90-minute default when the runtime fallback was
+      // extracted into lib/runtime.ts, found during the M6 milestone
+      // review (docs/TODO_ARCHIVE.md); this test is what makes that
+      // deliberate rather than a silent, untested side effect.
+      const cookie = await createUserAndCookie()
+      const userId = await meId(cookie)
+      const [movie] = await db
+        .insert(movies)
+        .values({ title: 'A Movie', slug: 'a-movie', runtimeMinutes: null })
+        .returning()
+      await db.insert(plays).values({
+        userId,
+        movieId: movie!.id,
+        watchedAt: new Date('2026-09-04T19:00:00.000Z'),
+      })
+
+      const feed = await createFeed(cookie, 'history')
+      const body = await (await app.request(`/api/v1/calendar/${feed.token}/feed.ics`)).text()
+      expect(body).toContain('DTSTART:20260904T173000Z')
+      expect(body).toContain('DTEND:20260904T190000Z')
+    })
+
     it('pushes the start later to avoid overlapping a strictly earlier previous play', async () => {
       const cookie = await createUserAndCookie()
       const userId = await meId(cookie)

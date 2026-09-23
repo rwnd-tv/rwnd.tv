@@ -1,4 +1,3 @@
-import { spawn } from 'node:child_process'
 import { createReadStream } from 'node:fs'
 import {
   type FileHandle,
@@ -16,15 +15,16 @@ import { join } from 'node:path'
 import { PassThrough } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import { createGunzip } from 'node:zlib'
-import { sql } from 'drizzle-orm'
 import { createDatabase } from '@rwnd/db'
 import {
   BackupAlreadyRunningError,
   acquireBackupLock,
   connectionArgs,
   dumpDatabaseTo,
-  pgClientBinary,
+  getServerMajor,
+  pgClientBinaryForMajor,
   releaseBackupLock,
+  spawnWithStderrCapture,
   type DatabaseBackupFile,
 } from './database-backup.js'
 
@@ -433,7 +433,7 @@ async function runPsqlRestore({
   dumpPath: string
 }): Promise<void> {
   const { args, password } = connectionArgs(databaseUrl)
-  const child = spawn(
+  const { child, getStderr, exited } = spawnWithStderrCapture(
     binary,
     [
       ...args,
@@ -444,27 +444,8 @@ async function runPsqlRestore({
       '--no-psqlrc',
       '--quiet',
     ],
-    {
-      shell: false,
-      stdio: ['pipe', 'pipe', 'pipe'],
-      env: password === undefined ? process.env : { ...process.env, PGPASSWORD: password },
-    },
+    { env: password === undefined ? process.env : { ...process.env, PGPASSWORD: password } },
   )
-
-  let stderr = ''
-  child.stderr.setEncoding('utf8')
-  child.stderr.on('data', (chunk: string) => {
-    if (stderr.length < 8192) stderr += chunk
-  })
-
-  const exited = new Promise<number>((resolve, reject) => {
-    child.on('error', reject)
-    child.on('close', (code) => resolve(code ?? 1))
-  })
-  // Same reasoning as dumpDatabaseTo's own `exited.catch(() => {})`: a spawn
-  // failure rejects both this and the input pipeline below around the same
-  // time, and only one of them is actually awaited past that point.
-  exited.catch(() => {})
 
   const input = new PassThrough()
   input.write(buildRestorePreamble())
@@ -495,7 +476,7 @@ async function runPsqlRestore({
     pipelineError = err instanceof Error ? err : new Error(String(err))
   }
   const code = await exited
-  if (code !== 0) throw new Error(`psql exited ${code}: ${stderr.trim() || 'no output'}`)
+  if (code !== 0) throw new Error(`psql exited ${code}: ${getStderr().trim() || 'no output'}`)
   if (pipelineError) throw pipelineError
 }
 
@@ -521,8 +502,23 @@ export async function runPendingRestore({
   const attemptedPath = join(dir, ATTEMPTED_FILE)
   const leftover = await readJsonIfExists<RestoreRequest>(attemptedPath)
   if (leftover) {
-    // Claimed by a previous boot that never finished — the transaction
-    // guarantees the database was left untouched, but this marker must
+    // Claimed by a previous boot that never reached its own final cleanup —
+    // but "never reached cleanup" and "never finished" are not the same
+    // fact. A container killed AFTER the psql transaction actually
+    // committed (below), but before writeRestoreResult/releaseBackupLock/
+    // unlink(attemptedPath) all finished, leaves exactly this same leftover
+    // marker behind despite the restore having genuinely succeeded. Check
+    // whether a result for this exact request (matched by requestedAt, set
+    // once per request) was already recorded before assuming failure —
+    // otherwise a successful restore's own true 'ok' result would be
+    // silently overwritten with a false 'failed' one here.
+    const existingResult = await readJsonIfExists<RestoreResult>(join(dir, RESULT_FILE))
+    if (existingResult && existingResult.requestedAt === leftover.requestedAt) {
+      await unlink(attemptedPath).catch(() => {})
+      return
+    }
+    // No result was ever recorded for this request, so the transaction
+    // guarantees the database was left untouched — but this marker must
     // never be retried (that's what makes a crash-loop structurally
     // impossible), so it becomes a failed result instead.
     await writeRestoreResult(dir, {
@@ -570,21 +566,30 @@ export async function runPendingRestore({
     const db = createDatabase(databaseUrl, { ssl })
     let psqlBinary: string
     try {
-      const [row] = (await db.execute(
-        sql`select current_setting('server_version_num')::int / 10000 as major`,
-      )) as { major: number }[]
-      const serverMajor = row?.major ?? 0
-
-      snapshotName = preRestoreSnapshotName(new Date())
-      await dumpDatabaseTo({ db, databaseUrl, finalPath: join(dir, snapshotName) })
-
+      const serverMajor = await getServerMajor(db)
       const role = decodeURIComponent(new URL(databaseUrl).username)
+
+      // Validate the requested dump BEFORE spending the time/disk on a full
+      // pre-restore snapshot — an invalid file (corrupt, truncated, wrong
+      // pg_dump major, owner mismatch) is rejected here without ever
+      // writing a snapshot a disk-constrained instance can't necessarily
+      // afford, and without recording a snapshot name for a file that was
+      // never going to exist.
       const preflight = await preflightCheckDump(dumpPath, { serverMajor, role })
       if (!preflight.ok) {
         throw new Error(preflight.detail ?? `Preflight check failed: ${preflight.reason}`)
       }
 
-      psqlBinary = await pgClientBinary(db, 'psql')
+      // Only assigned to the outer `snapshotName` (what the catch block
+      // below reports) once dumpDatabaseTo actually resolves — assigning it
+      // beforehand would let a failed snapshot dump still report a
+      // filename that was never written to disk, contradicting this
+      // field's own "null if the snapshot itself failed" doc comment.
+      const nextSnapshotName = preRestoreSnapshotName(new Date())
+      await dumpDatabaseTo({ db, databaseUrl, finalPath: join(dir, nextSnapshotName) })
+      snapshotName = nextSnapshotName
+
+      psqlBinary = pgClientBinaryForMajor(serverMajor, 'psql')
     } finally {
       // Must close before runPsqlRestore's preamble terminates every
       // backend under this role — otherwise it would terminate this very

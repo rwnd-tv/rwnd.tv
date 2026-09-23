@@ -232,6 +232,9 @@ describe('DatabaseBackupsPanel', () => {
   it('lets the owner confirm and request a restore, then shows the restoring state', async () => {
     const user = userEvent.setup()
     vi.mocked(api.admin.restoreDatabaseBackup).mockResolvedValue(undefined)
+    // RestoringState polls this via React Query now — an unmocked call
+    // resolves to `undefined`, which React Query itself warns about.
+    vi.mocked(api.health).mockResolvedValue({ status: 'ok' })
 
     renderPanel(
       baseStatus({

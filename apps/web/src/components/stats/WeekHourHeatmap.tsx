@@ -224,14 +224,26 @@ export function WeekHourHeatmap({
     return { matrix: combined, max: Math.max(1, ...combined.flat()) }
   }, [episodePlays, moviePlays, year])
 
+  // Intl.DateTimeFormat construction does real locale-data resolution
+  // work (hourLabelFormatter builds a throwaway one just to read
+  // resolvedOptions().hour12), so these are memoized on locale alone —
+  // this component re-renders on every year-selector change in StatsPage
+  // even though locale itself is stable, same reasoning as the matrix/max
+  // useMemo above.
+  const { dayOrder, weekdayFormatter, weekdayLongFormatter, hourFormatter } = useMemo(
+    () => ({
+      dayOrder: weekdayDisplayOrder(locale),
+      weekdayFormatter: new Intl.DateTimeFormat(locale, { weekday: 'short' }),
+      weekdayLongFormatter: new Intl.DateTimeFormat(locale, { weekday: 'long' }),
+      hourFormatter: hourLabelFormatter(locale),
+    }),
+    [locale],
+  )
+
   if (matrix.flat().every((count) => count === 0)) {
     return <p className="text-sm text-[var(--color-fg-muted)]">{t('stats.heatmap.empty')}</p>
   }
 
-  const dayOrder = weekdayDisplayOrder(locale)
-  const weekdayFormatter = new Intl.DateTimeFormat(locale, { weekday: 'short' })
-  const weekdayLongFormatter = new Intl.DateTimeFormat(locale, { weekday: 'long' })
-  const hourFormatter = hourLabelFormatter(locale)
   const cellCount = (count: number) => t('stats.heatmap.cellCount', { count })
 
   const sharedProps = {

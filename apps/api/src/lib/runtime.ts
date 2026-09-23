@@ -14,6 +14,15 @@ export const DEFAULT_EPISODE_RUNTIME_MINUTES = 30
 // the episode case (movies almost always carry a runtime from TMDB), so
 // this is a plain conventional feature length rather than anything
 // computed. Not worth a per-user median query for a value this rare.
+//
+// Deliberately different from DEFAULT_EPISODE_RUNTIME_MINUTES: this module
+// was extracted from calendar/build.ts (M6), which previously used one flat
+// 30-minute default for both movies and episodes. That's a real, if narrow,
+// behavior change for the already-shipped (M4) History/.ics calendar feed —
+// found during the M6 milestone review, not an intended part of this
+// module's own extraction. Kept as 90 rather than reverted to the old flat
+// 30, since 30 minutes was never a remotely plausible movie runtime; see
+// apps/api/src/test/calendar.test.ts's own test for this exact case.
 export const DEFAULT_MOVIE_RUNTIME_MINUTES = 90
 
 /**

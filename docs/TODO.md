@@ -153,27 +153,6 @@ Format:
 
 ## Auth & accounts
 
-- [ ] **Explain invite-only mode on the Create an account screen** (2026-09-16 added; M6)
-
-      `RegisterPage.tsx` renders the invite code `Field` whenever
-      `settings?.registrationMode === 'invite'` (around line 118), but
-      nothing on the page says why that field is there or that the
-      instance is invite-only at all: the field is just labeled
-      `register.inviteCode` ("Invite code") with no surrounding copy.
-      Someone landing on the page with no code in hand has no way to tell
-      whether it's optional, what it's for, or where to get one.
-
-      `register.closed` and `register.emailNotConfigured`
-      (`i18n/locales/*/common.json`) already show this pattern for the
-      other two gated states on this same page (registration fully closed,
-      SMTP not configured); add a matching string, e.g.
-      "This instance is invite-only. You'll need an invite code from an
-      admin to create an account," shown above or alongside the invite
-      code field only when `registrationMode === 'invite'`.
-
-      James, 2026-09-16: the screen is a bit opaque right now, wants some
-      explanatory text added for this case.
-
 - [ ] **Passkey (WebAuthn) support** (2026-08-23 15:45 added)
 
       Another `user_credentials` adapter type alongside `local`/`oidc`
@@ -283,40 +262,6 @@ Format:
       turns up, or IMDb gives a direct answer on whether self-hosted OSS
       counts as personal use. Movies-only vs. Movies+TV Shows was never
       decided either, moot until this unblocks.
-
-## Backups
-
-- [ ] **Restore automation for the automatic database backup** (2026-09-09 added, narrowed 2026-09-10 x2, split from the "back up now" button 2026-09-16, scoped into M6 2026-09-22; M6)
-
-      [ADR 0008](adr/0008-database-backups.md) decided restore stays a
-      manual shell procedure, on the grounds that it's destructive, rare,
-      and deliberate enough that automating it adds risk without adding
-      value. James, 2026-09-10: doesn't fully agree with that call
-      (recorded in the ADR rather than overridden). The admin panel
-      (`DatabaseBackupsPanel.tsx`, shipped 2026-09-10) links out to the
-      documented procedure for now; whether to build an actual in-app
-      restore path is still open and wants its own decision, not a quick
-      follow-on to the manual "back up now" button (shipped 2026-09-17,
-      see `docs/TODO_ARCHIVE.md`).
-
-      Decision made 2026-09-22: build it, as part of M6. Design research
-      found the obvious in-process approach (an admin route that drops
-      and recreates the schema, then restarts the process) has real holes
-      - Drizzle's migrations table lives in its own `drizzle` schema, not
-      `public`, so dropping only `public` either fails the restore
-      outright or silently desyncs the migration history; and a
-      drop-then-restore split across two transactions can leave the
-      database empty if the restore step fails partway. The design that
-      avoids both: entrypoint-driven, marker-file mediated - the app
-      validates the request and writes a small marker file, then exits;
-      `docker-entrypoint.sh` performs the actual drop-and-restore (as one
-      atomic transaction) before migrations run, while the app process
-      isn't holding any connections open. Full mechanism, including the
-      confirmation/permission gating (`requireOwner` + typed confirmation
-      + password re-proof, matching `transfer-ownership`'s bar) and the
-      pre-restore-snapshot handling, is in the M6 plan
-      (`C:\Users\James\.claude\plans\wise-tinkering-charm.md`). Not yet
-      started - the highest-risk piece of M6.
 
 ## Security
 

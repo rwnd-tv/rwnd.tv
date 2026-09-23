@@ -4179,6 +4179,18 @@ DATABASE` ×2) — zero residue.\
       busy-freeze). `pnpm lint`/`format:check`/`typecheck` clean, full
       `apps/web` suite (130 tests) run.
 
+- [x] **Explain invite-only mode on the Create an account screen** (2026-09-16 added, done 2026-09-22, archived 2026-09-23 having been missed by the M6 reconciliation)
+
+      James, 2026-09-16: the screen was opaque when `registrationMode`
+      is `'invite'` - the invite code `Field` had no surrounding copy
+      explaining why it's there or where to get a code. Shipped as part
+      of the M6 quick-fix polish batch (`da02000`): added explanatory
+      copy above the invite-code field, following `register.closed`/
+      `register.emailNotConfigured`'s existing pattern for the other two
+      gated states on the same page, and wove in `settings.adminEmail`
+      when set (its own schema doc comment already cited this as the
+      intended use).
+
 ## Import
 
 - [x] **Build ZIP-upload import from Trakt's own "Export now" file** (2026-08-24 22:50 added, investigated 2026-08-24, done 2026-08-25) — M2\
@@ -4554,6 +4566,50 @@ DATABASE` ×2) — zero residue.\
       a new `indexByRef()` builds a `BackupRefIndex` Map keyed by
       `` `${source}:${externalId}` `` once per file, making each lookup
       O(1).
+
+- [x] **Restore automation for the automatic database backup** (2026-09-09 added, narrowed 2026-09-10 x2, split from the "back up now" button 2026-09-16, scoped into M6 2026-09-22, done 2026-09-23, archived 2026-09-23 having been missed by the M6 reconciliation)
+
+      Reverses [ADR 0008](adr/0008-database-backups.md)'s "restore stays
+      manual" call, which had already recorded James's 2026-09-10
+      disagreement as an open question. M6 design research found the
+      obvious in-process approach (an admin route that drops and
+      recreates the schema, then restarts) has real holes: Drizzle's
+      migrations table lives in its own `drizzle` schema, not `public`,
+      so dropping only `public` either fails the restore outright or
+      silently desyncs the migration history; and a drop-then-restore
+      split across two transactions can leave the database empty if the
+      restore step fails partway.
+
+      Shipped (commit `a2a8d8e`) as an entrypoint-driven, marker-file
+      mediated design instead: `POST /admin/database-backups/{file}/
+      restore` (`requireOwner` + typed confirmation + password re-proof,
+      matching `transfer-ownership`'s bar) validates and writes a marker
+      file, then exits; `docker-entrypoint.sh` performs the actual
+      drop-and-restore as one atomic `psql --single-transaction`,
+      before migrations run, once the app's own connection pool is
+      already gone. Every restore takes an automatic pre-restore
+      snapshot first, itself restorable as a one-click undo.
+
+      **Verified live on dev.rwnd.tv, not just via automated tests**: a
+      real restore plus its own undo, a truncated/corrupt dump rejected
+      before anything restarted, and a dump that passes preflight but
+      fails mid-transaction rolling back with all 4 real users' data
+      checked intact (not just the owner's). Caught and fixed 2 real
+      bugs this way that no test suite had: a `readline`/zlib
+      error-propagation gap that could crash the restore process on a
+      corrupt file (readline re-emits its input stream's own 'error' on
+      itself, so a listener on the gunzip stream alone isn't enough),
+      and a broken-pipe error masking psql's real failure message behind
+      a useless "write EPIPE" (psql exiting on a bad statement closes
+      its stdin before the write finishes; fixed by only letting the
+      pipe error win when the exit code is actually 0).
+
+      The M6 milestone-wide code review (see `docs/ROADMAP.md`'s M6
+      entry) later found and fixed 3 more bugs in this same mechanism: a
+      leftover `.attempted` marker could overwrite an already-successful
+      restore's result as `failed`; a failed pre-restore snapshot could
+      report a filename that was never written; and a lock race let the
+      scheduled backup start inside the restore route's exit delay.
 
 ## Self-hosting & deployment
 

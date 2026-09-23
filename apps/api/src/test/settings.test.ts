@@ -160,6 +160,43 @@ describe('/api/v1/settings — admin email', () => {
   })
 })
 
+describe('/api/v1/settings — landing mode', () => {
+  beforeEach(() => resetDb(db))
+
+  it('GET reports the default marketing mode, with no auth required', async () => {
+    const res = await app.request('/api/v1/settings')
+    expect(res.status).toBe(200)
+    const body = await json<InstanceSettings>(res)
+    expect(body.landingMode).toBe('marketing')
+  })
+
+  it('PATCH sets it, and both the PATCH response and a public GET reflect the change', async () => {
+    const cookie = await createAdminAndCookie()
+    const patchRes = await app.request('/api/v1/settings', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', cookie },
+      body: JSON.stringify({ landingMode: 'login' }),
+    })
+    expect(patchRes.status).toBe(200)
+    const patched = await json<InstanceSettings>(patchRes)
+    expect(patched.landingMode).toBe('login')
+
+    const getRes = await app.request('/api/v1/settings')
+    const body = await json<InstanceSettings>(getRes)
+    expect(body.landingMode).toBe('login')
+  })
+
+  it('PATCH rejects a value outside the enum', async () => {
+    const cookie = await createAdminAndCookie()
+    const res = await app.request('/api/v1/settings', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', cookie },
+      body: JSON.stringify({ landingMode: 'bogus' }),
+    })
+    expect(res.status).toBe(400)
+  })
+})
+
 describe('/api/v1/settings/about', () => {
   beforeEach(() => resetDb(db))
 

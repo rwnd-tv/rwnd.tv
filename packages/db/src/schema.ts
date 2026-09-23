@@ -46,6 +46,7 @@ export const userRoleEnum = pgEnum('user_role', ['admin', 'user', 'owner'])
 export const themeEnum = pgEnum('theme', ['system', 'light', 'dark'])
 export const credentialTypeEnum = pgEnum('credential_type', ['local', 'oidc'])
 export const registrationModeEnum = pgEnum('registration_mode', ['open', 'invite', 'closed'])
+export const landingModeEnum = pgEnum('landing_mode', ['marketing', 'login'])
 export const metadataEntityTypeEnum = pgEnum('metadata_entity_type', ['movie', 'show', 'episode'])
 export const externalIdSourceEnum = pgEnum('external_id_source', ['tmdb', 'imdb', 'tvdb', 'trakt'])
 export const playSourceEnum = pgEnum('play_source', [
@@ -545,6 +546,14 @@ export const instanceSettings = pgTable(
     id: smallint('id').primaryKey().default(1),
     instanceName: text('instance_name').notNull().default('rwnd.tv'),
     registrationMode: registrationModeEnum('registration_mode').notNull().default('closed'),
+    // Which page an anonymous visitor sees at '/' — rwnd.tv's own marketing
+    // page ('marketing', the default, no behaviour change for this
+    // project's own instances) or straight to /login ('login', for a
+    // self-hoster who doesn't want rwnd.tv's own positioning/self-host CTA
+    // on their instance). Publicly readable — same reasoning as
+    // registrationMode above: LandingPage.tsx has to read this before
+    // anyone is authenticated. See apps/web/src/routes/LandingPage.tsx.
+    landingMode: landingModeEnum('landing_mode').notNull().default('marketing'),
     defaultLocale: text('default_locale').notNull().default('en-US'),
     // Ordered list of metadata provider sources, highest priority first.
     // Plain text[] rather than a pg enum array, following defaultLocale

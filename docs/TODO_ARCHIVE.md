@@ -2363,6 +2363,50 @@ currently-dropped shows, since a row can have both
       (`MILESTONES.filter(status === 'done')`) now also shows "M5 · done"
       automatically, with no separate change needed there.
 
+- [x] **Configurable or optional landing page for self-hosted instances** (2026-09-17 added, status strip count corrected 2026-09-22, scoped into M6 2026-09-22, done 2026-09-23)
+
+      `LandingPage.tsx` (route `/`) is deliberately rwnd.tv's own marketing
+      page — the self-host CTA, GitHub/vision.md links, the milestone
+      status strip, all specific to this project's own identity and
+      positioning (see CLAUDE.md's "Public-facing design surfaces"
+      section). James, 2026-09-17: right for rwnd.tv itself, but a
+      self-hoster running their own instance might want to skip the
+      marketing content and land straight on sign-in.
+
+      Decided 2026-09-22 as part of M6 scoping, over the admin-authored-copy
+      alternative (a materially bigger feature, touching ~112 existing
+      `landing.*` i18n keys, for a "skip the marketing page" ask): a new
+      `landingMode: 'marketing' | 'login'` enum field on `instance_settings`,
+      same public/admin-editable pattern as `registrationMode` (public
+      schema, `instanceSettingsSchema`, since the anonymous visitor at `/`
+      has to read it before login), defaulting to `'marketing'` so rwnd.tv's
+      own instances are unaffected.
+
+      Shipped: `packages/db/src/schema.ts`'s `landingModeEnum` +
+      `instance_settings.landing_mode` column (migration
+      `0046_add_instance_landing_mode.sql`); the shared `landingModeSchema`;
+      `serializeSettings`'s three spots in `apps/api/src/routes/settings.ts`
+      (`DEFAULT_SETTINGS`, the row-narrowing param type, the return object)
+      all updated together, the same "easy to miss one" risk the original
+      scoping note called out; a new radio group in
+      `InstanceSettingsPanel.tsx` following `registrationMode`'s exactly;
+      and `LandingPage.tsx` redirecting to `/login` when `landingMode` is
+      `'login'`, ordered after the existing setup-required and logged-in
+      redirects. Fixed the pre-existing bug the M6 plan flagged in passing:
+      `usePublicSettings()`'s `isLoading` wasn't in the page's loading gate,
+      so a `'login'` instance would have flashed the marketing page on every
+      cold load before redirecting — `settingsLoading` is now part of that
+      gate. If the settings fetch itself fails, the page falls back to the
+      marketing page rather than blocking, the safe default.
+
+      Full API test coverage (default value, PATCH round-trip through both
+      the PATCH response and a public GET, rejecting a value outside the
+      enum) and a new `LandingPage.test.tsx` (both modes, the loading-gate
+      flash regression, setup/auth taking priority over `landingMode`, and
+      the fetch-failure fallback). Verified live on dev.rwnd.tv: switching
+      to the sign-in page redirects `/` to `/login` with no marketing-page
+      flash on a hard reload, switching back restores the marketing page.
+
 ## Localization
 
 - [x] **Drop fr-FR** (2026-08-23 done)\

@@ -35,6 +35,7 @@ const DEFAULT_RETENTION = {
 const baseSettings: InstanceSettings = {
   instanceName: 'rwnd.tv',
   registrationMode: 'closed',
+  landingMode: 'marketing',
   defaultLocale: 'en-GB',
   metadataProviderPriority: ['tmdb'],
   availableMetadataProviders: ['tmdb'],

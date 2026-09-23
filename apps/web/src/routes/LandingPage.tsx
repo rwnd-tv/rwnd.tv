@@ -28,6 +28,11 @@ import { Spinner } from '../components/ui/Spinner.js'
  * this instance is taking registrations. See CLAUDE.md's "Public-facing
  * design surfaces" section for why this page's structure deliberately
  * doesn't mirror the closest comparable open-source project's.
+ *
+ * A self-hoster who doesn't want rwnd.tv's own marketing/self-host
+ * positioning on their instance can set `landingMode: 'login'` (Admin >
+ * Instance settings), which sends a logged-out visitor straight to /login
+ * instead of rendering any of this.
  */
 
 const SHOTS = '/landing'
@@ -114,9 +119,9 @@ export function LandingPage() {
   const locale = detectedLocale(i18n.language) ?? 'en-US'
   const { user, isLoading: authLoading } = useAuth()
   const { data: setupStatus, isLoading: setupLoading } = useSetupStatus()
-  const { data: settings } = usePublicSettings()
+  const { data: settings, isLoading: settingsLoading } = usePublicSettings()
 
-  if (setupLoading || authLoading) {
+  if (setupLoading || authLoading || settingsLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <Spinner label={t('common.loading')} />
@@ -126,6 +131,11 @@ export function LandingPage() {
   // A brand-new instance has no admin yet — setup comes before anything else.
   if (setupStatus?.required) return <Navigate to="/setup" replace />
   if (user) return <Navigate to="/dashboard" replace />
+  // Self-hosters who don't want rwnd.tv's own marketing page on their
+  // instance's '/' — settings is undefined only if the fetch itself
+  // failed, in which case the safe default is to fall through to the
+  // marketing page below rather than block the whole route on it.
+  if (settings?.landingMode === 'login') return <Navigate to="/login" replace />
 
   // Same gate as LoginPage's register prompt: an instance with registration
   // closed — or with no SMTP, which makes email verification impossible —

@@ -22,6 +22,7 @@ export const settingsRoutes = new OpenAPIHono<AppEnv>()
 const DEFAULT_SETTINGS = {
   instanceName: 'rwnd.tv',
   registrationMode: 'closed' as const,
+  landingMode: 'marketing' as const,
   defaultLocale: 'en-US' as const,
   metadataProviderPriority: ['tmdb'] as MetadataProviderSource[],
   adminEmail: null as string | null,
@@ -36,6 +37,7 @@ function isSupportedLocale(value: string): value is InstanceSettings['defaultLoc
 function serializeSettings(row?: {
   instanceName: string
   registrationMode: InstanceSettings['registrationMode']
+  landingMode: InstanceSettings['landingMode']
   defaultLocale: string
   metadataProviderPriority: string[]
   adminEmail: string | null
@@ -63,6 +65,7 @@ function serializeSettings(row?: {
   return {
     instanceName: source.instanceName,
     registrationMode: source.registrationMode,
+    landingMode: source.landingMode,
     defaultLocale: isSupportedLocale(source.defaultLocale)
       ? source.defaultLocale
       : DEFAULT_SETTINGS.defaultLocale,

@@ -109,9 +109,11 @@ that matter most when nobody is actively maintaining an instance
       psql's actual failure message) and fixed it. See
       [ADR 0008](adr/0008-database-backups.md)'s 2026-09-22 update for the
       full design.
-- [ ] **Configurable landing page for self-hosted instances**: a new
-      admin-editable `landingMode` setting so a self-hoster's `/` can skip
-      rwnd.tv's own marketing page and go straight to sign-in. See [TODO.md](TODO.md).
+- [x] **Configurable landing page for self-hosted instances**: a new
+      admin-editable `landingMode: 'marketing' | 'login'` setting (Admin >
+      Instance settings) so a self-hoster's `/` can skip rwnd.tv's own
+      marketing page and go straight to `/login`. Defaults to `'marketing'`,
+      so rwnd.tv's own instances are unaffected. See TODO_ARCHIVE.md.
 - [x] **Quick-fix polish**: explain invite-only mode on the Create an
       account screen; fold the remaining duplicate `PlusIcon` copies into
       the shared one; watchlist detail page year/rating sort+filter

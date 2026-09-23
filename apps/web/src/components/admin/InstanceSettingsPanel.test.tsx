@@ -33,6 +33,7 @@ vi.mock('../../lib/api-client.js', async (importOriginal) => {
 const SETTINGS: InstanceSettings = {
   instanceName: 'My rwnd.tv',
   registrationMode: 'invite',
+  landingMode: 'login',
   defaultLocale: 'en-GB',
   metadataProviderPriority: ['tvdb', 'tmdb'],
   availableMetadataProviders: ['tvdb', 'tmdb'],
@@ -69,6 +70,8 @@ describe('InstanceSettingsPanel', () => {
     expect(screen.getByDisplayValue('admin@example.com')).toBeInTheDocument()
     expect(screen.getByRole('radio', { name: 'Invite only' })).toBeChecked()
     expect(screen.getByRole('radio', { name: 'Closed — admin creates accounts' })).not.toBeChecked()
+    expect(screen.getByRole('radio', { name: 'Sign-in page' })).toBeChecked()
+    expect(screen.getByRole('radio', { name: 'rwnd.tv project page' })).not.toBeChecked()
   })
 
   it('seeds every field from a cold query (no warm cache) once it resolves', async () => {
@@ -78,9 +81,10 @@ describe('InstanceSettingsPanel', () => {
     expect(await screen.findByDisplayValue('My rwnd.tv')).toBeInTheDocument()
     expect(screen.getByDisplayValue('admin@example.com')).toBeInTheDocument()
     expect(screen.getByRole('radio', { name: 'Invite only' })).toBeChecked()
+    expect(screen.getByRole('radio', { name: 'Sign-in page' })).toBeChecked()
   })
 
-  it('saves exactly instanceName/registrationMode/adminEmail, never metadataProviderPriority or other fields', async () => {
+  it('saves exactly instanceName/registrationMode/landingMode/adminEmail, never metadataProviderPriority or other fields', async () => {
     vi.mocked(api.settings.get).mockResolvedValue(SETTINGS)
     vi.mocked(api.settings.update).mockResolvedValue(SETTINGS)
     renderPanel()
@@ -94,6 +98,7 @@ describe('InstanceSettingsPanel', () => {
       expect(api.settings.update).toHaveBeenCalledWith({
         instanceName: 'Renamed instance',
         registrationMode: 'invite',
+        landingMode: 'login',
         adminEmail: 'admin@example.com',
       }),
     )

@@ -4,9 +4,17 @@ import { localeSchema, metadataProviderSourceSchema } from './common.js'
 export const registrationModeSchema = z.enum(['open', 'invite', 'closed'])
 export type RegistrationMode = z.infer<typeof registrationModeSchema>
 
+export const landingModeSchema = z.enum(['marketing', 'login'])
+export type LandingMode = z.infer<typeof landingModeSchema>
+
 export const instanceSettingsSchema = z.object({
   instanceName: z.string(),
   registrationMode: registrationModeSchema,
+  // Which page an anonymous visitor sees at '/' — rwnd.tv's own marketing
+  // page, or straight to /login. Public, not gated behind auth: the
+  // anonymous visitor at '/' has to read this before they're authenticated,
+  // same reasoning as registrationMode above.
+  landingMode: landingModeSchema,
   defaultLocale: localeSchema,
   // Admin-configured metadata provider preference order, highest priority
   // first — see docs/adr/0006. Always contains every provider this

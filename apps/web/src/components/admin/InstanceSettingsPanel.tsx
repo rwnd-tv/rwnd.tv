@@ -1,7 +1,12 @@
 import { useState, type FormEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import type { InstanceSettings, MetadataProviderSource, RegistrationMode } from '@rwnd/shared'
+import type {
+  InstanceSettings,
+  LandingMode,
+  MetadataProviderSource,
+  RegistrationMode,
+} from '@rwnd/shared'
 import { api, ApiError } from '../../lib/api-client.js'
 import { usePublicSettings } from '../../lib/use-public-settings.js'
 import { PROVIDER_LABELS } from '../../lib/provider-labels.js'
@@ -59,6 +64,7 @@ function ChevronDownIcon() {
 interface InstanceSettingsForm {
   instanceName: string
   registrationMode: RegistrationMode
+  landingMode: LandingMode
   /** '' rather than null — an <input value> can't take null. Converted
    * back to null at submit time, the only place the API's own
    * string|null shape is reconstructed. */
@@ -69,6 +75,7 @@ function formFromSettings(settings: InstanceSettings): InstanceSettingsForm {
   return {
     instanceName: settings.instanceName,
     registrationMode: settings.registrationMode,
+    landingMode: settings.landingMode,
     adminEmail: settings.adminEmail ?? '',
   }
 }
@@ -94,6 +101,7 @@ export function InstanceSettingsPanel() {
   const [form, setForm] = useState<InstanceSettingsForm>({
     instanceName: '',
     registrationMode: 'closed',
+    landingMode: 'marketing',
     adminEmail: '',
   })
   // Kept separate from `form` above: a reorder click applies immediately
@@ -145,6 +153,7 @@ export function InstanceSettingsPanel() {
               data.registrationMode === prev.registrationMode
                 ? f.registrationMode
                 : data.registrationMode,
+            landingMode: data.landingMode === prev.landingMode ? f.landingMode : data.landingMode,
             adminEmail:
               data.adminEmail === prev.adminEmail ? f.adminEmail : (data.adminEmail ?? ''),
           },
@@ -157,6 +166,7 @@ export function InstanceSettingsPanel() {
       api.settings.update({
         instanceName: form.instanceName,
         registrationMode: form.registrationMode,
+        landingMode: form.landingMode,
         adminEmail: form.adminEmail.trim() === '' ? null : form.adminEmail.trim(),
       }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['settings', 'public'] }),
@@ -217,6 +227,27 @@ export function InstanceSettingsPanel() {
               </label>
             ))}
           </div>
+        </fieldset>
+
+        <fieldset className="flex flex-col gap-1">
+          <legend className="text-sm font-medium">{t('admin.instance.landingMode')}</legend>
+          <div className="flex flex-col gap-2">
+            {(['marketing', 'login'] as const).map((mode) => (
+              <label key={mode} className="flex items-center gap-2 text-sm">
+                <input
+                  type="radio"
+                  name="landingMode"
+                  value={mode}
+                  checked={form.landingMode === mode}
+                  onChange={() => setForm((f) => ({ ...f, landingMode: mode }))}
+                />
+                {t(`admin.instance.landingMode${mode[0]!.toUpperCase()}${mode.slice(1)}`)}
+              </label>
+            ))}
+          </div>
+          <p className="text-xs text-[var(--color-fg-muted)]">
+            {t('admin.instance.landingModeHint')}
+          </p>
         </fieldset>
 
         <div className="flex flex-col gap-1">

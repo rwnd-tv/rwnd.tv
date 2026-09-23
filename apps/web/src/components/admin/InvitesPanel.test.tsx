@@ -21,6 +21,7 @@ vi.mock('../../lib/api-client.js', async (importOriginal) => {
 const baseSettings: InstanceSettings = {
   instanceName: 'rwnd.tv',
   registrationMode: 'invite',
+  landingMode: 'marketing',
   defaultLocale: 'en-GB',
   metadataProviderPriority: ['tmdb'],
   availableMetadataProviders: ['tmdb'],

@@ -375,38 +375,6 @@ source of truth for scope; this is just so a TODO listing is complete.
 
       A public view of a user's watch history/stats.
 
-- [ ] **Configurable or optional landing page for self-hosted instances** (2026-09-17 added, status strip count corrected 2026-09-22, scoped into M6 2026-09-22; M6)
-
-      `LandingPage.tsx` (route `/`) is deliberately rwnd.tv's own marketing
-      page: the self-host CTA, GitHub/vision.md links, the M1-M5 status
-      strip (M1-M4 as of when this item was added; M5 shipped since), the
-      "Built with Claude Code" note, all specific to this
-      project's own identity and positioning (see CLAUDE.md's "Public-
-      facing design surfaces" section). James, 2026-09-17: that's right
-      for rwnd.tv itself, but a self-hoster running their own instance
-      (e.g. for family/friends) might want something else entirely, or
-      nothing at all - just landing straight on Sign In / Create an
-      account, skipping the marketing content altogether.
-
-      Genuinely open on the shape of a fix, worth exploring rather than
-      just picking one: an admin-editable instance setting (same pattern
-      as `instanceName`/`registrationMode`) that swaps `/` for a minimal
-      auth-only screen; a setting that lets an admin write their own
-      hero/features copy in place of rwnd.tv's; or something else. Any of
-      these needs a decision on how much stays fixed (layout, self-host
-      messaging that assumes this is *the* rwnd.tv project) versus
-      genuinely swappable per instance.
-
-      Decided 2026-09-22, as part of M6 scoping: the first option, a new
-      `landingMode: 'marketing' | 'login'` enum field on `instance_settings`
-      (same public/admin-editable pattern as `registrationMode`), defaulting
-      to `'marketing'` so rwnd.tv's own instance is unaffected. Not the
-      admin-authored-copy option - that's a materially bigger feature (i18n
-      implications alone touch ~112 existing `landing.*` keys) for a
-      "skip the marketing page" ask. Full design in the M6 plan
-      (`C:\Users\James\.claude\plans\wise-tinkering-charm.md`). Not yet
-      built.
-
 - [ ] **Consider federation (ActivityPub/AT Protocol) for cross-instance social features** (2026-09-20 added; Not yet scheduled)
 
       Surfaced from an r/TraktRejects thread ("Self-hosted federated

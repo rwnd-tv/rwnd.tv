@@ -19,7 +19,7 @@ mv .env.example .env
 docker compose up -d
 ```
 
-Visit `http://<host>:3000`. The first person to load the app is walked through creating the owner account. After that, whether anyone else can register is controlled from Admin → Instance settings (admin only), or by editing `instance_settings` directly.
+Visit `http://<host>:3000`. The first person to load the app is walked through creating the owner account. After that, whether anyone else can register is controlled from Admin → Instance settings (admin only), or by editing `instance_settings` directly. The same panel can also switch the root URL from rwnd.tv's own project page to a plain sign-in page, for an instance that doesn't want rwnd.tv's own marketing/self-host copy shown to logged-out visitors.
 
 ## Configuration
 

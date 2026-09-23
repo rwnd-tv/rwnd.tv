@@ -404,3 +404,14 @@ source of truth for scope; this is just so a TODO listing is complete.
       worth keeping an eye on how Popfeed/Opnshelf/Scrob develop given the
       overlap.
 
+- [ ] **No screenshot of the Stats page** (2026-09-23 added; Not yet scheduled)
+
+      `tools/screenshots/capture.ts`'s page lists (both the README docs
+      set and the landing-page gallery set) have no `/stats` entry, found
+      scanning for stale docs ahead of the M6 version cut. The page works
+      fine without one; this is a visual-completeness gap, not a
+      functional one. Needs a seeded reference account with enough real
+      watch/rating history for the page to look representative (an empty
+      Stats page screenshots badly), then a `/stats` entry added to both
+      lists and the tool re-run.
+

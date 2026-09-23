@@ -38,7 +38,16 @@ import { Spinner } from '../components/ui/Spinner.js'
 const SHOTS = '/landing'
 const GRADIENT = 'linear-gradient(135deg, #d946ef 0%, #f59e0b 100%)'
 
-const FEATURE_KEYS = ['log', 'plex', 'trakt', 'lists', 'calendar', 'backups', 'admin'] as const
+const FEATURE_KEYS = [
+  'log',
+  'plex',
+  'trakt',
+  'lists',
+  'calendar',
+  'stats',
+  'backups',
+  'admin',
+] as const
 const STEP_KEYS = ['run', 'import', 'current'] as const
 const GALLERY_SHOTS = {
   films: 'movies',
@@ -53,6 +62,7 @@ const MILESTONES = [
   { key: 'm3', status: 'done' },
   { key: 'm4', status: 'done' },
   { key: 'm5', status: 'done' },
+  { key: 'm6', status: 'done' },
 ] as const
 
 const QUICK_START = `curl -O https://raw.githubusercontent.com/rwnd-tv/rwnd.tv/main/docker-compose.yml

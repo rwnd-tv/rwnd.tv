@@ -42,6 +42,10 @@
         "label": "M5 · done",
         "body": "Security hardening, maintainability cleanups, sensible defaults, and a full mobile pass"
       },
+      "m6": {
+        "label": "M6 · done",
+        "body": "Stats and insights, database restore automation, and a configurable landing page"
+      },
       "honest": {
         "label": "Worth knowing:",
         "body": "this is a single-maintainer project, so expect the occasional rough edge, and please file an issue when you hit one.",
@@ -70,6 +74,10 @@
       "calendar": {
         "title": "Your calendar, in the app and out of it",
         "body": "An in-app Calendar page with a forward-looking Agenda of what's still to come and a Month grid at a glance. The same data is also served as personal History, TV Shows, and Movies webcal:// feeds to paste into Google Calendar, Apple Calendar, or any other app that supports it. Both link back to the episode or movie, and respect your spoiler-protection setting."
+      },
+      "stats": {
+        "title": "Stats and insights",
+        "body": "Totals, time watched, your top shows and movies, an activity heatmap by day and hour, top genres, and a ratings histogram — scoped to a single year or everything you've ever logged."
       },
       "backups": {
         "title": "Backups that just happen",
@@ -121,7 +129,7 @@
     },
     "status": {
       "title": "Where the project actually is",
-      "body": "The first five milestones are done, and v{{version}} is out. The roadmap in the repo is a living document and this page follows it rather than getting ahead of it.",
+      "body": "The first six milestones are done, and v{{version}} is out. The roadmap in the repo is a living document and this page follows it rather than getting ahead of it.",
       "done": "done",
       "inProgress": "in progress",
       "m1": {
@@ -167,6 +175,15 @@
           "Reuse cleanups, backup scheduling fixes, and a manual back-up button",
           "Better defaults: History filters, calendar feed scope, no rating unaired titles",
           "A full mobile and responsive pass, including sticky filter/sort bars"
+        ]
+      },
+      "m6": {
+        "title": "M6: Stats and insights",
+        "items": [
+          "A /stats page: totals, time watched, top shows and movies, an activity heatmap, top genres, and a ratings histogram",
+          "Whole-database restore automation, with an automatic pre-restore snapshot as an undo point",
+          "A configurable landing page, so a self-hosted instance can skip straight to sign-in",
+          "Quick-fix polish: invite-only sign-up copy, watchlist sort/filter, and other small cleanups"
         ]
       },
       "builtTitle": "Built with Claude Code, in the open.",

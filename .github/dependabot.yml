@@ -38,6 +38,13 @@ updates:
     directory: '/'
     schedule:
       interval: weekly
+    groups:
+      # CodeQL's init and analyze steps must run the same codeql-action
+      # version or the job fails with a configuration error. Separate
+      # per-step PRs (#73/#74) each left the two out of step, so neither
+      # could pass CI alone.
+      codeql-action:
+        patterns: ['github/codeql-action/*']
   - package-ecosystem: 'docker'
     directory: '/'
     schedule:

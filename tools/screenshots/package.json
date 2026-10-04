@@ -13,7 +13,7 @@
   "devDependencies": {
     "@types/node": "^26.6.3",
     "playwright": "^1.63.0",
-    "sharp": "^0.35.4",
+    "sharp": "^0.35.5",
     "tsx": "^4.23.15",
     "typescript": "^5.7.3"
   }

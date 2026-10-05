@@ -22,7 +22,7 @@
     "@rwnd/shared": "workspace:*",
     "drizzle-orm": "^0.45.3",
     "fflate": "^0.8.3",
-    "hono": "^4.13.9",
+    "hono": "^4.13.12",
     "nodemailer": "^10.0.13",
     "zod": "^4.6.5"
   },

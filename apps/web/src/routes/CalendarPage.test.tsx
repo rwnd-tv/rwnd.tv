@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest'
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router'
@@ -21,6 +21,10 @@ beforeEach(() => {
   vi.clearAllMocks()
   document.cookie = 'rwnd_calendar_view=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT'
   document.cookie = 'rwnd_calendar_filter=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT'
+})
+
+afterEach(() => {
+  vi.useRealTimers()
 })
 
 function testUser(overrides: Partial<User> = {}): User {
@@ -55,9 +59,12 @@ function renderPage(events: CalendarEvent[], user = testUser()) {
   )
 }
 
-// All dates computed from the real clock, never vi.useFakeTimers() — a
-// prior finding (HistoryRow.test.tsx) that fake timers risk hanging
+// All dates computed from the real clock, never a full vi.useFakeTimers() —
+// a prior finding (HistoryRow.test.tsx) that fake timers risk hanging
 // TanStack Query's own internal timers and Testing Library's async queries.
+// The one exception is a test that has to pin "today" to a known day of the
+// month: it fakes `Date` alone (`toFake: ['Date']`), leaving setTimeout and
+// friends real, so the hang risk above doesn't apply.
 function dayString(date: Date): string {
   return date.toISOString().slice(0, 10)
 }
@@ -291,6 +298,11 @@ describe('CalendarPage', () => {
   })
 
   it('Month view still shows a past day that Agenda hides', async () => {
+    // Pinned mid-month: on the real clock, "7 days ago" falls in the
+    // previous month during the first week of every month, off the current
+    // month's grid entirely.
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date(2026, 5, 15, 12))
     document.cookie = 'rwnd_calendar_view=month; path=/'
     renderPage([
       episodeEvent({

@@ -8,6 +8,7 @@ import { useEpisodeRatingActions } from '../lib/use-episode-rating-actions.js'
 import { useEpisodeWatchActions } from '../lib/use-episode-watch-actions.js'
 import { TVDB_LOGO_DARK_BG_URL, TVDB_LOGO_LIGHT_BG_URL, tvdbEpisodeUrl } from '../lib/tvdb.js'
 import { imdbTitleUrl } from '../lib/imdb.js'
+import { providerRef } from '../lib/provider-ref.js'
 import { PlusIcon } from '../components/icons.js'
 import { DetailHeader } from '../components/library/DetailHeader.js'
 import { MetadataAttribution } from '../components/library/MetadataAttribution.js'
@@ -127,7 +128,7 @@ export function EpisodeDetailPage() {
     slug ?? '',
     seasonNumber,
     episode,
-    show?.tmdbId ?? null,
+    show ? providerRef(show) : null,
   )
   const ratingActions = useEpisodeRatingActions(slug ?? '', seasonNumber, episode)
 

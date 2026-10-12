@@ -305,6 +305,9 @@ export async function resolveSeason(
   showExternalId: string,
   seasonNumber: number,
   locale: string,
+  // Opt-in, for the metadata refresh only (apps/api/src/metadata/refresh.ts's
+  // refreshOneShow) — see the `title` note on the upsert below.
+  options: { updateTitles?: boolean } = {},
 ): Promise<ResolvedEpisode[]> {
   // Writes no `imdb` external_ids rows, unlike resolveMovie/resolveShow/
   // resolveEpisode above — provider.getSeason() never populates an
@@ -332,11 +335,20 @@ export async function resolveSeason(
           overviewCheckedAt: checkedAt,
         })),
       )
-      // `title` is still onConflictDoNothing in spirit — only ever written
-      // once, on first insert (a title can legitimately vary by locale, so
-      // "which one wins on a later resolve in a different locale" is a
-      // separate judgment call this function doesn't make). Every other
-      // column below updates on every call:
+      // `title` is only written on first insert by default (a title can
+      // legitimately vary by locale, so "which one wins on a later resolve
+      // in a different locale" is a separate judgment call most callers,
+      // resolving on behalf of whichever user happened to ask, shouldn't
+      // make). The metadata refresh opts in via `updateTitles`: without it
+      // a stored title could never follow the provider at all, and a
+      // provider renumbering a season left every later episode's title
+      // pinned to the wrong row while its air date moved on (found live
+      // 2026-10-12: Formula 1's 2026 season on TVDB, where an inserted race
+      // weekend shifted everything after it by five episodes). Even then a
+      // real stored title is never replaced by a missing name or the
+      // provider's own "Episode N" placeholder (see
+      // findSeasonsNeedingTitleBackfill in refresh.ts). Every other column
+      // below updates on every call:
       //
       // `overview`/`overviewCheckedAt` are set regardless of whether the
       // provider actually had a synopsis this time (same "we asked, not we
@@ -370,6 +382,14 @@ export async function resolveSeason(
           overviewCheckedAt: sql`excluded.overview_checked_at`,
           runtimeMinutes: sql`coalesce(${episodes.runtimeMinutes}, excluded.runtime_minutes)`,
           firstAired: sql`coalesce(excluded.first_aired, ${episodes.firstAired})`,
+          ...(options.updateTitles && {
+            title: sql`case
+              when excluded.title is null
+                or excluded.title = 'Episode ' || ${episodes.episodeNumber}
+              then ${episodes.title}
+              else excluded.title
+            end`,
+          }),
         },
       })
   }

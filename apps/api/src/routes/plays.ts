@@ -169,16 +169,24 @@ playRoutes.openapi(
       201: { description: 'Play logged', content: { 'application/json': { schema: playSchema } } },
       400: {
         description:
-          'watchedAt is in the future, the movie has not released yet, the episode has not aired yet, or the movie/episode already has an unknown-date watch logged',
+          'watchedAt is in the future, the movie has not released yet, the episode has not aired yet, the movie/episode already has an unknown-date watch logged, or no provider for the requested source is configured',
       },
     },
   }),
   async (c) => {
     const body = c.req.valid('json')
     const db = c.get('db')
-    const provider = c.get('metadataProvider')
     const user = c.get('user')!
     const watchedAt = body.watchedAt ? new Date(body.watchedAt) : new Date()
+
+    // Resolved against whichever provider the client's id actually belongs
+    // to, not always the primary one — see createPlayRequestSchema's doc
+    // comment for why a TVDB-only show/movie needs this.
+    const source = (body.movie ?? body.episode)!.source
+    const provider = c.get('metadataProviders').find((p) => p.source === source)
+    if (!provider) {
+      return c.json({ error: `This instance has no ${source} provider configured` }, 400)
+    }
 
     if (body.movie) {
       const movie = await resolveMovie(db, provider, body.movie.externalId, user.locale)

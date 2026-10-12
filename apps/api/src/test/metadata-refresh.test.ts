@@ -58,12 +58,19 @@ function tmdbShowResponse(overrides: {
 // query rather than just being an unused field.
 function tmdbSeasonResponse(
   seasonNumber: number,
-  episodes: Array<{ episode_number: number; air_date?: string; runtime?: number }>,
+  episodes: Array<{
+    episode_number: number
+    air_date?: string
+    runtime?: number
+    // Defaults to TMDB's own "Episode N" placeholder; `null` omits the
+    // name entirely.
+    name?: string | null
+  }>,
 ) {
   return JSON.stringify({
     overview: 'A season overview.',
     episodes: episodes.map((e) => ({
-      name: `Episode ${e.episode_number}`,
+      name: e.name === undefined ? `Episode ${e.episode_number}` : (e.name ?? undefined),
       season_number: seasonNumber,
       episode_number: e.episode_number,
       air_date: e.air_date,
@@ -476,6 +483,181 @@ describe('metadata refresh', () => {
       .from(episodes)
       .where(and(eq(episodes.showId, show.id), eq(episodes.episodeNumber, 1)))
     expect(ep?.firstAired).toBe('2020-01-01')
+  })
+
+  // Regression: Formula 1's 2026 season. TVDB inserted a race weekend
+  // mid-season and renumbered every later episode; the refresh moved each
+  // row's air date along with it, but the stored title stayed put, so
+  // History/the calendar showed "United States (Qualifying)" for what was
+  // really Singapore's.
+  it('updates a stored episode title when the provider now names that episode differently', async () => {
+    const show = await insertShow({
+      tmdbId: 32,
+      status: 'Returning Series',
+      metadataRefreshedAt: new Date(),
+      withSeasons: false,
+    })
+    await db.insert(episodes).values({
+      showId: show.id,
+      seasonNumber: 1,
+      episodeNumber: 1,
+      title: 'United States (Qualifying)',
+      firstAired: '2020-01-01',
+    })
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: string | URL) => {
+        const url = new URL(input)
+        if (url.pathname === '/3/tv/32/season/1') {
+          return new Response(
+            tmdbSeasonResponse(1, [
+              { episode_number: 1, air_date: '2020-01-01', name: 'Singapore (Qualifying)' },
+            ]),
+            { status: 200 },
+          )
+        }
+        return new Response(
+          tmdbShowResponse({
+            id: 32,
+            status: 'Returning Series',
+            seasons: [{ season_number: 1, episode_count: 1, air_date: '2020-01-01' }],
+          }),
+          { status: 200 },
+        )
+      }),
+    )
+    await refreshOneShow(db, provider, { id: show.id, externalId: '32' }, 'en-US')
+
+    const [ep] = await db
+      .select()
+      .from(episodes)
+      .where(and(eq(episodes.showId, show.id), eq(episodes.episodeNumber, 1)))
+    expect(ep?.title).toBe('Singapore (Qualifying)')
+  })
+
+  it('keeps a real stored episode title when the provider only has a placeholder or no name', async () => {
+    const show = await insertShow({
+      tmdbId: 33,
+      status: 'Returning Series',
+      metadataRefreshedAt: new Date(),
+      withSeasons: false,
+    })
+    await db.insert(episodes).values([
+      { showId: show.id, seasonNumber: 1, episodeNumber: 1, title: 'Pilot' },
+      { showId: show.id, seasonNumber: 1, episodeNumber: 2, title: 'Second' },
+    ])
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: string | URL) => {
+        const url = new URL(input)
+        if (url.pathname === '/3/tv/33/season/1') {
+          return new Response(
+            tmdbSeasonResponse(1, [
+              { episode_number: 1, air_date: '2020-01-01' },
+              { episode_number: 2, air_date: '2020-01-08', name: null },
+            ]),
+            { status: 200 },
+          )
+        }
+        return new Response(
+          tmdbShowResponse({
+            id: 33,
+            status: 'Returning Series',
+            seasons: [{ season_number: 1, episode_count: 2, air_date: '2020-01-01' }],
+          }),
+          { status: 200 },
+        )
+      }),
+    )
+    await refreshOneShow(db, provider, { id: show.id, externalId: '33' }, 'en-US')
+
+    const rows = await db
+      .select({ episodeNumber: episodes.episodeNumber, title: episodes.title })
+      .from(episodes)
+      .where(eq(episodes.showId, show.id))
+      .orderBy(episodes.episodeNumber)
+    expect(rows).toEqual([
+      { episodeNumber: 1, title: 'Pilot' },
+      { episodeNumber: 2, title: 'Second' },
+    ])
+  })
+
+  // TVDB calls a still-airing show 'Continuing' (and an announced one
+  // 'Upcoming'), not any of TMDB's own status strings. Before both were in
+  // AIRING_STATUSES, a TVDB-sourced show like Formula 1 counted as finished,
+  // so its current season was never re-resolved here and the title fix
+  // above never got a chance to run for it.
+  it("re-resolves a TVDB show's current season when TVDB calls it 'Continuing'", async () => {
+    const [show] = await db
+      .insert(shows)
+      .values({
+        title: 'Formula 1',
+        slug: 'formula-1-1950',
+        status: 'Continuing',
+        metadataSource: 'tvdb',
+        metadataRefreshedAt: new Date(),
+      })
+      .returning()
+    if (!show) throw new Error('failed to insert show')
+    await db.insert(episodes).values({
+      showId: show.id,
+      seasonNumber: 2026,
+      episodeNumber: 93,
+      title: 'United States (Qualifying)',
+      firstAired: '2026-10-10',
+    })
+
+    const fakeTvdb = {
+      source: 'tvdb',
+      getShow: async () => ({
+        externalId: '387219',
+        title: 'Formula 1',
+        year: 1950,
+        overview: null,
+        posterPath: null,
+        status: 'Continuing',
+        genres: [],
+        voteAverage: null,
+        imdbId: null,
+        seasons: [
+          {
+            seasonNumber: 2026,
+            name: null,
+            episodeCount: 124,
+            airDate: '2026-02-11',
+            posterPath: null,
+          },
+        ],
+      }),
+      getSeason: async () => ({
+        overview: null,
+        voteAverage: null,
+        externalId: null,
+        episodes: [
+          {
+            title: 'Singapore (Qualifying)',
+            seasonNumber: 2026,
+            episodeNumber: 93,
+            runtimeMinutes: 60,
+            firstAired: '2026-10-10',
+            overview: null,
+            stillPath: null,
+            voteAverage: null,
+            externalId: null,
+          },
+        ],
+      }),
+    } as unknown as MetadataProvider
+
+    await refreshOneShow(db, fakeTvdb, { id: show.id, externalId: '387219' }, 'en-US')
+
+    const [ep] = await db
+      .select()
+      .from(episodes)
+      .where(and(eq(episodes.showId, show.id), eq(episodes.episodeNumber, 93)))
+    expect(ep?.title).toBe('Singapore (Qualifying)')
   })
 
   // A1 of the cross-provider runtime fallback (docs/adr/0006's 2026-09-05

@@ -1,6 +1,12 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { hasAired, type SeasonDetail, type SeasonEpisode, type WatchedStatus } from '@rwnd/shared'
+import {
+  hasAired,
+  type MetadataProviderSource,
+  type SeasonDetail,
+  type SeasonEpisode,
+  type WatchedStatus,
+} from '@rwnd/shared'
 import { api } from './api-client.js'
 import { invalidateWatchData } from './query-client.js'
 
@@ -21,7 +27,9 @@ export function useEpisodeWatchActions(
   // below stays disabled/inert until it resolves, since React's rules of
   // hooks mean this can't be called conditionally once the caller knows.
   episode: SeasonEpisode | undefined,
-  tmdbId: string | null,
+  // The show's provider id to log against (see lib/provider-ref.ts) — null
+  // only when the show has no provider id on record at all.
+  showRef: { source: MetadataProviderSource; externalId: string } | null,
 ) {
   const queryClient = useQueryClient()
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -85,8 +93,8 @@ export function useEpisodeWatchActions(
       // needed (see the plan's backend section).
       const play = await api.plays.create({
         episode: {
-          source: 'tmdb',
-          showExternalId: tmdbId!,
+          source: showRef!.source,
+          showExternalId: showRef!.externalId,
           seasonNumber,
           episodeNumber: episode!.episodeNumber,
         },
@@ -107,15 +115,15 @@ export function useEpisodeWatchActions(
   // now enforced here too so the toggle never opens a dialog whose only
   // possible outcome is the POST /plays 400 this would otherwise hit.
   const notAiredYet = !episode || !hasAired(episode.firstAired)
-  // Can only mark watched when the show has a TMDB id on record (POST
-  // /plays needs it) and the episode has actually aired — unwatching needs
+  // Can only mark watched when the show has a provider id on record (POST
+  // /plays needs one) and the episode has actually aired — unwatching needs
   // neither, so only guarded here. Also disabled outright while `episode`
   // itself hasn't resolved yet (see the param doc comment above).
   const toggleDisabled =
     !episode ||
     unwatch.isPending ||
     markWatched.isPending ||
-    (!episode.watched && (!tmdbId || notAiredYet))
+    (!episode.watched && (!showRef || notAiredYet))
 
   return {
     dialogOpen,

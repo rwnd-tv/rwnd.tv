@@ -12,6 +12,7 @@ import { useMovieWatchActions } from '../lib/use-movie-watch-actions.js'
 import { TMDB_LOGO_URL } from '../lib/tmdb.js'
 import { TVDB_LOGO_DARK_BG_URL, TVDB_LOGO_LIGHT_BG_URL, tvdbMovieUrl } from '../lib/tvdb.js'
 import { imdbTitleUrl } from '../lib/imdb.js'
+import { providerRef } from '../lib/provider-ref.js'
 import { PlusIcon } from '../components/icons.js'
 import { DetailHeader } from '../components/library/DetailHeader.js'
 import { MetadataAttribution } from '../components/library/MetadataAttribution.js'
@@ -103,7 +104,7 @@ export function MovieDetailPage() {
     markWatched,
     unwatch,
     toggleDisabled,
-  } = useMovieWatchActions(slug!, movie, movie?.tmdbId ?? null)
+  } = useMovieWatchActions(slug!, movie, movie ? providerRef(movie) : null)
 
   // Same queryKey useMovieWatchActions' own watchesData query uses (see
   // that hook's doc comment) — that one only fetches while the unwatch
@@ -306,9 +307,9 @@ export function MovieDetailPage() {
             <Button
               variant={movie.watched ? 'primary' : 'secondary'}
               type="button"
-              disabled={!movie.watched && !movie.tmdbId}
+              disabled={!movie.watched && !providerRef(movie)}
               title={
-                !movie.watched && !movie.tmdbId
+                !movie.watched && !providerRef(movie)
                   ? t('movieDetail.watchedButtonDisabled')
                   : t(
                       movie.watched

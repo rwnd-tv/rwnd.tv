@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import {
+  metadataProviderSourceSchema,
   paginationQuerySchema,
   playSourceSchema,
   providerExternalIdSchema,
@@ -11,23 +12,22 @@ import {
  * the API resolves/creates the local movie or episode as part of handling
  * the request. Exactly one of movie/episode must be present.
  *
- * `source` is deliberately still `z.literal('tmdb')`, not the wider
- * `metadataProviderSourceSchema` (schemas/common.ts) used elsewhere as of
- * the multi-provider plumbing work (docs/adr/0006) — unlike
- * searchResultSchema/resolveMediaRequestSchema, this value is *authored by
- * the client* from a `tmdbId` field (see use-movie-watch-actions.ts,
- * use-episode-watch-actions.ts, both of which hardcode `'tmdb'`), and the
- * handler ignores it and resolves against whichever provider is on
- * context. Widening this now would let a request claim `source: 'tvdb'`
- * and silently resolve it against TMDB anyway. Widen this once POST /plays
- * actually honours `source` per-request, not before.
+ * `source` names which provider the external id belongs to, and POST /plays
+ * resolves it against that same provider (not just the primary one) — a
+ * show or movie resolved via the cross-provider fallback can have only a
+ * `tvdb` id on record, and the client can only send the id it actually has
+ * (see use-episode-watch-actions.ts / use-movie-watch-actions.ts). Found
+ * live 2026-10-12: Formula 1 had no TMDB id at all, so none of its
+ * episodes could be marked watched by hand.
  */
 export const createPlayRequestSchema = z
   .object({
-    movie: z.object({ source: z.literal('tmdb'), externalId: providerExternalIdSchema }).optional(),
+    movie: z
+      .object({ source: metadataProviderSourceSchema, externalId: providerExternalIdSchema })
+      .optional(),
     episode: z
       .object({
-        source: z.literal('tmdb'),
+        source: metadataProviderSourceSchema,
         showExternalId: providerExternalIdSchema,
         seasonNumber: z.number().int().min(0),
         episodeNumber: z.number().int().min(1),

@@ -41,10 +41,20 @@ const AIRING_REFRESH_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000 // 7 days
 // line before its next pass.
 const COMPLIANCE_MAX_AGE_MS = 150 * 24 * 60 * 60 * 1000 // ~5 months
 
-// Statuses TMDB uses for a show that's still airing. Anything else
-// ('Ended', 'Canceled', or a status this list doesn't know about yet)
-// gets treated as finished and only refreshed by the compliance sweep.
-const AIRING_STATUSES = ['Returning Series', 'In Production', 'Planned', 'Pilot']
+// Statuses a provider uses for a show that's still airing: TMDB's first
+// four, then TVDB's own vocabulary ('Continuing'/'Upcoming', alongside
+// 'Ended'). Anything else ('Ended', 'Canceled', or a status this list
+// doesn't know about yet) gets treated as finished and only refreshed by
+// the compliance sweep. TVDB's were missing until 2026-10-12, so a
+// TVDB-sourced show (Formula 1) never had its current season re-resolved.
+const AIRING_STATUSES = [
+  'Returning Series',
+  'In Production',
+  'Planned',
+  'Pilot',
+  'Continuing',
+  'Upcoming',
+]
 
 // Sequential with a short stagger rather than unbounded concurrency — TMDB's
 // real ceiling is roughly 50 req/s and 20 connections/IP with no daily cap,
@@ -548,6 +558,10 @@ export async function refreshOneShow(
         candidate.externalId,
         seasonNumber,
         locale,
+        // Same "refresh corrects, not just fills" stance as the show's own
+        // title above — see resolveSeason's `title` note for why only this
+        // path opts in.
+        { updateTitles: true },
       )
       const now = new Date()
       airedCountBySeason.set(

@@ -1,8 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { eq } from 'drizzle-orm'
-import { plays } from '@rwnd/db'
+import { episodes, externalIds, movies, plays, shows } from '@rwnd/db'
 import type { ListPlaysResponse, Play, User } from '@rwnd/shared'
 import { createLocalUser, extractCookie, json, resetDb, testApp, testDb } from './helpers.js'
+import { createApp } from '../app.js'
+import type { MetadataProvider } from '../providers/types.js'
 import { BREAKING_BAD_SHOW_TMDB_ID, tmdbBreakingBadShow } from './fixtures/trakt.js'
 
 const db = testDb()
@@ -510,6 +512,128 @@ describe('plays', () => {
       const { plays: history } = await json<ListPlaysResponse>(list)
       expect(history).toHaveLength(1)
       expect(history[0]?.source).toBe('manual')
+    })
+
+    describe('a show or movie with only a TVDB id (regression: Formula 1 could not be marked watched)', () => {
+      // TMDB is still the primary provider, but these rows only have a
+      // `tvdb` external_ids row — same shape as a show resolved through
+      // match.ts's cross-provider fallback. The client can only send the
+      // id it actually has, so POST /plays has to resolve it against TVDB
+      // rather than the primary provider.
+      const fakeTmdb = {
+        source: 'tmdb',
+        getShow: vi.fn(),
+        getEpisode: vi.fn(),
+        getMovie: vi.fn(),
+      } as unknown as MetadataProvider
+      const fakeTvdb = {
+        source: 'tvdb',
+        getShow: vi.fn(),
+        getEpisode: vi.fn(),
+        getMovie: vi.fn(),
+      } as unknown as MetadataProvider
+
+      async function insertTvdbOnlyShow() {
+        const [show] = await db
+          .insert(shows)
+          .values({ title: 'Formula 1', slug: 'formula-1-1950', metadataSource: 'tvdb' })
+          .returning()
+        if (!show) throw new Error('failed to insert show')
+        await db
+          .insert(externalIds)
+          .values({ entityType: 'show', entityId: show.id, source: 'tvdb', externalId: '387219' })
+        const [episode] = await db
+          .insert(episodes)
+          .values({
+            showId: show.id,
+            seasonNumber: 2026,
+            episodeNumber: 93,
+            title: 'Singapore (Qualifying)',
+            firstAired: '2026-10-10',
+          })
+          .returning()
+        if (!episode) throw new Error('failed to insert episode')
+        return { show, episode }
+      }
+
+      it('logs an episode watch sent with its TVDB id', async () => {
+        const cookie = await createUserAndCookie()
+        const { episode } = await insertTvdbOnlyShow()
+
+        const customApp = createApp({ db, metadataProviders: [fakeTmdb, fakeTvdb] })
+        const res = await customApp.request('/api/v1/plays', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', cookie },
+          body: JSON.stringify({
+            episode: {
+              source: 'tvdb',
+              showExternalId: '387219',
+              seasonNumber: 2026,
+              episodeNumber: 93,
+            },
+          }),
+        })
+        expect(res.status).toBe(201)
+        const play = await json<Play>(res)
+        expect(play.media).toMatchObject({
+          type: 'episode',
+          title: 'Singapore (Qualifying)',
+          showSlug: 'formula-1-1950',
+        })
+        const [row] = await db.select().from(plays).where(eq(plays.id, play.id))
+        expect(row?.episodeId).toBe(episode.id)
+        // Resolved entirely from the local rows: neither provider is asked.
+        expect(fakeTmdb.getShow).not.toHaveBeenCalled()
+        expect(fakeTvdb.getShow).not.toHaveBeenCalled()
+      })
+
+      it('logs a movie watch sent with its TVDB id', async () => {
+        const cookie = await createUserAndCookie()
+        const [movie] = await db
+          .insert(movies)
+          .values({
+            title: 'TVDB-Only Movie',
+            slug: 'tvdb-only-movie-2020',
+            metadataSource: 'tvdb',
+          })
+          .returning()
+        if (!movie) throw new Error('failed to insert movie')
+        await db
+          .insert(externalIds)
+          .values({ entityType: 'movie', entityId: movie.id, source: 'tvdb', externalId: '4242' })
+
+        const customApp = createApp({ db, metadataProviders: [fakeTmdb, fakeTvdb] })
+        const res = await customApp.request('/api/v1/plays', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', cookie },
+          body: JSON.stringify({ movie: { source: 'tvdb', externalId: '4242' } }),
+        })
+        expect(res.status).toBe(201)
+        const play = await json<Play>(res)
+        const [row] = await db.select().from(plays).where(eq(plays.id, play.id))
+        expect(row?.movieId).toBe(movie.id)
+      })
+
+      it('rejects a TVDB id when this instance has no TVDB provider configured', async () => {
+        const cookie = await createUserAndCookie()
+        await insertTvdbOnlyShow()
+
+        const customApp = createApp({ db, metadataProviders: [fakeTmdb] })
+        const res = await customApp.request('/api/v1/plays', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', cookie },
+          body: JSON.stringify({
+            episode: {
+              source: 'tvdb',
+              showExternalId: '387219',
+              seasonNumber: 2026,
+              episodeNumber: 93,
+            },
+          }),
+        })
+        expect(res.status).toBe(400)
+        expect(await db.select().from(plays)).toHaveLength(0)
+      })
     })
   })
 

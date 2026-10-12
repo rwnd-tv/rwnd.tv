@@ -9,6 +9,7 @@ import { markWatchedRequestBody } from '../lib/date.js'
 import { averageEpisodeRatingStars } from '../lib/rating.js'
 import { TVDB_LOGO_DARK_BG_URL, TVDB_LOGO_LIGHT_BG_URL, tvdbSeasonUrl } from '../lib/tvdb.js'
 import { useAuth } from '../lib/use-auth.js'
+import { providerRef } from '../lib/provider-ref.js'
 import { PlusIcon } from '../components/icons.js'
 import { DetailHeader } from '../components/library/DetailHeader.js'
 import { EpisodeCard } from '../components/library/EpisodeCard.js'
@@ -251,6 +252,8 @@ export function SeasonDetailPage() {
   const airedEpisodes = season.episodes.filter((episode) => hasAired(episode.firstAired, now))
   const watchedAiredEpisodes = airedEpisodes.filter((episode) => episode.watched).length
   const fullyWatched = airedEpisodes.length > 0 && watchedAiredEpisodes === airedEpisodes.length
+  // Same "any provider id will do" gate as ShowDetailPage.tsx's showRef.
+  const showRef = show ? providerRef(show) : null
   // Same "nothing to mark watched yet" gate as ShowDetailPage.tsx's own
   // notAiredYet, scoped to this one season.
   const notAiredYet = airedEpisodes.length === 0
@@ -458,9 +461,9 @@ export function SeasonDetailPage() {
             <Button
               variant={fullyWatched ? 'primary' : 'secondary'}
               type="button"
-              disabled={!fullyWatched && !show?.tmdbId}
+              disabled={!fullyWatched && !showRef}
               title={
-                !fullyWatched && !show?.tmdbId
+                !fullyWatched && !showRef
                   ? t('showDetail.watchedButtonDisabled')
                   : t(
                       fullyWatched
@@ -481,7 +484,7 @@ export function SeasonDetailPage() {
               variant="secondary"
               type="button"
               size="icon"
-              disabled={markSeasonWatched.isPending || !show?.tmdbId}
+              disabled={markSeasonWatched.isPending || !showRef}
               title={t('showDetail.addWatchTooltip.season')}
               aria-label={t('showDetail.addWatchTooltip.season')}
               onClick={() => setLogAdditionalWatchOpen(true)}
@@ -560,7 +563,7 @@ export function SeasonDetailPage() {
               episode={episode}
               slug={slug!}
               seasonNumber={season.seasonNumber}
-              tmdbId={show?.tmdbId ?? null}
+              showRef={showRef}
               revealed={episodesRevealed}
             />
           ))}

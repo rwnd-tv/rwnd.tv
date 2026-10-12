@@ -10,6 +10,7 @@ import { TMDB_LOGO_URL } from '../lib/tmdb.js'
 import { TVDB_LOGO_DARK_BG_URL, TVDB_LOGO_LIGHT_BG_URL, tvdbSeriesUrl } from '../lib/tvdb.js'
 import { imdbTitleUrl } from '../lib/imdb.js'
 import { useAuth } from '../lib/use-auth.js'
+import { providerRef } from '../lib/provider-ref.js'
 import { PlusIcon } from '../components/icons.js'
 import { DetailHeader } from '../components/library/DetailHeader.js'
 import { EpisodeCard } from '../components/library/EpisodeCard.js'
@@ -259,6 +260,12 @@ export function ShowDetailPage() {
     show.airedEpisodes > 0 &&
     show.watchedEpisodes === show.airedEpisodes
 
+  // Any provider id will do — the show/season "Watched" routes resolve via
+  // whichever provider has one (pickRefreshTarget), and POST /plays takes
+  // either (see lib/provider-ref.ts). Was TMDB-only, which blocked every
+  // watch action on a TVDB-only show like Formula 1.
+  const showRef = providerRef(show)
+
   // A show with zero aired (non-special) episodes yet can't be rated —
   // `null` (not yet cached by the metadata refresher) is deliberately
   // *not* blocked, so a show whose season data hasn't refreshed yet
@@ -421,9 +428,9 @@ export function ShowDetailPage() {
             <Button
               variant={fullyWatched ? 'primary' : 'secondary'}
               type="button"
-              disabled={!fullyWatched && !show.tmdbId}
+              disabled={!fullyWatched && !showRef}
               title={
-                !fullyWatched && !show.tmdbId
+                !fullyWatched && !showRef
                   ? t('showDetail.watchedButtonDisabled')
                   : t(
                       fullyWatched
@@ -444,7 +451,7 @@ export function ShowDetailPage() {
               variant="secondary"
               type="button"
               size="icon"
-              disabled={markWatched.isPending || !show.tmdbId}
+              disabled={markWatched.isPending || !showRef}
               title={t('showDetail.addWatchTooltip.show')}
               aria-label={t('showDetail.addWatchTooltip.show')}
               onClick={() => setLogAdditionalWatchOpen(true)}
@@ -576,7 +583,7 @@ export function ShowDetailPage() {
                   episode={episode}
                   slug={slug!}
                   seasonNumber={singleSeason.seasonNumber}
-                  tmdbId={show.tmdbId}
+                  showRef={showRef}
                 />
               ))}
             </PosterGrid>

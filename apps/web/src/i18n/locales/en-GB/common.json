@@ -471,7 +471,7 @@
     },
     "droppedFact": "Dropped",
     "watchedButton": "Watched",
-    "watchedButtonDisabled": "This show has no TMDB match, so episodes can't be resolved",
+    "watchedButtonDisabled": "This show has no TMDB or TVDB match, so episodes can't be resolved",
     "watchedButtonTooltip": {
       "addShow": "Add a watch for every unwatched episode of this TV show",
       "removeShow": "Remove every watch from every episode of this TV show",
@@ -586,7 +586,7 @@
     "viewOnTvdb": "View this film on TheTVDB",
     "viewOnImdb": "View this film on IMDb",
     "watchedButton": "Watched",
-    "watchedButtonDisabled": "This film has no TMDB match, so a watch can't be logged",
+    "watchedButtonDisabled": "This film has no TMDB or TVDB match, so a watch can't be logged",
     "watchedButtonTooltip": {
       "add": "Add a watch for this film",
       "remove": "Remove a watch from this film"

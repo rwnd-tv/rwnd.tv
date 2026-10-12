@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import type { MovieDetail, WatchedStatus } from '@rwnd/shared'
+import type { MetadataProviderSource, MovieDetail, WatchedStatus } from '@rwnd/shared'
 import { api } from './api-client.js'
 import { invalidateWatchData } from './query-client.js'
 
@@ -14,7 +14,8 @@ import { invalidateWatchData } from './query-client.js'
 export function useMovieWatchActions(
   slug: string,
   movie: MovieDetail | undefined,
-  tmdbId: string | null,
+  // Same as the episode hook's `showRef` — see lib/provider-ref.ts.
+  movieRef: { source: MetadataProviderSource; externalId: string } | null,
 ) {
   const queryClient = useQueryClient()
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -60,7 +61,7 @@ export function useMovieWatchActions(
       // dedicated mark-watched endpoint needed" reasoning as the episode
       // hook.
       const play = await api.plays.create({
-        movie: { source: 'tmdb', externalId: tmdbId! },
+        movie: { source: movieRef!.source, externalId: movieRef!.externalId },
         watchedAt,
       })
       return {
@@ -72,15 +73,15 @@ export function useMovieWatchActions(
     onSuccess: onMutationSuccess,
   })
 
-  // Can only mark watched once the movie has a TMDB id on record (POST
-  // /plays needs it). Unwatching needs neither, so only guarded here. No
+  // Can only mark watched once the movie has a provider id on record (POST
+  // /plays needs one). Unwatching needs neither, so only guarded here. No
   // release-date term here despite POST /plays now rejecting an unreleased
   // movie (apps/api/src/routes/plays.ts) - MovieDetailPage.tsx hides the
   // Watched button entirely instead, using its own already-computed
   // `notReleasedYet`, the same "hide, don't disable" treatment as the
   // episode hook's own notAiredYet gets at its call sites.
   const toggleDisabled =
-    !movie || unwatch.isPending || markWatched.isPending || (!movie.watched && !tmdbId)
+    !movie || unwatch.isPending || markWatched.isPending || (!movie.watched && !movieRef)
 
   return {
     dialogOpen,

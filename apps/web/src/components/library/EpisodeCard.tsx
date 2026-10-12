@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router'
-import type { SeasonEpisode } from '@rwnd/shared'
+import type { MetadataProviderSource, SeasonEpisode } from '@rwnd/shared'
 import { useAuth } from '../../lib/use-auth.js'
 import { useEpisodeRatingActions } from '../../lib/use-episode-rating-actions.js'
 import { useEpisodeWatchActions } from '../../lib/use-episode-watch-actions.js'
@@ -86,13 +86,14 @@ export function EpisodeCard({
   episode,
   slug,
   seasonNumber,
-  tmdbId,
+  showRef,
   revealed = false,
 }: {
   episode: SeasonEpisode
   slug: string
   seasonNumber: number
-  tmdbId: string | null
+  /** The show's provider id to log a watch against — see lib/provider-ref.ts. */
+  showRef: { source: MetadataProviderSource; externalId: string } | null
   /** Reveals this tile even before its own per-tile button is clicked —
    * SeasonDetailPage.tsx's "reveal all episodes" control, for a season
    * with too many hidden tiles to reveal one at a time. Doesn't replace
@@ -119,7 +120,7 @@ export function EpisodeCard({
     unwatch,
     notAiredYet,
     toggleDisabled,
-  } = useEpisodeWatchActions(slug, seasonNumber, episode, tmdbId)
+  } = useEpisodeWatchActions(slug, seasonNumber, episode, showRef)
   const { setRating, ratingDisabled } = useEpisodeRatingActions(slug, seasonNumber, episode)
 
   const episodeLabel = t('import.progress.episode', { number: episode.episodeNumber })
@@ -180,7 +181,7 @@ export function EpisodeCard({
         {episode.watched && (
           <button
             type="button"
-            disabled={unwatch.isPending || markWatched.isPending || !tmdbId}
+            disabled={unwatch.isPending || markWatched.isPending || !showRef}
             title={t('showDetail.addWatchTooltip.episode')}
             aria-label={t('showDetail.addWatchTooltip.episode')}
             onClick={() => setLogAdditionalWatchOpen(true)}

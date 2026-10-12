@@ -163,3 +163,25 @@ tolerates up to a 1-day difference (`AIR_DATE_TOLERANCE_DAYS`,
 loose enough to absorb this class of rounding quirk, tight enough that a
 real mismatch (a different season, a different show) still reads as
 weeks or months apart, not one day.
+
+## Update (2026-10-12)
+
+Two assumptions above stopped holding once a show resolved from TheTVDB
+alone (Formula 1, which has no TMDB id at all) reached day-to-day use
+rather than just import:
+
+- `createPlayRequestSchema`'s `source` is now widened to
+  `metadataProviderSourceSchema` too. `POST /plays` resolves the id against
+  the provider it names rather than always the primary one, and the web
+  client sends whichever id the show or movie actually has, preferring the
+  provider its metadata came from (`apps/web/src/lib/provider-ref.ts`). The
+  reason for keeping it narrow no longer applies now the handler honours
+  the field: a request naming `tvdb` resolves against TVDB, or is rejected
+  if this instance has no TVDB provider configured. Before this, a
+  TVDB-only show's episodes couldn't be marked watched by hand at all.
+- The metadata refresh treats TVDB's own airing statuses (`Continuing`,
+  `Upcoming`) as airing, not just TMDB's, so a TVDB-sourced show's current
+  season is actually re-resolved. The refresh also now updates stored
+  episode titles (never replacing a real title with a missing name or a
+  placeholder "Episode N"), since TVDB renumbering a season had left titles
+  attached to the wrong episodes.

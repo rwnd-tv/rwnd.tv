@@ -270,96 +270,97 @@ export function ShowsPage() {
               { value: 'myRatingDesc', label: t('shows.sortMyRatingDesc') },
               { value: 'myRatingAsc', label: t('shows.sortMyRatingAsc') },
             ]}
+            panel={
+              filtersOpen && (
+                <FiltersPanel>
+                  <GenreFilterPanel
+                    genres={availableGenres}
+                    filters={genreFilters}
+                    onChange={setGenreFilters}
+                    groupLabel={t('shows.filtersPanel.genres')}
+                    includeLabel={t('shows.filtersPanel.include')}
+                    excludeLabel={t('shows.filtersPanel.exclude')}
+                  />
+                  <KeyedFilterPanel
+                    keys={availableStatuses}
+                    labelFor={statusLabel}
+                    filters={statusFilters}
+                    onChange={setStatusFilters}
+                    groupLabel={t('shows.filtersPanel.status')}
+                    includeLabel={t('shows.filtersPanel.include')}
+                    excludeLabel={t('shows.filtersPanel.exclude')}
+                  />
+                  {libraryYearRange && (
+                    <ReleaseYearFilterPanel
+                      min={libraryYearRange.min}
+                      max={libraryYearRange.max}
+                      range={yearFilter}
+                      onChange={setYearFilter}
+                      groupLabel={t('shows.filtersPanel.released')}
+                      afterLabel={t('shows.filtersPanel.after')}
+                      beforeLabel={t('shows.filtersPanel.before')}
+                    />
+                  )}
+                  {libraryRatingRange && (
+                    <RatingFilterPanel
+                      min={libraryRatingRange.min}
+                      max={libraryRatingRange.max}
+                      range={ratingFilter}
+                      onChange={setRatingFilter}
+                      groupLabel={t('shows.filtersPanel.rating')}
+                      minLabel={t('shows.filtersPanel.min')}
+                      maxLabel={t('shows.filtersPanel.max')}
+                    />
+                  )}
+                  {libraryMyRatingRange && (
+                    <MyRatingFilterPanel
+                      min={libraryMyRatingRange.min}
+                      max={libraryMyRatingRange.max}
+                      range={myRatingFilter}
+                      onChange={setMyRatingFilter}
+                      unratedMode={unratedMode}
+                      onUnratedModeChange={setUnratedMode}
+                      groupLabel={t('shows.filtersPanel.myRating')}
+                      minLabel={t('shows.filtersPanel.min')}
+                      maxLabel={t('shows.filtersPanel.max')}
+                      unratedLabel={t('shows.filtersPanel.unrated')}
+                      includeLabel={t('shows.filtersPanel.include')}
+                      excludeLabel={t('shows.filtersPanel.exclude')}
+                    />
+                  )}
+                  <BooleanFilterPanel
+                    mode={droppedMode}
+                    onChange={setDroppedMode}
+                    groupLabel={t('shows.filtersPanel.dropped')}
+                    rowLabel={t('shows.filtersPanel.dropped')}
+                    includeLabel={t('shows.filtersPanel.include')}
+                    excludeLabel={t('shows.filtersPanel.exclude')}
+                  />
+                  {libraryWatchedYearRange && (
+                    <WatchedYearFilterPanel
+                      min={libraryWatchedYearRange.min}
+                      max={libraryWatchedYearRange.max}
+                      range={watchedYearFilter}
+                      onChange={setWatchedYearFilter}
+                      unknownMode={unknownWatchedMode}
+                      onUnknownModeChange={setUnknownWatchedMode}
+                      groupLabel={t('shows.filtersPanel.watched')}
+                      afterLabel={t('shows.filtersPanel.after')}
+                      beforeLabel={t('shows.filtersPanel.before')}
+                      unknownLabel={t('shows.filtersPanel.unknown')}
+                      includeLabel={t('shows.filtersPanel.include')}
+                      excludeLabel={t('shows.filtersPanel.exclude')}
+                    />
+                  )}
+                  <div>
+                    <Button variant="secondary" type="button" onClick={resetFilters}>
+                      {t('shows.filtersPanel.reset')}
+                    </Button>
+                  </div>
+                </FiltersPanel>
+              )
+            }
           />
-
-          {filtersOpen && (
-            <FiltersPanel>
-              <GenreFilterPanel
-                genres={availableGenres}
-                filters={genreFilters}
-                onChange={setGenreFilters}
-                groupLabel={t('shows.filtersPanel.genres')}
-                includeLabel={t('shows.filtersPanel.include')}
-                excludeLabel={t('shows.filtersPanel.exclude')}
-              />
-              <KeyedFilterPanel
-                keys={availableStatuses}
-                labelFor={statusLabel}
-                filters={statusFilters}
-                onChange={setStatusFilters}
-                groupLabel={t('shows.filtersPanel.status')}
-                includeLabel={t('shows.filtersPanel.include')}
-                excludeLabel={t('shows.filtersPanel.exclude')}
-              />
-              {libraryYearRange && (
-                <ReleaseYearFilterPanel
-                  min={libraryYearRange.min}
-                  max={libraryYearRange.max}
-                  range={yearFilter}
-                  onChange={setYearFilter}
-                  groupLabel={t('shows.filtersPanel.released')}
-                  afterLabel={t('shows.filtersPanel.after')}
-                  beforeLabel={t('shows.filtersPanel.before')}
-                />
-              )}
-              {libraryRatingRange && (
-                <RatingFilterPanel
-                  min={libraryRatingRange.min}
-                  max={libraryRatingRange.max}
-                  range={ratingFilter}
-                  onChange={setRatingFilter}
-                  groupLabel={t('shows.filtersPanel.rating')}
-                  minLabel={t('shows.filtersPanel.min')}
-                  maxLabel={t('shows.filtersPanel.max')}
-                />
-              )}
-              {libraryMyRatingRange && (
-                <MyRatingFilterPanel
-                  min={libraryMyRatingRange.min}
-                  max={libraryMyRatingRange.max}
-                  range={myRatingFilter}
-                  onChange={setMyRatingFilter}
-                  unratedMode={unratedMode}
-                  onUnratedModeChange={setUnratedMode}
-                  groupLabel={t('shows.filtersPanel.myRating')}
-                  minLabel={t('shows.filtersPanel.min')}
-                  maxLabel={t('shows.filtersPanel.max')}
-                  unratedLabel={t('shows.filtersPanel.unrated')}
-                  includeLabel={t('shows.filtersPanel.include')}
-                  excludeLabel={t('shows.filtersPanel.exclude')}
-                />
-              )}
-              <BooleanFilterPanel
-                mode={droppedMode}
-                onChange={setDroppedMode}
-                groupLabel={t('shows.filtersPanel.dropped')}
-                rowLabel={t('shows.filtersPanel.dropped')}
-                includeLabel={t('shows.filtersPanel.include')}
-                excludeLabel={t('shows.filtersPanel.exclude')}
-              />
-              {libraryWatchedYearRange && (
-                <WatchedYearFilterPanel
-                  min={libraryWatchedYearRange.min}
-                  max={libraryWatchedYearRange.max}
-                  range={watchedYearFilter}
-                  onChange={setWatchedYearFilter}
-                  unknownMode={unknownWatchedMode}
-                  onUnknownModeChange={setUnknownWatchedMode}
-                  groupLabel={t('shows.filtersPanel.watched')}
-                  afterLabel={t('shows.filtersPanel.after')}
-                  beforeLabel={t('shows.filtersPanel.before')}
-                  unknownLabel={t('shows.filtersPanel.unknown')}
-                  includeLabel={t('shows.filtersPanel.include')}
-                  excludeLabel={t('shows.filtersPanel.exclude')}
-                />
-              )}
-              <div>
-                <Button variant="secondary" type="button" onClick={resetFilters}>
-                  {t('shows.filtersPanel.reset')}
-                </Button>
-              </div>
-            </FiltersPanel>
-          )}
 
           {shows.length === 0 ? (
             <p className="text-[var(--color-fg-muted)]">

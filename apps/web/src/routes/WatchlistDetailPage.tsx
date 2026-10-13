@@ -282,39 +282,41 @@ export function WatchlistDetailPage() {
               { value: 'ratingDesc', label: t('watchlists.sortRatingDesc') },
               { value: 'ratingAsc', label: t('watchlists.sortRatingAsc') },
             ]}
+            panel={
+              filtersOpen &&
+              (yearBounds || ratingBounds) && (
+                <FiltersPanel>
+                  {yearBounds && (
+                    <ReleaseYearFilterPanel
+                      min={yearBounds.min}
+                      max={yearBounds.max}
+                      range={yearFilter ?? { after: yearBounds.min, before: yearBounds.max }}
+                      onChange={setYearFilter}
+                      groupLabel={t('watchlists.filtersPanel.released')}
+                      afterLabel={t('watchlists.filtersPanel.after')}
+                      beforeLabel={t('watchlists.filtersPanel.before')}
+                    />
+                  )}
+                  {ratingBounds && (
+                    <RatingFilterPanel
+                      min={ratingBounds.min}
+                      max={ratingBounds.max}
+                      range={ratingFilter ?? { after: ratingBounds.min, before: ratingBounds.max }}
+                      onChange={setRatingFilter}
+                      groupLabel={t('watchlists.filtersPanel.rating')}
+                      minLabel={t('watchlists.filtersPanel.min')}
+                      maxLabel={t('watchlists.filtersPanel.max')}
+                    />
+                  )}
+                  <div>
+                    <Button variant="secondary" type="button" onClick={resetFilters}>
+                      {t('watchlists.filtersPanel.reset')}
+                    </Button>
+                  </div>
+                </FiltersPanel>
+              )
+            }
           />
-
-          {filtersOpen && (yearBounds || ratingBounds) && (
-            <FiltersPanel>
-              {yearBounds && (
-                <ReleaseYearFilterPanel
-                  min={yearBounds.min}
-                  max={yearBounds.max}
-                  range={yearFilter ?? { after: yearBounds.min, before: yearBounds.max }}
-                  onChange={setYearFilter}
-                  groupLabel={t('watchlists.filtersPanel.released')}
-                  afterLabel={t('watchlists.filtersPanel.after')}
-                  beforeLabel={t('watchlists.filtersPanel.before')}
-                />
-              )}
-              {ratingBounds && (
-                <RatingFilterPanel
-                  min={ratingBounds.min}
-                  max={ratingBounds.max}
-                  range={ratingFilter ?? { after: ratingBounds.min, before: ratingBounds.max }}
-                  onChange={setRatingFilter}
-                  groupLabel={t('watchlists.filtersPanel.rating')}
-                  minLabel={t('watchlists.filtersPanel.min')}
-                  maxLabel={t('watchlists.filtersPanel.max')}
-                />
-              )}
-              <div>
-                <Button variant="secondary" type="button" onClick={resetFilters}>
-                  {t('watchlists.filtersPanel.reset')}
-                </Button>
-              </div>
-            </FiltersPanel>
-          )}
 
           {items.length === 0 ? (
             <p className="text-[var(--color-fg-muted)]">

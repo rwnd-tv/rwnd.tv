@@ -274,37 +274,38 @@ export function HistoryPage() {
               { value: 'titleAsc', label: t('history.sortTitleAsc') },
               { value: 'titleDesc', label: t('history.sortTitleDesc') },
             ]}
+            panel={
+              filtersOpen && (
+                <FiltersPanel>
+                  <ActivityKindFilterPanel
+                    shown={shownKinds}
+                    onChange={setShownKinds}
+                    labelFor={kindLabel}
+                    groupLabel={t('history.filtersPanel.kind')}
+                  />
+                  <DateRangeFilterPanel
+                    range={dateRange}
+                    onChange={setDateRange}
+                    groupLabel={t('history.filtersPanel.dateRange')}
+                    afterLabel={t('history.filtersPanel.after')}
+                    beforeLabel={t('history.filtersPanel.before')}
+                  />
+                  <div>
+                    <Button
+                      variant="secondary"
+                      type="button"
+                      onClick={() => {
+                        setShownKinds(new Set(ACTIVITY_KINDS))
+                        setDateRange({ after: null, before: null })
+                      }}
+                    >
+                      {t('history.filtersPanel.reset')}
+                    </Button>
+                  </div>
+                </FiltersPanel>
+              )
+            }
           />
-
-          {filtersOpen && (
-            <FiltersPanel>
-              <ActivityKindFilterPanel
-                shown={shownKinds}
-                onChange={setShownKinds}
-                labelFor={kindLabel}
-                groupLabel={t('history.filtersPanel.kind')}
-              />
-              <DateRangeFilterPanel
-                range={dateRange}
-                onChange={setDateRange}
-                groupLabel={t('history.filtersPanel.dateRange')}
-                afterLabel={t('history.filtersPanel.after')}
-                beforeLabel={t('history.filtersPanel.before')}
-              />
-              <div>
-                <Button
-                  variant="secondary"
-                  type="button"
-                  onClick={() => {
-                    setShownKinds(new Set(ACTIVITY_KINDS))
-                    setDateRange({ after: null, before: null })
-                  }}
-                >
-                  {t('history.filtersPanel.reset')}
-                </Button>
-              </div>
-            </FiltersPanel>
-          )}
 
           {selectedKeys.size > 0 && (
             <div className="flex flex-wrap items-center gap-3 rounded-lg border border-[var(--color-border)] p-3">

@@ -207,79 +207,80 @@ export function MoviesPage() {
               { value: 'myRatingDesc', label: t('movies.sortMyRatingDesc') },
               { value: 'myRatingAsc', label: t('movies.sortMyRatingAsc') },
             ]}
+            panel={
+              filtersOpen && (
+                <FiltersPanel>
+                  <GenreFilterPanel
+                    genres={availableGenres}
+                    filters={genreFilters}
+                    onChange={setGenreFilters}
+                    groupLabel={t('movies.filtersPanel.genres')}
+                    includeLabel={t('movies.filtersPanel.include')}
+                    excludeLabel={t('movies.filtersPanel.exclude')}
+                  />
+                  {libraryYearRange && (
+                    <ReleaseYearFilterPanel
+                      min={libraryYearRange.min}
+                      max={libraryYearRange.max}
+                      range={yearFilter}
+                      onChange={setYearFilter}
+                      groupLabel={t('movies.filtersPanel.released')}
+                      afterLabel={t('movies.filtersPanel.after')}
+                      beforeLabel={t('movies.filtersPanel.before')}
+                    />
+                  )}
+                  {libraryRatingRange && (
+                    <RatingFilterPanel
+                      min={libraryRatingRange.min}
+                      max={libraryRatingRange.max}
+                      range={ratingFilter}
+                      onChange={setRatingFilter}
+                      groupLabel={t('movies.filtersPanel.rating')}
+                      minLabel={t('movies.filtersPanel.min')}
+                      maxLabel={t('movies.filtersPanel.max')}
+                    />
+                  )}
+                  {libraryMyRatingRange && (
+                    <MyRatingFilterPanel
+                      min={libraryMyRatingRange.min}
+                      max={libraryMyRatingRange.max}
+                      range={myRatingFilter}
+                      onChange={setMyRatingFilter}
+                      unratedMode={unratedMode}
+                      onUnratedModeChange={setUnratedMode}
+                      groupLabel={t('movies.filtersPanel.myRating')}
+                      minLabel={t('movies.filtersPanel.min')}
+                      maxLabel={t('movies.filtersPanel.max')}
+                      unratedLabel={t('movies.filtersPanel.unrated')}
+                      includeLabel={t('movies.filtersPanel.include')}
+                      excludeLabel={t('movies.filtersPanel.exclude')}
+                    />
+                  )}
+                  {libraryWatchedYearRange && (
+                    <WatchedYearFilterPanel
+                      min={libraryWatchedYearRange.min}
+                      max={libraryWatchedYearRange.max}
+                      range={watchedYearFilter}
+                      onChange={setWatchedYearFilter}
+                      unknownMode={unknownWatchedMode}
+                      onUnknownModeChange={setUnknownWatchedMode}
+                      groupLabel={t('movies.filtersPanel.watched')}
+                      afterLabel={t('movies.filtersPanel.after')}
+                      beforeLabel={t('movies.filtersPanel.before')}
+                      unknownLabel={t('movies.filtersPanel.unknown')}
+                      includeLabel={t('movies.filtersPanel.include')}
+                      excludeLabel={t('movies.filtersPanel.exclude')}
+                    />
+                  )}
+                  <div>
+                    <Button variant="secondary" type="button" onClick={resetFilters}>
+                      {t('movies.filtersPanel.reset')}
+                    </Button>
+                  </div>
+                </FiltersPanel>
+              )
+            }
           />
-
-          {filtersOpen && (
-            <FiltersPanel>
-              <GenreFilterPanel
-                genres={availableGenres}
-                filters={genreFilters}
-                onChange={setGenreFilters}
-                groupLabel={t('movies.filtersPanel.genres')}
-                includeLabel={t('movies.filtersPanel.include')}
-                excludeLabel={t('movies.filtersPanel.exclude')}
-              />
-              {libraryYearRange && (
-                <ReleaseYearFilterPanel
-                  min={libraryYearRange.min}
-                  max={libraryYearRange.max}
-                  range={yearFilter}
-                  onChange={setYearFilter}
-                  groupLabel={t('movies.filtersPanel.released')}
-                  afterLabel={t('movies.filtersPanel.after')}
-                  beforeLabel={t('movies.filtersPanel.before')}
-                />
-              )}
-              {libraryRatingRange && (
-                <RatingFilterPanel
-                  min={libraryRatingRange.min}
-                  max={libraryRatingRange.max}
-                  range={ratingFilter}
-                  onChange={setRatingFilter}
-                  groupLabel={t('movies.filtersPanel.rating')}
-                  minLabel={t('movies.filtersPanel.min')}
-                  maxLabel={t('movies.filtersPanel.max')}
-                />
-              )}
-              {libraryMyRatingRange && (
-                <MyRatingFilterPanel
-                  min={libraryMyRatingRange.min}
-                  max={libraryMyRatingRange.max}
-                  range={myRatingFilter}
-                  onChange={setMyRatingFilter}
-                  unratedMode={unratedMode}
-                  onUnratedModeChange={setUnratedMode}
-                  groupLabel={t('movies.filtersPanel.myRating')}
-                  minLabel={t('movies.filtersPanel.min')}
-                  maxLabel={t('movies.filtersPanel.max')}
-                  unratedLabel={t('movies.filtersPanel.unrated')}
-                  includeLabel={t('movies.filtersPanel.include')}
-                  excludeLabel={t('movies.filtersPanel.exclude')}
-                />
-              )}
-              {libraryWatchedYearRange && (
-                <WatchedYearFilterPanel
-                  min={libraryWatchedYearRange.min}
-                  max={libraryWatchedYearRange.max}
-                  range={watchedYearFilter}
-                  onChange={setWatchedYearFilter}
-                  unknownMode={unknownWatchedMode}
-                  onUnknownModeChange={setUnknownWatchedMode}
-                  groupLabel={t('movies.filtersPanel.watched')}
-                  afterLabel={t('movies.filtersPanel.after')}
-                  beforeLabel={t('movies.filtersPanel.before')}
-                  unknownLabel={t('movies.filtersPanel.unknown')}
-                  includeLabel={t('movies.filtersPanel.include')}
-                  excludeLabel={t('movies.filtersPanel.exclude')}
-                />
-              )}
-              <div>
-                <Button variant="secondary" type="button" onClick={resetFilters}>
-                  {t('movies.filtersPanel.reset')}
-                </Button>
-              </div>
-            </FiltersPanel>
-          )}
 
           {movies.length === 0 ? (
             <p className="text-[var(--color-fg-muted)]">

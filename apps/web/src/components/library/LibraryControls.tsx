@@ -20,6 +20,7 @@ export function LibraryControls<SortKey extends string>({
   sortLabel,
   sortOptions,
   sticky = false,
+  panel,
 }: {
   filterValue: string
   onFilterChange: (value: string) => void
@@ -38,43 +39,55 @@ export function LibraryControls<SortKey extends string>({
    * rest of the page. `top-16`/`z-10` match Layout.tsx's header (`h-16`,
    * `z-20`) and Sidebar.tsx's own `top-16` sticky offset. */
   sticky?: boolean
+  /** Rendered under the filter/sort row, inside the same (possibly sticky)
+   * container: the pages' expanded "Filters…" card (FiltersPanel.tsx). It
+   * lives in here rather than as a sibling after this component so it pins
+   * along with the row instead of scrolling away on its own. When sticky,
+   * the container is capped below the viewport height and the panel scrolls
+   * internally, so a tall panel can't push its own lower sections off-screen
+   * where page scrolling would never reach them, and a strip of results
+   * stays visible underneath. */
+  panel?: ReactNode
 }) {
   return (
     <div
       className={
         sticky
-          ? 'sticky top-16 z-10 flex flex-wrap items-end gap-3 border-b border-[var(--color-border)] bg-[var(--color-bg)] py-3'
-          : 'flex flex-wrap items-end gap-3'
+          ? 'sticky top-16 z-10 flex max-h-[calc(100dvh-8rem)] flex-col gap-3 border-b border-[var(--color-border)] bg-[var(--color-bg)] py-3'
+          : 'flex flex-col gap-3'
       }
     >
-      <Field
-        label={filterLabel}
-        hideLabel
-        type="search"
-        placeholder={filterPlaceholder}
-        value={filterValue}
-        onChange={(e) => onFilterChange(e.target.value)}
-        // min-w-48 (192px) alone used to always force the sort Select (also
-        // 192px) onto its own row below sm — nothing left for both to share
-        // a line at a phone's ~343px usable width. min-w-32 lets this field
-        // actually shrink there; sm:min-w-48 keeps today's floor everywhere
-        // it already fit.
-        className="min-w-32 flex-1 sm:min-w-48"
-      />
-      {betweenFilterAndSort}
-      <Select
-        label={sortLabel}
-        hideLabel
-        value={sortValue}
-        onChange={(e) => onSortChange(e.target.value as SortKey)}
-        className="w-36 sm:w-48"
-      >
-        {sortOptions.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </Select>
+      <div className="flex flex-wrap items-end gap-3">
+        <Field
+          label={filterLabel}
+          hideLabel
+          type="search"
+          placeholder={filterPlaceholder}
+          value={filterValue}
+          onChange={(e) => onFilterChange(e.target.value)}
+          // min-w-48 (192px) alone used to always force the sort Select (also
+          // 192px) onto its own row below sm — nothing left for both to share
+          // a line at a phone's ~343px usable width. min-w-32 lets this field
+          // actually shrink there; sm:min-w-48 keeps today's floor everywhere
+          // it already fit.
+          className="min-w-32 flex-1 sm:min-w-48"
+        />
+        {betweenFilterAndSort}
+        <Select
+          label={sortLabel}
+          hideLabel
+          value={sortValue}
+          onChange={(e) => onSortChange(e.target.value as SortKey)}
+          className="w-36 sm:w-48"
+        >
+          {sortOptions.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </Select>
+      </div>
+      {panel && <div className="min-h-0 overflow-y-auto">{panel}</div>}
     </div>
   )
 }

@@ -23,6 +23,13 @@ updates:
       dev-dependencies:
         dependency-type: development
         update-types: ['minor', 'patch']
+      # react-dom refuses to load unless react is the exact same version,
+      # so the two must always move together. A react-dom-only PR (#100)
+      # failed every rendering test with "Incompatible React versions".
+      # Majors included on purpose: a react major alone would break the
+      # same way.
+      react:
+        patterns: ['react', 'react-dom']
     ignore:
       # typescript-eslint doesn't support TS 7 yet — see docs/TODO.md's
       # "Hold TS 7 bump" item. The dev-dependencies group above is

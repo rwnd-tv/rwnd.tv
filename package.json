@@ -6,7 +6,7 @@
   "description": "rwnd.tv (rewind dot tv) — self-hosted tracking for what you watch.",
   "license": "MIT",
   "engines": {
-    "node": ">=22"
+    "node": ">=22.18"
   },
   "packageManager": "pnpm@11.20.0",
   "scripts": {

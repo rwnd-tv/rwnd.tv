@@ -14,7 +14,7 @@ pnpm dev:api    # http://localhost:3000
 pnpm dev:web    # http://localhost:5173, proxies /api to the API above
 ```
 
-Requirements: Node.js ≥ 22 (`.nvmrc` pins the exact version this repo
+Requirements: Node.js ≥ 22.18 (`.nvmrc` pins the exact version this repo
 develops against; the shipped image runs Node 26 (see `Dockerfile`)
 but nothing is tested against 26 outside the Docker build), pnpm
 `11.20.0` (`corepack enable` picks this up from `packageManager` in

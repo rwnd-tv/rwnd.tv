@@ -242,9 +242,18 @@ jobs:
       # `SET transaction_timeout` and the round-trip test's restore into a 16
       # server would fail. The runtime image solves this by bundling every
       # major and picking at runtime (see Dockerfile); CI only needs the one
-      # its own service actually runs.
+      # its own service actually runs. It comes from PostgreSQL's own apt
+      # repository rather than Ubuntu's, which only carries one major per
+      # release (Ubuntu 26.04 dropped 16), whereas PostgreSQL's carries every
+      # supported major for every supported Ubuntu release.
       - name: Install Postgres client (for the backup round-trip test)
         run: |
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+            https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          . /etc/os-release
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends postgresql-client-16
           pg_dump --version

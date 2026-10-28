@@ -245,7 +245,10 @@ jobs:
       # its own service actually runs. It comes from PostgreSQL's own apt
       # repository rather than Ubuntu's, which only carries one major per
       # release (Ubuntu 26.04 dropped 16), whereas PostgreSQL's carries every
-      # supported major for every supported Ubuntu release.
+      # supported major for every supported Ubuntu release. Its bin directory
+      # then goes first on PATH: the runner image can ship a newer client of
+      # its own, and Ubuntu's /usr/bin/pg_dump wrapper picks the newest one
+      # installed, not 16.
       - name: Install Postgres client (for the backup round-trip test)
         run: |
           sudo install -d /usr/share/postgresql-common/pgdg
@@ -256,7 +259,8 @@ jobs:
             | sudo tee /etc/apt/sources.list.d/pgdg.list
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends postgresql-client-16
-          pg_dump --version
+          echo /usr/lib/postgresql/16/bin >> "$GITHUB_PATH"
+          /usr/lib/postgresql/16/bin/pg_dump --version
 
       - name: Run database migrations
         run: pnpm db:migrate

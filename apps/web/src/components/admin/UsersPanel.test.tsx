@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -306,6 +306,10 @@ describe('UsersPanel', () => {
 
     resolveRevoke()
     await screen.findByText('1 of 1 account signed out everywhere.')
-    expect(screen.getByRole('checkbox', { name: 'Select Watcher' })).toBeEnabled()
+    // The report renders first; the busy flag clears on a later render, via
+    // UserBulkActions's useEffect, so the checkbox can still be disabled here.
+    await waitFor(() =>
+      expect(screen.getByRole('checkbox', { name: 'Select Watcher' })).toBeEnabled(),
+    )
   })
 })

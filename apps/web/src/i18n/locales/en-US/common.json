@@ -664,6 +664,12 @@
     "noFilterMatches": "Nothing matches the selected filters.",
     "filtersPanel": {
       "kind": "Type",
+      "source": "Source (watches only)",
+      "sourceLabel": {
+        "manual": "Manual",
+        "imported": "Imported",
+        "scrobbled": "Scrobbled"
+      },
       "dateRange": "Date range",
       "after": "From",
       "before": "To",

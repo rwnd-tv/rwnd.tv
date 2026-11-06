@@ -1,10 +1,14 @@
 import { OpenAPIHono, createRoute } from '@hono/zod-openapi'
-import { and, asc, desc, eq, ilike, inArray, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, ilike, inArray, ne, or, sql } from 'drizzle-orm'
 import { alias, unionAll } from 'drizzle-orm/pg-core'
 import {
   ACTIVITY_KINDS,
+  ACTIVITY_SOURCE_GROUP_MEMBERS,
+  ACTIVITY_SOURCE_GROUPS,
   type ActivityEntry,
   type ActivityKind,
+  type ActivitySourceGroup,
+  type PlaySource,
   listActivityQuerySchema,
   listActivityResponseSchema,
   removeActivityRequestSchema,
@@ -246,6 +250,13 @@ function parseKinds(raw: string | undefined): ActivityKind[] | undefined {
   return kinds.length > 0 ? kinds : undefined
 }
 
+function parseSources(raw: string | undefined): PlaySource[] | undefined {
+  if (!raw) return undefined
+  const known = new Set<string>(ACTIVITY_SOURCE_GROUPS)
+  const groups = raw.split(',').filter((g): g is ActivitySourceGroup => known.has(g))
+  return groups.length > 0 ? groups.flatMap((g) => ACTIVITY_SOURCE_GROUP_MEMBERS[g]) : undefined
+}
+
 activityRoutes.openapi(
   createRoute({
     method: 'get',
@@ -260,10 +271,20 @@ activityRoutes.openapi(
     },
   }),
   async (c) => {
-    const { offset, limit, q, kinds: kindsRaw, sort, after, before } = c.req.valid('query')
+    const {
+      offset,
+      limit,
+      q,
+      kinds: kindsRaw,
+      sources: sourcesRaw,
+      sort,
+      after,
+      before,
+    } = c.req.valid('query')
     const userId = c.get('user')!.id
     const db = c.get('db')
     const kinds = parseKinds(kindsRaw)
+    const sources = parseSources(sourcesRaw)
 
     const activity = db
       .$with('activity')
@@ -279,6 +300,7 @@ activityRoutes.openapi(
     const filters = [
       q ? ilike(activity.title, `%${q}%`) : undefined,
       kinds ? inArray(activity.kind, kinds) : undefined,
+      sources ? or(ne(activity.kind, 'watch'), inArray(activity.source, sources)) : undefined,
       // Raw SQL rather than gte()/lte() with a JS `Date` — `occurredAt` is a
       // `sql<T>`-cast CTE column (see the comment above watchBranch()), so
       // it carries no column type info for drizzle/postgres.js to encode a

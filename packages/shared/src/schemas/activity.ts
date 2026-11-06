@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { playMediaSummarySchema } from './plays.js'
-import { playSourceSchema, ratingValueSchema, uuidSchema } from './common.js'
+import { type PlaySource, playSourceSchema, ratingValueSchema, uuidSchema } from './common.js'
 
 /**
  * The four kinds of user action the Activity page (formerly just "History",
@@ -14,6 +14,20 @@ import { playSourceSchema, ratingValueSchema, uuidSchema } from './common.js'
 export const ACTIVITY_KINDS = ['watch', 'rating', 'watchlist', 'dropped'] as const
 export const activityKindSchema = z.enum(ACTIVITY_KINDS)
 export type ActivityKind = z.infer<typeof activityKindSchema>
+
+/**
+ * The groups a watch's source can be filtered by. "imported" describes how the
+ * play reached this instance, not how it was first logged: a Trakt scrobble
+ * brought in by an import is imported. Media servers share one group because
+ * most instances use only one, so separate options would mostly be clutter.
+ */
+export const ACTIVITY_SOURCE_GROUPS = ['manual', 'imported', 'scrobbled'] as const
+export type ActivitySourceGroup = (typeof ACTIVITY_SOURCE_GROUPS)[number]
+export const ACTIVITY_SOURCE_GROUP_MEMBERS: Record<ActivitySourceGroup, PlaySource[]> = {
+  manual: ['manual'],
+  imported: ['import'],
+  scrobbled: ['plex', 'jellyfin', 'emby', 'tautulli'],
+}
 
 export const ACTIVITY_SORT_KEYS = ['occurredDesc', 'occurredAsc', 'titleAsc', 'titleDesc'] as const
 export const activitySortSchema = z.enum(ACTIVITY_SORT_KEYS)
@@ -67,6 +81,10 @@ export const listActivityQuerySchema = z.object({
    * silently dropped rather than rejected, the same tolerant treatment
    * apps/web/src/lib/use-genre-filter-cookie.ts gives a stale filter value. */
   kinds: z.string().optional(),
+  /** Comma-separated subset of ACTIVITY_SOURCE_GROUPS, tolerated the same way
+   * as `kinds`. Narrows watches only: ratings, watchlist entries and drops
+   * have no source, and are left to `kinds`. */
+  sources: z.string().optional(),
   sort: activitySortSchema.default('occurredDesc'),
   /** Inclusive bounds on `occurredAt`, as full ISO instants rather than
    * bare dates — the frontend's date-range picker only offers day

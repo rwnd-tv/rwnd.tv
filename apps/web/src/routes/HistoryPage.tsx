@@ -9,6 +9,7 @@ import {
 import {
   ACTIVITY_KINDS,
   ACTIVITY_SORT_KEYS,
+  ACTIVITY_SOURCE_GROUPS,
   type ActivityEntry,
   type ActivitySort,
 } from '@rwnd/shared'
@@ -17,6 +18,7 @@ import { invalidateWatchData } from '../lib/query-client.js'
 import { useAuth } from '../lib/use-auth.js'
 import { useSortCookie } from '../lib/use-sort-cookie.js'
 import { useActivityKindFilterCookie } from '../lib/use-activity-kind-filter-cookie.js'
+import { useKindFilterCookie } from '../lib/use-kind-filter-cookie.js'
 import { useDateRangeCookie } from '../lib/use-date-range-cookie.js'
 import { useDebouncedValue } from '../lib/use-debounced-value.js'
 import { localDayEndISO, localDayStartISO } from '../lib/date.js'
@@ -25,7 +27,7 @@ import { PosterGrid } from '../components/library/PosterGrid.js'
 import { ActivityTile } from '../components/library/ActivityTile.js'
 import { LibraryControls } from '../components/library/LibraryControls.js'
 import { FiltersPanel } from '../components/library/FiltersPanel.js'
-import { ActivityKindFilterPanel } from '../components/library/ActivityKindFilterPanel.js'
+import { CheckboxFilterPanel } from '../components/library/CheckboxFilterPanel.js'
 import { DateRangeFilterPanel } from '../components/library/DateRangeFilterPanel.js'
 import { WatchDateDialog } from '../components/library/WatchDateDialog.js'
 import { Button } from '../components/ui/Button.js'
@@ -83,28 +85,51 @@ export function HistoryPage() {
     'occurredDesc',
   )
   const [shownKinds, setShownKinds] = useActivityKindFilterCookie('rwnd_history_kind_filters')
+  const [shownSources, setShownSources] = useKindFilterCookie(
+    'rwnd_history_source_filters',
+    ACTIVITY_SOURCE_GROUPS,
+  )
   const [dateRange, setDateRange] = useDateRangeCookie('rwnd_history_date_range')
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set())
   const [editingKey, setEditingKey] = useState<string | null>(null)
 
-  const kindsParam = shownKinds.size < ACTIVITY_KINDS.length ? [...shownKinds].sort() : undefined
+  // Unticking every source hides watches but not the other kinds, which have no
+  // source. An empty `sources` list means "no filter" over the wire
+  // (api-client.ts's activity.list), so that case drops watches via `kinds`.
+  const effectiveKinds =
+    shownSources.size > 0 ? shownKinds : new Set([...shownKinds].filter((kind) => kind !== 'watch'))
+  const kindsParam =
+    effectiveKinds.size < ACTIVITY_KINDS.length ? [...effectiveKinds].sort() : undefined
+  const sourcesParam =
+    shownSources.size > 0 && shownSources.size < ACTIVITY_SOURCE_GROUPS.length
+      ? [...shownSources].sort()
+      : undefined
   const kindsCacheKey = kindsParam?.join(',') ?? 'all'
+  const sourcesCacheKey = sourcesParam?.join(',') ?? 'all'
   const dateRangeCacheKey = `${dateRange.after ?? ''}_${dateRange.before ?? ''}`
   // Deselecting every kind checkbox means "show nothing" — no API call can
   // express that (an empty `kinds` list is indistinguishable from "no
   // filter" over the wire, api-client.ts's activity.list), so it's handled
   // entirely client-side by not fetching at all.
-  const hasSelectedKind = shownKinds.size > 0
+  const hasSelectedKind = effectiveKinds.size > 0
 
   const { data, isLoading, isFetchingNextPage, hasNextPage, fetchNextPage } = useInfiniteQuery({
-    queryKey: ['activity', debouncedFilter, sortBy, kindsCacheKey, dateRangeCacheKey],
+    queryKey: [
+      'activity',
+      debouncedFilter,
+      sortBy,
+      kindsCacheKey,
+      sourcesCacheKey,
+      dateRangeCacheKey,
+    ],
     queryFn: ({ pageParam }: { pageParam: number }) =>
       api.activity.list({
         offset: pageParam,
         limit: PAGE_SIZE,
         q: debouncedFilter.trim() || undefined,
         kinds: kindsParam,
+        sources: sourcesParam,
         sort: sortBy,
         after: dateRange.after ? localDayStartISO(dateRange.after) : undefined,
         before: dateRange.before ? localDayEndISO(dateRange.before) : undefined,
@@ -159,6 +184,7 @@ export function HistoryPage() {
   const hasActiveFilter =
     debouncedFilter.trim().length > 0 ||
     kindsParam !== undefined ||
+    shownSources.size < ACTIVITY_SOURCE_GROUPS.length ||
     dateRange.after !== null ||
     dateRange.before !== null
   const entryByKey = useMemo(
@@ -277,11 +303,19 @@ export function HistoryPage() {
             panel={
               filtersOpen && (
                 <FiltersPanel>
-                  <ActivityKindFilterPanel
+                  <CheckboxFilterPanel
+                    options={ACTIVITY_KINDS}
                     shown={shownKinds}
                     onChange={setShownKinds}
                     labelFor={kindLabel}
                     groupLabel={t('history.filtersPanel.kind')}
+                  />
+                  <CheckboxFilterPanel
+                    options={ACTIVITY_SOURCE_GROUPS}
+                    shown={shownSources}
+                    onChange={setShownSources}
+                    labelFor={(source) => t(`history.filtersPanel.sourceLabel.${source}`)}
+                    groupLabel={t('history.filtersPanel.source')}
                   />
                   <DateRangeFilterPanel
                     range={dateRange}
@@ -296,6 +330,7 @@ export function HistoryPage() {
                       type="button"
                       onClick={() => {
                         setShownKinds(new Set(ACTIVITY_KINDS))
+                        setShownSources(new Set(ACTIVITY_SOURCE_GROUPS))
                         setDateRange({ after: null, before: null })
                       }}
                     >
@@ -305,40 +340,41 @@ export function HistoryPage() {
                 </FiltersPanel>
               )
             }
+            footer={
+              selectedKeys.size > 0 && (
+                <div className="flex flex-wrap items-center gap-3 rounded-lg border border-[var(--color-border)] p-3">
+                  <span className="text-sm">
+                    {t('history.selection.count', { count: selectedKeys.size })}
+                  </span>
+                  <Button
+                    variant="secondary"
+                    type="button"
+                    disabled={!singleSelectedEntry || singleSelectedEntry.kind !== 'watch'}
+                    onClick={() => setEditingKey([...selectedKeys][0]!)}
+                  >
+                    {t('history.selection.editDate')}
+                  </Button>
+                  <Button
+                    variant="danger"
+                    type="button"
+                    isLoading={removeMutation.isPending}
+                    onClick={() =>
+                      removeMutation.mutate(
+                        [...selectedKeys]
+                          .map((key) => entryByKey.get(key))
+                          .filter((e): e is ActivityEntry => e !== undefined),
+                      )
+                    }
+                  >
+                    {t('history.selection.remove')}
+                  </Button>
+                  <Button variant="ghost" type="button" onClick={() => setSelectedKeys(new Set())}>
+                    {t('history.selection.clear')}
+                  </Button>
+                </div>
+              )
+            }
           />
-
-          {selectedKeys.size > 0 && (
-            <div className="flex flex-wrap items-center gap-3 rounded-lg border border-[var(--color-border)] p-3">
-              <span className="text-sm">
-                {t('history.selection.count', { count: selectedKeys.size })}
-              </span>
-              <Button
-                variant="secondary"
-                type="button"
-                disabled={!singleSelectedEntry || singleSelectedEntry.kind !== 'watch'}
-                onClick={() => setEditingKey([...selectedKeys][0]!)}
-              >
-                {t('history.selection.editDate')}
-              </Button>
-              <Button
-                variant="danger"
-                type="button"
-                isLoading={removeMutation.isPending}
-                onClick={() =>
-                  removeMutation.mutate(
-                    [...selectedKeys]
-                      .map((key) => entryByKey.get(key))
-                      .filter((e): e is ActivityEntry => e !== undefined),
-                  )
-                }
-              >
-                {t('history.selection.remove')}
-              </Button>
-              <Button variant="ghost" type="button" onClick={() => setSelectedKeys(new Set())}>
-                {t('history.selection.clear')}
-              </Button>
-            </div>
-          )}
 
           {entries.length === 0 ? (
             <p className="text-[var(--color-fg-muted)]">

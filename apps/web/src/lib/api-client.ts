@@ -1,6 +1,7 @@
 import {
   type AccountDataCounts,
   type ActivityKind,
+  type ActivitySourceGroup,
   type ActivitySort,
   type ApiToken,
   type BackupSummary,
@@ -307,6 +308,7 @@ export const api = {
       limit: number
       q?: string
       kinds?: ActivityKind[]
+      sources?: ActivitySourceGroup[]
       sort: ActivitySort
       /** Inclusive ISO instant bounds — see date.ts's localDayStartISO/
        * localDayEndISO for converting a picked calendar day into these. */
@@ -318,6 +320,7 @@ export const api = {
       qs.set('limit', String(params.limit))
       if (params.q) qs.set('q', params.q)
       if (params.kinds && params.kinds.length > 0) qs.set('kinds', params.kinds.join(','))
+      if (params.sources && params.sources.length > 0) qs.set('sources', params.sources.join(','))
       qs.set('sort', params.sort)
       if (params.after) qs.set('after', params.after)
       if (params.before) qs.set('before', params.before)

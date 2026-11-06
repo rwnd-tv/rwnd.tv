@@ -21,6 +21,7 @@ export function LibraryControls<SortKey extends string>({
   sortOptions,
   sticky = false,
   panel,
+  footer,
 }: {
   filterValue: string
   onFilterChange: (value: string) => void
@@ -48,6 +49,10 @@ export function LibraryControls<SortKey extends string>({
    * where page scrolling would never reach them, and a strip of results
    * stays visible underneath. */
   panel?: ReactNode
+  /** Rendered last, inside the same (possibly sticky) container but outside
+   * `panel`'s scrolling area, for controls that must stay reachable however
+   * far a tall panel has been scrolled: HistoryPage.tsx's selection bar. */
+  footer?: ReactNode
 }) {
   return (
     <div
@@ -88,6 +93,7 @@ export function LibraryControls<SortKey extends string>({
         </Select>
       </div>
       {panel && <div className="min-h-0 overflow-y-auto">{panel}</div>}
+      {footer && <div className="shrink-0">{footer}</div>}
     </div>
   )
 }

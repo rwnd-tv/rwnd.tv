@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { eq } from 'drizzle-orm'
-import { droppedShows, movies, ratings, shows, watchlistItems } from '@rwnd/db'
+import { eq, isNotNull, isNull } from 'drizzle-orm'
+import { droppedShows, movies, plays, ratings, shows, watchlistItems } from '@rwnd/db'
 import type { ListActivityResponse, Play } from '@rwnd/shared'
 import { createLocalUser, extractCookie, json, resetDb, testApp, testDb } from './helpers.js'
 import { BREAKING_BAD_SHOW_TMDB_ID, tmdbBreakingBadShow } from './fixtures/trakt.js'
@@ -232,6 +232,72 @@ describe('activity', () => {
       })
       const body = await json<ListActivityResponse>(res)
       expect(body.entries.map((e) => e.kind).sort()).toEqual(['rating', 'watchlist'])
+    })
+
+    describe('filtering by source', () => {
+      async function watchSourcesFor(cookie: string, query: string) {
+        const res = await app.request(`/api/v1/activity-feed?${query}`, { headers: { cookie } })
+        const body = await json<ListActivityResponse>(res)
+        return {
+          watches: body.entries.flatMap((e) => (e.kind === 'watch' ? [e.source] : [])).sort(),
+          otherKinds: body.entries
+            .filter((e) => e.kind !== 'watch')
+            .map((e) => e.kind)
+            .sort(),
+          total: body.total,
+        }
+      }
+
+      it('narrows watches to the chosen group and leaves other kinds alone', async () => {
+        const cookie = await createUserAndCookie()
+        await seedOneOfEach(cookie)
+        await db.update(plays).set({ source: 'plex' }).where(isNotNull(plays.episodeId))
+        await db.update(plays).set({ source: 'import' }).where(isNull(plays.episodeId))
+
+        const scrobbled = await watchSourcesFor(cookie, 'sources=scrobbled')
+        expect(scrobbled.watches).toEqual(['plex'])
+        expect(scrobbled.otherKinds).toEqual(['dropped', 'rating', 'watchlist'])
+        expect(scrobbled.total).toBe(4)
+
+        const imported = await watchSourcesFor(cookie, 'sources=imported')
+        expect(imported.watches).toEqual(['import'])
+
+        const manual = await watchSourcesFor(cookie, 'sources=manual')
+        expect(manual.watches).toEqual([])
+        expect(manual.otherKinds).toEqual(['dropped', 'rating', 'watchlist'])
+
+        const both = await watchSourcesFor(cookie, 'sources=imported,scrobbled')
+        expect(both.watches).toEqual(['import', 'plex'])
+      })
+
+      it.each(['plex', 'jellyfin', 'emby', 'tautulli'] as const)(
+        'counts %s as scrobbled',
+        async (source) => {
+          const cookie = await createUserAndCookie()
+          await seedOneOfEach(cookie)
+          await db.update(plays).set({ source }).where(isNotNull(plays.episodeId))
+
+          const { watches } = await watchSourcesFor(cookie, 'sources=scrobbled')
+          expect(watches).toEqual([source])
+        },
+      )
+
+      it('combines with the kind filter', async () => {
+        const cookie = await createUserAndCookie()
+        await seedOneOfEach(cookie)
+
+        const { watches, otherKinds } = await watchSourcesFor(cookie, 'kinds=watch&sources=manual')
+        expect(watches).toEqual(['manual', 'manual'])
+        expect(otherKinds).toEqual([])
+      })
+
+      it('ignores an unknown group, like an unknown kind', async () => {
+        const cookie = await createUserAndCookie()
+        await seedOneOfEach(cookie)
+
+        const { watches } = await watchSourcesFor(cookie, 'sources=nonsense')
+        expect(watches).toEqual(['manual', 'manual'])
+      })
     })
 
     it('filters by an inclusive after/before date range', async () => {

@@ -45,6 +45,11 @@ pnpm test
 pnpm build
 ```
 
+The backup and restore tests skip themselves when there's no `pg_dump` or
+`psql` on your `PATH`. `scripts/test-full.sh` runs the whole suite the way
+CI does, against a throwaway Postgres 16 container with the Postgres 16
+client, so those tests run; it needs Docker and `postgresql-client-16`.
+
 CI (`.github/workflows/ci.yml`) runs all of the above, on both amd64 and
 arm64, plus a few things not worth running on every save locally: a
 Trivy filesystem scan of the dependency tree for HIGH/CRITICAL

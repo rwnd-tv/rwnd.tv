@@ -1,3 +1,4 @@
+import { TRAKT_USER_AGENT } from './auth.js'
 import type {
   TraktHiddenItem,
   TraktHistoryItem,
@@ -50,7 +51,7 @@ export class TraktClient {
     const res = await fetch(url, {
       headers: {
         'Content-Type': 'application/json',
-        'User-Agent': 'rwnd.tv (+https://rwnd.tv)',
+        'User-Agent': TRAKT_USER_AGENT,
         'trakt-api-key': this.options.clientId,
         'trakt-api-version': '2',
         Authorization: `Bearer ${this.options.accessToken}`,

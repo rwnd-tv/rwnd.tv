@@ -8,6 +8,13 @@ import type { TraktDeviceCodeResponse, TraktTokenResponse } from './types.js'
  * client.ts — sending these calls to the API host 404s.
  */
 
+/**
+ * Sent on every Trakt request. Cloudflare in front of Trakt answers 403 with
+ * an HTML block page to requests that don't identify themselves, which
+ * includes Node fetch's default.
+ */
+export const TRAKT_USER_AGENT = 'rwnd.tv (+https://rwnd.tv)'
+
 export interface TraktAuthOptions {
   authBaseUrl: string
   clientId: string
@@ -19,7 +26,7 @@ export async function requestDeviceCode(
 ): Promise<TraktDeviceCodeResponse> {
   const res = await fetch(`${options.authBaseUrl}/oauth/device/code`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'User-Agent': TRAKT_USER_AGENT },
     body: JSON.stringify({ client_id: options.clientId }),
   })
   if (!res.ok) {
@@ -46,7 +53,7 @@ export async function pollDeviceToken(
 ): Promise<DevicePollResult> {
   const res = await fetch(`${options.authBaseUrl}/oauth/device/token`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'User-Agent': TRAKT_USER_AGENT },
     body: JSON.stringify({
       code: deviceCode,
       client_id: options.clientId,
@@ -72,7 +79,7 @@ export async function refreshAccessToken(
 ): Promise<TraktTokenResponse> {
   const res = await fetch(`${options.authBaseUrl}/oauth/token`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'User-Agent': TRAKT_USER_AGENT },
     body: JSON.stringify({
       refresh_token: refreshToken,
       client_id: options.clientId,

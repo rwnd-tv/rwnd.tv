@@ -29,3 +29,20 @@ import type { Tx } from '@rwnd/db'
 export async function lockUserScope(tx: Tx, userId: string, scopeKey: string): Promise<void> {
   await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${userId}), hashtext(${scopeKey}))`)
 }
+
+/**
+ * Takes a Postgres advisory lock on one provider id for the rest of the
+ * enclosing transaction, so two requests that both find a title missing can't
+ * each create a row for it. external_ids' unique index can't prevent that on
+ * its own: by the time its insert no-ops, the losing request has already
+ * inserted its own movie or show.
+ */
+export async function lockExternalId(
+  tx: Tx,
+  entityType: 'movie' | 'show',
+  source: string,
+  externalId: string,
+): Promise<void> {
+  const scope = `${entityType}:${source}`
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${scope}), hashtext(${externalId}))`)
+}

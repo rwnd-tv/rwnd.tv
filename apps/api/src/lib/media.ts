@@ -1,8 +1,9 @@
 import { and, eq, gt, gte, inArray, sql } from 'drizzle-orm'
 import { hasAired } from '@rwnd/shared'
-import type { Database } from '@rwnd/db'
+import type { Database, Tx } from '@rwnd/db'
 import { episodes, externalIds, movies, plays, seasons, shows } from '@rwnd/db'
 import type { MetadataProvider } from '../providers/types.js'
+import { lockExternalId } from './locks.js'
 import { generateUniqueMovieSlug, generateUniqueShowSlug } from './slug.js'
 
 /** TMDB frequently has no episode title yet for very recent/unaired episodes. */
@@ -27,7 +28,7 @@ export function episodeDisplayTitle(
  * manual "refresh metadata" button unable to ever fix a wrong one.
  */
 export async function upsertExternalId(
-  db: Database,
+  db: Database | Tx,
   entityType: 'movie' | 'show' | 'episode',
   entityId: string,
   source: 'tmdb' | 'tvdb' | 'imdb',
@@ -61,19 +62,7 @@ export async function upsertExternalId(
   }
 }
 
-/**
- * Finds the local row already mapped to (entityType, source, externalId), or
- * creates one by fetching from the provider. This is the join point between
- * provider-sourced search results and rwnd.tv's own IDs, and the mechanism
- * M2's Trakt importer will reuse to match imported history against existing
- * records instead of duplicating them.
- */
-export async function resolveMovie(
-  db: Database,
-  provider: MetadataProvider,
-  externalId: string,
-  locale: string,
-): Promise<{
+interface ResolvedMovie {
   id: string
   slug: string
   title: string
@@ -81,72 +70,28 @@ export async function resolveMovie(
   runtimeMinutes: number | null
   releaseDate: string | null
   releaseDates: Record<string, string> | null
-}> {
+}
+
+async function lookupMovieByExternalId(
+  db: Database | Tx,
+  source: MetadataProvider['source'],
+  externalId: string,
+): Promise<ResolvedMovie | null> {
   const [existing] = await db
     .select({ id: externalIds.entityId })
     .from(externalIds)
     .where(
       and(
         eq(externalIds.entityType, 'movie'),
-        eq(externalIds.source, provider.source),
+        eq(externalIds.source, source),
         eq(externalIds.externalId, externalId),
       ),
     )
     .limit(1)
+  if (!existing) return null
 
-  if (existing) {
-    const [movie] = await db.select().from(movies).where(eq(movies.id, existing.id)).limit(1)
-    if (movie)
-      return {
-        id: movie.id,
-        slug: movie.slug,
-        title: movie.title,
-        posterPath: movie.posterPath,
-        runtimeMinutes: movie.runtimeMinutes,
-        releaseDate: movie.releaseDate,
-        releaseDates: movie.releaseDates,
-      }
-  }
-
-  const fetched = await provider.getMovie(externalId, locale)
-  const slug = await generateUniqueMovieSlug(db, fetched.title, fetched.year)
-  const [movie] = await db
-    .insert(movies)
-    .values({
-      title: fetched.title,
-      slug,
-      year: fetched.year,
-      runtimeMinutes: fetched.runtimeMinutes,
-      overview: fetched.overview,
-      posterPath: fetched.posterPath,
-      genres: fetched.genres,
-      voteAverage: fetched.voteAverage,
-      releaseDate: fetched.releaseDate,
-      // `?? {}`, not `?? null` — a freshly-resolved movie has already been
-      // asked, so it shouldn't look like an unfetched row to the metadata
-      // refresher's findStaleMovies (see movies.releaseDates' doc comment).
-      releaseDates: fetched.releaseDates ?? {},
-      metadataSource: provider.source,
-    })
-    .returning()
-  if (!movie) throw new Error('Failed to insert movie')
-
-  await db
-    .insert(externalIds)
-    .values({
-      entityType: 'movie',
-      entityId: movie.id,
-      source: provider.source,
-      externalId,
-    })
-    .onConflictDoNothing()
-
-  // Free IMDb id for the "View on IMDb" deep link — TMDB returns this in
-  // the same request getMovie() already made above.
-  if (fetched.imdbId) {
-    await upsertExternalId(db, 'movie', movie.id, 'imdb', fetched.imdbId, { correct: false })
-  }
-
+  const [movie] = await db.select().from(movies).where(eq(movies.id, existing.id)).limit(1)
+  if (!movie) return null
   return {
     id: movie.id,
     slug: movie.slug,
@@ -159,12 +104,90 @@ export async function resolveMovie(
 }
 
 /**
+ * Finds the local row already mapped to (entityType, source, externalId), or
+ * creates one by fetching from the provider. This is the join point between
+ * provider-sourced search results and rwnd.tv's own IDs, and the mechanism
+ * M2's Trakt importer will reuse to match imported history against existing
+ * records instead of duplicating them.
+ *
+ * The provider fetch stays outside the transaction so a slow provider can't
+ * hold a database connection. Two requests can therefore both fetch a new
+ * title, so the one that loses `lockExternalId` finds the winner's row on its
+ * second lookup and discards what it fetched.
+ */
+export async function resolveMovie(
+  db: Database,
+  provider: MetadataProvider,
+  externalId: string,
+  locale: string,
+): Promise<ResolvedMovie> {
+  const known = await lookupMovieByExternalId(db, provider.source, externalId)
+  if (known) return known
+
+  const fetched = await provider.getMovie(externalId, locale)
+
+  return db.transaction(async (tx) => {
+    await lockExternalId(tx, 'movie', provider.source, externalId)
+    const created = await lookupMovieByExternalId(tx, provider.source, externalId)
+    if (created) return created
+
+    const slug = await generateUniqueMovieSlug(tx, fetched.title, fetched.year)
+    const [movie] = await tx
+      .insert(movies)
+      .values({
+        title: fetched.title,
+        slug,
+        year: fetched.year,
+        runtimeMinutes: fetched.runtimeMinutes,
+        overview: fetched.overview,
+        posterPath: fetched.posterPath,
+        genres: fetched.genres,
+        voteAverage: fetched.voteAverage,
+        releaseDate: fetched.releaseDate,
+        // `?? {}`, not `?? null` — a freshly-resolved movie has already been
+        // asked, so it shouldn't look like an unfetched row to the metadata
+        // refresher's findStaleMovies (see movies.releaseDates' doc comment).
+        releaseDates: fetched.releaseDates ?? {},
+        metadataSource: provider.source,
+      })
+      .returning()
+    if (!movie) throw new Error('Failed to insert movie')
+
+    await tx
+      .insert(externalIds)
+      .values({
+        entityType: 'movie',
+        entityId: movie.id,
+        source: provider.source,
+        externalId,
+      })
+      .onConflictDoNothing()
+
+    // Free IMDb id for the "View on IMDb" deep link — TMDB returns this in
+    // the same request getMovie() already made above.
+    if (fetched.imdbId) {
+      await upsertExternalId(tx, 'movie', movie.id, 'imdb', fetched.imdbId, { correct: false })
+    }
+
+    return {
+      id: movie.id,
+      slug: movie.slug,
+      title: movie.title,
+      posterPath: movie.posterPath,
+      runtimeMinutes: movie.runtimeMinutes,
+      releaseDate: movie.releaseDate,
+      releaseDates: movie.releaseDates,
+    }
+  })
+}
+
+/**
  * Exported for apps/api/src/import/match.ts, which needs to resolve a show
  * on its own (for a Trakt rating/watchlist entry of type 'show') as well as
  * before resolving individual episodes.
  */
 async function lookupShowByExternalId(
-  db: Database,
+  db: Database | Tx,
   source: MetadataProvider['source'],
   externalId: string,
 ): Promise<{ id: string; title: string; slug: string; externalId: string } | null> {
@@ -204,81 +227,82 @@ export async function resolveShow(
   // was never actually this show's own.
   const canonicalExternalId = fetched.externalId
 
-  // The redirect above can land on a show already known locally under its
-  // *own* id, just not under showExternalId (whatever other id it arrived
-  // as). Without this check, the insert below creates a genuine duplicate
-  // show — its own external_ids insert silently no-ops against the
-  // original's existing row (external_ids_source_lookup_idx conflicts on
-  // (entityType, source, externalId) alone), but nothing then stops
-  // backfillExternalIdBundle (apps/api/src/lib/external-match.ts) from
-  // giving that duplicate a *wrong* external_ids row of its own — the raw,
-  // uncorrected id, since entity_id differs so no unique index blocks it.
-  // Confirmed live 2026-08-24: two duplicate "Formula 1" shows created
-  // this exact way, each missing the real tvdb id entirely.
-  if (canonicalExternalId !== showExternalId) {
-    const existingByCanonical = await lookupShowByExternalId(
-      db,
-      provider.source,
-      canonicalExternalId,
-    )
-    if (existingByCanonical) return existingByCanonical
-  }
+  // Locked and looked up by the canonical id, as resolveMovie explains above,
+  // so requests arriving under different ids for one show still serialize.
+  return db.transaction(async (tx) => {
+    await lockExternalId(tx, 'show', provider.source, canonicalExternalId)
 
-  const slug = await generateUniqueShowSlug(db, fetched.title, fetched.year)
-  const [show] = await db
-    .insert(shows)
-    .values({
-      title: fetched.title,
-      slug,
-      year: fetched.year,
-      overview: fetched.overview,
-      posterPath: fetched.posterPath,
-      status: fetched.status,
-      genres: fetched.genres,
-      voteAverage: fetched.voteAverage,
-      metadataSource: provider.source,
-    })
-    .returning()
-  if (!show) throw new Error('Failed to insert show')
+    // Besides a concurrent request, this also catches a redirect landing on a
+    // show already known locally under its *own* id, just not under
+    // showExternalId (whatever other id it arrived as). Without this check,
+    // the insert below creates a genuine duplicate show — its own external_ids
+    // insert silently no-ops against the original's existing row
+    // (external_ids_source_lookup_idx conflicts on (entityType, source,
+    // externalId) alone), but nothing then stops backfillExternalIdBundle
+    // (apps/api/src/lib/external-match.ts) from giving that duplicate a *wrong*
+    // external_ids row of its own — the raw, uncorrected id, since entity_id
+    // differs so no unique index blocks it. Confirmed live 2026-08-24: two
+    // duplicate "Formula 1" shows created this exact way, each missing the
+    // real tvdb id entirely.
+    const existing = await lookupShowByExternalId(tx, provider.source, canonicalExternalId)
+    if (existing) return existing
 
-  await db
-    .insert(externalIds)
-    .values({
-      entityType: 'show',
-      entityId: show.id,
-      source: provider.source,
-      externalId: canonicalExternalId,
-    })
-    .onConflictDoNothing()
+    const slug = await generateUniqueShowSlug(tx, fetched.title, fetched.year)
+    const [show] = await tx
+      .insert(shows)
+      .values({
+        title: fetched.title,
+        slug,
+        year: fetched.year,
+        overview: fetched.overview,
+        posterPath: fetched.posterPath,
+        status: fetched.status,
+        genres: fetched.genres,
+        voteAverage: fetched.voteAverage,
+        metadataSource: provider.source,
+      })
+      .returning()
+    if (!show) throw new Error('Failed to insert show')
 
-  // Free IMDb id for the "View on IMDb" deep link — see resolveMovie's own
-  // comment above. resolveSeason below never gets one: getSeason() can't
-  // supply per-episode ids, and there's no show-level id to piggyback on
-  // for episodes.
-  if (fetched.imdbId) {
-    await upsertExternalId(db, 'show', show.id, 'imdb', fetched.imdbId, { correct: false })
-  }
-
-  // Store season/episode-count data the provider already returned for free —
-  // saves the metadata refresher (apps/api/src/metadata/refresh.ts) an
-  // otherwise-immediate re-fetch for every newly-resolved show.
-  if (fetched.seasons.length > 0) {
-    await db
-      .insert(seasons)
-      .values(
-        fetched.seasons.map((season) => ({
-          showId: show.id,
-          seasonNumber: season.seasonNumber,
-          name: season.name,
-          episodeCount: season.episodeCount,
-          airDate: season.airDate,
-          posterPath: season.posterPath,
-        })),
-      )
+    await tx
+      .insert(externalIds)
+      .values({
+        entityType: 'show',
+        entityId: show.id,
+        source: provider.source,
+        externalId: canonicalExternalId,
+      })
       .onConflictDoNothing()
-  }
 
-  return { id: show.id, title: show.title, slug: show.slug, externalId: canonicalExternalId }
+    // Free IMDb id for the "View on IMDb" deep link — see resolveMovie's own
+    // comment above. resolveSeason below never gets one: getSeason() can't
+    // supply per-episode ids, and there's no show-level id to piggyback on
+    // for episodes.
+    if (fetched.imdbId) {
+      await upsertExternalId(tx, 'show', show.id, 'imdb', fetched.imdbId, { correct: false })
+    }
+
+    // Store season/episode-count data the provider already returned for free —
+    // saves the metadata refresher (apps/api/src/metadata/refresh.ts) an
+    // otherwise-immediate re-fetch for every newly-resolved show.
+    if (fetched.seasons.length > 0) {
+      await tx
+        .insert(seasons)
+        .values(
+          fetched.seasons.map((season) => ({
+            showId: show.id,
+            seasonNumber: season.seasonNumber,
+            name: season.name,
+            episodeCount: season.episodeCount,
+            airDate: season.airDate,
+            posterPath: season.posterPath,
+          })),
+        )
+        .onConflictDoNothing()
+    }
+
+    return { id: show.id, title: show.title, slug: show.slug, externalId: canonicalExternalId }
+  })
 }
 
 /** One episode resolved to a local row, with just the fields the "Watched"

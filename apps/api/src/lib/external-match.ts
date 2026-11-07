@@ -198,6 +198,56 @@ export async function resolveMovieFromExternalIds(
   return result.value
 }
 
+/** Case, accents, punctuation and a trailing qualifier such as "(US)" or
+ * "(2005)" are ignored: a media server and a metadata provider often format
+ * the same title slightly differently. */
+function normalizeTitle(title: string): string {
+  return title
+    .replace(/\s*\([^)]*\)\s*$/, '')
+    .normalize('NFKD')
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]/gu, '')
+}
+
+/** Provider walk for a webhook episode event, whose ids may be the episode's
+ * own. Each provider's cross-reference lookup comes first, because it can
+ * recognize an id as an episode and report that episode's show. Only then is
+ * an id tried as the provider's own show id, where an episode's id can name an
+ * unrelated show, so that result counts only if its title agrees. */
+async function resolveShowForEpisodeEvent(
+  db: Database,
+  providers: MetadataProvider[],
+  ids: ExternalIdBundle,
+  showTitle: string,
+  locale: string,
+): Promise<
+  | { ok: true; value: Awaited<ReturnType<typeof resolveShow>>; provider: MetadataProvider }
+  | { ok: false }
+> {
+  for (const provider of providers) {
+    const alternateId = await findViaAlternateIds(provider, 'show', ids, locale)
+    if (alternateId) {
+      try {
+        return { ok: true, value: await resolveShow(db, provider, alternateId, locale), provider }
+      } catch {
+        // Fall through to this provider's own id, then the next provider.
+      }
+    }
+    const ownId = ownProviderId(provider, ids)
+    if (ownId) {
+      try {
+        const candidate = await provider.getShow(ownId, locale)
+        if (normalizeTitle(candidate.title) === normalizeTitle(showTitle)) {
+          return { ok: true, value: await resolveShow(db, provider, ownId, locale), provider }
+        }
+      } catch {
+        // Not a show this provider knows; move on to the next provider.
+      }
+    }
+  }
+  return { ok: false }
+}
+
 /** Show counterpart of `resolveMovieFromExternalIds`. Also resolves which
  * configured provider (and its id) should be used for episode-level
  * lookups under this show — `pickRefreshTarget`'s own convention (used by
@@ -205,12 +255,22 @@ export async function resolveMovieFromExternalIds(
  * path, or the provider that actually resolved it. Returns null both when
  * the title can't be matched at all, and when it's known locally but no
  * *configured* provider has a usable id for it (nothing to resolve
- * episodes against either way). */
+ * episodes against either way).
+ *
+ * `episodeEventShowTitle` is for a webhook episode event, whose `ids` may be
+ * the episode's own rather than its show's. Episode and series ids are
+ * separate number ranges, so an episode's id can equal an unrelated show's id.
+ * A stored match therefore only counts when its title agrees with the one the
+ * media server sent; otherwise `resolveShowForEpisodeEvent` decides. Those ids
+ * are also never recorded against the show. An event whose title disagrees
+ * and which no provider can corroborate resolves to null: a lost play with a
+ * server log line is preferred to a wrong one in someone's history. */
 export async function resolveShowFromExternalIds(
   db: Database,
   providers: MetadataProvider[],
   ids: ExternalIdBundle,
   locale: string,
+  episodeEventShowTitle?: string,
 ): Promise<{
   id: string
   title: string
@@ -221,8 +281,13 @@ export async function resolveShowFromExternalIds(
   const localId = await localEntityIdForAnyExternalId(db, 'show', ids)
   if (localId) {
     const [show] = await db.select().from(shows).where(eq(shows.id, localId)).limit(1)
-    if (show) {
-      await backfillExternalIdBundle(db, 'show', show.id, ids)
+    const titleAgrees =
+      episodeEventShowTitle === undefined ||
+      (show && normalizeTitle(show.title) === normalizeTitle(episodeEventShowTitle))
+    if (show && titleAgrees) {
+      if (episodeEventShowTitle === undefined) {
+        await backfillExternalIdBundle(db, 'show', show.id, ids)
+      }
       const target = await pickRefreshTarget(db, 'show', show.id, providers)
       if (!target) return null
       return {
@@ -235,15 +300,20 @@ export async function resolveShowFromExternalIds(
     }
   }
 
-  const result = await resolveViaProvider(
-    (provider, externalId) => resolveShow(db, provider, externalId, locale),
-    providers,
-    'show',
-    ids,
-    locale,
-  )
+  const result =
+    episodeEventShowTitle === undefined
+      ? await resolveViaProvider(
+          (provider, externalId) => resolveShow(db, provider, externalId, locale),
+          providers,
+          'show',
+          ids,
+          locale,
+        )
+      : await resolveShowForEpisodeEvent(db, providers, ids, episodeEventShowTitle, locale)
   if (!result.ok) return null
-  await backfillExternalIdBundle(db, 'show', result.value.id, ids)
+  if (episodeEventShowTitle === undefined) {
+    await backfillExternalIdBundle(db, 'show', result.value.id, ids)
+  }
   return {
     id: result.value.id,
     title: result.value.title,

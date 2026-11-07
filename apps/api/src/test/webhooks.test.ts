@@ -1,6 +1,14 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { eq } from 'drizzle-orm'
-import { episodes, movies, pendingWebhookEvents, plays, shows, webhookAccountLinks } from '@rwnd/db'
+import {
+  episodes,
+  externalIds,
+  movies,
+  pendingWebhookEvents,
+  plays,
+  shows,
+  webhookAccountLinks,
+} from '@rwnd/db'
 import { createLocalUser, json, resetDb, testDb } from './helpers.js'
 import {
   createLinkedTokenAndCookie,
@@ -10,8 +18,88 @@ import {
   postMultipartWebhook,
 } from './webhook-fixtures.js'
 import { createApp } from '../app.js'
+import type { MetadataProvider } from '../providers/types.js'
 
 const db = testDb()
+
+/** Reproduces a real collision: TVDB id 411857 belongs to "1990" S1E1 as an
+ * episode, and TMDB's cross-reference data also lists it as the series id of
+ * the unrelated show "Sisbro". TMDB's `/find` reports the episode's show. */
+function fakeTmdbWithEpisodeIdCollision(): MetadataProvider {
+  const titles: Record<string, { title: string; year: number; episode: string }> = {
+    '13380': { title: '1990', year: 1977, episode: 'Creed of Slaves' },
+    '138346': { title: 'Sisbro', year: 2021, episode: 'Episode 1' },
+  }
+  return {
+    ...fakeTmdb(),
+    async getShow(externalId) {
+      const show = titles[externalId]
+      if (!show) throw new Error(`No show with id ${externalId}`)
+      return {
+        externalId,
+        title: show.title,
+        year: show.year,
+        overview: null,
+        posterPath: null,
+        status: null,
+        genres: [],
+        voteAverage: null,
+        seasons: [],
+        imdbId: null,
+      }
+    },
+    async getSeason(externalId) {
+      const show = titles[externalId]
+      if (!show) throw new Error(`No show with id ${externalId}`)
+      return {
+        overview: null,
+        voteAverage: null,
+        externalId: null,
+        episodes: [
+          {
+            title: show.episode,
+            seasonNumber: 1,
+            episodeNumber: 1,
+            runtimeMinutes: 50,
+            firstAired: '2000-01-01',
+            overview: null,
+            stillPath: null,
+            voteAverage: null,
+            externalId: null,
+            imdbId: null,
+          },
+        ],
+      }
+    },
+    async findByExternalId(_entityType, source, externalId) {
+      return source === 'tvdb' && externalId === '411857' ? '13380' : null
+    },
+  }
+}
+
+function plexEpisodeEvent(showTitle: string, guids: string[]) {
+  return {
+    event: 'media.scrobble',
+    Account: DEFAULT_ACCOUNT,
+    Metadata: {
+      type: 'episode',
+      ratingKey: '7001',
+      grandparentTitle: showTitle,
+      parentIndex: 1,
+      index: 1,
+      Guid: guids.map((id) => ({ id })),
+    },
+  }
+}
+
+async function loggedShowTitles() {
+  const rows = await db
+    .select({ title: shows.title })
+    .from(plays)
+    .innerJoin(episodes, eq(plays.episodeId, episodes.id))
+    .innerJoin(shows, eq(episodes.showId, shows.id))
+  return rows.map((row) => row.title)
+}
 
 /** Account id "1" carries no special meaning any more — Plex's own docs
  * claim it's always the server owner, but that doesn't hold for real
@@ -145,6 +233,81 @@ describe('POST /webhooks/plex/:token', () => {
 
     const [show] = await db.select().from(shows).where(eq(shows.title, 'Formula 1'))
     expect(show).toBeDefined()
+  })
+
+  it('does not log an episode against a stored show whose series id equals the episode id', async () => {
+    const app = createApp({ db, metadataProviders: [fakeTmdbWithEpisodeIdCollision()] })
+    const { token } = await createLinkedTokenAndCookie(app)
+
+    await postWebhook(app, token, plexEpisodeEvent('Sisbro', ['tmdb://138346']))
+    const [sisbro] = await db.select().from(shows).where(eq(shows.title, 'Sisbro'))
+    await db
+      .insert(externalIds)
+      .values({ entityType: 'show', entityId: sisbro!.id, source: 'tvdb', externalId: '411857' })
+
+    const res = await postWebhook(
+      app,
+      token,
+      plexEpisodeEvent('1990', ['tmdb://498066', 'tvdb://411857']),
+    )
+    expect(res.status).toBe(200)
+
+    expect((await loggedShowTitles()).sort()).toEqual(['1990', 'Sisbro'])
+  })
+
+  it("does not record an episode event's ids as ids of the show", async () => {
+    const app = createApp({ db, metadataProviders: [fakeTmdbWithEpisodeIdCollision()] })
+    const { token } = await createLinkedTokenAndCookie(app)
+
+    await postWebhook(app, token, plexEpisodeEvent('1990', ['tmdb://498066', 'tvdb://411857']))
+
+    expect(await loggedShowTitles()).toEqual(['1990'])
+    const showIds = await db
+      .select({ source: externalIds.source, externalId: externalIds.externalId })
+      .from(externalIds)
+      .where(eq(externalIds.entityType, 'show'))
+    expect(showIds).toEqual([{ source: 'tmdb', externalId: '13380' }])
+  })
+
+  it('still logs against the stored show when the media server titles it differently, given an id that corroborates it', async () => {
+    const app = createApp({ db, metadataProviders: [fakeTmdbWithEpisodeIdCollision()] })
+    const { token } = await createLinkedTokenAndCookie(app)
+
+    await postWebhook(app, token, plexEpisodeEvent('1990', ['tvdb://411857']))
+    await postWebhook(app, token, plexEpisodeEvent('Nineteen Ninety', ['tvdb://411857']))
+
+    expect(await db.select().from(shows)).toHaveLength(1)
+    expect(await loggedShowTitles()).toEqual(['1990'])
+  })
+
+  it('ignores a trailing qualifier when comparing titles', async () => {
+    const app = createApp({ db, metadataProviders: [fakeTmdb()] })
+    const { token } = await createLinkedTokenAndCookie(app)
+
+    await postWebhook(app, token, plexEpisodeEvent('Breaking Bad (2008)', ['tmdb://1396']))
+
+    expect(await loggedShowTitles()).toEqual(['Breaking Bad'])
+  })
+
+  it('prefers a cross-referenced id over an episode tmdb id that is also a real show', async () => {
+    const app = createApp({ db, metadataProviders: [fakeTmdbWithEpisodeIdCollision()] })
+    const { token } = await createLinkedTokenAndCookie(app)
+
+    await postWebhook(app, token, plexEpisodeEvent('1990', ['tmdb://138346', 'tvdb://411857']))
+
+    expect(await loggedShowTitles()).toEqual(['1990'])
+    expect(await db.select().from(shows).where(eq(shows.title, 'Sisbro'))).toHaveLength(0)
+  })
+
+  it('logs nothing rather than guess when a lone id names a show with a different title', async () => {
+    const app = createApp({ db, metadataProviders: [fakeTmdbWithEpisodeIdCollision()] })
+    const { token } = await createLinkedTokenAndCookie(app)
+
+    const res = await postWebhook(app, token, plexEpisodeEvent('1990', ['tmdb://138346']))
+    expect(res.status).toBe(200)
+
+    expect(await loggedShowTitles()).toEqual([])
+    expect(await db.select().from(shows)).toHaveLength(0)
   })
 
   it('does not create a duplicate show when a later event redirects to an id already known under its own', async () => {

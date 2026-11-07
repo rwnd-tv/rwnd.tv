@@ -77,12 +77,11 @@ function parseGuids(guids: unknown): ExternalIdBundle {
  * `Guid`).
  *
  * `Guid` is read at the top level of `Metadata` for both movies and
- * episodes — Plex's docs don't precisely say whether an episode's own
- * `Guid` entries (when present) differ from its show's, so this doesn't
- * try to distinguish "episode id" from "show id": both would resolve to
- * the same show via `resolveShowFromExternalIds`, and the episode itself
- * is always addressed by season/episode number
- * (`parentIndex`/`index`) against that show, never by its own id.
+ * episodes. On an episode these can be the episode's own ids rather than
+ * its show's, so `resolveShowFromExternalIds` is also given the show's
+ * title to check a stored match against. The episode itself is always
+ * addressed by season/episode number (`parentIndex`/`index`) against that
+ * show, never by its own id.
  *
  * `Account` (who was watching — see `IncomingWatchEvent.account`'s doc
  * comment) is read as a top-level sibling of `Metadata`, not nested

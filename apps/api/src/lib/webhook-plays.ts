@@ -45,7 +45,13 @@ export async function logWebhookPlay(
     return
   }
 
-  const show = await resolveShowFromExternalIds(db, providers, event.ids, user.locale)
+  const show = await resolveShowFromExternalIds(
+    db,
+    providers,
+    event.ids,
+    user.locale,
+    event.media.showTitle,
+  )
   if (!show) {
     console.error(
       `${source} webhook: no configured provider matched show "${event.media.showTitle}"`,

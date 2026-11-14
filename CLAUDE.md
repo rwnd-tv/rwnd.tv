@@ -80,6 +80,27 @@ ghcr.io/rwnd-tv/rwnd.tv:X.Y.Z`, replace the old digest in that one
 Deploy to dev the same way afterward (see above) so both instances track
 the same released version, not just prod.
 
+## Nightly maintenance job
+
+A job on the home-server runs every morning at 05:00 UK time (documented
+in the private home-server repo, `rwnd-nightly.md`). James set it up and
+authorised what it does:
+
+- merges Dependabot's patch and minor PRs once CI passes (majors only
+  when they fix a security alert);
+- when one fails for a real reason, has Claude push a fix commit to that
+  Dependabot branch, which merges on a later night if CI passes;
+- when a security alert closed, cuts a patch release ("Bump version to
+  X.Y.Z" plus tag) and deploys it to prod and dev, rolling prod back
+  automatically if it isn't healthy; otherwise deploys dev only;
+- emails James a report every night.
+
+Its commits, tags and prod digest changes are expected, not surprises.
+It only releases or deploys when `~/projects/rwnd.tv` is clean, on
+`main` and has no unpushed commits, so a session that leaves work
+uncommitted overnight makes it skip its deploys (it says so in the
+report and tries again the next night).
+
 ## Closing out a milestone
 
 Before marking a milestone `✅ done` in `docs/ROADMAP.md`, run both a code

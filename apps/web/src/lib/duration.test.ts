@@ -4,8 +4,8 @@ import { formatDuration } from './duration.js'
 /** Mirrors the real i18next keys' shape (stats.duration.{days,hours,minutes}
  * with a {{count}}) without pulling in the real translation bundle — this
  * file is testing the unit-selection/rounding logic, not the English copy. */
-function fakeT(key: string, options?: Record<string, unknown>): string {
-  const count = options?.count as number
+function fakeT(key: string, options: { count: number }): string {
+  const { count } = options
   const unit = key.split('.').pop()
   return `${count} ${unit}`
 }

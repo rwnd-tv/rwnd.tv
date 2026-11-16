@@ -9,7 +9,7 @@
  */
 export function formatDuration(
   totalMinutes: number,
-  t: (key: string, options?: Record<string, unknown>) => string,
+  t: (key: string, options: { count: number }) => string,
 ): string {
   const minutes = Math.max(0, Math.round(totalMinutes))
   const days = Math.floor(minutes / 1440)

@@ -263,6 +263,70 @@ Format:
       counts as personal use. Movies-only vs. Movies+TV Shows was never
       decided either, moot until this unblocks.
 
+- [ ] **Surface and fix external IDs a provider no longer recognizes** (2026-11-23 12:36 added)
+
+      Found 2026-11-23: on prod, "A Certain Dark Item" (2026) carries TVDB
+      id 11638818, saved from the Plex webhook's `Guid` list on 7 Nov 2026,
+      and TVDB now answers 404 for it. Today that's only a log line on
+      every metadata refresh (the runtime backfill retries it each pass).
+      It's harmless with TMDB first in the provider order, but with TVDB
+      first the show would stop refreshing, and On Deck most likely fails
+      outright for anyone who has watched it recently. Nothing tells an
+      admin, and there's no way to fix an id in the UI or the API.
+
+      **Detection.** A nullable `not_found_at` column on `external_ids`,
+      set when a provider returns 404 for that id (from any code path),
+      cleared when a later call with it succeeds. Outages, 5xx and rate
+      limits don't count. Flagged on the first 404. The background
+      backfills stop retrying a flagged id. A column rather than a
+      `metadata_problems` table because the scope is bad ids only;
+      revisit if dismissal or history is ever needed.
+
+      **While flagged.** A flagged id counts as absent when choosing a
+      provider (`pickRefreshTarget`/`pickRefreshTargets`), so the refresh,
+      manual refresh, On Deck and Up Next fall through to the next
+      provider. A title left with no usable provider id stops refreshing
+      but is on the admin list. Separately, and worth doing on its own:
+      one show's next-episode lookup failing should drop just that show
+      from On Deck, not fail the whole row
+      (`apps/api/src/routes/library/queue.ts` has no try/catch around it;
+      reproduce on dev first).
+
+      **Who sees what.** Only admins and the owner can change ids: they're
+      shared across the instance, and this guards against a malicious
+      user. Admins get a metadata-problems list in the admin settings and
+      a notice with the fix on the title's page. Regular users get a short
+      note on the title's page saying an admin can fix it (assumed, not
+      yet confirmed).
+
+      **Fixing.** Replace is the main fix: find a candidate by IMDb
+      suggestion (each provider's reverse lookup by the stored IMDb id),
+      by a title search pre-filled with the stored title and year, or by
+      pasting an id. Every route then confirms: fetch the candidate and
+      show its title, year, overview and (for shows) season 1 episode
+      count; refuse an id the provider doesn't recognize or another title
+      already has. Remove is offered only when another unflagged provider
+      id remains, and says rwnd.tv will try to find the right id through
+      IMDb on a later refresh. Check again asks the provider once more and
+      clears the flag if the id works (the only way back from a false
+      flag, since flagged ids are no longer called).
+
+      **Titles with only one id.** A collapsed, informational section on
+      the admin list ("Titles with only one ID (n)"), not counting Trakt
+      ids since Trakt isn't an ongoing metadata source. Computed by query,
+      no storage and no dismiss, each entry offering "Add an ID" through
+      the same find-and-confirm steps. No note on the title's page. A
+      survey of dev on 2026-11-23 found 7 shows and 2 movies like this;
+      28 of 512 shows and 588 of 592 movies rely on a single provider id
+      (TMDB or TVDB), nearly all recoverable through their IMDb id.
+
+      **Related, kept separate.** The TMDB provider already requests a
+      show's `external_ids` but reads only `imdb_id`; if a live check
+      confirms TMDB returns `tvdb_id` there too, capturing it would give
+      many single-provider shows a second provider for free. Whether the
+      404 flag should also cover episode-level IMDb/TVDB ids is undecided.
+      Before building: run the id survey on prod as well.
+
 ## Security
 
 - [ ] **Add a request/correlation id to the structured request log** (2026-09-16 added; Not yet scheduled)
